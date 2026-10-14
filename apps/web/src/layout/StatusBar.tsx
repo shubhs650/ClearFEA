@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import type { SessionUser } from "@clearfea/spec";
 import { useEffect, useState } from "react";
 import { fetchHealth, type HealthState } from "../api/health";
 
@@ -9,7 +10,7 @@ const labels: Record<HealthState["kind"], string> = {
   unreachable: "API not reachable",
 };
 
-export function StatusBar() {
+export function StatusBar({ user, onSignOut }: { user?: SessionUser; onSignOut?: () => void }) {
   const [health, setHealth] = useState<HealthState>({ kind: "checking" });
 
   useEffect(() => {
@@ -30,6 +31,16 @@ export function StatusBar() {
             {problem}
           </span>
         ))}
+      {user && (
+        <span className="status-user">
+          Signed in as {user.name}
+          {onSignOut && (
+            <button type="button" className="link-button" onClick={onSignOut}>
+              Sign out
+            </button>
+          )}
+        </span>
+      )}
     </footer>
   );
 }

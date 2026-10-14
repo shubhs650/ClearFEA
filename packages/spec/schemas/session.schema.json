@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Session",
+  "description": "Wire shapes of the session routes (docs/ARCHITECTURE.md section 8, ADR-022). Each message is a definition under $defs.",
+  "$defs": {
+    "LoginRequest": {
+      "description": "Body of POST /api/session.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["login", "password"],
+      "properties": {
+        "login": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "password": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "SessionUser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "login", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "login": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "SessionResponse": {
+      "description": "Answer to POST /api/session and GET /api/session when signed in (HTTP 200). Not signed in is HTTP 401 with an ErrorResponse.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["user"],
+      "properties": { "user": { "$ref": "#/$defs/SessionUser" } }
+    }
+  }
+}

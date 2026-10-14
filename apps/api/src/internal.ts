@@ -7,16 +7,18 @@ import {
   type ClaimResponse,
   type CompleteResponse,
   type HeartbeatResponse,
-  type Validation,
   validateClaimRequest,
   validateCompleteRequest,
   validateHeartbeatRequest,
 } from "@clearfea/spec";
 import { Hono } from "hono";
+import { readBody } from "./body";
 import { claimJob, completeJob, type Job, recordHeartbeat } from "./db/jobs";
 import type { Env } from "./env";
 
 export const internal = new Hono<{ Bindings: Env }>();
+
+const SCHEMA = "jobs.schema.json";
 
 async function sha256(text: string): Promise<ArrayBuffer> {
   return crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -46,31 +48,12 @@ internal.use("*", async (c, next) => {
   await next();
 });
 
-/** Reads and checks a JSON body; returns the value or a plain-language 400 message. */
-async function readBody<T>(
-  request: Request,
-  validate: (value: unknown) => Validation<T>,
-  name: string,
-): Promise<{ value: T } | { error: string }> {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return { error: `The request body must be JSON (a ${name}).` };
-  }
-  const checked = validate(body);
-  if (checked.ok) return { value: checked.value };
-  return {
-    error: `The request body is not a valid ${name} (packages/spec/schemas/jobs.schema.json): ${checked.errors.join(" ")}`,
-  };
-}
-
 function payload(job: Job) {
   return { id: job.id, type: job.type, targetId: job.targetId };
 }
 
 internal.post("/jobs/claim", async (c) => {
-  const body = await readBody(c.req.raw, validateClaimRequest, "ClaimRequest");
+  const body = await readBody(c.req.raw, validateClaimRequest, "ClaimRequest", SCHEMA);
   if ("error" in body) return c.json({ error: body.error }, 400);
   const job = await claimJob(c.env.DB, body.value.workerId, body.value.jobTypes);
   if (job === null) return c.body(null, 204);
@@ -78,7 +61,7 @@ internal.post("/jobs/claim", async (c) => {
 });
 
 internal.post("/jobs/:id/heartbeat", async (c) => {
-  const body = await readBody(c.req.raw, validateHeartbeatRequest, "HeartbeatRequest");
+  const body = await readBody(c.req.raw, validateHeartbeatRequest, "HeartbeatRequest", SCHEMA);
   if ("error" in body) return c.json({ error: body.error }, 400);
   const { workerId, stage = null } = body.value;
   const outcome = await recordHeartbeat(c.env.DB, workerId, c.req.param("id"), stage);
@@ -87,7 +70,7 @@ internal.post("/jobs/:id/heartbeat", async (c) => {
 });
 
 internal.post("/jobs/:id/complete", async (c) => {
-  const body = await readBody(c.req.raw, validateCompleteRequest, "CompleteRequest");
+  const body = await readBody(c.req.raw, validateCompleteRequest, "CompleteRequest", SCHEMA);
   if ("error" in body) return c.json({ error: body.error }, 400);
   const request = body.value;
   const completion =

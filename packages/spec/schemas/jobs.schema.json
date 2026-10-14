@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Jobs",
-  "description": "Wire shapes of the worker's internal job routes (docs/ARCHITECTURE.md sections 6 and 8). Each message is a definition under $defs.",
+  "description": "Wire shapes of the job routes: the worker's internal routes and the signed-in user's public routes (docs/ARCHITECTURE.md sections 6 and 8). Each message is a definition under $defs.",
   "$defs": {
     "JobType": { "enum": ["noop", "import", "mesh", "solve", "report"] },
     "JobStatus": {
@@ -97,6 +97,48 @@
       "additionalProperties": false,
       "required": ["job"],
       "properties": { "job": { "$ref": "#/$defs/CompletedJob" } }
+    },
+    "CreateJobRequest": {
+      "description": "Body of POST /api/jobs. Only a noop job is queued directly; later job types are created by the routes for the records they work on.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": { "type": { "const": "noop" } }
+    },
+    "JobView": {
+      "description": "A job as its owner sees it. Timestamps are ISO 8601 UTC strings.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "type", "targetId", "status", "stage", "failureCategory", "failureCause",
+        "createdAt", "claimedAt", "finishedAt"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "$ref": "#/$defs/JobType" },
+        "targetId": { "type": ["string", "null"] },
+        "status": { "$ref": "#/$defs/JobStatus" },
+        "stage": { "type": ["string", "null"] },
+        "failureCategory": { "oneOf": [{ "$ref": "#/$defs/FailureCategory" }, { "type": "null" }] },
+        "failureCause": { "type": ["string", "null"] },
+        "createdAt": { "type": "string" },
+        "claimedAt": { "type": ["string", "null"] },
+        "finishedAt": { "type": ["string", "null"] }
+      }
+    },
+    "JobResponse": {
+      "description": "Answer to POST /api/jobs (HTTP 201) and GET /api/jobs/{id}.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job"],
+      "properties": { "job": { "$ref": "#/$defs/JobView" } }
+    },
+    "JobListResponse": {
+      "description": "Answer to GET /api/jobs: the signed-in user's most recent jobs, newest first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobs"],
+      "properties": { "jobs": { "type": "array", "items": { "$ref": "#/$defs/JobView" } } }
     },
     "ErrorResponse": {
       "description": "Body of any 4xx or 5xx answer: what is wrong and what to do about it.",

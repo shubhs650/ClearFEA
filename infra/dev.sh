@@ -29,6 +29,12 @@ if [ ! -f apps/api/.dev.vars ]; then
   cp apps/api/.dev.vars.example apps/api/.dev.vars
   say "Created apps/api/.dev.vars from .dev.vars.example (local worker token)."
 fi
+# .dev.vars made before M0.9 has no session secret (ADR-022); add a random one.
+if ! grep -q '^SESSION_SECRET=' apps/api/.dev.vars; then
+  [ -z "$(tail -c 1 apps/api/.dev.vars)" ] || echo >> apps/api/.dev.vars
+  printf 'SESSION_SECRET=%s\n' "$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" >> apps/api/.dev.vars
+  say "Added a SESSION_SECRET line to apps/api/.dev.vars."
+fi
 # The worker must send the token the API expects (ADR-016), so take it from one place.
 worker_token=$(sed -n 's/^WORKER_TOKEN=//p' apps/api/.dev.vars | tail -n 1)
 [ -n "$worker_token" ] || die "apps/api/.dev.vars has no WORKER_TOKEN line. Copy it from apps/api/.dev.vars.example."
