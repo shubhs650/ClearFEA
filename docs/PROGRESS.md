@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M0 Bootstrap
-- **Next task:** M0.4 Web skeleton with layout shell
+- **Next task:** M0.5 Worker skeleton, Dockerfile, no-op job
 - **Blocked on:** nothing
 
 ## Milestones
@@ -35,7 +35,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M0.1 Confirm Docker works in the Claude Code cloud environment
 - [x] M0.2 Monorepo layout, pnpm workspaces, uv, Makefile
 - [x] M0.3 API skeleton with local D1 and R2
-- [ ] M0.4 Web skeleton with layout shell
+- [x] M0.4 Web skeleton with layout shell
 - [ ] M0.5 Worker skeleton, Dockerfile, no-op job
 - [ ] M0.6 `packages/spec` with first schema, type generation, `units.json`
 - [ ] M0.7 `make dev`, `make test`, Commands section in `CLAUDE.md`
@@ -76,6 +76,8 @@ Written by the last session for the next one. Replace, do not append.
 >
 > M0.3 (2026-10-14): `apps/api` is a Hono app on `wrangler dev` (port 8787) with local D1 (`DB`) and R2 (`FILES`) bindings in `wrangler.jsonc`, persisted under `apps/api/.wrangler/state`. Migration `0001_users_projects.sql` creates `users` and `projects`; apply it with `pnpm --filter @clearfea/api db:migrate` (the `dev` script does this first). `GET /api/health` probes both bindings and returns 503 with a plain-language fix when tables are missing. Tests run in `workerd` through `@cloudflare/vitest-plugin` (ADR-014, accepted). Not done here, on purpose: a TypeScript lint tool (the api has `typecheck` and `test` scripts but no `lint`; choose one in M0.7), the wallet balance column on `users` (no money unit is decided; add it with the ledger), CORS (the M0.4 Vite dev server can proxy `/api`). Pin new npm packages at least a day old: pnpm's release-age policy rejects fresher ones.
 >
+> M0.4 (2026-10-14): `apps/web` is Vite 8, React 19.3.0 and TypeScript on port 5173 (`strictPort`), with `/api` proxied to `127.0.0.1:8787`. The shell is a CSS grid (tree 260 px, viewer, settings 320 px, 28 px status bar, minimum width 1024 px); the panes hold placeholder text only. The status bar calls `/api/health` once on load and shows connected, degraded (with the API's own fix text) or not reachable (with the command to start the API). Tests use Vitest with jsdom and Testing Library. Not done here, on purpose: three.js (comes with the viewer in M1), polling health, and lint (M0.7). The health response shape is checked by hand in `apps/web/src/api/health.ts`; move it to a shared schema once M0.6 creates `packages/spec`. For headless screenshots use `/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell`; full `chrome --headless` cuts about 90 px off the viewport height.
+>
 > Two points to watch from the ADR review: Gmsh may not report the STEP file's original length unit (check in the M1.1 spike), and browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -90,6 +92,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-14
 
+- M0.4: web skeleton with Vite, React and TypeScript; three-pane layout shell with a status bar that calls the API health route through the dev server proxy.
 - M0.3: API skeleton with Hono, local D1 and R2, first migration (`users`, `projects`), health route, Vitest in the Workers runtime (ADR-014 accepted).
 - M0.2: created the monorepo layout (`apps/web`, `apps/api`, `worker`, `packages/spec`, `verification`, `infra`), pnpm workspace, `uv` project for the worker, top-level `Makefile`.
 - M0.1: Docker works in the cloud environment once `dockerd` is started; recorded as ADR-012 (accepted) with the image mirror and build CA conditions. Fallback not needed.
