@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Local configuration for the ClearFEA API. In Phase 0 everything runs under
+// `wrangler dev`: D1 and R2 are emulated locally and persisted in .wrangler/state.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "clearfea-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "dev": {
+    "port": 8787
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "clearfea",
+      // Placeholder: only the local emulation is used in Phase 0.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "clearfea-files"
+    }
+  ]
+}

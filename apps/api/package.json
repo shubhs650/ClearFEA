@@ -3,5 +3,21 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply DB --local && wrangler dev",
+    "db:migrate": "wrangler d1 migrations apply DB --local",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.0",
+    "@cloudflare/workers-types": "5.20261006.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9",
+    "wrangler": "4.149.0"
+  }
 }
