@@ -4,7 +4,9 @@ version = "0.0.0"
 description = "ClearFEA job worker: meshing with Gmsh and solving with CalculiX"
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "gmsh==4.15.2",
+]
 
 [dependency-groups]
 dev = [
