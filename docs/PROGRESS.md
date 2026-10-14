@@ -72,7 +72,7 @@ Written by the last session for the next one. Replace, do not append.
 >
 > For M0.5: a probe image on `python:3.12-slim-bookworm` with `calculix-ccx` and pip `gmsh==4.15.2` built, Gmsh initialised, and CalculiX solved a one-element C3D8 deck. Gmsh needs `libgl1 libglu1-mesa libgomp1 libxrender1 libxcursor1 libxft2 libxinerama1` (the host's missing `libGLU.so.1` is the same problem). Bookworm's `calculix-ccx` is 2.20, while the host has 2.21, so M0.5 must pin one version on purpose. Image size was about 490 MB.
 >
-> M0.2 (2026-10-14): monorepo layout in place. `make install` and `make test` work; `make test` runs pnpm lint/typecheck/test across the workspace (no-ops until packages gain scripts) and ruff plus pytest in `worker/`. The TypeScript packages are empty `package.json` stubs with a README naming the task that fills them. `make dev`, `verify` and `e2e` are left for M0.7 and later. Python tooling choice is ADR-013 (proposed).
+> M0.2 (2026-10-14): monorepo layout in place. `make install` and `make test` work; `make test` runs pnpm lint/typecheck/test across the workspace (no-ops until packages gain scripts) and ruff plus pytest in `worker/`. The TypeScript packages are empty `package.json` stubs with a README naming the task that fills them. `make dev`, `verify` and `e2e` are left for M0.7 and later. Python tooling choice is ADR-013 (accepted).
 >
 > Two points to watch from the ADR review: Gmsh may not report the STEP file's original length unit (check in the M1.1 spike), and browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
