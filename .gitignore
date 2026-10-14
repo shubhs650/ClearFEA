@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Build output
+dist/
+build/
+.wrangler/
+*.tsbuildinfo
+
+# Local data and solver output
+.data/
+*.frd
+*.dat
+*.cvg
+*.sta
+*.12d
+spooles.out
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+.dev.vars
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+.pytest_cache/
+.ruff_cache/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
