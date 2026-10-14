@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Nightly tier placeholder. The physics suite (`make verify`, M1.13) and browser end-to-end
+# tests (`make e2e`, M1.14) do not exist yet; they replace the step below when they land.
+# See docs/VERIFICATION.md for what this tier will run.
+name: Nightly
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nightly:
+    name: Nightly suites
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: echo "No nightly suites yet. make verify arrives in M1.13 and make e2e in M1.14."
