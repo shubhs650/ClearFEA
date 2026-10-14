@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M0 Bootstrap
-- **Next task:** M0.7 `make dev`, `make test`, Commands section in `CLAUDE.md`
+- **Next task:** M0.8 GitHub Actions fast tier, DCO check, nightly placeholder
 - **Blocked on:** nothing
 
 ## Milestones
@@ -38,7 +38,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M0.4 Web skeleton with layout shell
 - [x] M0.5 Worker skeleton, Dockerfile, no-op job
 - [x] M0.6 `packages/spec` with first schema, type generation, `units.json`
-- [ ] M0.7 `make dev`, `make test`, Commands section in `CLAUDE.md`
+- [x] M0.7 `make dev`, `make test`, Commands section in `CLAUDE.md`
 - [ ] M0.8 GitHub Actions fast tier, DCO check, nightly placeholder
 - [ ] M0.9 Seeded test users and session login
 
@@ -82,6 +82,8 @@ Written by the last session for the next one. Replace, do not append.
 >
 > M0.6 (2026-10-14): `packages/spec` holds the first schemas (`health`, `jobs` with the internal job messages under `$defs`, and `units` for the shape of `units.json`), `units.json` with length, force and pressure, and `fixtures/unit-conversions.json`. `make spec` regenerates TypeScript types and validators (`packages/spec/src/generated/`) and Pydantic models (`worker/clearfea_worker/spec/`); `make test` now starts with `make spec-check`, which fails when the committed generated files differ from the schemas (ADR-017, accepted). The web health check, the API's `/internal` request bodies and the worker's API client now go through the schemas, and the worker tests' fake API checks every body it sees. Unit conversion: `apps/web/src/units/convert.ts` and `worker/clearfea_worker/units.py`, both run against the shared fixture (ADR-018, accepted). Not done here, on purpose: `SimulationSpec` and the `{ value, unit }` quantity shape (M1.4), and any kind beyond length, force and pressure. Watch: the worker image does not contain `packages/spec/units.json` (its build context is `worker/`), so the first job that converts units (the deck generator in M1) must change the build context or copy the table in. Validation messages come from `@cfworker/json-schema` and are tidied in `packages/spec/src/validate.ts`; they are fine for the internal routes but are not user-facing text.
 >
+> M0.7 (2026-10-14): `make dev` runs `infra/dev.sh` (ADR-020, proposed): API, web app and worker container in one terminal with `[api]`/`[web]`/`[worker]` prefixes; Ctrl-C, or any one service exiting, stops all three and the worker container. It checks for `node_modules`, a reachable Docker daemon and free ports 8787 and 5173 first, creates `apps/api/.dev.vars` if missing and hands its token to the worker. Checked here: with `dockerd` started by hand and `BUILD_CA=/root/.ccr/ca-bundle.crt`, the worker built, a no-op job queued with `wrangler d1 execute` went to `succeeded`, `/api/health` answered through the Vite proxy, and both Ctrl-C and killing Vite left no process or running container behind. TypeScript lint is Biome 2.5.9 from a root `biome.json` (ADR-019, proposed); it found one real issue (`aria-label` on the status-bar `footer` now has an explicit `contentinfo` role). Not done here, on purpose: `make verify` (M1.13) and `make e2e` (M1.14), Biome's formatter (would rewrite most files; its own decision), and a route to create jobs (M0.9). The "Ready" line appears once the API and web app answer, which on a first run is before the worker image finishes building.
+>
 > Two points to watch from the ADR review: Gmsh may not report the STEP file's original length unit (check in the M1.1 spike), and browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -96,6 +98,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-14
 
+- M0.7: `make dev` starts the API, web app and worker together and stops them together (ADR-020 proposed); Biome lints all TypeScript (ADR-019 proposed); Commands section in `CLAUDE.md` and "Running it" in `README.md` filled in.
 - M0.6: `packages/spec` with health, jobs and units schemas, `units.json` (length, force, pressure), TypeScript and Pydantic generation with a drift check in `make test`, unit conversion in both languages tested against one shared fixture (ADR-017 and ADR-018 accepted).
 - M0.5: worker image with pinned CalculiX 2.21 and Gmsh 4.15.2, jobs table and internal claim routes in the API, worker claim loop that takes a no-op job from queued to succeeded (ADR-015 and ADR-016 accepted).
 - M0.4: web skeleton with Vite, React and TypeScript; three-pane layout shell with a status bar that calls the API health route through the dev server proxy.

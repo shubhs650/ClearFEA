@@ -42,7 +42,15 @@ No fluids, no nonlinear analysis, no shells or beams, no geometry editing. The f
 
 ## Running it
 
-Not yet available. Milestone M0 delivers a single documented command that starts the whole system on localhost. Requirements will be Docker, Node.js and Python.
+Requirements: Docker (with the daemon running), Node.js 22 with pnpm, and `uv` (which provides Python 3.12).
+
+```
+make install   # TypeScript and Python dependencies
+make dev       # API on :8787, web app on http://localhost:5173, worker in Docker; Ctrl-C stops all
+make test      # fast test tier: generated-code check, unit tests, type checks, lint
+```
+
+The first `make dev` builds the worker image, which takes a few minutes. Behind a TLS-intercepting proxy, pass its CA bundle: `make dev BUILD_CA=/path/to/ca-bundle.crt`.
 
 ## Licence
 

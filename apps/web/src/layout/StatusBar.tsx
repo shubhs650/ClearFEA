@@ -21,7 +21,7 @@ export function StatusBar() {
   }, []);
 
   return (
-    <footer className="pane pane-status" aria-label="Status">
+    <footer className="pane pane-status" role="contentinfo" aria-label="Status">
       <span className={`status-dot status-${health.kind}`} aria-hidden="true" />
       <span role="status">{labels[health.kind]}</span>
       {"problems" in health &&

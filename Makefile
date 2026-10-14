@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Single entry point for ClearFEA. `make dev`, `verify` and `e2e` are added by later M0 tasks.
+# Single entry point for ClearFEA. `make verify` and `make e2e` arrive with the suites they run.
 
-.PHONY: help install spec spec-check test test-ts test-py lint format clean worker-image
+.PHONY: help dev install spec spec-check test test-ts test-py lint format clean worker-image
 
 help:
 	@echo "make install   install TypeScript (pnpm) and Python (uv) dependencies"
+	@echo "make dev       start the API (:8787), web app (:5173) and worker container; Ctrl-C stops all"
 	@echo "make spec      regenerate TypeScript types and Pydantic models from packages/spec/schemas"
 	@echo "make test      fast tier: generated-code check, unit tests, type checks and lint"
 	@echo "make lint      lint only"
@@ -15,6 +16,10 @@ help:
 install:
 	pnpm install --frozen-lockfile
 	uv sync --directory worker --locked
+
+# BUILD_CA: CA bundle for building the worker image behind a TLS-intercepting proxy (ADR-012).
+dev:
+	CLEARFEA_BUILD_CA=$(BUILD_CA) infra/dev.sh
 
 spec:
 	pnpm --filter @clearfea/spec generate
