@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { JobTypeValues } from "@clearfea/spec";
 import { env, exports } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createJob, getJob } from "../src/db/jobs";
@@ -130,6 +131,12 @@ describe("internal job routes", () => {
 });
 
 describe("job data access", () => {
+  it("stores every job type the shared schema defines", async () => {
+    for (const type of JobTypeValues) {
+      expect((await createJob(env.DB, "alice", type)).type).toBe(type);
+    }
+  });
+
   it("does not show one user's job to another", async () => {
     const job = await createJob(env.DB, "alice", "noop");
     expect(await getJob(env.DB, "bob", job.id)).toBeNull();

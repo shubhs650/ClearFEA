@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import type { HealthResponse } from "@clearfea/spec";
 import { Hono } from "hono";
 import { probeDatabase, probeStorage } from "./db/health";
 import type { Env } from "./env";
@@ -17,7 +18,7 @@ app.get("/api/health", async (c) => {
       status: ok ? "ok" : "degraded",
       database: database.ok ? "ok" : database.problem,
       storage: storage.ok ? "ok" : storage.problem,
-    },
+    } satisfies HealthResponse,
     ok ? 200 : 503,
   );
 });

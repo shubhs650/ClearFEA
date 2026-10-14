@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Single entry point for ClearFEA. `make dev`, `verify` and `e2e` are added by later M0 tasks.
 
-.PHONY: help install test test-ts test-py lint format clean worker-image
+.PHONY: help install spec spec-check test test-ts test-py lint format clean worker-image
 
 help:
 	@echo "make install   install TypeScript (pnpm) and Python (uv) dependencies"
-	@echo "make test      fast tier: unit tests, type checks and lint"
+	@echo "make spec      regenerate TypeScript types and Pydantic models from packages/spec/schemas"
+	@echo "make test      fast tier: generated-code check, unit tests, type checks and lint"
 	@echo "make lint      lint only"
 	@echo "make format    format Python code"
 	@echo "make clean     remove installed dependencies and caches"
@@ -15,7 +16,15 @@ install:
 	pnpm install --frozen-lockfile
 	uv sync --directory worker --locked
 
-test: test-ts test-py
+spec:
+	pnpm --filter @clearfea/spec generate
+	packages/spec/scripts/generate-python.sh
+
+spec-check:
+	pnpm --filter @clearfea/spec generate:check
+	packages/spec/scripts/generate-python.sh --check
+
+test: spec-check test-ts test-py
 
 test-ts:
 	pnpm run lint

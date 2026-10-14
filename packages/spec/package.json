@@ -3,5 +3,24 @@
   "version": "0.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./units.json": "./units.json",
+    "./fixtures/*": "./fixtures/*"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "generate:check": "node scripts/generate.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cfworker/json-schema": "4.1.1"
+  },
+  "devDependencies": {
+    "json-schema-to-typescript": "16.0.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
+  }
 }

@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clearfea/spec": "workspace:*",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

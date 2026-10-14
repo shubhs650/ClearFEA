@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UnitsTable",
+  "description": "Shape of packages/spec/units.json, the single table of quantity kinds and allowed units. A value in unit u converts to SI as value * factor + offset.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "kinds"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "kinds": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/QuantityKind" }
+    }
+  },
+  "$defs": {
+    "QuantityKind": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["si", "units"],
+      "properties": {
+        "description": { "type": "string" },
+        "si": {
+          "type": "string",
+          "description": "The SI unit stored and solved in. It must appear in units with factor 1 and offset 0."
+        },
+        "units": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "$ref": "#/$defs/UnitDefinition" }
+        }
+      }
+    },
+    "UnitDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["factor", "definition"],
+      "properties": {
+        "factor": { "type": "number", "exclusiveMinimum": 0 },
+        "offset": { "type": "number" },
+        "definition": {
+          "type": "string",
+          "description": "Where the factor comes from, so a reviewer can check it."
+        }
+      }
+    }
+  }
+}

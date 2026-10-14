@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Client for GET /api/health. The response shape is checked by hand here until
-// packages/spec holds the shared schemas (M0.6); then this check moves to the schema.
+// Client for GET /api/health. The response shape is checked against packages/spec.
+
+import { validateHealthResponse } from "@clearfea/spec";
 
 export type HealthState =
   | { kind: "checking" }
@@ -20,8 +21,8 @@ export async function fetchHealth(signal?: AbortSignal): Promise<HealthState> {
     return { kind: "unreachable", problems: [`The API did not answer. ${startApi}`] };
   }
 
-  const body: unknown = await response.json().catch(() => undefined);
-  if (!isHealthBody(body)) {
+  const checked = validateHealthResponse(await response.json().catch(() => undefined));
+  if (!checked.ok) {
     // The Vite proxy answers with an empty 5xx when nothing listens on port 8787.
     return {
       kind: "unreachable",
@@ -29,23 +30,8 @@ export async function fetchHealth(signal?: AbortSignal): Promise<HealthState> {
     };
   }
 
+  const body = checked.value;
   if (body.status === "ok") return { kind: "ok" };
   const problems = [body.database, body.storage].filter((value) => value !== "ok");
   return { kind: "degraded", problems };
-}
-
-interface HealthBody {
-  status: "ok" | "degraded";
-  database: string;
-  storage: string;
-}
-
-function isHealthBody(value: unknown): value is HealthBody {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    (record.status === "ok" || record.status === "degraded") &&
-    typeof record.database === "string" &&
-    typeof record.storage === "string"
-  );
 }

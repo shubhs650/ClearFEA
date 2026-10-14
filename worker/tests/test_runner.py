@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
+import json
 import threading
+import urllib.error
+import urllib.request
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from clearfea_worker.api import ApiClient, ApiError, ClaimedJob
 from clearfea_worker.config import Settings
@@ -104,3 +108,22 @@ def test_run_forever_keeps_polling_and_stops_cleanly() -> None:
         assert not thread.is_alive()
         assert api.jobs["j1"]["status"] == "succeeded"
         assert api.jobs["j2"]["status"] == "succeeded"
+
+
+def test_fake_api_refuses_bodies_outside_the_schema() -> None:
+    with FakeApi() as api:
+        request = urllib.request.Request(
+            f"{api.url}/internal/jobs/claim",
+            data=json.dumps({"workerId": "w1", "jobTypes": ["bake"]}).encode(),
+            method="POST",
+            headers={"Authorization": f"Bearer {api.token}"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as raised:
+            urllib.request.urlopen(request)
+        assert raised.value.code == 400
+
+
+def test_client_refuses_to_send_an_empty_failure_cause() -> None:
+    client = ApiClient("http://127.0.0.1:9", "t", "w1")
+    with pytest.raises(ValidationError):
+        client.fail("job", "platform_fault", "")
