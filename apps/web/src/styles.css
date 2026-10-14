@@ -1,0 +1,116 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+
+:root {
+  --bg: #f4f5f7;
+  --pane: #ffffff;
+  --viewer: #e9ecef;
+  --border: #d5d9de;
+  --text: #1f2328;
+  --muted: #667085;
+  --ok: #2f9e44;
+  --warn: #e8590c;
+  --error: #c92a2a;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/* Desktop only: the minimum supported width is a laptop screen. */
+.shell {
+  display: grid;
+  grid-template-columns: 260px 1fr 320px;
+  grid-template-rows: 1fr 28px;
+  grid-template-areas:
+    "tree viewer settings"
+    "status status status";
+  height: 100vh;
+  min-width: 1024px;
+  min-height: 600px;
+}
+
+.pane {
+  background: var(--pane);
+  overflow: auto;
+}
+
+.pane-tree {
+  grid-area: tree;
+  border-right: 1px solid var(--border);
+  padding: 8px 12px;
+}
+
+.pane-viewer {
+  grid-area: viewer;
+  background: var(--viewer);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pane-settings {
+  grid-area: settings;
+  border-left: 1px solid var(--border);
+  padding: 8px 12px;
+}
+
+.pane-status {
+  grid-area: status;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.pane-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.pane-empty {
+  color: var(--muted);
+  margin: 0;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-ok {
+  background: var(--ok);
+}
+
+.status-degraded {
+  background: var(--warn);
+}
+
+.status-unreachable {
+  background: var(--error);
+}
+
+.status-problem {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
