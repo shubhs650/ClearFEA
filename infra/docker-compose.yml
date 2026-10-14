@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Local services for Phase 0. The API and web app run on the host (wrangler dev,
+# Vite); the worker runs here and reaches the API through host.docker.internal.
+#
+#   docker compose -f infra/docker-compose.yml up --build worker
+#
+# CLEARFEA_WORKER_TOKEN must match WORKER_TOKEN in apps/api/.dev.vars.
+
+name: clearfea
+
+services:
+  worker:
+    build:
+      context: ../worker
+      # Optional CA bundle for builds behind a TLS-intercepting proxy (ADR-012).
+      # Point CLEARFEA_BUILD_CA at it; the default is an empty file, which the build ignores.
+      secrets:
+        - extra_ca
+    image: clearfea-worker
+    environment:
+      CLEARFEA_API_URL: ${CLEARFEA_API_URL:-http://host.docker.internal:8787}
+      CLEARFEA_WORKER_TOKEN: ${CLEARFEA_WORKER_TOKEN:-local-dev-worker-token}
+      CLEARFEA_WORKER_ID: ${CLEARFEA_WORKER_ID:-local-worker}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Simulated machine size for Phase 0 (docs/ARCHITECTURE.md, Metering).
+    cpus: 2
+    mem_limit: 4g
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+secrets:
+  extra_ca:
+    file: ${CLEARFEA_BUILD_CA:-/dev/null}

@@ -134,6 +134,7 @@ queued -> claimed -> running -> succeeded
 
 | Type | Input | Output | Metered |
 | --- | --- | --- | --- |
+| `noop` | Nothing | Nothing; exercises claim, heartbeat and completion (M0) | No |
 | `import` | STEP file | `topology.json`, display mesh, detected unit, candidate bonds | No |
 | `mesh` | STEP file, mesh settings | Volume mesh, face-to-element map, quality summary, mesh display file | Yes |
 | `solve` | Frozen spec, mesh | Deck, log, raw output, viewer result files, reaction table | Yes |

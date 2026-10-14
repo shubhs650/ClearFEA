@@ -17,4 +17,15 @@ pnpm --filter @clearfea/api typecheck
 | `src/db/` | Data-access layer. Route handlers do not write SQL |
 | `test/` | Tests; migrations are applied before each file |
 
-Routes so far: `GET /api/health` returns the state of the database and file storage.
+Local secrets live in `.dev.vars` (git-ignored); copy `.dev.vars.example` to start.
+
+Routes so far:
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/health` | State of the database and file storage |
+| `POST /internal/jobs/claim` | Worker claims the oldest queued job of the types it lists; 204 when none |
+| `POST /internal/jobs/:id/heartbeat` | Worker reports it is alive; the reply says continue, cancel or stop |
+| `POST /internal/jobs/:id/complete` | Worker reports success with a result, or failure with category and cause |
+
+`/internal` routes need `Authorization: Bearer <WORKER_TOKEN>` (ADR-016).

@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M0 Bootstrap
-- **Next task:** M0.5 Worker skeleton, Dockerfile, no-op job
+- **Next task:** M0.6 `packages/spec` with first schema, type generation, `units.json`
 - **Blocked on:** nothing
 
 ## Milestones
@@ -36,7 +36,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M0.2 Monorepo layout, pnpm workspaces, uv, Makefile
 - [x] M0.3 API skeleton with local D1 and R2
 - [x] M0.4 Web skeleton with layout shell
-- [ ] M0.5 Worker skeleton, Dockerfile, no-op job
+- [x] M0.5 Worker skeleton, Dockerfile, no-op job
 - [ ] M0.6 `packages/spec` with first schema, type generation, `units.json`
 - [ ] M0.7 `make dev`, `make test`, Commands section in `CLAUDE.md`
 - [ ] M0.8 GitHub Actions fast tier, DCO check, nightly placeholder
@@ -64,7 +64,7 @@ Things only the maintainer can do.
 
 Written by the last session for the next one. Replace, do not append.
 
-> M0.1 to M0.3 are done; start with M0.4. ADR-001 to ADR-011 were accepted unchanged on 2026-10-14.
+> M0.1 to M0.5 are done; start with M0.6. ADR-001 to ADR-011 were accepted unchanged on 2026-10-14.
 >
 > Environment check (2026-10-14, Claude Code cloud): pnpm 12.11.2, uv 0.11.32, wrangler 4.151.0, Node 22.22.0, Python 3.13 default with 3.12 present. CalculiX `ccx` 2.21 (Debian `calculix-ccx`) runs. Gmsh pip package 4.15.2 is installed but fails to load because `libGLU.so.1` is missing.
 >
@@ -78,13 +78,15 @@ Written by the last session for the next one. Replace, do not append.
 >
 > M0.4 (2026-10-14): `apps/web` is Vite 8, React 19.3.0 and TypeScript on port 5173 (`strictPort`), with `/api` proxied to `127.0.0.1:8787`. The shell is a CSS grid (tree 260 px, viewer, settings 320 px, 28 px status bar, minimum width 1024 px); the panes hold placeholder text only. The status bar calls `/api/health` once on load and shows connected, degraded (with the API's own fix text) or not reachable (with the command to start the API). Tests use Vitest with jsdom and Testing Library. Not done here, on purpose: three.js (comes with the viewer in M1), polling health, and lint (M0.7). The health response shape is checked by hand in `apps/web/src/api/health.ts`; move it to a shared schema once M0.6 creates `packages/spec`. For headless screenshots use `/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell`; full `chrome --headless` cuts about 90 px off the viewport height.
 >
+> M0.5 (2026-10-14): the worker image (`worker/Dockerfile`) is Ubuntu 24.04 by digest with `calculix-ccx=2.21-1` and Gmsh 4.15.2 from `uv.lock`, running as a non-root user (ADR-015, accepted): Debian trixie has no CalculiX package and bookworm has 2.20, so Ubuntu matches the host's 2.21. `python -m clearfea_worker check` prints both versions and initialises Gmsh (on the host it fails on `libGLU.so.1`, as expected). The API gained migration `0002_jobs.sql` (with a `noop` job type) and `POST /internal/jobs/claim`, `/internal/jobs/:id/heartbeat`, `/internal/jobs/:id/complete`, guarded by `WORKER_TOKEN` from `apps/api/.dev.vars` (copy `.dev.vars.example`; ADR-016, accepted). Run the worker with `docker compose -f infra/docker-compose.yml -f infra/docker-compose.linux.yml up --build worker` on Linux (drop the second file on Docker Desktop); behind the cloud proxy set `CLEARFEA_BUILD_CA=/root/.ccr/ca-bundle.crt`. There is no route to create a job yet (needs M0.9 sessions), so queue one with `wrangler d1 execute DB --local`; see `worker/README.md`. Not done here, on purpose: the heartbeat-timeout sweep that fails silent jobs, job logs, transfer URLs and metering (they arrive with the job types that need them). Wire shapes are hand-checked on both sides; move them into `packages/spec` in M0.6. Surprise: D1 storage in API tests is shared between tests in one file, not isolated per test as ADR-014 says, so `test/jobs.test.ts` resets its rows in `beforeEach`. The image is about 990 MB.
+>
 > Two points to watch from the ADR review: Gmsh may not report the STEP file's original length unit (check in the M1.1 spike), and browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
 
 Ideas that came up during work and are outside the current milestone. Do not build these without a decision.
 
-- (none yet)
+- Shrink the worker image (about 990 MB): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use.
 
 ## Log
 
@@ -92,6 +94,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-14
 
+- M0.5: worker image with pinned CalculiX 2.21 and Gmsh 4.15.2, jobs table and internal claim routes in the API, worker claim loop that takes a no-op job from queued to succeeded (ADR-015 and ADR-016 accepted).
 - M0.4: web skeleton with Vite, React and TypeScript; three-pane layout shell with a status bar that calls the API health route through the dev server proxy.
 - M0.3: API skeleton with Hono, local D1 and R2, first migration (`users`, `projects`), health route, Vitest in the Workers runtime (ADR-014 accepted).
 - M0.2: created the monorepo layout (`apps/web`, `apps/api`, `worker`, `packages/spec`, `verification`, `infra`), pnpm workspace, `uv` project for the worker, top-level `Makefile`.

@@ -2,6 +2,7 @@
 import { Hono } from "hono";
 import { probeDatabase, probeStorage } from "./db/health";
 import type { Env } from "./env";
+import { internal } from "./internal";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -20,5 +21,7 @@ app.get("/api/health", async (c) => {
     ok ? 200 : 503,
   );
 });
+
+app.route("/internal", internal);
 
 export default app;
