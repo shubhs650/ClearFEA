@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Linux override. Docker Desktop (macOS, Windows) forwards host.docker.internal to
+# services that listen only on the host's loopback, such as `wrangler dev`; Docker
+# Engine on Linux does not. Rather than expose the API on every interface, the
+# worker shares the host's network here and calls the API on 127.0.0.1.
+#
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.linux.yml up --build worker
+
+services:
+  worker:
+    network_mode: host
+    extra_hosts: !reset []
+    environment:
+      CLEARFEA_API_URL: ${CLEARFEA_API_URL:-http://127.0.0.1:8787}
