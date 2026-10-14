@@ -72,7 +72,7 @@ describe("session tokens", () => {
     const token = await issueToken("secret", "user-1", 1_000);
     expect(await readToken("other", token, 0)).toBeNull();
     expect(await readToken("secret", token.replace("user-1", "user-2"), 0)).toBeNull();
-    expect(await readToken("secret", token.replace(".1000.", ".9999.") , 0)).toBeNull();
+    expect(await readToken("secret", token.replace(".1000.", ".9999."), 0)).toBeNull();
     expect(await readToken("secret", "v1.user-1.1000", 0)).toBeNull();
   });
 });

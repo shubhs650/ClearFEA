@@ -40,7 +40,7 @@ Behind a TLS-intercepting proxy (the Claude Code cloud environment), pass its CA
 
 ## Running a no-op job by hand
 
-Until sessions exist (M0.9) there is no route that creates a job, so queue one directly in the local D1.
+The simplest way is `make dev`, sign in at http://localhost:5173 as `alice` / `alice-local`, and press "Queue a no-op job" in the settings pane. Without the web app, queue one directly in the local D1.
 
 ```
 cp apps/api/.dev.vars.example apps/api/.dev.vars
