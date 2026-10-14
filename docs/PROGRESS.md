@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M0 Bootstrap
-- **Next task:** M0.3 API skeleton with local D1 and R2
+- **Next task:** M0.4 Web skeleton with layout shell
 - **Blocked on:** nothing
 
 ## Milestones
@@ -34,7 +34,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 
 - [x] M0.1 Confirm Docker works in the Claude Code cloud environment
 - [x] M0.2 Monorepo layout, pnpm workspaces, uv, Makefile
-- [ ] M0.3 API skeleton with local D1 and R2
+- [x] M0.3 API skeleton with local D1 and R2
 - [ ] M0.4 Web skeleton with layout shell
 - [ ] M0.5 Worker skeleton, Dockerfile, no-op job
 - [ ] M0.6 `packages/spec` with first schema, type generation, `units.json`
@@ -64,7 +64,7 @@ Things only the maintainer can do.
 
 Written by the last session for the next one. Replace, do not append.
 
-> M0.1 and M0.2 are done; start with M0.3. ADR-001 to ADR-011 were accepted unchanged on 2026-10-14.
+> M0.1 to M0.3 are done; start with M0.4. ADR-001 to ADR-011 were accepted unchanged on 2026-10-14.
 >
 > Environment check (2026-10-14, Claude Code cloud): pnpm 12.11.2, uv 0.11.32, wrangler 4.151.0, Node 22.22.0, Python 3.13 default with 3.12 present. CalculiX `ccx` 2.21 (Debian `calculix-ccx`) runs. Gmsh pip package 4.15.2 is installed but fails to load because `libGLU.so.1` is missing.
 >
@@ -73,6 +73,8 @@ Written by the last session for the next one. Replace, do not append.
 > For M0.5: a probe image on `python:3.12-slim-bookworm` with `calculix-ccx` and pip `gmsh==4.15.2` built, Gmsh initialised, and CalculiX solved a one-element C3D8 deck. Gmsh needs `libgl1 libglu1-mesa libgomp1 libxrender1 libxcursor1 libxft2 libxinerama1` (the host's missing `libGLU.so.1` is the same problem). Bookworm's `calculix-ccx` is 2.20, while the host has 2.21, so M0.5 must pin one version on purpose. Image size was about 490 MB.
 >
 > M0.2 (2026-10-14): monorepo layout in place. `make install` and `make test` work; `make test` runs pnpm lint/typecheck/test across the workspace (no-ops until packages gain scripts) and ruff plus pytest in `worker/`. The TypeScript packages are empty `package.json` stubs with a README naming the task that fills them. `make dev`, `verify` and `e2e` are left for M0.7 and later. Python tooling choice is ADR-013 (accepted).
+>
+> M0.3 (2026-10-14): `apps/api` is a Hono app on `wrangler dev` (port 8787) with local D1 (`DB`) and R2 (`FILES`) bindings in `wrangler.jsonc`, persisted under `apps/api/.wrangler/state`. Migration `0001_users_projects.sql` creates `users` and `projects`; apply it with `pnpm --filter @clearfea/api db:migrate` (the `dev` script does this first). `GET /api/health` probes both bindings and returns 503 with a plain-language fix when tables are missing. Tests run in `workerd` through `@cloudflare/vitest-plugin` (ADR-014, proposed). Not done here, on purpose: a TypeScript lint tool (the api has `typecheck` and `test` scripts but no `lint`; choose one in M0.7), the wallet balance column on `users` (no money unit is decided; add it with the ledger), CORS (the M0.4 Vite dev server can proxy `/api`). Pin new npm packages at least a day old: pnpm's release-age policy rejects fresher ones.
 >
 > Two points to watch from the ADR review: Gmsh may not report the STEP file's original length unit (check in the M1.1 spike), and browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
@@ -88,6 +90,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-14
 
+- M0.3: API skeleton with Hono, local D1 and R2, first migration (`users`, `projects`), health route, Vitest in the Workers runtime (ADR-014 proposed).
 - M0.2: created the monorepo layout (`apps/web`, `apps/api`, `worker`, `packages/spec`, `verification`, `infra`), pnpm workspace, `uv` project for the worker, top-level `Makefile`.
 - M0.1: Docker works in the cloud environment once `dockerd` is started; recorded as ADR-012 (accepted) with the image mirror and build CA conditions. Fallback not needed.
 - Maintainer accepted ADR-001 to ADR-011 unchanged.
