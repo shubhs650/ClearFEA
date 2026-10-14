@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HealthResponse",
+  "description": "Body of GET /api/health. HTTP 200 when status is ok, 503 when degraded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "database", "storage"],
+  "properties": {
+    "status": { "enum": ["ok", "degraded"] },
+    "database": {
+      "type": "string",
+      "description": "\"ok\", or what is wrong with the database and how to fix it."
+    },
+    "storage": {
+      "type": "string",
+      "description": "\"ok\", or what is wrong with file storage and how to fix it."
+    }
+  }
+}

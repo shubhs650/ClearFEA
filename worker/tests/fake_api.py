@@ -6,6 +6,21 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from pydantic import TypeAdapter, ValidationError
+
+from clearfea_worker.spec.jobs_schema import (
+    ClaimRequest,
+    ClaimResponse,
+    CompleteRequest,
+    CompleteResponse,
+    HeartbeatRequest,
+    HeartbeatResponse,
+)
+
+# Every request and answer is checked against the shared schemas, so a test that passes
+# here also proves the worker speaks the same wire format as the real API.
+_complete_request: TypeAdapter[Any] = TypeAdapter(CompleteRequest)
+
 
 class FakeApi:
     def __init__(self, token: str = "t") -> None:
@@ -38,20 +53,25 @@ class FakeApi:
     def _handle(self, path: str, body: dict[str, Any]) -> tuple[int, dict[str, Any] | None]:
         self.calls.append((path, body))
         if path == "/internal/jobs/claim":
+            ClaimRequest.model_validate(body)
             for job in self.queue:
                 if job["type"] in body["jobTypes"]:
                     self.queue.remove(job)
                     job["status"] = "claimed"
-                    return 200, {"job": {k: job[k] for k in ("id", "type", "targetId")}}
+                    answer = {"job": {k: job[k] for k in ("id", "type", "targetId")}}
+                    return 200, _checked(ClaimResponse, answer)
             return 204, None
         parts = path.split("/")  # ['', 'internal', 'jobs', id, action]
         job = self.jobs[parts[3]]
         if parts[4] == "heartbeat":
+            HeartbeatRequest.model_validate(body)
             job["status"] = "running"
-            return 200, {"action": self.heartbeat_action}
+            return 200, _checked(HeartbeatResponse, {"action": self.heartbeat_action})
+        _complete_request.validate_python(body)
         job["status"] = body["status"]
         job["outcome"] = body
-        return 200, {"job": {"id": job["id"], "status": body["status"]}}
+        answer = {"job": {k: job[k] for k in ("id", "type", "targetId", "status")}}
+        return 200, _checked(CompleteResponse, answer)
 
     def _handler(self) -> type[BaseHTTPRequestHandler]:
         api = self
@@ -62,7 +82,10 @@ class FakeApi:
                     self._send(401, {"error": "The worker token is missing or wrong."})
                     return
                 length = int(self.headers.get("Content-Length", 0))
-                status, body = api._handle(self.path, json.loads(self.rfile.read(length)))
+                try:
+                    status, body = api._handle(self.path, json.loads(self.rfile.read(length)))
+                except ValidationError as error:
+                    status, body = 400, {"error": f"Body does not match the schema: {error}"}
                 self._send(status, body)
 
             def _send(self, status: int, body: dict[str, Any] | None) -> None:
@@ -77,3 +100,8 @@ class FakeApi:
                 pass
 
         return Handler
+
+
+def _checked(model: Any, body: dict[str, Any]) -> dict[str, Any]:
+    model.model_validate(body)
+    return body

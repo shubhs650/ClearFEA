@@ -1,28 +1,35 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Client for the API's internal job routes (docs/ARCHITECTURE.md section 6).
 
-Uses only the standard library. Wire shapes are written out here until
-packages/spec holds their schemas (M0.6).
+HTTP through the standard library. Request and response shapes are the Pydantic models
+generated from packages/spec/schemas/jobs.schema.json.
 """
 
 import json
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
-HeartbeatAction = Literal["continue", "cancel", "stop"]
+from pydantic import BaseModel, ValidationError
+
+from .spec.jobs_schema import (
+    ClaimedJob,
+    ClaimRequest,
+    ClaimResponse,
+    CompleteFailed,
+    CompleteSucceeded,
+    FailureCategory,
+    HeartbeatAction,
+    HeartbeatRequest,
+    HeartbeatResponse,
+    JobType,
+)
+
+__all__ = ["ApiClient", "ApiError", "ClaimedJob", "HeartbeatAction"]
 
 
 class ApiError(Exception):
     """The API could not be reached or answered with an error."""
-
-
-@dataclass(frozen=True)
-class ClaimedJob:
-    id: str
-    type: str
-    target_id: str | None
 
 
 class ApiClient:
@@ -32,8 +39,8 @@ class ApiClient:
         self._worker_id = worker_id
         self._timeout = timeout
 
-    def _post(self, path: str, body: dict[str, Any]) -> tuple[int, dict[str, Any] | None]:
-        data = json.dumps({"workerId": self._worker_id, **body}).encode()
+    def _post(self, path: str, body: BaseModel) -> tuple[int, Any]:
+        data = body.model_dump_json(by_alias=True, exclude_unset=True).encode()
         request = urllib.request.Request(
             f"{self._base_url}/internal{path}",
             data=data,
@@ -61,23 +68,36 @@ class ApiClient:
                 "Start it with `pnpm --filter @clearfea/api dev`."
             ) from None
 
-    def claim(self, job_types: list[str]) -> ClaimedJob | None:
-        status, body = self._post("/jobs/claim", {"jobTypes": job_types})
+    def _parse[T: BaseModel](self, model: type[T], path: str, body: Any) -> T:
+        try:
+            return model.model_validate(body)
+        except ValidationError as error:
+            raise ApiError(
+                f"The API answered {path} with a body that is not a valid {model.__name__} "
+                f"(packages/spec/schemas/jobs.schema.json): {error}"
+            ) from None
+
+    def claim(self, job_types: list[JobType]) -> ClaimedJob | None:
+        request = ClaimRequest(worker_id=self._worker_id, job_types=job_types)
+        status, body = self._post("/jobs/claim", request)
         if status == 204 or body is None:
             return None
-        job = body["job"]
-        return ClaimedJob(id=job["id"], type=job["type"], target_id=job.get("targetId"))
+        return self._parse(ClaimResponse, "/jobs/claim", body).job
 
     def heartbeat(self, job_id: str, stage: str | None) -> HeartbeatAction:
-        _, body = self._post(f"/jobs/{job_id}/heartbeat", {"stage": stage})
-        action = (body or {}).get("action", "continue")
-        return action if action in ("continue", "cancel", "stop") else "continue"
+        path = f"/jobs/{job_id}/heartbeat"
+        _, body = self._post(path, HeartbeatRequest(worker_id=self._worker_id, stage=stage))
+        return self._parse(HeartbeatResponse, path, body).action
 
     def succeed(self, job_id: str, result: dict[str, Any]) -> None:
-        self._post(f"/jobs/{job_id}/complete", {"status": "succeeded", "result": result})
+        request = CompleteSucceeded(worker_id=self._worker_id, status="succeeded", result=result)
+        self._post(f"/jobs/{job_id}/complete", request)
 
-    def fail(self, job_id: str, category: str, cause: str) -> None:
-        self._post(
-            f"/jobs/{job_id}/complete",
-            {"status": "failed", "failureCategory": category, "failureCause": cause},
+    def fail(self, job_id: str, category: FailureCategory, cause: str) -> None:
+        request = CompleteFailed(
+            worker_id=self._worker_id,
+            status="failed",
+            failure_category=category,
+            failure_cause=cause,
         )
+        self._post(f"/jobs/{job_id}/complete", request)

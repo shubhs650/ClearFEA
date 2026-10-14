@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@clearfea/spec": "workspace:*",
     "hono": "4.13.13"
   },
   "devDependencies": {

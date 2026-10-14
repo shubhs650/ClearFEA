@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "kinds": {
+    "length": {
+      "description": "Lengths and coordinates.",
+      "si": "m",
+      "units": {
+        "m": { "factor": 1, "definition": "SI base unit" },
+        "cm": { "factor": 0.01, "definition": "1 cm = 1e-2 m exactly" },
+        "mm": { "factor": 0.001, "definition": "1 mm = 1e-3 m exactly" },
+        "in": { "factor": 0.0254, "definition": "international inch, 1 in = 0.0254 m exactly" },
+        "ft": { "factor": 0.3048, "definition": "international foot, 1 ft = 12 in = 0.3048 m exactly" }
+      }
+    },
+    "force": {
+      "description": "Forces.",
+      "si": "N",
+      "units": {
+        "N": { "factor": 1, "definition": "SI derived unit, kg m s^-2" },
+        "kN": { "factor": 1000, "definition": "1 kN = 1e3 N exactly" },
+        "MN": { "factor": 1000000, "definition": "1 MN = 1e6 N exactly" },
+        "lbf": {
+          "factor": 4.4482216152605,
+          "definition": "pound-force, 0.45359237 kg x 9.80665 m/s^2 = 4.4482216152605 N exactly"
+        },
+        "kip": { "factor": 4448.2216152605, "definition": "1 kip = 1000 lbf exactly" }
+      }
+    },
+    "pressure": {
+      "description": "Pressures and stresses.",
+      "si": "Pa",
+      "units": {
+        "Pa": { "factor": 1, "definition": "SI derived unit, N m^-2" },
+        "kPa": { "factor": 1000, "definition": "1 kPa = 1e3 Pa exactly" },
+        "MPa": { "factor": 1000000, "definition": "1 MPa = 1e6 Pa = 1 N/mm^2 exactly" },
+        "GPa": { "factor": 1000000000, "definition": "1 GPa = 1e9 Pa exactly" },
+        "bar": { "factor": 100000, "definition": "1 bar = 1e5 Pa exactly" },
+        "psi": {
+          "factor": 6894.757293168362,
+          "definition": "1 lbf/in^2 = 4.4482216152605 N / 0.00064516 m^2 = 6894.7572931683613... Pa (nearest double)"
+        },
+        "ksi": {
+          "factor": 6894757.293168361,
+          "definition": "1 ksi = 1000 psi = 6894757.2931683613... Pa (nearest double)"
+        }
+      }
+    }
+  }
+}

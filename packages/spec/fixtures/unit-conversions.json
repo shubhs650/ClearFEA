@@ -1,0 +1,28 @@
+{
+  "description": "Known conversions to SI, worked out by hand from the unit definitions, not from units.json. The TypeScript and Python unit modules must both reproduce every case in both directions. Errors are lookups that must be refused.",
+  "relativeTolerance": 1e-12,
+  "conversions": [
+    { "kind": "length", "value": 1, "unit": "m", "si": 1 },
+    { "kind": "length", "value": 250, "unit": "mm", "si": 0.25 },
+    { "kind": "length", "value": -3, "unit": "mm", "si": -0.003 },
+    { "kind": "length", "value": 2.5, "unit": "cm", "si": 0.025 },
+    { "kind": "length", "value": 12, "unit": "in", "si": 0.3048 },
+    { "kind": "length", "value": 1, "unit": "ft", "si": 0.3048 },
+    { "kind": "force", "value": 1, "unit": "kN", "si": 1000 },
+    { "kind": "force", "value": 0.5, "unit": "MN", "si": 500000 },
+    { "kind": "force", "value": 1, "unit": "lbf", "si": 4.4482216152605 },
+    { "kind": "force", "value": 2, "unit": "kip", "si": 8896.443230521 },
+    { "kind": "pressure", "value": 0, "unit": "psi", "si": 0 },
+    { "kind": "pressure", "value": 1, "unit": "bar", "si": 100000 },
+    { "kind": "pressure", "value": 101.325, "unit": "kPa", "si": 101325 },
+    { "kind": "pressure", "value": 1, "unit": "MPa", "si": 1000000 },
+    { "kind": "pressure", "value": 210, "unit": "GPa", "si": 210000000000 },
+    { "kind": "pressure", "value": 1, "unit": "psi", "si": 6894.757293168362 },
+    { "kind": "pressure", "value": 30, "unit": "ksi", "si": 206842718.79505083 }
+  ],
+  "errors": [
+    { "kind": "pressure", "unit": "mm", "reason": "a length unit is not a pressure unit" },
+    { "kind": "length", "unit": "MM", "reason": "unit symbols are case-sensitive" },
+    { "kind": "stress", "unit": "Pa", "reason": "no such quantity kind" }
+  ]
+}

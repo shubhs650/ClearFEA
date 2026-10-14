@@ -4,20 +4,7 @@
 // worker id instead: the worker serves every owner, so its scope is the jobs it
 // has claimed, never a user's other records.
 
-export const JOB_TYPES = ["noop", "import", "mesh", "solve", "report"] as const;
-export type JobType = (typeof JOB_TYPES)[number];
-
-export const FAILURE_CATEGORIES = ["user_fault", "platform_fault"] as const;
-export type FailureCategory = (typeof FAILURE_CATEGORIES)[number];
-
-export type JobStatus =
-  | "queued"
-  | "claimed"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "cancelled"
-  | "stopped_at_limit";
+import type { FailureCategory, HeartbeatAction, JobStatus, JobType } from "@clearfea/spec";
 
 export interface Job {
   id: string;
@@ -130,9 +117,7 @@ export async function claimJob(
   return row === null ? null : toJob(row);
 }
 
-export type HeartbeatOutcome =
-  | { found: false }
-  | { found: true; action: "continue" | "cancel" | "stop" };
+export type HeartbeatOutcome = { found: false } | { found: true; action: HeartbeatAction };
 
 /**
  * Records that the worker is alive and at the given stage. The first heartbeat

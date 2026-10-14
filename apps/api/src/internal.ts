@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Internal routes used by the job worker (docs/ARCHITECTURE.md sections 6 and 8).
 // Authenticated by the shared worker token, never by a user session.
-// Request bodies are checked by hand until packages/spec holds their schemas (M0.6).
+// Request and response shapes are the schemas in packages/spec/schemas/jobs.schema.json.
 
-import { Hono } from "hono";
 import {
-  claimJob,
-  completeJob,
-  type Completion,
-  FAILURE_CATEGORIES,
-  type FailureCategory,
-  JOB_TYPES,
-  type Job,
-  type JobType,
-  recordHeartbeat,
-} from "./db/jobs";
+  type ClaimResponse,
+  type CompleteResponse,
+  type HeartbeatResponse,
+  type Validation,
+  validateClaimRequest,
+  validateCompleteRequest,
+  validateHeartbeatRequest,
+} from "@clearfea/spec";
+import { Hono } from "hono";
+import { claimJob, completeJob, type Job, recordHeartbeat } from "./db/jobs";
 import type { Env } from "./env";
 
 export const internal = new Hono<{ Bindings: Env }>();
@@ -47,88 +46,61 @@ internal.use("*", async (c, next) => {
   await next();
 });
 
-type Body = Record<string, unknown>;
-
-async function readBody(request: Request): Promise<Body | null> {
+/** Reads and checks a JSON body; returns the value or a plain-language 400 message. */
+async function readBody<T>(
+  request: Request,
+  validate: (value: unknown) => Validation<T>,
+  name: string,
+): Promise<{ value: T } | { error: string }> {
+  let body: unknown;
   try {
-    const body: unknown = await request.json();
-    return typeof body === "object" && body !== null && !Array.isArray(body)
-      ? (body as Body)
-      : null;
+    body = await request.json();
   } catch {
-    return null;
+    return { error: `The request body must be JSON (a ${name}).` };
   }
-}
-
-function workerIdOf(body: Body): string | null {
-  const id = body.workerId;
-  return typeof id === "string" && id.length > 0 && id.length <= 200 ? id : null;
-}
-
-function isJobType(value: unknown): value is JobType {
-  return typeof value === "string" && (JOB_TYPES as readonly string[]).includes(value);
+  const checked = validate(body);
+  if (checked.ok) return { value: checked.value };
+  return {
+    error: `The request body is not a valid ${name} (packages/spec/schemas/jobs.schema.json): ${checked.errors.join(" ")}`,
+  };
 }
 
 function payload(job: Job) {
   return { id: job.id, type: job.type, targetId: job.targetId };
 }
 
-const BAD_WORKER_ID = "The request needs a workerId string (1 to 200 characters).";
-
 internal.post("/jobs/claim", async (c) => {
-  const body = await readBody(c.req.raw);
-  const workerId = body && workerIdOf(body);
-  if (!body || !workerId) return c.json({ error: BAD_WORKER_ID }, 400);
-  const types = body.jobTypes;
-  if (!Array.isArray(types) || !types.every(isJobType)) {
-    return c.json({ error: `jobTypes must be a list drawn from: ${JOB_TYPES.join(", ")}.` }, 400);
-  }
-  const job = await claimJob(c.env.DB, workerId, types);
+  const body = await readBody(c.req.raw, validateClaimRequest, "ClaimRequest");
+  if ("error" in body) return c.json({ error: body.error }, 400);
+  const job = await claimJob(c.env.DB, body.value.workerId, body.value.jobTypes);
   if (job === null) return c.body(null, 204);
-  return c.json({ job: payload(job) });
+  return c.json({ job: payload(job) } satisfies ClaimResponse);
 });
 
 internal.post("/jobs/:id/heartbeat", async (c) => {
-  const body = await readBody(c.req.raw);
-  const workerId = body && workerIdOf(body);
-  if (!body || !workerId) return c.json({ error: BAD_WORKER_ID }, 400);
-  const stage = body.stage ?? null;
-  if (stage !== null && typeof stage !== "string") {
-    return c.json({ error: "stage must be a string or null." }, 400);
-  }
+  const body = await readBody(c.req.raw, validateHeartbeatRequest, "HeartbeatRequest");
+  if ("error" in body) return c.json({ error: body.error }, 400);
+  const { workerId, stage = null } = body.value;
   const outcome = await recordHeartbeat(c.env.DB, workerId, c.req.param("id"), stage);
   if (!outcome.found) return c.json({ error: "This worker holds no job with that id." }, 404);
-  return c.json({ action: outcome.action });
+  return c.json({ action: outcome.action } satisfies HeartbeatResponse);
 });
 
-function completionOf(body: Body): Completion | string {
-  if (body.status === "succeeded") return { status: "succeeded", result: body.result ?? null };
-  if (body.status === "failed") {
-    const category = body.failureCategory;
-    const cause = body.failureCause;
-    if (
-      typeof category !== "string" ||
-      !(FAILURE_CATEGORIES as readonly string[]).includes(category)
-    ) {
-      return `failureCategory must be one of: ${FAILURE_CATEGORIES.join(", ")}.`;
-    }
-    if (typeof cause !== "string" || cause.length === 0) {
-      return "failureCause must be a non-empty string.";
-    }
-    return { status: "failed", failureCategory: category as FailureCategory, failureCause: cause };
-  }
-  return "status must be succeeded or failed.";
-}
-
 internal.post("/jobs/:id/complete", async (c) => {
-  const body = await readBody(c.req.raw);
-  const workerId = body && workerIdOf(body);
-  if (!body || !workerId) return c.json({ error: BAD_WORKER_ID }, 400);
-  const completion = completionOf(body);
-  if (typeof completion === "string") return c.json({ error: completion }, 400);
-  const job = await completeJob(c.env.DB, workerId, c.req.param("id"), completion);
+  const body = await readBody(c.req.raw, validateCompleteRequest, "CompleteRequest");
+  if ("error" in body) return c.json({ error: body.error }, 400);
+  const request = body.value;
+  const completion =
+    request.status === "succeeded"
+      ? { status: request.status, result: request.result ?? null }
+      : {
+          status: request.status,
+          failureCategory: request.failureCategory,
+          failureCause: request.failureCause,
+        };
+  const job = await completeJob(c.env.DB, request.workerId, c.req.param("id"), completion);
   if (job === null) {
     return c.json({ error: "This worker holds no active job with that id; it may have been cancelled." }, 409);
   }
-  return c.json({ job: { ...payload(job), status: job.status } });
+  return c.json({ job: { ...payload(job), status: job.status } } satisfies CompleteResponse);
 });

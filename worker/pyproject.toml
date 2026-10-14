@@ -6,10 +6,12 @@ license = "AGPL-3.0-or-later"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "gmsh==4.15.2",
+    "pydantic==2.14.1",
 ]
 
 [dependency-groups]
 dev = [
+    "datamodel-code-generator==0.83.0",
     "pytest==8.4.2",
     "ruff==0.14.0",
 ]
@@ -27,6 +29,10 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# Generated from the JSON Schemas; descriptions come through as long docstrings.
+"clearfea_worker/spec/*" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

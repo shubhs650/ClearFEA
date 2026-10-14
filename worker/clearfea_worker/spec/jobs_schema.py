@@ -1,0 +1,150 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Generated from packages/spec/schemas by packages/spec/scripts/generate-python.sh.
+# Do not edit by hand; change the schema and run `make spec`.
+
+from __future__ import annotations
+
+from typing import Annotated, Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+type Jobs = Annotated[Any, Field(title="Jobs")]
+"""
+Wire shapes of the worker's internal job routes (docs/ARCHITECTURE.md sections 6 and 8). Each message is a definition under $defs.
+"""
+
+
+type JobType = Literal["noop", "import", "mesh", "solve", "report"]
+
+
+type JobStatus = Literal[
+    "queued", "claimed", "running", "succeeded", "failed", "cancelled", "stopped_at_limit"
+]
+
+
+type FailureCategory = Literal["user_fault", "platform_fault"]
+
+
+type HeartbeatAction = Literal["continue", "cancel", "stop"]
+"""
+What the worker should do next: carry on, or end the job because the user cancelled it or it reached its stop limit.
+"""
+
+
+type WorkerId = Annotated[str, Field(max_length=200, min_length=1)]
+
+
+class ClaimedJob(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: str
+    type: JobType
+    target_id: Annotated[str | None, Field(alias="targetId")]
+
+
+class ClaimRequest(BaseModel):
+    """
+    Body of POST /internal/jobs/claim.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    worker_id: Annotated[WorkerId, Field(alias="workerId")]
+    job_types: Annotated[list[JobType], Field(alias="jobTypes")]
+
+
+class ClaimResponse(BaseModel):
+    """
+    Answer to a claim when a job was claimed (HTTP 200). No job to claim is HTTP 204 with no body.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    job: ClaimedJob
+
+
+class HeartbeatRequest(BaseModel):
+    """
+    Body of POST /internal/jobs/{id}/heartbeat.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    worker_id: Annotated[WorkerId, Field(alias="workerId")]
+    stage: str | None = None
+
+
+class HeartbeatResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    action: HeartbeatAction
+
+
+class CompleteSucceeded(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    worker_id: Annotated[WorkerId, Field(alias="workerId")]
+    status: Literal["succeeded"]
+    result: dict[str, Any] | None = None
+    """
+    Job-type specific summary, stored as given.
+    """
+
+
+class CompleteFailed(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    worker_id: Annotated[WorkerId, Field(alias="workerId")]
+    status: Literal["failed"]
+    failure_category: Annotated[FailureCategory, Field(alias="failureCategory")]
+    failure_cause: Annotated[str, Field(alias="failureCause", min_length=1)]
+
+
+type CompleteRequest = CompleteSucceeded | CompleteFailed
+"""
+Body of POST /internal/jobs/{id}/complete.
+"""
+
+
+class CompletedJob(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: str
+    type: JobType
+    target_id: Annotated[str | None, Field(alias="targetId")]
+    status: JobStatus
+
+
+class CompleteResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    job: CompletedJob
+
+
+class ErrorResponse(BaseModel):
+    """
+    Body of any 4xx or 5xx answer: what is wrong and what to do about it.
+    """
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
+    error: str

@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Jobs",
+  "description": "Wire shapes of the worker's internal job routes (docs/ARCHITECTURE.md sections 6 and 8). Each message is a definition under $defs.",
+  "$defs": {
+    "JobType": { "enum": ["noop", "import", "mesh", "solve", "report"] },
+    "JobStatus": {
+      "enum": ["queued", "claimed", "running", "succeeded", "failed", "cancelled", "stopped_at_limit"]
+    },
+    "FailureCategory": { "enum": ["user_fault", "platform_fault"] },
+    "HeartbeatAction": {
+      "description": "What the worker should do next: carry on, or end the job because the user cancelled it or it reached its stop limit.",
+      "enum": ["continue", "cancel", "stop"]
+    },
+    "WorkerId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "ClaimedJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "targetId"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "$ref": "#/$defs/JobType" },
+        "targetId": { "type": ["string", "null"] }
+      }
+    },
+    "ClaimRequest": {
+      "description": "Body of POST /internal/jobs/claim.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workerId", "jobTypes"],
+      "properties": {
+        "workerId": { "$ref": "#/$defs/WorkerId" },
+        "jobTypes": { "type": "array", "items": { "$ref": "#/$defs/JobType" } }
+      }
+    },
+    "ClaimResponse": {
+      "description": "Answer to a claim when a job was claimed (HTTP 200). No job to claim is HTTP 204 with no body.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job"],
+      "properties": { "job": { "$ref": "#/$defs/ClaimedJob" } }
+    },
+    "HeartbeatRequest": {
+      "description": "Body of POST /internal/jobs/{id}/heartbeat.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workerId"],
+      "properties": {
+        "workerId": { "$ref": "#/$defs/WorkerId" },
+        "stage": { "type": ["string", "null"] }
+      }
+    },
+    "HeartbeatResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": { "action": { "$ref": "#/$defs/HeartbeatAction" } }
+    },
+    "CompleteSucceeded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workerId", "status"],
+      "properties": {
+        "workerId": { "$ref": "#/$defs/WorkerId" },
+        "status": { "const": "succeeded" },
+        "result": { "type": "object", "description": "Job-type specific summary, stored as given." }
+      }
+    },
+    "CompleteFailed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workerId", "status", "failureCategory", "failureCause"],
+      "properties": {
+        "workerId": { "$ref": "#/$defs/WorkerId" },
+        "status": { "const": "failed" },
+        "failureCategory": { "$ref": "#/$defs/FailureCategory" },
+        "failureCause": { "type": "string", "minLength": 1 }
+      }
+    },
+    "CompleteRequest": {
+      "description": "Body of POST /internal/jobs/{id}/complete.",
+      "oneOf": [{ "$ref": "#/$defs/CompleteSucceeded" }, { "$ref": "#/$defs/CompleteFailed" }]
+    },
+    "CompletedJob": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "targetId", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "$ref": "#/$defs/JobType" },
+        "targetId": { "type": ["string", "null"] },
+        "status": { "$ref": "#/$defs/JobStatus" }
+      }
+    },
+    "CompleteResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job"],
+      "properties": { "job": { "$ref": "#/$defs/CompletedJob" } }
+    },
+    "ErrorResponse": {
+      "description": "Body of any 4xx or 5xx answer: what is wrong and what to do about it.",
+      "type": "object",
+      "required": ["error"],
+      "properties": { "error": { "type": "string" } }
+    }
+  }
+}
