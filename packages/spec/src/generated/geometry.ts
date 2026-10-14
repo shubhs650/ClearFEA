@@ -177,6 +177,14 @@ export interface GeometryView {
   declaredUnit: string | null;
   detectedUnit: LengthUnit | null;
   unitProblem: string | null;
+  /**
+   * Metres per file coordinate as the file is read; with scaling it turns sizes back into the file's own numbers.
+   */
+  readingFactor: number | null;
+  /**
+   * Geometry.OCCScaling of the current topology.
+   */
+  scaling: number | null;
   confirmedUnit: LengthUnit | null;
   bodyCount: number | null;
   faceCount: number | null;

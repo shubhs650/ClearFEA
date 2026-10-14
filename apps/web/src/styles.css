@@ -245,3 +245,78 @@ button:disabled {
 .job-cause {
   color: var(--muted);
 }
+
+/* Geometry: upload and unit confirmation in the settings pane. */
+.geometry {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.geometry-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.geometry-facts dt {
+  color: var(--muted);
+}
+
+.geometry-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.geometry-status {
+  font-weight: 600;
+}
+
+.geometry-ready {
+  color: var(--ok);
+}
+
+.geometry-failed {
+  color: var(--error);
+}
+
+.geometry-unit-note {
+  margin: 0;
+}
+
+.geometry-unit {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.field select {
+  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+/* A file input dressed as a button; the input itself stays focusable for keyboards. */
+.file-button {
+  position: relative;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--pane);
+  cursor: pointer;
+}
+
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-button:focus-within {
+  outline: 2px solid var(--text);
+}

@@ -192,6 +192,14 @@ class GeometryView(BaseModel):
     declared_unit: Annotated[str | None, Field(alias="declaredUnit")]
     detected_unit: Annotated[LengthUnit | None, Field(alias="detectedUnit")]
     unit_problem: Annotated[str | None, Field(alias="unitProblem")]
+    reading_factor: Annotated[float | None, Field(alias="readingFactor")]
+    """
+    Metres per file coordinate as the file is read; with scaling it turns sizes back into the file's own numbers.
+    """
+    scaling: float | None
+    """
+    Geometry.OCCScaling of the current topology.
+    """
     confirmed_unit: Annotated[LengthUnit | None, Field(alias="confirmedUnit")]
     body_count: Annotated[int | None, Field(alias="bodyCount")]
     face_count: Annotated[int | None, Field(alias="faceCount")]

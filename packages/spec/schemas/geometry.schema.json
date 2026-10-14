@@ -132,7 +132,7 @@
       "additionalProperties": false,
       "required": [
         "id", "name", "sizeBytes", "status", "problem", "declaredUnit", "detectedUnit",
-        "unitProblem", "confirmedUnit", "bodyCount", "faceCount", "size", "bbox", "createdAt"
+        "unitProblem", "readingFactor", "scaling", "confirmedUnit", "bodyCount", "faceCount", "size", "bbox", "createdAt"
       ],
       "properties": {
         "id": { "type": "string" },
@@ -143,6 +143,11 @@
         "declaredUnit": { "type": ["string", "null"] },
         "detectedUnit": { "oneOf": [{ "$ref": "#/$defs/LengthUnit" }, { "type": "null" }] },
         "unitProblem": { "type": ["string", "null"] },
+        "readingFactor": {
+          "description": "Metres per file coordinate as the file is read; with scaling it turns sizes back into the file's own numbers.",
+          "type": ["number", "null"]
+        },
+        "scaling": { "description": "Geometry.OCCScaling of the current topology.", "type": ["number", "null"] },
         "confirmedUnit": { "oneOf": [{ "$ref": "#/$defs/LengthUnit" }, { "type": "null" }] },
         "bodyCount": { "type": ["integer", "null"] },
         "faceCount": { "type": ["integer", "null"] },

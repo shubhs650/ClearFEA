@@ -10,6 +10,7 @@ const healthy = { status: 200, body: { status: "ok", database: "ok", storage: "o
 const alice = { id: "a", login: "alice", name: "Alice (test user)" };
 const signedIn = { status: 200, body: { user: alice } };
 const signedOut = { status: 401, body: { error: "You are not signed in." } };
+const noGeometries = { status: 200, body: { geometries: [] } };
 
 function job(status: string) {
   return {
@@ -20,6 +21,7 @@ function job(status: string) {
     stage: null,
     failureCategory: null,
     failureCause: null,
+    failureMessage: null,
     createdAt: "2026-10-14T12:00:00.000Z",
     claimedAt: null,
     finishedAt: null,
@@ -62,6 +64,7 @@ describe("sign-in", () => {
       "GET /api/session": signedOut,
       "POST /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
     });
     render(<App />);
     fireEvent.change(await screen.findByLabelText("Login"), { target: { value: "alice" } });
@@ -96,6 +99,7 @@ describe("sign-in", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
       "DELETE /api/session": { status: 204 },
     });
     render(<App />);
@@ -110,6 +114,7 @@ describe("layout shell", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
     });
     render(<App />);
     expect(await screen.findByRole("navigation", { name: "Simulation tree" })).toBeTruthy();
@@ -126,6 +131,7 @@ describe("worker check", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": () => ({ status: 200, body: { jobs } }),
+      "GET /api/geometries": noGeometries,
       "POST /api/jobs": () => {
         jobs = [job("queued")];
         return { status: 201, body: { job: job("queued") } };
@@ -144,6 +150,7 @@ describe("worker check", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 401, body: { error: "Your sign-in has expired. Sign in again." } },
+      "GET /api/geometries": noGeometries,
     });
     render(<App />);
     expect(await screen.findByRole("main", { name: "Sign in" })).toBeTruthy();

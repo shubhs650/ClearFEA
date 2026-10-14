@@ -48,6 +48,8 @@ function view(geometry: Geometry): GeometryView {
     declaredUnit: geometry.declaredUnit,
     detectedUnit: geometry.detectedUnit,
     unitProblem: geometry.unitProblem,
+    readingFactor: geometry.readingFactor,
+    scaling: geometry.scaling,
     confirmedUnit: geometry.confirmedUnit,
     bodyCount: geometry.bodyCount,
     faceCount: geometry.faceCount,
