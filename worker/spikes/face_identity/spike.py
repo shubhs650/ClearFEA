@@ -471,6 +471,8 @@ def summarise(stem, unit, imp, scale_err, mesh, rescale):
         if not (r["sameTypes"] and r["worstRelativeDifference"] < REIMPORT_TOL):
             problems.append(f"{stem}: unit override by re-import {rescale}")
     m1, m2 = mesh[1], mesh[2]
+    off = sum(c["offSurface"] for c in (d, m1["check"], m2["check"]))
+    wrong = sum(c["closerToAnotherFace"] for c in (d, m1["check"], m2["check"]))
     row = [
         stem,
         imp["unit"]["declared"] or "-",
@@ -483,11 +485,9 @@ def summarise(stem, unit, imp, scale_err, mesh, rescale):
         f"{m1['check']['triangles']}/{m2['check']['triangles']}",
         f"{m1['surfaceTrianglesWithoutTetFace'] + m2['surfaceTrianglesWithoutTetFace']}"
         f"/{m1['tetFacesWithoutFaceTag'] + m2['tetFacesWithoutFaceTag']}",
-        f"{d['offSurface'] + m1['check']['offSurface'] + m2['check']['offSurface']}"
-        f"/{d['closerToAnotherFace'] + m1['check']['closerToAnotherFace']}"
-        f"+{m2['check']['closerToAnotherFace']}",
+        f"{off}/{wrong}",
         "{:.1e}/{:.1e}".format(
-            max(m1["check"]["worstAreaError"]["plane"], d["worstAreaError"]["plane"]),
+            m1["check"]["worstAreaError"]["plane"],
             max(m1["check"]["worstAreaError"]["cylinder"], m1["check"]["worstAreaError"]["other"]),
         ),
         "-"
