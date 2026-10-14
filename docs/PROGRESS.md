@@ -48,7 +48,7 @@ Things only the maintainer can do.
 
 - [ ] Create the public GitHub repository and upload these files
 - [ ] Check domain, GitHub organisation name and trademark registers for "ClearFEA"
-- [ ] Review the proposed ADRs in `DECISIONS.md` and mark each accepted or changed
+- [x] Review the proposed ADRs in `DECISIONS.md` and mark each accepted or changed (all eleven accepted 2026-10-14)
 - [ ] Enable branch protection on `main` (require pull request and passing checks)
 - [ ] Confirm Docker Desktop (or equivalent) runs on the verification laptop
 
@@ -64,7 +64,11 @@ Things only the maintainer can do.
 
 Written by the last session for the next one. Replace, do not append.
 
-> Kickoff documents only. No code exists. Start with M0.1. All technology choices are proposals recorded as ADR-001 to ADR-011; if the maintainer has changed any, `DECISIONS.md` will say so.
+> Kickoff documents only. No code exists. Start with M0.1. ADR-001 to ADR-011 were accepted unchanged on 2026-10-14.
+>
+> Environment check (2026-10-14, Claude Code cloud): Docker CLI 29.8.2 and `dockerd` are installed but the daemon is not running (no socket); M0.1 must find out whether it can be started. pnpm 12.11.2, uv 0.11.32, wrangler 4.151.0, Node 22.22.0, Python 3.13 default with 3.12 present. CalculiX `ccx` 2.21 (Debian `calculix-ccx`) runs. Gmsh pip package 4.15.2 is installed but fails to load because `libGLU.so.1` is missing.
+>
+> Two points to watch from the ADR review: Gmsh may not report the STEP file's original length unit (check in the M1.1 spike), and browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
 
@@ -75,6 +79,11 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 ## Log
 
 Newest first. One entry per session: date, what was done, what was learned.
+
+### 2026-10-14
+
+- Maintainer accepted ADR-001 to ADR-011 unchanged.
+- Checked tool availability in the cloud environment; see handoff notes.
 
 ### 2026-10-13
 

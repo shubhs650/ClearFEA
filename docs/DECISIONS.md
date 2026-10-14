@@ -125,56 +125,56 @@ After the beta: team workspaces, user-defined acceptance checks in reports, brin
 Add new records at the bottom. Format: number, date, status (proposed, accepted, superseded), decision, reason. Records marked **proposed** were chosen by Claude during kickoff and await the maintainer's confirmation; treat them as the working assumption until changed.
 
 ### ADR-001: Monorepo with three deployable parts
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 `apps/web` (frontend), `apps/api` (Cloudflare Worker), `worker` (Python container), plus `packages/spec` for shared schemas. One repository keeps the spec, the deck generator and the UI in step.
 
 ### ADR-002: Gmsh as both geometry importer and mesher
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 Gmsh, through its OpenCASCADE kernel, reads the STEP file, supplies the display tessellation and produces the mesh. One tool owns face identity from import to mesh, which is the riskiest chain in the product. Gmsh is GPL, compatible with AGPL.
 
 ### ADR-003: SI base units as the internal system
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 All stored and solved quantities are in m, kg, s, K. Gmsh converts STEP geometry to metres at import. One rule with no exceptions is easier to keep correct than a mm-tonne system. Entered values are stored with their unit as typed; conversion uses one shared table.
 
 ### ADR-004: Jobs table with a claim API instead of a managed queue
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 Jobs live in D1. The worker claims work over HTTPS from the API. This behaves identically on localhost and in the cloud, and avoids depending on local emulation of Cloudflare Queues. A managed queue may still trigger machine launches in Phase 1.
 
 ### ADR-005: Worker moves files through transfer URLs issued by the API
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 The worker never holds storage credentials. For each job the API issues upload and download URLs. Locally these point at API pass-through endpoints; in the cloud they are presigned R2 URLs, which avoids Worker body-size limits.
 
 ### ADR-006: SimulationSpec as a versioned JSON document
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 A simulation's setup is one JSON document validated by JSON Schema in `packages/spec`. TypeScript types and Pydantic models are generated from the schema. Runs store a frozen copy.
 
 ### ADR-007: React, Vite, TypeScript and three.js for the frontend
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 Widely used, well supported by Claude Code, and three.js is sufficient for surface rendering with per-face picking.
 
 ### ADR-008: Hono on Cloudflare Workers with D1 and R2
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 Matches the deployment target in the brief. Wrangler's local mode provides D1 and R2 on localhost.
 
 ### ADR-009: Python for the worker
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 Gmsh has a first-class Python API, and Python has mature libraries for numerical work and document generation.
 
 ### ADR-010: Start with the distribution CalculiX build; choose the production solver build by benchmark
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 Milestone M1 uses a packaged `ccx` (SPOOLES). A benchmark task in M2 compares SPOOLES, PaStiX and the iterative solver for speed and memory, then fixes the build for the 2-million-element target. Building CalculiX with PaStiX is known to be fiddly, so it is isolated as its own task.
 
 ### ADR-011: Report figures are captured in the browser
-2026-10-13 · proposed
+2026-10-13 · accepted 2026-10-14
 
 Report pictures are rendered by the same three.js viewer and uploaded as images when the user generates a report. One renderer keeps reports consistent with what the user saw. The cost is that report generation needs the browser open.
