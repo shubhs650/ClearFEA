@@ -1,3 +1,5 @@
-# Local secrets for `wrangler dev`. Copy to .dev.vars (git-ignored) and change the value.
+# Local secrets for `wrangler dev`. Copy to .dev.vars (git-ignored) and change the values.
 # The worker must send the same value as CLEARFEA_WORKER_TOKEN.
 WORKER_TOKEN=local-dev-worker-token
+# Signs session cookies (ADR-022). Any long random string; changing it signs everyone out.
+SESSION_SECRET=local-dev-session-secret-change-me

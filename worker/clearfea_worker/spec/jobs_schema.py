@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 type Jobs = Annotated[Any, Field(title="Jobs")]
 """
-Wire shapes of the worker's internal job routes (docs/ARCHITECTURE.md sections 6 and 8). Each message is a definition under $defs.
+Wire shapes of the job routes: the worker's internal routes and the signed-in user's public routes (docs/ARCHITECTURE.md sections 6 and 8). Each message is a definition under $defs.
 """
 
 
@@ -137,6 +137,63 @@ class CompleteResponse(BaseModel):
         populate_by_name=True,
     )
     job: CompletedJob
+
+
+class CreateJobRequest(BaseModel):
+    """
+    Body of POST /api/jobs. Only a noop job is queued directly; later job types are created by the routes for the records they work on.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    type: Literal["noop"]
+
+
+class JobView(BaseModel):
+    """
+    A job as its owner sees it. Timestamps are ISO 8601 UTC strings.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: str
+    type: JobType
+    target_id: Annotated[str | None, Field(alias="targetId")]
+    status: JobStatus
+    stage: str | None
+    failure_category: Annotated[FailureCategory | None, Field(alias="failureCategory")]
+    failure_cause: Annotated[str | None, Field(alias="failureCause")]
+    created_at: Annotated[str, Field(alias="createdAt")]
+    claimed_at: Annotated[str | None, Field(alias="claimedAt")]
+    finished_at: Annotated[str | None, Field(alias="finishedAt")]
+
+
+class JobResponse(BaseModel):
+    """
+    Answer to POST /api/jobs (HTTP 201) and GET /api/jobs/{id}.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    job: JobView
+
+
+class JobListResponse(BaseModel):
+    """
+    Answer to GET /api/jobs: the signed-in user's most recent jobs, newest first.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    jobs: list[JobView]
 
 
 class ErrorResponse(BaseModel):

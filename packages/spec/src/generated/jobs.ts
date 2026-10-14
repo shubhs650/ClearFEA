@@ -41,7 +41,7 @@ export type WorkerId = string;
 export type CompleteRequest = CompleteSucceeded | CompleteFailed;
 
 /**
- * Wire shapes of the worker's internal job routes (docs/ARCHITECTURE.md sections 6 and 8). Each message is a definition under $defs.
+ * Wire shapes of the job routes: the worker's internal routes and the signed-in user's public routes (docs/ARCHITECTURE.md sections 6 and 8). Each message is a definition under $defs.
  */
 export interface Jobs {
   [k: string]: unknown;
@@ -131,6 +131,51 @@ export interface CompleteResponse {
   job: CompletedJob;
 }
 /**
+ * Body of POST /api/jobs. Only a noop job is queued directly; later job types are created by the routes for the records they work on.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "CreateJobRequest".
+ */
+export interface CreateJobRequest {
+  type: "noop";
+}
+/**
+ * A job as its owner sees it. Timestamps are ISO 8601 UTC strings.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "JobView".
+ */
+export interface JobView {
+  id: string;
+  type: JobType;
+  targetId: string | null;
+  status: JobStatus;
+  stage: string | null;
+  failureCategory: FailureCategory | null;
+  failureCause: string | null;
+  createdAt: string;
+  claimedAt: string | null;
+  finishedAt: string | null;
+}
+/**
+ * Answer to POST /api/jobs (HTTP 201) and GET /api/jobs/{id}.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "JobResponse".
+ */
+export interface JobResponse {
+  job: JobView;
+}
+/**
+ * Answer to GET /api/jobs: the signed-in user's most recent jobs, newest first.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "JobListResponse".
+ */
+export interface JobListResponse {
+  jobs: JobView[];
+}
+/**
  * Body of any 4xx or 5xx answer: what is wrong and what to do about it.
  *
  * This interface was referenced by `Jobs`'s JSON-Schema
@@ -159,4 +204,8 @@ export const validateCompleteFailed = validator<CompleteFailed>(schema, "Complet
 export const validateCompleteRequest = validator<CompleteRequest>(schema, "CompleteRequest");
 export const validateCompletedJob = validator<CompletedJob>(schema, "CompletedJob");
 export const validateCompleteResponse = validator<CompleteResponse>(schema, "CompleteResponse");
+export const validateCreateJobRequest = validator<CreateJobRequest>(schema, "CreateJobRequest");
+export const validateJobView = validator<JobView>(schema, "JobView");
+export const validateJobResponse = validator<JobResponse>(schema, "JobResponse");
+export const validateJobListResponse = validator<JobListResponse>(schema, "JobListResponse");
 export const validateErrorResponse = validator<ErrorResponse>(schema, "ErrorResponse");

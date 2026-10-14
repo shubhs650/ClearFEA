@@ -6,4 +6,6 @@ export interface Env {
   FILES: R2Bucket;
   /** Shared secret the job worker sends on /internal routes. Unset means those routes refuse. */
   WORKER_TOKEN?: string;
+  /** Key that signs session cookies (ADR-022). Unset means signed-in routes refuse. */
+  SESSION_SECRET?: string;
 }

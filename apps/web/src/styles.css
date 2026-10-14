@@ -114,3 +114,134 @@ body,
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.status-user {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+button {
+  font: inherit;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--pane);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  color: var(--muted);
+}
+
+.link-button {
+  border: none;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  text-decoration: underline;
+}
+
+/* Sign-in page: the form in the middle, the status bar along the bottom. */
+.signin-page {
+  display: grid;
+  grid-template-rows: 1fr 28px;
+  grid-template-areas:
+    "main"
+    "status";
+  height: 100vh;
+  min-width: 1024px;
+  min-height: 600px;
+}
+
+.signin {
+  grid-area: main;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.signin-form {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  background: var(--pane);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.signin-title {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.signin-hint {
+  color: var(--muted);
+  margin: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field input {
+  font: inherit;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.form-problem {
+  color: var(--error);
+  margin: 0;
+}
+
+.test-jobs {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.job-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.job-row {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.job-status {
+  min-width: 80px;
+  font-weight: 600;
+}
+
+.job-succeeded {
+  color: var(--ok);
+}
+
+.job-failed,
+.job-cancelled,
+.job-stopped_at_limit {
+  color: var(--error);
+}
+
+.job-time,
+.job-cause {
+  color: var(--muted);
+}

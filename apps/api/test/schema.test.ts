@@ -11,7 +11,8 @@ async function columns(table: string): Promise<string[]> {
 
 describe("migration 0001", () => {
   it("creates users and projects", async () => {
-    expect(await columns("users")).toEqual(["id", "login", "name", "created_at"]);
+    // password_hash is added by migration 0003.
+    expect(await columns("users")).toEqual(["id", "login", "name", "created_at", "password_hash"]);
     expect(await columns("projects")).toEqual([
       "id",
       "owner_id",

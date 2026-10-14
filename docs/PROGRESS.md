@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M0 Bootstrap
-- **Next task:** M0.9 Seeded test users and session login
+- **Next task:** close M0 (all tasks done; M0 exit checked in M0.9), then M1.1
 - **Blocked on:** nothing
 
 ## Milestones
@@ -40,7 +40,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M0.6 `packages/spec` with first schema, type generation, `units.json`
 - [x] M0.7 `make dev`, `make test`, Commands section in `CLAUDE.md`
 - [x] M0.8 GitHub Actions fast tier, DCO check, nightly placeholder
-- [ ] M0.9 Seeded test users and session login
+- [x] M0.9 Seeded test users and session login
 
 ## Maintainer to-do
 
@@ -86,6 +86,8 @@ Written by the last session for the next one. Replace, do not append.
 >
 > M0.8 (2026-10-14): `.github/workflows/fast.yml` runs on every pull request. Job `make test` runs `make install` then `make test` on `ubuntu-24.04` (Node 22, pnpm from `packageManager`, uv 0.11.32, Python 3.12, pnpm and uv caches); sign-offs are checked by the DCO GitHub App, which was already installed. Actions are pinned by commit SHA and the token is read-only (ADR-021, accepted). `.github/workflows/nightly.yml` runs at 02:00 UTC and by hand but only prints that no suites exist yet; replace its step when `make verify` (M1.13) lands. To require these checks, the maintainer adds `make test` and `DCO` as required status checks in branch protection for `main`. The first CI run (PR #9) took 34 s for `make test`.
 >
+> M0.9 (2026-10-14): two seeded test users, `alice` / `alice-local` and `bob` / `bob-local` (`apps/api/seed/test-users.sql`, applied by `db:seed`, which `pnpm --filter @clearfea/api dev` runs after the migrations). Migration 0003 adds `users.password_hash`. `POST`/`GET`/`DELETE /api/session` sign in, report and sign out with a signed, stateless cookie keyed by `SESSION_SECRET` in `apps/api/.dev.vars` (ADR-022, accepted); `infra/dev.sh` adds a random `SESSION_SECRET` to an older `.dev.vars` that lacks one. Signed-in routes use `requireUser` from `apps/api/src/session/`. Since M0's exit needs it, M0.9 also adds `POST /api/jobs` (noop only), `GET /api/jobs` and `GET /api/jobs/:id`, owner-scoped, with route tests that user B cannot read or list user A's jobs. The web app shows a sign-in form until someone is signed in, then the shell with a "Worker check" section in the settings pane that queues a no-op job and polls every 2 s while it is active; the status bar names the user and has Sign out. M0 exit checked with `make dev` in the cloud session and headless Chromium: sign in as alice, queue, Queued then Succeeded, worker log shows the claim; bob sees no jobs. The `readBody` helper moved from `internal.ts` to `src/body.ts` and now requires `Content-Type: application/json` (the worker already sends it). Not done here, on purpose: login rate limiting, revocable sessions and a projects route (M1). The sign-in form, the worker-check section and the jobs API shapes are new public surface; the worker-check section is meant to be replaced or moved once real job types exist.
+>
 > Two points to watch from the ADR review: Gmsh may not report the STEP file's original length unit (check in the M1.1 spike), and browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -100,6 +102,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-14
 
+- M0.9: seeded test users `alice` and `bob`, session login with a signed cookie (ADR-022 accepted), owner-scoped `/api/jobs` routes, sign-in form and a worker check in the web app; M0 exit (no-op job queued to succeeded from the browser) checked with `make dev`.
 - M0.8: GitHub Actions fast tier (`make test`) on every pull request (DCO sign-off left to the already-installed DCO App), nightly workflow placeholder (ADR-021 accepted).
 - M0.7: `make dev` starts the API, web app and worker together and stops them together (ADR-020 accepted); Biome lints all TypeScript (ADR-019 accepted); Commands section in `CLAUDE.md` and "Running it" in `README.md` filled in.
 - M0.6: `packages/spec` with health, jobs and units schemas, `units.json` (length, force, pressure), TypeScript and Pydantic generation with a drift check in `make test`, unit conversion in both languages tested against one shared fixture (ADR-017 and ADR-018 accepted).

@@ -5,8 +5,9 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
-    "dev": "wrangler d1 migrations apply DB --local && wrangler dev",
+    "dev": "pnpm db:migrate && pnpm db:seed && wrangler dev",
     "db:migrate": "wrangler d1 migrations apply DB --local",
+    "db:seed": "wrangler d1 execute DB --local --file seed/test-users.sql",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

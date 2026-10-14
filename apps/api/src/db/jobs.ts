@@ -88,6 +88,15 @@ export async function getJob(db: D1Database, userId: string, jobId: string): Pro
   return row === null ? null : toJob(row);
 }
 
+/** The user's most recent jobs, newest first. */
+export async function listJobs(db: D1Database, userId: string, limit = 20): Promise<Job[]> {
+  const { results } = await db
+    .prepare("SELECT * FROM jobs WHERE owner_id = ? ORDER BY created_at DESC, id DESC LIMIT ?")
+    .bind(userId, limit)
+    .all<JobRow>();
+  return results.map(toJob);
+}
+
 /**
  * Marks the oldest queued job of one of the given types as claimed by this
  * worker and returns it, or null when nothing is queued. A single UPDATE
