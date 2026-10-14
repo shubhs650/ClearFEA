@@ -42,6 +42,10 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M0.8 GitHub Actions fast tier, DCO check, nightly placeholder
 - [x] M0.9 Seeded test users and session login
 
+### M1 Thin slice
+
+- [x] M1.1 Spike: face identity chain
+
 ## Maintainer to-do
 
 Things only the maintainer can do.
@@ -88,7 +92,9 @@ Written by the last session for the next one. Replace, do not append.
 >
 > M0.9 (2026-10-14): two seeded test users, `alice` / `alice-local` and `bob` / `bob-local` (`apps/api/seed/test-users.sql`, applied by `db:seed`, which `pnpm --filter @clearfea/api dev` runs after the migrations). Migration 0003 adds `users.password_hash`. `POST`/`GET`/`DELETE /api/session` sign in, report and sign out with a signed, stateless cookie keyed by `SESSION_SECRET` in `apps/api/.dev.vars` (ADR-022, accepted); `infra/dev.sh` adds a random `SESSION_SECRET` to an older `.dev.vars` that lacks one. Signed-in routes use `requireUser` from `apps/api/src/session/`. Since M0's exit needs it, M0.9 also adds `POST /api/jobs` (noop only), `GET /api/jobs` and `GET /api/jobs/:id`, owner-scoped, with route tests that user B cannot read or list user A's jobs. The web app shows a sign-in form until someone is signed in, then the shell with a "Worker check" section in the settings pane that queues a no-op job and polls every 2 s while it is active; the status bar names the user and has Sign out. M0 exit checked with `make dev` in the cloud session and headless Chromium: sign in as alice, queue, Queued then Succeeded, worker log shows the claim; bob sees no jobs. The `readBody` helper moved from `internal.ts` to `src/body.ts` and now requires `Content-Type: application/json` (the worker already sends it). Not done here, on purpose: login rate limiting, revocable sessions and a projects route (M1). The sign-in form, the worker-check section and the jobs API shapes are new public surface; the worker-check section is meant to be replaced or moved once real job types exist.
 >
-> Two points to watch from the ADR review: Gmsh may not report the STEP file's original length unit (check in the M1.1 spike), and browser-captured report figures (ADR-011) mean report generation needs the browser open.
+> M1.1 (2026-10-14): the face identity spike is `worker/spikes/face_identity/` (script only; run command and result table in its README); findings are ADR-023 (accepted). The chain in `ARCHITECTURE.md` section 3 holds on all three models in mm, m and in, for first- and second-order tetrahedra. Confirmed: Gmsh does not report the STEP file's declared unit, so `step_units.py` reads it from the file; M1.2 should move it into the worker with unit tests. Import with `Geometry.OCCTargetUnit = "M"` (Gmsh's default is millimetres), and apply a user-corrected unit by re-importing with `Geometry.OCCScaling`, never `occ.dilate` (it turns faces into B-splines and moves areas by up to 0.3 percent). Not covered: CalculiX face numbering (M1.7), multiple bodies (M4), files from commercial CAD. To run Gmsh on the cloud host, `apt-get install libglu1-mesa libxrender1 libxcursor1 libxft2 libxinerama1 libgl1` first. numpy is not a worker dependency; the spike uses `uv run --with numpy==2.3.4`.
+>
+> Still to watch from the ADR review: browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
 
@@ -102,6 +108,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-14
 
+- M1.1: face identity spike on three generated models in three declared units; tags stable across processes, every surface triangle maps to one tetrahedron face and lies on its own face; Gmsh does not report the STEP unit, so the file is read directly (ADR-023 accepted).
 - M0.9: seeded test users `alice` and `bob`, session login with a signed cookie (ADR-022 accepted), owner-scoped `/api/jobs` routes, sign-in form and a worker check in the web app; M0 exit (no-op job queued to succeeded from the browser) checked with `make dev`.
 - M0.8: GitHub Actions fast tier (`make test`) on every pull request (DCO sign-off left to the already-installed DCO App), nightly workflow placeholder (ADR-021 accepted).
 - M0.7: `make dev` starts the API, web app and worker together and stops them together (ADR-020 accepted); Biome lints all TypeScript (ADR-019 accepted); Commands section in `CLAUDE.md` and "Running it" in `README.md` filled in.
