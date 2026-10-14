@@ -178,3 +178,8 @@ Milestone M1 uses a packaged `ccx` (SPOOLES). A benchmark task in M2 compares SP
 2026-10-13 · accepted 2026-10-14
 
 Report pictures are rendered by the same three.js viewer and uploaded as images when the user generates a report. One renderer keeps reports consistent with what the user saw. The cost is that report generation needs the browser open.
+
+### ADR-013: Python tooling lives in `worker/`; versions pinned per workspace
+2026-10-14 · proposed
+
+The `uv` project is `worker/pyproject.toml` with its own `uv.lock`, not a uv workspace at the repository root, because the worker is the only Python package. Python is pinned to 3.12 there (`.python-version`, `requires-python`), and dev tools (pytest, ruff) are pinned to exact versions. TypeScript packages are a pnpm workspace (`apps/*`, `packages/*`) with pnpm pinned through `packageManager`. If verification scripts later need their own Python package, the root becomes a uv workspace with `worker` as a member. (ADR-012 is proposed in the M0.1 pull request.)

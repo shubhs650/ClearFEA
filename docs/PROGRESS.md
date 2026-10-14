@@ -33,7 +33,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M0 Bootstrap
 
 - [ ] M0.1 Confirm Docker works in the Claude Code cloud environment
-- [ ] M0.2 Monorepo layout, pnpm workspaces, uv, Makefile
+- [x] M0.2 Monorepo layout, pnpm workspaces, uv, Makefile
 - [ ] M0.3 API skeleton with local D1 and R2
 - [ ] M0.4 Web skeleton with layout shell
 - [ ] M0.5 Worker skeleton, Dockerfile, no-op job
@@ -68,6 +68,8 @@ Written by the last session for the next one. Replace, do not append.
 >
 > Environment check (2026-10-14, Claude Code cloud): Docker CLI 29.8.2 and `dockerd` are installed but the daemon is not running (no socket); M0.1 must find out whether it can be started. pnpm 12.11.2, uv 0.11.32, wrangler 4.151.0, Node 22.22.0, Python 3.13 default with 3.12 present. CalculiX `ccx` 2.21 (Debian `calculix-ccx`) runs. Gmsh pip package 4.15.2 is installed but fails to load because `libGLU.so.1` is missing.
 >
+> M0.2 (2026-10-14): monorepo layout in place. `make install` and `make test` work; `make test` runs pnpm lint/typecheck/test across the workspace (no-ops until packages gain scripts) and ruff plus pytest in `worker/`. The TypeScript packages are empty `package.json` stubs with a README naming the task that fills them. `make dev`, `verify` and `e2e` are left for M0.7 and later. Python tooling choice is ADR-013 (proposed).
+>
 > Two points to watch from the ADR review: Gmsh may not report the STEP file's original length unit (check in the M1.1 spike), and browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -82,6 +84,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-14
 
+- M0.2: created the monorepo layout (`apps/web`, `apps/api`, `worker`, `packages/spec`, `verification`, `infra`), pnpm workspace, `uv` project for the worker, top-level `Makefile`.
 - Maintainer accepted ADR-001 to ADR-011 unchanged.
 - Checked tool availability in the cloud environment; see handoff notes.
 
