@@ -13,14 +13,30 @@
       "enum": ["continue", "cancel", "stop"]
     },
     "WorkerId": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "Transfer": {
+      "description": "One file a job reads or writes (ADR-005). Locally the url points at the API's /internal/jobs/{id}/files route and needs the worker token; in the cloud it is a presigned storage URL.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "direction", "url"],
+      "properties": {
+        "name": { "description": "The file's name within the job, for example model.step.", "type": "string", "minLength": 1 },
+        "direction": { "enum": ["download", "upload"] },
+        "url": { "type": "string", "minLength": 1 }
+      }
+    },
     "ClaimedJob": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "type", "targetId"],
+      "required": ["id", "type", "targetId", "params", "transfers"],
       "properties": {
         "id": { "type": "string" },
         "type": { "$ref": "#/$defs/JobType" },
-        "targetId": { "type": ["string", "null"] }
+        "targetId": { "type": ["string", "null"] },
+        "params": {
+          "description": "Job-type specific parameters, for example an ImportParams (geometry.schema.json); null when the type has none.",
+          "type": ["object", "null"]
+        },
+        "transfers": { "type": "array", "items": { "$ref": "#/$defs/Transfer" } }
       }
     },
     "ClaimRequest": {
@@ -74,7 +90,12 @@
         "workerId": { "$ref": "#/$defs/WorkerId" },
         "status": { "const": "failed" },
         "failureCategory": { "$ref": "#/$defs/FailureCategory" },
-        "failureCause": { "type": "string", "minLength": 1 }
+        "failureCause": { "type": "string", "minLength": 1 },
+        "failureMessage": {
+          "description": "What went wrong and what to do about it, in plain language for the job's owner.",
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "CompleteRequest": {
@@ -111,7 +132,7 @@
       "additionalProperties": false,
       "required": [
         "id", "type", "targetId", "status", "stage", "failureCategory", "failureCause",
-        "createdAt", "claimedAt", "finishedAt"
+        "failureMessage", "createdAt", "claimedAt", "finishedAt"
       ],
       "properties": {
         "id": { "type": "string" },
@@ -121,6 +142,7 @@
         "stage": { "type": ["string", "null"] },
         "failureCategory": { "oneOf": [{ "$ref": "#/$defs/FailureCategory" }, { "type": "null" }] },
         "failureCause": { "type": ["string", "null"] },
+        "failureMessage": { "type": ["string", "null"] },
         "createdAt": { "type": "string" },
         "claimedAt": { "type": ["string", "null"] },
         "finishedAt": { "type": ["string", "null"] }

@@ -2,12 +2,14 @@
 """Claim loop: claim a job, run its handler with heartbeats, report the outcome."""
 
 import logging
+import tempfile
 import threading
 from collections.abc import Callable
+from pathlib import Path
 
 from .api import ApiClient, ApiError, ClaimedJob
 from .config import Settings
-from .jobs import HANDLERS, Handler, JobContext
+from .jobs import HANDLERS, Files, Handler, JobContext, JobFailure
 
 log = logging.getLogger(__name__)
 
@@ -60,10 +62,21 @@ def run_job(
     if handler is None:
         client.fail(job.id, "platform_fault", "unsupported_job_type")
         return "failed"
-    context = JobContext()
-    with _Heartbeat(client, job, context, heartbeat_seconds):
+    with (
+        tempfile.TemporaryDirectory(prefix=f"job-{job.id}-") as workdir,
+        _Heartbeat(client, job, context := JobContext(), heartbeat_seconds),
+    ):
+        context.files = Files(job, client, Path(workdir))
         try:
             result = handler(job, context)
+        except JobFailure as failure:
+            log.info("Job %s (%s) failed: %s", job.id, job.type, failure.message)
+            client.fail(job.id, failure.category, failure.cause, failure.message)
+            return "failed"
+        except ApiError as error:
+            log.warning("Job %s (%s): %s", job.id, job.type, error)
+            client.fail(job.id, "platform_fault", "transfer_failed")
+            return "failed"
         except Exception:
             log.exception("Job %s (%s) raised an error", job.id, job.type)
             client.fail(job.id, "platform_fault", "internal_error")

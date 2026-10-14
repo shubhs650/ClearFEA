@@ -34,8 +34,8 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import models  # noqa: E402
-from step_units import detect_length_unit  # noqa: E402
 
+from clearfea_worker.geometry.step_units import detect_length_unit  # noqa: E402
 from clearfea_worker.units import to_si  # noqa: E402
 
 UNIT_VARIANTS = ("mm", "m", "in")

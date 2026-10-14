@@ -47,6 +47,20 @@ export interface Jobs {
   [k: string]: unknown;
 }
 /**
+ * One file a job reads or writes (ADR-005). Locally the url points at the API's /internal/jobs/{id}/files route and needs the worker token; in the cloud it is a presigned storage URL.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "Transfer".
+ */
+export interface Transfer {
+  /**
+   * The file's name within the job, for example model.step.
+   */
+  name: string;
+  direction: "download" | "upload";
+  url: string;
+}
+/**
  * This interface was referenced by `Jobs`'s JSON-Schema
  * via the `definition` "ClaimedJob".
  */
@@ -54,6 +68,11 @@ export interface ClaimedJob {
   id: string;
   type: JobType;
   targetId: string | null;
+  /**
+   * Job-type specific parameters, for example an ImportParams (geometry.schema.json); null when the type has none.
+   */
+  params: {} | null;
+  transfers: Transfer[];
 }
 /**
  * Body of POST /internal/jobs/claim.
@@ -112,6 +131,10 @@ export interface CompleteFailed {
   status: "failed";
   failureCategory: FailureCategory;
   failureCause: string;
+  /**
+   * What went wrong and what to do about it, in plain language for the job's owner.
+   */
+  failureMessage?: string;
 }
 /**
  * This interface was referenced by `Jobs`'s JSON-Schema
@@ -153,6 +176,7 @@ export interface JobView {
   stage: string | null;
   failureCategory: FailureCategory | null;
   failureCause: string | null;
+  failureMessage: string | null;
   createdAt: string;
   claimedAt: string | null;
   finishedAt: string | null;
@@ -194,6 +218,7 @@ export const validateFailureCategory = validator<FailureCategory>(schema, "Failu
 export const HeartbeatActionValues = ["continue", "cancel", "stop"] as const satisfies readonly HeartbeatAction[];
 export const validateHeartbeatAction = validator<HeartbeatAction>(schema, "HeartbeatAction");
 export const validateWorkerId = validator<WorkerId>(schema, "WorkerId");
+export const validateTransfer = validator<Transfer>(schema, "Transfer");
 export const validateClaimedJob = validator<ClaimedJob>(schema, "ClaimedJob");
 export const validateClaimRequest = validator<ClaimRequest>(schema, "ClaimRequest");
 export const validateClaimResponse = validator<ClaimResponse>(schema, "ClaimResponse");

@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Geometry",
+  "description": "Uploaded STEP geometry: the topology file the import job writes, the import job's parameters and result, and the wire shapes of /api/geometries (docs/ARCHITECTURE.md sections 3 and 4, ADR-023, ADR-024). Lengths are in metres. Each message is a definition under $defs.",
+  "$defs": {
+    "LengthUnit": {
+      "description": "A length unit symbol from packages/spec/units.json.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20
+    },
+    "Vector3": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "BoundingBox": {
+      "description": "xmin, ymin, zmin, xmax, ymax, zmax in metres.",
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 6,
+      "maxItems": 6
+    },
+    "FaceType": { "enum": ["plane", "cylinder", "other"] },
+    "UnitReading": {
+      "description": "What the import job read about the file's length unit. Factors are metres per file unit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared", "detectedUnit", "problem", "readingFactor"],
+      "properties": {
+        "declared": {
+          "description": "The unit as the file writes it, for example SI_UNIT(.MILLI.,.METRE.) or 'INCH'; null when it declares none.",
+          "type": ["string", "null"]
+        },
+        "detectedUnit": {
+          "description": "The declared unit as a units.json symbol; null when the file declares none, several, an unsupported one, or one whose factor disagrees with the table. The user must then choose one.",
+          "oneOf": [{ "$ref": "#/$defs/LengthUnit" }, { "type": "null" }]
+        },
+        "problem": {
+          "description": "Why there is no detected unit, in plain language; null when there is one.",
+          "type": ["string", "null"]
+        },
+        "readingFactor": {
+          "description": "Metres per file coordinate that OpenCASCADE applies when importing the file as it is (ADR-024).",
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "TopologyBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag", "volume", "faces"],
+      "properties": {
+        "tag": { "type": "integer" },
+        "volume": { "description": "Cubic metres.", "type": "number" },
+        "faces": { "type": "array", "items": { "type": "integer" } }
+      }
+    },
+    "TopologyFace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag", "type", "gmshType", "area", "centroid", "bbox", "bodies"],
+      "properties": {
+        "tag": { "type": "integer" },
+        "type": { "$ref": "#/$defs/FaceType" },
+        "gmshType": { "description": "Gmsh's own surface type name, for example Plane or BSpline surface.", "type": "string" },
+        "area": { "description": "Square metres.", "type": "number" },
+        "centroid": { "$ref": "#/$defs/Vector3" },
+        "bbox": { "$ref": "#/$defs/BoundingBox" },
+        "bodies": { "type": "array", "items": { "type": "integer" } }
+      }
+    },
+    "Topology": {
+      "description": "topology.json: the reference for face identity (ARCHITECTURE.md section 3). Written by the import job in metres, at the geometry's confirmed scale once the unit is confirmed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "size", "bbox", "unit", "scaling", "software", "bodies", "faces"],
+      "properties": {
+        "version": { "const": 1 },
+        "size": { "description": "Diagonal of the model's bounding box, in metres.", "type": "number" },
+        "bbox": { "$ref": "#/$defs/BoundingBox" },
+        "unit": { "$ref": "#/$defs/UnitReading" },
+        "scaling": {
+          "description": "Geometry.OCCScaling the file was imported with: 1, or the confirmed unit's factor divided by the reading factor.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "software": {
+          "description": "Versions that produced the tags. Tags are only stable for the same file and the same versions.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gmsh", "occt"],
+          "properties": { "gmsh": { "type": "string" }, "occt": { "type": "string" } }
+        },
+        "bodies": { "type": "array", "items": { "$ref": "#/$defs/TopologyBody" } },
+        "faces": { "type": "array", "items": { "$ref": "#/$defs/TopologyFace" } }
+      }
+    },
+    "ImportParams": {
+      "description": "Parameters of an import job. confirmedUnit is null on the first import, which reads the file as it is.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["confirmedUnit"],
+      "properties": {
+        "confirmedUnit": { "oneOf": [{ "$ref": "#/$defs/LengthUnit" }, { "type": "null" }] }
+      }
+    },
+    "ImportResult": {
+      "description": "Result summary of a succeeded import job.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "scaling", "bodies", "faces", "size", "bbox", "displayTriangles"],
+      "properties": {
+        "unit": { "$ref": "#/$defs/UnitReading" },
+        "scaling": { "type": "number", "exclusiveMinimum": 0 },
+        "bodies": { "type": "integer", "minimum": 1 },
+        "faces": { "type": "integer", "minimum": 1 },
+        "size": { "type": "number" },
+        "bbox": { "$ref": "#/$defs/BoundingBox" },
+        "displayTriangles": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "GeometryStatus": {
+      "description": "importing: an import job is queued or running. needs_unit: the file declares no usable unit and the user must choose one. unconfirmed: a unit was detected and awaits the user's confirmation. ready: the unit is confirmed and topology.json is at that scale. failed: the import failed; problem says why.",
+      "enum": ["importing", "needs_unit", "unconfirmed", "ready", "failed"]
+    },
+    "GeometryView": {
+      "description": "A geometry as its owner sees it. Lengths in metres; the browser converts for display.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "name", "sizeBytes", "status", "problem", "declaredUnit", "detectedUnit",
+        "unitProblem", "confirmedUnit", "bodyCount", "faceCount", "size", "bbox", "createdAt"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "description": "The uploaded file's name.", "type": "string" },
+        "sizeBytes": { "type": "integer" },
+        "status": { "$ref": "#/$defs/GeometryStatus" },
+        "problem": { "description": "Why the import failed, in plain language.", "type": ["string", "null"] },
+        "declaredUnit": { "type": ["string", "null"] },
+        "detectedUnit": { "oneOf": [{ "$ref": "#/$defs/LengthUnit" }, { "type": "null" }] },
+        "unitProblem": { "type": ["string", "null"] },
+        "confirmedUnit": { "oneOf": [{ "$ref": "#/$defs/LengthUnit" }, { "type": "null" }] },
+        "bodyCount": { "type": ["integer", "null"] },
+        "faceCount": { "type": ["integer", "null"] },
+        "size": { "description": "Bounding box diagonal in metres at the current scale.", "type": ["number", "null"] },
+        "bbox": { "oneOf": [{ "$ref": "#/$defs/BoundingBox" }, { "type": "null" }] },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "GeometryResponse": {
+      "description": "Answer to POST /api/geometries (HTTP 201), GET /api/geometries/{id} and POST /api/geometries/{id}/unit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geometry"],
+      "properties": { "geometry": { "$ref": "#/$defs/GeometryView" } }
+    },
+    "GeometryListResponse": {
+      "description": "Answer to GET /api/geometries: the signed-in user's geometries, newest first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geometries"],
+      "properties": { "geometries": { "type": "array", "items": { "$ref": "#/$defs/GeometryView" } } }
+    },
+    "ConfirmUnitRequest": {
+      "description": "Body of POST /api/geometries/{id}/unit: the length unit the file is really in.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit"],
+      "properties": { "unit": { "$ref": "#/$defs/LengthUnit" } }
+    }
+  }
+}

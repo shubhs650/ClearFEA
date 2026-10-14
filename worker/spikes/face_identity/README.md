@@ -12,8 +12,9 @@ It needs the Gmsh system libraries (`libglu1-mesa` and friends, see `worker/Dock
 | File | Does |
 | --- | --- |
 | `models.py` | Builds the three models with Gmsh's OpenCASCADE kernel and writes them as STEP (millimetres), and rewrites the unit declaration to make metre and inch variants of the same coordinates |
-| `step_units.py` | Reads the declared length unit from the STEP data section; names map to `units.json` symbols, and a conversion-based unit's own factor is cross-checked against the table |
 | `spike.py` | Runs each step in its own process, as the jobs will, and checks it |
+
+The STEP unit reader that started here now lives in the worker as `clearfea_worker/geometry/step_units.py` (M1.2), and the spike imports it from there.
 
 Models (original geometry, generated on each run, no STEP files in the repository):
 
