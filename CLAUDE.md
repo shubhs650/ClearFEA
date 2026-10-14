@@ -81,14 +81,22 @@ docs/            Decisions, architecture, plan, progress, verification
 
 ## Commands
 
-None exist yet. Milestone M0 creates them and records them here. Planned targets:
+Run from the repository root. `make help` lists them.
 
 ```
-make dev         start API, web and worker on localhost
-make test        fast tier: unit, snapshot, types, lint
-make verify      physics verification suite (coarse); VERIFY_TIER=full for fine meshes
-make e2e         browser end-to-end tests
+make install     pnpm and uv dependencies (frozen lockfiles)
+make dev         API (wrangler dev, :8787), web (Vite, :5173, proxies /api) and the worker
+                 container together; Ctrl-C stops all three (infra/dev.sh)
+make test        fast tier: generated-code drift check, Biome lint, tsc, Vitest, ruff, pytest
+make lint        lint only (Biome for TypeScript, ruff for Python)
+make format      format Python code with ruff
+make spec        regenerate TypeScript types and Pydantic models from packages/spec/schemas
+make worker-image  build the worker image on its own
 ```
+
+- `make dev` needs a running Docker daemon. In the Claude Code cloud environment start it first with `nohup dockerd > /tmp/dockerd.log 2>&1 &` and run `make dev BUILD_CA=/root/.ccr/ca-bundle.crt` so the image build trusts the proxy (ADR-012). It creates `apps/api/.dev.vars` from the example if missing and passes its `WORKER_TOKEN` to the worker.
+- To see a job run, queue one by hand as `worker/README.md` describes, until sessions exist (M0.9).
+- Planned, not yet present: `make verify` (physics suite, M1.13) and `make e2e` (browser tests, M1.14).
 
 ## When unsure
 

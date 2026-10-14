@@ -63,7 +63,7 @@ async function generate() {
     modules.push(name);
   }
   files["index.ts"] =
-    header("*.schema.json") + "\n" + modules.map((m) => `export * from "./${m}";`).join("\n") + "\n";
+    `${header("*.schema.json")}\n${modules.map((m) => `export * from "./${m}";`).join("\n")}\n`;
   return files;
 }
 
