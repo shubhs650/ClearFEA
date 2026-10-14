@@ -53,4 +53,4 @@ clean:
 
 comma := ,
 worker-image:
-	docker build $(if $(BUILD_CA),--secret id=extra_ca$(comma)src=$(BUILD_CA)) -t clearfea-worker worker
+	docker build $(if $(BUILD_CA),--secret id=extra_ca$(comma)src=$(BUILD_CA)) --build-context spec=packages/spec -t clearfea-worker worker
