@@ -95,7 +95,7 @@ make worker-image  build the worker image on its own
 ```
 
 - `make dev` needs a running Docker daemon. In the Claude Code cloud environment start it first with `nohup dockerd > /tmp/dockerd.log 2>&1 &` and run `make dev BUILD_CA=/root/.ccr/ca-bundle.crt` so the image build trusts the proxy (ADR-012). It creates `apps/api/.dev.vars` from the example if missing and passes its `WORKER_TOKEN` to the worker.
-- CI (`.github/workflows/fast.yml`) runs `make install` and `make test` on every pull request, plus a DCO sign-off check you can run locally with `.github/scripts/check-dco.sh origin/main HEAD`. The nightly workflow is a placeholder until `make verify` exists.
+- CI (`.github/workflows/fast.yml`) runs `make install` and `make test` on every pull request; the DCO GitHub App checks sign-offs. The nightly workflow is a placeholder until `make verify` exists.
 - To see a job run, queue one by hand as `worker/README.md` describes, until sessions exist (M0.9).
 - Planned, not yet present: `make verify` (physics suite, M1.13) and `make e2e` (browser tests, M1.14).
 

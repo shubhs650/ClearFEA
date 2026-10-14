@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Fast tier: generated-code drift check, lint, type checks, unit and snapshot tests (`make test`),
-# plus the DCO sign-off check. Runs on every pull request; keep it under five minutes.
+# Fast tier: generated-code drift check, lint, type checks, unit and snapshot tests (`make test`).
+# Runs on every pull request; keep it under five minutes. DCO sign-off is checked by the DCO GitHub App.
 name: Fast tier
 
 on:
@@ -38,18 +38,3 @@ jobs:
       - run: make install
       - run: make test
 
-  dco:
-    name: DCO sign-off
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha }}
-      - run: .github/scripts/check-dco.sh "$BASE" "$HEAD"
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
