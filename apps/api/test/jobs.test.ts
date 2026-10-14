@@ -51,7 +51,7 @@ describe("internal job routes", () => {
     const claimed = await claim();
     expect(claimed.status).toBe(200);
     expect(await claimed.json()).toEqual({
-      job: { id: created.id, type: "noop", targetId: null },
+      job: { id: created.id, type: "noop", targetId: null, params: null, transfers: [] },
     });
     expect((await getJob(env.DB, "alice", created.id))?.status).toBe("claimed");
 

@@ -17,6 +17,8 @@ export interface Job {
   heartbeatAt: string | null;
   failureCategory: FailureCategory | null;
   failureCause: string | null;
+  failureMessage: string | null;
+  params: Record<string, unknown> | null;
   result: unknown;
   createdAt: string;
   claimedAt: string | null;
@@ -34,6 +36,8 @@ interface JobRow {
   heartbeat_at: string | null;
   failure_category: FailureCategory | null;
   failure_cause: string | null;
+  failure_message: string | null;
+  params: string | null;
   result: string | null;
   created_at: string;
   claimed_at: string | null;
@@ -52,6 +56,8 @@ function toJob(row: JobRow): Job {
     heartbeatAt: row.heartbeat_at,
     failureCategory: row.failure_category,
     failureCause: row.failure_cause,
+    failureMessage: row.failure_message,
+    params: row.params === null ? null : JSON.parse(row.params),
     result: row.result === null ? null : JSON.parse(row.result),
     createdAt: row.created_at,
     claimedAt: row.claimed_at,
@@ -64,20 +70,41 @@ const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 /** Statuses in which the claiming worker may still report on a job. */
 const ACTIVE = "('claimed', 'running')";
 
+export interface NewJob {
+  id: string;
+  statement: D1PreparedStatement;
+}
+
+/**
+ * The statement that queues a job, for callers that must create it in one batch with the
+ * record it works on. Run it, then read the job back with getJob.
+ */
+export function newJob(
+  db: D1Database,
+  userId: string,
+  type: JobType,
+  targetId: string | null = null,
+  params: Record<string, unknown> | null = null,
+): NewJob {
+  const id = crypto.randomUUID();
+  const statement = db
+    .prepare("INSERT INTO jobs (id, owner_id, type, target_id, params) VALUES (?, ?, ?, ?, ?)")
+    .bind(id, userId, type, targetId, params === null ? null : JSON.stringify(params));
+  return { id, statement };
+}
+
 export async function createJob(
   db: D1Database,
   userId: string,
   type: JobType,
   targetId: string | null = null,
+  params: Record<string, unknown> | null = null,
 ): Promise<Job> {
-  const row = await db
-    .prepare(
-      "INSERT INTO jobs (id, owner_id, type, target_id) VALUES (?, ?, ?, ?) RETURNING *",
-    )
-    .bind(crypto.randomUUID(), userId, type, targetId)
-    .first<JobRow>();
-  if (row === null) throw new Error("Inserting the job returned no row.");
-  return toJob(row);
+  const { id, statement } = newJob(db, userId, type, targetId, params);
+  await statement.run();
+  const job = await getJob(db, userId, id);
+  if (job === null) throw new Error("Inserting the job returned no row.");
+  return job;
 }
 
 export async function getJob(db: D1Database, userId: string, jobId: string): Promise<Job | null> {
@@ -159,7 +186,25 @@ export async function recordHeartbeat(
 
 export type Completion =
   | { status: "succeeded"; result: unknown }
-  | { status: "failed"; failureCategory: FailureCategory; failureCause: string };
+  | {
+      status: "failed";
+      failureCategory: FailureCategory;
+      failureCause: string;
+      failureMessage: string | null;
+    };
+
+/** A job that the given worker holds and may still report on, or null. */
+export async function getClaimedJob(
+  db: D1Database,
+  workerId: string,
+  jobId: string,
+): Promise<Job | null> {
+  const row = await db
+    .prepare(`SELECT * FROM jobs WHERE id = ? AND claimed_by = ? AND status IN ${ACTIVE}`)
+    .bind(jobId, workerId)
+    .first<JobRow>();
+  return row === null ? null : toJob(row);
+}
 
 /** Records the final outcome. Returns the job, or null if this worker does not hold it. */
 export async function completeJob(
@@ -173,7 +218,7 @@ export async function completeJob(
     .prepare(
       `UPDATE jobs
           SET status = ?, result = ?, failure_category = ?, failure_cause = ?,
-              finished_at = ${NOW}, heartbeat_at = ${NOW}
+              failure_message = ?, finished_at = ${NOW}, heartbeat_at = ${NOW}
         WHERE id = ? AND claimed_by = ? AND status IN ${ACTIVE}
         RETURNING *`,
     )
@@ -182,6 +227,7 @@ export async function completeJob(
       succeeded ? JSON.stringify(completion.result ?? null) : null,
       succeeded ? null : completion.failureCategory,
       succeeded ? null : completion.failureCause,
+      succeeded ? null : completion.failureMessage,
       jobId,
       workerId,
     )
