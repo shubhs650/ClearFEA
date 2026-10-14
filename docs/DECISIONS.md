@@ -114,7 +114,7 @@ After the beta: team workspaces, user-defined acceptance checks in reports, brin
 ## Open items
 
 - Domain, GitHub organisation and trademark checks for the name.
-- Confirm Docker runs in the Claude Code cloud environment and on the laptop.
+- Confirm Docker runs on the laptop. The Claude Code cloud environment was confirmed in M0.1 (ADR-012).
 - Free storage quota, retention period, machine size list and rates: configuration values, set from benchmark and beta data.
 - Lawyer review of terms of service before real payments are taken.
 
@@ -179,7 +179,12 @@ Milestone M1 uses a packaged `ccx` (SPOOLES). A benchmark task in M2 compares SP
 
 Report pictures are rendered by the same three.js viewer and uploaded as images when the user generates a report. One renderer keeps reports consistent with what the user saw. The cost is that report generation needs the browser open.
 
+### ADR-012: Docker runs in the cloud environment; the worker stays a container
+2026-10-14 · accepted 2026-10-14
+
+M0.1 found that Docker works in the Claude Code cloud environment, so the plain-process fallback is not needed and the worker stays a container as in `ARCHITECTURE.md`. Three conditions apply there. The daemon is not started for us, so a session starts `dockerd` in the background before using Docker. Anonymous pulls from Docker Hub fail with HTTP 429, so base images are named through the public `mirror.gcr.io/library/` mirror, which serves the same official images and needs no account, so it works on the laptop too. HTTPS traffic leaves through a proxy with its own certificate authority, so a build that downloads over HTTPS (pip) reads that certificate from an optional BuildKit secret (`--secret id=extra_ca`) at build time; the certificate is never copied into an image layer or the repository, and builds without the secret work unchanged on the laptop.
+
 ### ADR-013: Python tooling lives in `worker/`; versions pinned per workspace
 2026-10-14 · proposed
 
-The `uv` project is `worker/pyproject.toml` with its own `uv.lock`, not a uv workspace at the repository root, because the worker is the only Python package. Python is pinned to 3.12 there (`.python-version`, `requires-python`), and dev tools (pytest, ruff) are pinned to exact versions. TypeScript packages are a pnpm workspace (`apps/*`, `packages/*`) with pnpm pinned through `packageManager`. If verification scripts later need their own Python package, the root becomes a uv workspace with `worker` as a member. (ADR-012 is proposed in the M0.1 pull request.)
+The `uv` project is `worker/pyproject.toml` with its own `uv.lock`, not a uv workspace at the repository root, because the worker is the only Python package. Python is pinned to 3.12 there (`.python-version`, `requires-python`), and dev tools (pytest, ruff) are pinned to exact versions. TypeScript packages are a pnpm workspace (`apps/*`, `packages/*`) with pnpm pinned through `packageManager`. If verification scripts later need their own Python package, the root becomes a uv workspace with `worker` as a member.
