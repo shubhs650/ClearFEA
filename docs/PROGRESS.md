@@ -86,7 +86,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-14
 
-- M0.1: Docker works in the cloud environment once `dockerd` is started; recorded as ADR-012 with the image mirror and build CA conditions. Fallback not needed.
+- M0.1: Docker works in the cloud environment once `dockerd` is started; recorded as ADR-012 (accepted) with the image mirror and build CA conditions. Fallback not needed.
 - Maintainer accepted ADR-001 to ADR-011 unchanged.
 - Checked tool availability in the cloud environment; see handoff notes.
 
