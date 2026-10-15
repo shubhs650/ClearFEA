@@ -95,6 +95,7 @@ class FakeApi:
         if parts[4] == "heartbeat":
             HeartbeatRequest.model_validate(body)
             job["status"] = "running"
+            job["log"] = job.get("log", "") + body.get("log", "")
             return 200, _checked(HeartbeatResponse, {"action": self.heartbeat_action})
         _complete_request.validate_python(body)
         job["status"] = body["status"]

@@ -13,11 +13,13 @@ import {
   validateHeartbeatRequest,
   validateImportResult,
   validateMeshResult,
+  validateSolveResult,
 } from "@clearfea/spec";
 import { Hono } from "hono";
 import { readBody } from "./body";
 import { recordImportOutcome } from "./db/geometries";
 import {
+  appendJobLog,
   type Completion,
   claimJob,
   completeJob,
@@ -26,6 +28,7 @@ import {
   recordHeartbeat,
 } from "./db/jobs";
 import { recordMeshOutcome } from "./db/meshes";
+import { recordRunOutcome } from "./db/runs";
 import type { Env } from "./env";
 import { jobFiles, transfers } from "./jobs/files";
 
@@ -137,10 +140,11 @@ internal.put("/jobs/:id/files/:name", async (c) => {
 const resultChecks: Partial<Record<Job["type"], (result: unknown) => { ok: boolean }>> = {
   import: validateImportResult,
   mesh: validateMeshResult,
+  solve: validateSolveResult,
 };
 
 /**
- * The completion to record. A succeeded import or mesh job whose result or output files are
+ * The completion to record. A succeeded import, mesh or solve job whose result or output files are
  * not what its contract says becomes a platform fault, so a geometry or mesh never turns
  * ready on outputs the viewer or a later job cannot read.
  */
@@ -186,6 +190,12 @@ function validatedMeshResult(result: unknown) {
   return checked.value;
 }
 
+function validatedSolveResult(result: unknown) {
+  const checked = validateSolveResult(result);
+  if (!checked.ok) throw new Error("checkedCompletion lets only valid solve results through.");
+  return checked.value;
+}
+
 /** What the owner is told about a failed job: the worker's message when it is their fault. */
 function problem(completion: Completion & { status: "failed" }, ours: string): string {
   if (completion.failureCategory === "user_fault" && completion.failureMessage) {
@@ -196,15 +206,19 @@ function problem(completion: Completion & { status: "failed" }, ours: string): s
 
 const IMPORT_FAULT =
   "The import stopped because of a fault in ClearFEA, not in your file ({cause}). Upload the file again; if it fails again, report it.";
+const RUN_FAULT =
+  "The run stopped because of a fault in ClearFEA, not in your setup ({cause}). The solver log shows what happened. Run it again; if it fails again, report it.";
 const MESH_FAULT =
   "Meshing stopped because of a fault in ClearFEA, not in your setup ({cause}). Generate the mesh again; if it fails again, report it.";
 
 internal.post("/jobs/:id/heartbeat", async (c) => {
   const body = await readBody(c.req.raw, validateHeartbeatRequest, "HeartbeatRequest", SCHEMA);
   if ("error" in body) return c.json({ error: body.error }, 400);
-  const { workerId, stage = null } = body.value;
-  const outcome = await recordHeartbeat(c.env.DB, workerId, c.req.param("id"), stage);
+  const { workerId, stage = null, log = "" } = body.value;
+  const jobId = c.req.param("id");
+  const outcome = await recordHeartbeat(c.env.DB, workerId, jobId, stage);
   if (!outcome.found) return c.json({ error: "This worker holds no job with that id." }, 404);
+  await appendJobLog(c.env.DB, jobId, log);
   return c.json({ action: outcome.action } satisfies HeartbeatResponse);
 });
 
@@ -234,6 +248,15 @@ internal.post("/jobs/:id/complete", async (c) => {
       completion.status === "succeeded"
         ? { status: "succeeded", result: validatedMeshResult(completion.result) }
         : { status: "failed", problem: problem(completion, MESH_FAULT) },
+    );
+  }
+  if (job.type === "solve") {
+    await recordRunOutcome(
+      c.env.DB,
+      job,
+      completion.status === "succeeded"
+        ? { status: "succeeded", result: validatedSolveResult(completion.result) }
+        : { status: "failed", problem: problem(completion, RUN_FAULT) },
     );
   }
   return c.json({ job: { ...payload(job), status: job.status } } satisfies CompleteResponse);

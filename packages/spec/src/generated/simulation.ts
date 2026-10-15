@@ -47,6 +47,23 @@ export type ElementOrder = 1 | 2;
  * via the `definition` "MeshStatus".
  */
 export type MeshStatus = "meshing" | "ready" | "failed";
+/**
+ * x, y and z components.
+ *
+ * @minItems 3
+ * @maxItems 3
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "XYZ".
+ */
+export type XYZ = [number, number, number];
+/**
+ * solving while the solve job is queued or running; succeeded or failed once it ends.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunStatus".
+ */
+export type RunStatus = "solving" | "succeeded" | "failed";
 
 /**
  * The SimulationSpec, the one document that describes a simulation's setup (docs/ARCHITECTURE.md section 4, ADR-006, ADR-026), and the wire shapes of /api/simulations. Physical quantities are stored as the user typed them, { value, unit }, and converted to SI only by the deck generator. A spec may be incomplete (null values, items without faces) so the setup can be saved as it is built; pre-run validation (M1.12) lists what is missing. Each message is a definition under $defs.
@@ -294,6 +311,130 @@ export interface MeshResponse {
 export interface SimulationMeshResponse {
   mesh: MeshView | null;
 }
+/**
+ * Parameters of a solve job (ADR-030): the run's frozen spec and the mesh it is solved on. The worker writes the deck from these two alone.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "SolveParams".
+ */
+export interface SolveParams {
+  /**
+   * The mesh whose mesh.bin the job reads.
+   */
+  meshId: string;
+  spec: SimulationSpec;
+}
+/**
+ * A nodal result value and where it occurs. SI units; position in metres.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "NodeValue".
+ */
+export interface NodeValue {
+  value: number;
+  /**
+   * Index of the node in mesh.bin, from 0.
+   */
+  node: number;
+  position: XYZ;
+}
+/**
+ * Total reaction force of one support, in newtons, as CalculiX reports it for the support's node set.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "SupportReaction".
+ */
+export interface SupportReaction {
+  supportId: ItemId;
+  force: XYZ;
+}
+/**
+ * Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "SolveResult".
+ */
+export interface SolveResult {
+  /**
+   * Nodes with results; every node of the mesh.
+   */
+  nodes: number;
+  /**
+   * Largest displacement magnitude.
+   */
+  displacement: {
+    max: NodeValue;
+  };
+  /**
+   * Smallest and largest von Mises stress of CalculiX's nodal stresses.
+   */
+  vonMises: {
+    min: NodeValue;
+    max: NodeValue;
+  };
+  /**
+   * One entry per support, in spec order.
+   */
+  reactions: SupportReaction[];
+  software: SolveSoftware;
+}
+/**
+ * Versions that solved the run.
+ */
+export interface SolveSoftware {
+  calculix: string;
+}
+/**
+ * A run as its owner sees it. The spec it was solved with is frozen in the run and not shown here yet (M1.10).
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunView".
+ */
+export interface RunView {
+  id: string;
+  simulationId: string;
+  meshId: string;
+  status: RunStatus;
+  /**
+   * What the solve job is doing: queued, then the worker's stage.
+   */
+  stage: string | null;
+  /**
+   * Why the run failed, in plain language.
+   */
+  problem: string | null;
+  result: SolveResult | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+/**
+ * Answer to POST /api/simulations/{id}/runs (HTTP 201) and GET /api/runs/{id}.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunResponse".
+ */
+export interface RunResponse {
+  run: RunView;
+}
+/**
+ * Answer to GET /api/simulations/{id}/runs: the simulation's runs, newest first.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunListResponse".
+ */
+export interface RunListResponse {
+  runs: RunView[];
+}
+/**
+ * Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunLogResponse".
+ */
+export interface RunLogResponse {
+  text: string;
+  next: number;
+}
 
 export const validateQuantity = validator<Quantity>(schema, "Quantity");
 export const validateItemId = validator<ItemId>(schema, "ItemId");
@@ -320,3 +461,14 @@ export const validateMeshStatus = validator<MeshStatus>(schema, "MeshStatus");
 export const validateMeshView = validator<MeshView>(schema, "MeshView");
 export const validateMeshResponse = validator<MeshResponse>(schema, "MeshResponse");
 export const validateSimulationMeshResponse = validator<SimulationMeshResponse>(schema, "SimulationMeshResponse");
+export const validateSolveParams = validator<SolveParams>(schema, "SolveParams");
+export const validateXYZ = validator<XYZ>(schema, "XYZ");
+export const validateNodeValue = validator<NodeValue>(schema, "NodeValue");
+export const validateSupportReaction = validator<SupportReaction>(schema, "SupportReaction");
+export const validateSolveResult = validator<SolveResult>(schema, "SolveResult");
+export const RunStatusValues = ["solving", "succeeded", "failed"] as const satisfies readonly RunStatus[];
+export const validateRunStatus = validator<RunStatus>(schema, "RunStatus");
+export const validateRunView = validator<RunView>(schema, "RunView");
+export const validateRunResponse = validator<RunResponse>(schema, "RunResponse");
+export const validateRunListResponse = validator<RunListResponse>(schema, "RunListResponse");
+export const validateRunLogResponse = validator<RunLogResponse>(schema, "RunLogResponse");

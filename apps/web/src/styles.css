@@ -517,3 +517,17 @@ button:disabled {
 .setup-remove {
   color: var(--error);
 }
+
+/* The run's solver log (M1.8). */
+.run-log pre {
+  margin: 6px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: pre;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}

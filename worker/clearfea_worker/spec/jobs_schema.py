@@ -102,6 +102,10 @@ class HeartbeatRequest(BaseModel):
     )
     worker_id: Annotated[WorkerId, Field(alias="workerId")]
     stage: str | None = None
+    log: Annotated[str | None, Field(max_length=65536)] = None
+    """
+    Log text the job wrote since the previous heartbeat, appended to the job's log as one chunk (ADR-030).
+    """
 
 
 class HeartbeatResponse(BaseModel):

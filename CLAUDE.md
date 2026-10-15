@@ -98,6 +98,7 @@ make worker-image  build the worker image on its own
 - CI (`.github/workflows/fast.yml`) runs `make install` and `make test` on every pull request; the DCO GitHub App checks sign-offs. The nightly workflow is a placeholder until `make verify` exists.
 - `make dev` seeds two local test users (`alice` / `alice-local`, `bob` / `bob-local`, ADR-022). Sign in at http://localhost:5173 and use "Queue a no-op job" to see a job go from queued to succeeded. `pnpm --filter @clearfea/api db:seed` re-seeds them.
 - Until `make verify` exists, check the deck generator against CalculiX with `cd worker && uv run python spikes/deck_check/check.py` (needs `ccx` and Gmsh's system libraries; ADR-029). Deck snapshots live in `worker/tests/snapshots/deck/`; a missing one is written only with `CLEARFEA_WRITE_SNAPSHOTS=1`.
+- Check the result reader against CalculiX the same way with `cd worker && uv run python spikes/solve_check/check.py` (ADR-030).
 - Planned, not yet present: `make verify` (physics suite, M1.13) and `make e2e` (browser tests, M1.14).
 
 ## When unsure

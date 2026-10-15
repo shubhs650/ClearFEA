@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { emptySimulationSpec, type MeshView, type SimulationSpec } from "@clearfea/spec";
+import { emptySimulationSpec, type MeshView, type RunView, type SimulationSpec } from "@clearfea/spec";
 import { describe, expect, it } from "vitest";
 import {
   addFixedSupport,
@@ -8,6 +8,7 @@ import {
   assignMaterial,
   facesOf,
   meshStatus,
+  runStatus,
   removeItem,
   setupStatus,
   updateLoad,
@@ -152,5 +153,30 @@ describe("mesh mark", () => {
   it("marks a mesh size in the wrong unit kind as an error", () => {
     const spec: SimulationSpec = { ...empty(), mesh: { size: { value: 5, unit: "MPa" } } };
     expect(setupStatus(spec).get("mesh")?.mark).toBe("error");
+  });
+});
+
+describe("run mark", () => {
+  const run = (overrides: Partial<RunView>): RunView => ({
+    id: "r1",
+    simulationId: "s1",
+    meshId: "m1",
+    status: "solving",
+    stage: "solving",
+    problem: null,
+    result: null,
+    createdAt: "2026-10-15T12:00:00.000Z",
+    finishedAt: null,
+    ...overrides,
+  });
+
+  it("asks for a run until there is one, and follows its status", () => {
+    expect(runStatus(null)).toEqual({ mark: "incomplete", notes: ["Run the simulation to get results."] });
+    expect(runStatus(run({})).mark).toBe("incomplete");
+    expect(runStatus(run({ status: "failed", problem: "Add a support." }))).toEqual({
+      mark: "error",
+      notes: ["Add a support."],
+    });
+    expect(runStatus(run({ status: "succeeded" }))).toEqual({ mark: "complete", notes: [] });
   });
 });

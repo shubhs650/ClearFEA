@@ -236,6 +236,115 @@
       "additionalProperties": false,
       "required": ["mesh"],
       "properties": { "mesh": { "oneOf": [{ "$ref": "#/$defs/MeshView" }, { "type": "null" }] } }
+    },
+    "SolveParams": {
+      "description": "Parameters of a solve job (ADR-030): the run's frozen spec and the mesh it is solved on. The worker writes the deck from these two alone.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["meshId", "spec"],
+      "properties": {
+        "meshId": { "description": "The mesh whose mesh.bin the job reads.", "type": "string" },
+        "spec": { "$ref": "#/$defs/SimulationSpec" }
+      }
+    },
+    "XYZ": { "description": "x, y and z components.", "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+    "NodeValue": {
+      "description": "A nodal result value and where it occurs. SI units; position in metres.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "node", "position"],
+      "properties": {
+        "value": { "type": "number" },
+        "node": { "description": "Index of the node in mesh.bin, from 0.", "type": "integer", "minimum": 0 },
+        "position": { "$ref": "#/$defs/XYZ" }
+      }
+    },
+    "SupportReaction": {
+      "description": "Total reaction force of one support, in newtons, as CalculiX reports it for the support's node set.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supportId", "force"],
+      "properties": {
+        "supportId": { "$ref": "#/$defs/ItemId" },
+        "force": { "$ref": "#/$defs/XYZ" }
+      }
+    },
+    "SolveResult": {
+      "description": "Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "displacement", "vonMises", "reactions", "software"],
+      "properties": {
+        "nodes": { "description": "Nodes with results; every node of the mesh.", "type": "integer", "minimum": 4 },
+        "displacement": {
+          "description": "Largest displacement magnitude.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max"],
+          "properties": { "max": { "$ref": "#/$defs/NodeValue" } }
+        },
+        "vonMises": {
+          "description": "Smallest and largest von Mises stress of CalculiX's nodal stresses.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": { "min": { "$ref": "#/$defs/NodeValue" }, "max": { "$ref": "#/$defs/NodeValue" } }
+        },
+        "reactions": { "description": "One entry per support, in spec order.", "type": "array", "items": { "$ref": "#/$defs/SupportReaction" } },
+        "software": {
+          "title": "SolveSoftware",
+          "description": "Versions that solved the run.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["calculix"],
+          "properties": { "calculix": { "type": "string" } }
+        }
+      }
+    },
+    "RunStatus": {
+      "description": "solving while the solve job is queued or running; succeeded or failed once it ends.",
+      "enum": ["solving", "succeeded", "failed"]
+    },
+    "RunView": {
+      "description": "A run as its owner sees it. The spec it was solved with is frozen in the run and not shown here yet (M1.10).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "simulationId", "meshId", "status", "stage", "problem", "result", "createdAt", "finishedAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "simulationId": { "type": "string" },
+        "meshId": { "type": "string" },
+        "status": { "$ref": "#/$defs/RunStatus" },
+        "stage": { "description": "What the solve job is doing: queued, then the worker's stage.", "type": ["string", "null"] },
+        "problem": { "description": "Why the run failed, in plain language.", "type": ["string", "null"] },
+        "result": { "oneOf": [{ "$ref": "#/$defs/SolveResult" }, { "type": "null" }] },
+        "createdAt": { "type": "string" },
+        "finishedAt": { "type": ["string", "null"] }
+      }
+    },
+    "RunResponse": {
+      "description": "Answer to POST /api/simulations/{id}/runs (HTTP 201) and GET /api/runs/{id}.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run"],
+      "properties": { "run": { "$ref": "#/$defs/RunView" } }
+    },
+    "RunListResponse": {
+      "description": "Answer to GET /api/simulations/{id}/runs: the simulation's runs, newest first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runs"],
+      "properties": { "runs": { "type": "array", "items": { "$ref": "#/$defs/RunView" } } }
+    },
+    "RunLogResponse": {
+      "description": "Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "next"],
+      "properties": {
+        "text": { "type": "string" },
+        "next": { "type": "integer", "minimum": 0 }
+      }
     }
   }
 }

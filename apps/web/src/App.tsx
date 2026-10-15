@@ -11,6 +11,7 @@ import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { GroupPanel, MaterialPanel, PressurePanel, SupportPanel } from "./setup/ItemPanels";
 import { MeshPanel } from "./setup/MeshPanel";
+import { RunPanel } from "./setup/RunPanel";
 import {
   addFixedSupport,
   addMaterial,
@@ -18,10 +19,13 @@ import {
   facesOf,
   type Group,
   type ItemStatus,
+  meshIsCurrent,
   meshStatus,
+  runStatus,
   setupStatus,
 } from "./setup/spec";
 import { useMesh } from "./setup/useMesh";
+import { useRun } from "./setup/useRun";
 import { useSimulation } from "./setup/useSimulation";
 
 type SessionState =
@@ -82,13 +86,26 @@ export function App() {
   const spec = setup.kind === "open" ? setup.spec : null;
   const meshes = useMesh(setup.kind === "open" ? setup.id : null, signedOut);
   const { mesh } = meshes;
+  const runs = useRun(setup.kind === "open" ? setup.id : null, signedOut);
+  const { run } = runs;
   const statuses = useMemo(() => {
     if (setup.kind !== "open") return new Map<string, ItemStatus>();
     const result = setupStatus(setup.spec, setup.topology);
     const settings = result.get("mesh");
     if (settings) result.set("mesh", meshStatus(settings, setup.spec, mesh));
+    result.set("run", runStatus(run));
     return result;
-  }, [setup, mesh]);
+  }, [setup, mesh, run]);
+
+  /** Why the setup cannot be run now, or null when it can (the full pre-run list is M1.12). */
+  function runBlocked(): string | null {
+    if (spec === null) return "Start the setup first.";
+    if (simulation.save.kind !== "saved") return "Wait until all changes are saved.";
+    if (mesh === null || mesh.status === "failed") return "Generate the mesh first.";
+    if (mesh.status === "meshing") return "Wait for the mesh to finish.";
+    if (!meshIsCurrent(spec, mesh)) return "The mesh size changed. Generate the mesh again.";
+    return null;
+  }
 
   async function leave() {
     await signOut();
@@ -144,6 +161,21 @@ export function App() {
           requestProblem={meshes.requestProblem}
           onChange={change}
           onGenerate={() => void meshes.generate()}
+        />
+      );
+    }
+    if (selected === "run") {
+      return (
+        <RunPanel
+          status={status}
+          run={run}
+          log={runs.log}
+          blocked={runBlocked()}
+          lengthUnit={geometry?.confirmedUnit ?? "mm"}
+          supportNames={new Map(spec.supports.map((s) => [s.id, s.name]))}
+          requesting={runs.requesting}
+          requestProblem={runs.requestProblem}
+          onRun={() => void runs.start()}
         />
       );
     }

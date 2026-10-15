@@ -63,7 +63,12 @@
       "required": ["workerId"],
       "properties": {
         "workerId": { "$ref": "#/$defs/WorkerId" },
-        "stage": { "type": ["string", "null"] }
+        "stage": { "type": ["string", "null"] },
+        "log": {
+          "description": "Log text the job wrote since the previous heartbeat, appended to the job's log as one chunk (ADR-030).",
+          "type": "string",
+          "maxLength": 65536
+        }
       }
     },
     "HeartbeatResponse": {

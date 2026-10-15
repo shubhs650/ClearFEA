@@ -2,7 +2,7 @@
 // The setup flow in the whole app (M1.5): start a simulation on a ready geometry, add a
 // material, a fixed support and a pressure from the tree, and see each edit saved.
 
-import type { GeometryView, MeshView, SimulationSpec, SimulationView } from "@clearfea/spec";
+import type { GeometryView, MeshView, RunView, SimulationSpec, SimulationView, SolveResult } from "@clearfea/spec";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -122,6 +122,7 @@ function routes(simulations: SimulationView[], extra: Record<string, Route> = {}
     "GET /api/geometries/g1/topology": { status: 200, json: topology },
     "GET /api/simulations?geometryId=g1": { status: 200, json: { simulations } },
     "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: null } },
+    "GET /api/simulations/s1/runs": { status: 200, json: { runs: [] } },
     ...extra,
   };
 }
@@ -336,7 +337,8 @@ describe("mesh", () => {
     expect(settings().getByText("4,000")).toBeTruthy();
     expect(settings().getByText("7,108")).toBeTruthy();
     expect(await screen.findByText("Mesh: 4,000 elements, 7,108 nodes")).toBeTruthy();
-    expect(scene.edges.at(-1)).toBe("elements");
+    // The scene is given the mesh in an effect, which can run just after the text appears.
+    await waitFor(() => expect(scene.edges.at(-1)).toBe("elements"));
     expect(fetchMock.mock.calls.some(([path]) => path === "/api/meshes/m1/display")).toBe(true);
     expect(settings().getByRole("button", { name: "Generate mesh again" })).toHaveProperty("disabled", true);
 
@@ -364,5 +366,109 @@ describe("mesh", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Mesh, has a problem" }));
     expect(settings().getAllByText(problem)).toHaveLength(1);
     expect(settings().getByRole("button", { name: "Generate mesh again" })).toHaveProperty("disabled", false);
+  });
+});
+
+function run(overrides: Partial<RunView> = {}): RunView {
+  return {
+    id: "r1",
+    simulationId: "s1",
+    meshId: "m1",
+    status: "solving",
+    stage: "queued",
+    problem: null,
+    result: null,
+    createdAt: "2026-10-15T12:00:00.000Z",
+    finishedAt: null,
+    ...overrides,
+  };
+}
+
+const supported: SimulationSpec = {
+  ...meshed,
+  supports: [{ id: "fixed-1", type: "fixed", name: "Base", faces: [3] }],
+};
+
+describe("run", () => {
+  it("waits for a current mesh, then solves and shows the solver log", async () => {
+    serve(routes([simulation(supported)]));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    expect(settings().getByRole("button", { name: "Run" })).toHaveProperty("disabled", true);
+    expect(settings().getByText("Generate the mesh first.")).toBeTruthy();
+    cleanup();
+
+    const fetchMock = serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "POST /api/simulations/s1/runs": { status: 201, json: { run: run() } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "CalculiX Version 2.21\n", next: 1 } },
+        "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    const button = settings().getByRole("button", { name: "Run" });
+    await waitFor(() => expect(button).toHaveProperty("disabled", false));
+    fireEvent.click(button);
+    expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
+    expect(await settings().findByText("CalculiX Version 2.21")).toBeTruthy();
+    expect(settings().getByRole("button", { name: "Run again" })).toHaveProperty("disabled", true);
+    expect(tree().getByRole("button", { name: "Run, incomplete" }).getAttribute("title")).toBe(
+      "The simulation is being solved.",
+    );
+    expect(fetchMock.mock.calls.some(([path, init]) => path === "/api/simulations/s1/runs" && init?.method === "POST")).toBe(true);
+  });
+
+  it("shows a finished run's figures in display units, with numbers only", async () => {
+    const result: SolveResult = {
+      nodes: 7108,
+      displacement: { max: { value: 1.2e-4, node: 17, position: [0.1, 0.05, 0.02] } },
+      vonMises: {
+        min: { value: 1.5e3, node: 3, position: [0, 0.05, 0] },
+        max: { value: 2.4e8, node: 40, position: [0, 0, 0] },
+      },
+      reactions: [{ supportId: "fixed-1", force: [0, 0, -400] }],
+      software: { calculix: "2.21" },
+    };
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": {
+          status: 200,
+          json: { runs: [run({ status: "succeeded", stage: null, result, finishedAt: "2026-10-15T12:01:00.000Z" })] },
+        },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
+        "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const figures = within(settings().getByLabelText("Run results"));
+    expect(figures.getByText("0.12 mm")).toBeTruthy();
+    expect(figures.getByText("at (100, 50, 20) mm")).toBeTruthy();
+    expect(figures.getByText("240 MPa")).toBeTruthy();
+    expect(figures.getByText("0.0015 MPa")).toBeTruthy();
+    expect(figures.getByText("Reaction, Base")).toBeTruthy();
+    expect(figures.getByText("(0, 0, -400) N")).toBeTruthy();
+    expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
+    expect(settings().getByRole("button", { name: "Run again" })).toHaveProperty("disabled", false);
+  });
+
+  it("shows why a run failed", async () => {
+    const problem = "Body 1 has no material. Assign a material to it.";
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": {
+          status: 200,
+          json: { runs: [run({ status: "failed", stage: null, problem, finishedAt: "2026-10-15T12:01:00.000Z" })] },
+        },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, has a problem" }));
+    expect(settings().getAllByText(problem)).toHaveLength(1);
   });
 });
