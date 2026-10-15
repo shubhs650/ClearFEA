@@ -41,12 +41,12 @@ function Row({
       type="button"
       className={`tree-row tree-depth-${depth}`}
       aria-current={selected === id ? "true" : undefined}
+      aria-label={`${label}, ${markLabels[mark]}`}
       title={status?.notes.join(" ")}
       onClick={() => onSelect(id)}
     >
       <span className={`mark mark-${mark}`} aria-hidden="true" />
       <span className="tree-label">{label}</span>
-      <span className="visually-hidden">, {markLabels[mark]}</span>
     </button>
   );
 }
