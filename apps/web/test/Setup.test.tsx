@@ -375,6 +375,10 @@ function run(overrides: Partial<RunView> = {}): RunView {
     id: "r1",
     simulationId: "s1",
     meshId: "m1",
+    spec: supported,
+    mesh: { size: { value: 5, unit: "mm" }, order: 2, nodeCount: 7108, elementCount: 4000 },
+    software: { clearfea: "0.0.0+d9d394b", deckFormat: 1, calculix: "2.21", gmsh: "4.15.2", occt: "7.9.0" },
+    files: [],
     status: "solving",
     stage: "queued",
     problem: null,
@@ -464,6 +468,80 @@ describe("run", () => {
     expect(figures.getByText("(0, 0, -400) N")).toBeTruthy();
     expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
     expect(settings().getByRole("button", { name: "Run again" })).toHaveProperty("disabled", false);
+  });
+
+  it("shows the run record with its versions and links to view and download the deck and log", async () => {
+    // The run was solved before the support was renamed: its record says the setup differs.
+    const before: SimulationSpec = { ...supported, supports: supported.supports.map((s) => ({ ...s, name: "Old base" })) };
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": {
+          status: 200,
+          json: {
+            runs: [
+              run({
+                spec: before,
+                status: "failed",
+                stage: null,
+                problem: "CalculiX stopped on the deck.",
+                files: ["deck.inp", "solver.log"],
+                finishedAt: "2026-10-15T12:01:00.000Z",
+              }),
+            ],
+          },
+        },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, has a problem" }));
+    const record = within(settings().getByLabelText("Run record"));
+    expect(record.getByText(/The setup has changed since this run/)).toBeTruthy();
+    expect(record.getByText("2026-10-15 12:00:00 UTC")).toBeTruthy();
+    expect(record.getByText("2026-10-15 12:01:00 UTC")).toBeTruthy();
+    expect(record.getByText("5 mm, quadratic tetrahedra (10 nodes); 4,000 elements, 7,108 nodes")).toBeTruthy();
+    expect(record.getByText("0.0.0+d9d394b")).toBeTruthy();
+    expect(record.getByText("2.21")).toBeTruthy();
+    expect(record.getByText("with OpenCASCADE 7.9.0")).toBeTruthy();
+    expect(record.getByRole("link", { name: "View deck.inp" }).getAttribute("href")).toBe("/api/runs/r1/files/deck.inp");
+    expect(record.getByRole("link", { name: "View solver.log" }).getAttribute("href")).toBe(
+      "/api/runs/r1/files/solver.log",
+    );
+    expect(record.getAllByRole("link", { name: "Download" }).map((link) => link.getAttribute("href"))).toEqual([
+      "/api/runs/r1/files/deck.inp?download=1",
+      "/api/runs/r1/files/solver.log?download=1",
+    ]);
+  });
+
+  it("says when a run has no deck or log, and that versions are unknown for older runs", async () => {
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": {
+          status: 200,
+          json: {
+            runs: [
+              run({
+                status: "failed",
+                stage: null,
+                problem: "Add a support.",
+                software: { clearfea: null, deckFormat: null, calculix: null, gmsh: null, occt: null },
+                finishedAt: "2026-10-15T12:01:00.000Z",
+              }),
+            ],
+          },
+        },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, has a problem" }));
+    const record = within(settings().getByLabelText("Run record"));
+    expect(record.queryByText(/The setup has changed/)).toBeNull();
+    expect(record.getAllByText("None: the run stopped before the solver started.")).toHaveLength(2);
+    expect(record.getAllByText("not recorded")).toHaveLength(4);
+    expect(record.queryByRole("link")).toBeNull();
   });
 
   it("shows why a run failed", async () => {

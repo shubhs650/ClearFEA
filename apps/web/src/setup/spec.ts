@@ -205,3 +205,18 @@ export function runStatus(run: RunView | null): ItemStatus {
   if (run.status === "failed") return { mark: "error", notes: [run.problem ?? "The run failed."] };
   return { mark: "complete", notes: [] };
 }
+
+/** JSON text with object keys sorted, so two specs compare by content, not key order. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** Whether the setup is still the one a run froze (M1.10). */
+export function sameSpec(a: SimulationSpec, b: SimulationSpec): boolean {
+  return canonical(a) === canonical(b);
+}

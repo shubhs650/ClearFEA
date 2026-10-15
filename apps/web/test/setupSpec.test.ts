@@ -10,6 +10,7 @@ import {
   meshStatus,
   runStatus,
   removeItem,
+  sameSpec,
   setupStatus,
   updateLoad,
   updateMaterial,
@@ -161,6 +162,10 @@ describe("run mark", () => {
     id: "r1",
     simulationId: "s1",
     meshId: "m1",
+    spec: empty(),
+    mesh: { size: { value: 5, unit: "mm" }, order: 2, nodeCount: 7108, elementCount: 4000 },
+    software: { clearfea: "0.0.0+d9d394b", deckFormat: 1, calculix: "2.21", gmsh: "4.15.2", occt: "7.9.0" },
+    files: [],
     status: "solving",
     stage: "solving",
     problem: null,
@@ -178,5 +183,17 @@ describe("run mark", () => {
       notes: ["Add a support."],
     });
     expect(runStatus(run({ status: "succeeded" }))).toEqual({ mark: "complete", notes: [] });
+  });
+});
+
+describe("sameSpec", () => {
+  it("compares content, not key order", () => {
+    const spec = empty();
+    const { mesh, ...rest } = spec;
+    const reordered: SimulationSpec = { mesh, ...rest };
+    expect(Object.keys(reordered)[0]).toBe("mesh");
+    expect(sameSpec(spec, reordered)).toBe(true);
+    expect(sameSpec(spec, { ...spec, mesh: { size: { value: 3, unit: "mm" } } })).toBe(false);
+    expect(sameSpec(spec, { ...spec, bodies: [] })).toBe(false);
   });
 });

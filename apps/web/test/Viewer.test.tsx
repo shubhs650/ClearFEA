@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { GeometryView, RunView } from "@clearfea/spec";
+import { emptySimulationSpec, type GeometryView, type RunView } from "@clearfea/spec";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -245,6 +245,10 @@ const succeeded: RunView = {
   id: "r1",
   simulationId: "s1",
   meshId: "m1",
+  spec: emptySimulationSpec("g1", topology),
+  mesh: { size: { value: 5, unit: "mm" }, order: 2, nodeCount: 7108, elementCount: 4000 },
+  software: { clearfea: "0.0.0+d9d394b", deckFormat: 1, calculix: "2.21", gmsh: "4.15.2", occt: "7.9.0" },
+  files: [],
   status: "succeeded",
   stage: null,
   problem: null,

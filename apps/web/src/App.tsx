@@ -173,6 +173,7 @@ export function App() {
         <RunPanel
           status={status}
           run={run}
+          currentSpec={spec}
           log={runs.log}
           blocked={runBlocked()}
           lengthUnit={lengthUnit}

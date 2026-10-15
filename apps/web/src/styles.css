@@ -519,6 +519,14 @@ button:disabled {
 }
 
 /* The run's solver log (M1.8). */
+/* The run record (M1.10). */
+.pane-subtitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 12px 0 6px;
+}
+
 .run-log pre {
   margin: 6px 0 0;
   max-height: 320px;
