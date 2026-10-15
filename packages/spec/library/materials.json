@@ -1,0 +1,406 @@
+{
+  "version": 1,
+  "description": "Generic library materials (M2.9, ADR-046). Each value is copied exactly as printed in the cited table, in the table's own units, and converted to SI only by the units table. Thermal expansion is given only where the table prints a number; where it refers to a figure, it is left empty for the user to enter for their temperature range.",
+  "references": [
+    {
+      "id": "MIL-HDBK-5G",
+      "citation": "MIL-HDBK-5G, Metallic Materials and Elements for Aerospace Vehicle Structures, U.S. Department of Defense, 1 November 1994. Distribution Statement A: approved for public release, distribution is unlimited.",
+      "links": [
+        "https://archive.org/details/DTIC_ADA295150",
+        "https://archive.org/details/DTIC_ADA322636"
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "id": "lib-steel-1025",
+      "name": "Carbon steel AISI 1025",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 29000,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.32,
+      "density": {
+        "value": 0.284,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 2.2.1.0(b), page 2-7: AISI 1025 sheet, strip, plate, tubing and bar."
+    },
+    {
+      "id": "lib-steel-4130",
+      "name": "Low-alloy steel (AISI 4130, 4135, 8630, 8735)",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 29000,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.32,
+      "density": {
+        "value": 0.283,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 2.3.1.0(c), page 2-15: low-alloy steels, normalized or quenched and tempered."
+    },
+    {
+      "id": "lib-steel-301-annealed",
+      "name": "Austenitic stainless steel, annealed (AISI 301, 302, 304, 321, 347)",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 29000,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.27,
+      "density": {
+        "value": 0.286,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 2.7.1.0(b), page 2-214: AISI 301 and other annealed stainless steels (footnote a lists 302, 303, 304, 321 and 347)."
+    },
+    {
+      "id": "lib-steel-17-4ph",
+      "name": "Stainless steel 17-4PH",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 28500,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.27,
+      "density": {
+        "value": 0.283,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 2.6.8.0(b), page 2-187: 17-4PH sheet, strip and plate; density for H1075 (0.282 for H900, 0.284 for H1150)."
+    },
+    {
+      "id": "lib-steel-15-5ph",
+      "name": "Stainless steel 15-5PH",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 28500,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.27,
+      "density": {
+        "value": 0.283,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 2.6.6.0(b), page 2-158: 15-5PH bar and forging."
+    },
+    {
+      "id": "lib-al-2014",
+      "name": "Aluminium alloy 2014",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 10500,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.101,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.2.1.0(d), page 3-30: 2014 bar, rod and shapes, T6 and T651."
+    },
+    {
+      "id": "lib-al-2024-sheet",
+      "name": "Aluminium alloy 2024 (sheet, up to 0.249 in)",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 10500,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.101,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.2.3.0(b3) and 3.2.3.0(d), page 3-71 and 3-72: bare 2024 sheet and plate, modulus and Poisson's ratio for 0.010 to 0.249 in."
+    },
+    {
+      "id": "lib-al-2219",
+      "name": "Aluminium alloy 2219",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 10500,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.103,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.2.7.0(b2), page 3-161: 2219 sheet, T87."
+    },
+    {
+      "id": "lib-al-5052",
+      "name": "Aluminium alloy 5052",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 10100,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.097,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.5.1.0(b1), page 3-202: 5052 sheet and plate."
+    },
+    {
+      "id": "lib-al-5083",
+      "name": "Aluminium alloy 5083",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 10200,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.096,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.5.2.0(c), page 3-215: 5083 extrusion."
+    },
+    {
+      "id": "lib-al-5086",
+      "name": "Aluminium alloy 5086",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 10200,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.096,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": {
+        "value": 13.2,
+        "unit": "µin/(in·°F)"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.5.3.0(b), page 3-220: 5086 sheet, plate and extrusion; thermal expansion is the mean from 68 to 212 °F."
+    },
+    {
+      "id": "lib-al-6061",
+      "name": "Aluminium alloy 6061",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 9900,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.098,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.6.2.0(b1), page 3-244: 6061 sheet, T4, T42, T6 and T62."
+    },
+    {
+      "id": "lib-al-7050",
+      "name": "Aluminium alloy 7050",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 10300,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.102,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": {
+        "value": 12.8,
+        "unit": "µin/(in·°F)"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.7.2.0(b1) (as printed; the 7050 section is 3.7.3), page 3-300: 7050 plate, T7451; thermal expansion is the mean from 68 to 212 °F."
+    },
+    {
+      "id": "lib-al-7075",
+      "name": "Aluminium alloy 7075",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 10300,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.101,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.7.4.0(b1), page 3-339: 7075 sheet and plate, T6, T62 and T651."
+    },
+    {
+      "id": "lib-al-356-cast",
+      "name": "Aluminium casting alloy 356.0-T6",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 10300,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.097,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.9.4.0(b), page 3-467: 356.0-T6 sand, investment and permanent mould castings."
+    },
+    {
+      "id": "lib-al-a356-cast",
+      "name": "Aluminium casting alloy A356.0-T6",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 10400,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.33,
+      "density": {
+        "value": 0.097,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.9.5.0(b), page 3-470: A356.0-T6 castings."
+    },
+    {
+      "id": "lib-mg-az31b",
+      "name": "Magnesium alloy AZ31B",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 6500,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.35,
+      "density": {
+        "value": 0.0639,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 4.2.1.0(b), page 4-8: AZ31B sheet and plate, O and H24."
+    },
+    {
+      "id": "lib-ti-6al-4v",
+      "name": "Titanium alloy Ti-6Al-4V",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 16000,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.31,
+      "density": {
+        "value": 0.16,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 5.4.1.0(b), page 5-53: Ti-6Al-4V sheet, strip and plate, annealed or solution treated and aged."
+    },
+    {
+      "id": "lib-ni-a286",
+      "name": "Iron-nickel alloy A-286",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 29100,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.31,
+      "density": {
+        "value": 0.287,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 6.2.1.0(b), page 6-5: A-286, solution treated and aged."
+    },
+    {
+      "id": "lib-ni-hastelloy-x",
+      "name": "Nickel alloy Hastelloy X",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 29800,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.32,
+      "density": {
+        "value": 0.297,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.1.0(b), page 6-22: Hastelloy X sheet and plate, solution treated."
+    },
+    {
+      "id": "lib-ni-inconel-600",
+      "name": "Nickel alloy Inconel 600",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 30000,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.29,
+      "density": {
+        "value": 0.304,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.2.0(b), page 6-28: Inconel 600, annealed or cold drawn."
+    },
+    {
+      "id": "lib-ni-inconel-625",
+      "name": "Nickel alloy Inconel 625",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 29800,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.28,
+      "density": {
+        "value": 0.305,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.3.0(b), page 6-34: Inconel 625 sheet and plate, annealed."
+    },
+    {
+      "id": "lib-ni-inconel-718",
+      "name": "Nickel alloy Inconel 718",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 29400,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.29,
+      "density": {
+        "value": 0.297,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.5.0(b), page 6-52: Inconel 718, solution treated and aged."
+    },
+    {
+      "id": "lib-cu-c17200",
+      "name": "Copper beryllium C17200",
+      "model": "isotropic_elastic",
+      "youngsModulus": {
+        "value": 18500,
+        "unit": "ksi"
+      },
+      "poissonsRatio": 0.27,
+      "density": {
+        "value": 0.298,
+        "unit": "lb/in³"
+      },
+      "thermalExpansion": null,
+      "source": "MIL-HDBK-5G (1 November 1994), Table 7.3.2.0(d), page 7-16: C17200 rod and bar, TF00."
+    }
+  ]
+}

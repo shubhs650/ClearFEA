@@ -110,6 +110,76 @@ class IsotropicMaterial(BaseModel):
     """
     Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.
     """
+    source: Annotated[str | None, Field(max_length=500, min_length=1)] = None
+    """
+    Where the values came from, as text: a library material's citation, or a note the user saved with a custom material (M2.9, ADR-046). Information only; the setup drops it when a value is changed, since the values then no longer match it. Absent when unknown.
+    """
+
+
+class MaterialReference(BaseModel):
+    """
+    A document the material library cites.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: Annotated[str, Field(min_length=1)]
+    citation: Annotated[str, Field(min_length=1)]
+    links: list[str]
+
+
+class MaterialLibrary(BaseModel):
+    """
+    packages/spec/library/materials.json, the generic library materials (M2.9, ADR-046). Each material holds its values exactly as its source prints them, and its source names the table they come from.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    version: Literal[1]
+    description: str
+    references: list[MaterialReference]
+    materials: list[IsotropicMaterial]
+
+
+class MaterialsResponse(BaseModel):
+    """
+    Answer to GET /api/materials: the library's materials in library order, and the signed-in user's own materials by name (M2.9, ADR-046). A material is copied into a simulation with a new id; later changes to either side do not reach the other.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    library: list[IsotropicMaterial]
+    custom: list[IsotropicMaterial]
+
+
+class SaveMaterialRequest(BaseModel):
+    """
+    Body of POST /api/materials: a material to keep among the user's own materials, usable in every simulation of theirs. Its id is ignored and a new one given. Young's modulus and Poisson's ratio must be entered; its name must not be one of theirs already.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    material: IsotropicMaterial
+
+
+class MaterialResponse(BaseModel):
+    """
+    Answer to POST /api/materials (HTTP 201): the saved material with its new id.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    material: IsotropicMaterial
 
 
 class FixedSupport(BaseModel):

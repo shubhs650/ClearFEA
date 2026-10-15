@@ -2,7 +2,17 @@
 // The setup flow in the whole app (M1.5): start a simulation on a ready geometry, add a
 // material, a fixed support and a pressure from the tree, and see each edit saved.
 
-import type { GeometryView, MeshQuality, MeshView, RunView, SimulationSpec, SimulationView, SolveResult } from "@clearfea/spec";
+import {
+  type GeometryView,
+  type IsotropicMaterial,
+  type MeshQuality,
+  type MeshView,
+  materialLibrary,
+  type RunView,
+  type SimulationSpec,
+  type SimulationView,
+  type SolveResult,
+} from "@clearfea/spec";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -145,6 +155,7 @@ function routes(simulations: SimulationView[], extra: Record<string, Route> = {}
     "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: null } },
     "GET /api/simulations/s1/runs": { status: 200, json: { runs: [] } },
     "GET /api/project": { status: 200, json: { project: { id: "p1", name: "My project", unitSystem: "metric-mm" } } },
+    "GET /api/materials": { status: 200, json: { library: materialLibrary.materials, custom: [] } },
     ...extra,
   };
 }
@@ -209,7 +220,7 @@ describe("setup tree", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Materials, incomplete" }));
     expect(settings().getByText("Add a material.")).toBeTruthy();
-    fireEvent.click(settings().getByRole("button", { name: "Add a material" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add an empty material" }));
     expect(tree().getByRole("button", { name: "Material 1, incomplete" })).toBeTruthy();
     expect(settings().getByRole("checkbox", { name: "Body 1" })).toHaveProperty("checked", true);
 
@@ -240,13 +251,96 @@ describe("setup tree", () => {
     serve(routes([simulation()], { "PUT /api/simulations/s1/spec": route }));
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Materials, incomplete" }));
-    fireEvent.click(settings().getByRole("button", { name: "Add a material" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add an empty material" }));
     fireEvent.change(settings().getByLabelText("Poisson's ratio"), { target: { value: "0.7" } });
     expect(settings().getByText("Enter a value above -1 and below 0.5.")).toBeTruthy();
     fireEvent.change(settings().getByLabelText("Young's modulus"), { target: { value: "-5" } });
     expect(settings().getByText("Enter a value greater than 0.")).toBeTruthy();
     await waitFor(() => expect(sent.length).toBeGreaterThan(0));
     expect(sent.at(-1)?.materials[0]).toMatchObject({ youngsModulus: null, poissonsRatio: null });
+  });
+
+  it("adds a library material with its values as published and its source (M2.9)", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation()], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Materials, incomplete" }));
+    const library = within(await settings().findByRole("region", { name: "Material library" }));
+    fireEvent.change(library.getByLabelText("Material"), { target: { value: "lib-al-6061" } });
+    // Shown in the project's units (MPa), with the value as the source prints it.
+    const values = within(library.getByLabelText("Values of Aluminium alloy 6061"));
+    expect(values.getByText("68260 MPa (given as 9900 ksi)")).toBeTruthy();
+    expect(values.getByText("0.33")).toBeTruthy();
+    expect(values.getByText("Not given; enter it for a temperature change.")).toBeTruthy();
+    expect(values.getByText(/^MIL-HDBK-5G \(1 November 1994\), Table 3\.6\.2\.0\(b1\), page 3-244/)).toBeTruthy();
+
+    fireEvent.click(library.getByRole("button", { name: "Add this material" }));
+    expect(await tree().findByRole("button", { name: "Aluminium alloy 6061, complete" })).toBeTruthy();
+    const original = materialLibrary.materials.find((m) => m.id === "lib-al-6061");
+    await waitFor(() => expect(sent.at(-1)?.materials).toEqual([{ ...original, id: "material-1" }]));
+    expect(sent.at(-1)?.bodies).toEqual([{ tag: 1, material: "material-1" }]);
+    expect(settings().getByLabelText("Young's modulus unit")).toHaveProperty("value", "ksi");
+    expect(settings().getByText(/^Values from MIL-HDBK-5G/)).toBeTruthy();
+
+    // A changed value no longer matches the source, so the source is dropped; a new name is not a new value.
+    fireEvent.change(settings().getByLabelText("Name"), { target: { value: "Bracket 6061" } });
+    await waitFor(() => expect(sent.at(-1)?.materials[0]?.name).toBe("Bracket 6061"));
+    expect(sent.at(-1)?.materials[0]?.source).toBe(original?.source);
+    fireEvent.change(settings().getByLabelText("Poisson's ratio"), { target: { value: "0.34" } });
+    await waitFor(() => expect(sent.at(-1)?.materials[0]?.poissonsRatio).toBe(0.34));
+    expect(sent.at(-1)?.materials[0]).not.toHaveProperty("source");
+    expect(settings().queryByText(/^Values from/)).toBeNull();
+  });
+
+  it("saves a material to the user's materials, offers it first, and deletes it (M2.9)", async () => {
+    const steel: IsotropicMaterial = {
+      id: "steel",
+      name: "Bracket steel",
+      model: "isotropic_elastic",
+      youngsModulus: { value: 205, unit: "GPa" },
+      poissonsRatio: 0.29,
+      density: null,
+      thermalExpansion: null,
+    };
+    const posted: unknown[] = [];
+    const fetchMock = serve(
+      routes([simulation({ ...emptySpec, materials: [steel], bodies: [{ tag: 1, material: "steel" }] })], {
+        "POST /api/materials": (init) => {
+          posted.push(JSON.parse(String(init?.body)));
+          return { status: 201, json: { material: { ...steel, id: "c1" } } };
+        },
+        "DELETE /api/materials/c1": { status: 204 },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Bracket steel, complete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Save to my materials" }));
+    expect(await settings().findByText('Saved "Bracket steel" to your materials. You can add it to any simulation.')).toBeTruthy();
+    expect(posted).toEqual([{ material: steel }]);
+
+    fireEvent.click(tree().getByRole("button", { name: "Materials, complete" }));
+    const library = within(settings().getByRole("region", { name: "Material library" }));
+    expect(library.getByLabelText("Material")).toHaveProperty("value", "c1");
+    expect(library.getByRole("group", { name: "Your materials" })).toBeTruthy();
+    expect(within(library.getByLabelText("Values of Bracket steel")).getByText("205000 MPa (given as 205 GPa)")).toBeTruthy();
+    fireEvent.click(library.getByRole("button", { name: "Delete from your materials" }));
+    expect(
+      await library.findByText('Deleted "Bracket steel" from your materials. Simulations that use it keep their copy.'),
+    ).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([path, init]) => path === "/api/materials/c1" && init?.method === "DELETE")).toBe(true);
+    expect(library.queryByRole("group", { name: "Your materials" })).toBeNull();
+    // The simulation's own copy stays.
+    expect(tree().getByRole("button", { name: "Bracket steel, complete" })).toBeTruthy();
+  });
+
+  it("offers saving only once the modulus and Poisson's ratio are entered (M2.9)", async () => {
+    const { route } = saves();
+    serve(routes([simulation()], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Materials, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add an empty material" }));
+    expect(settings().getByRole("button", { name: "Save to my materials" })).toHaveProperty("disabled", true);
+    expect(settings().getByText("Enter Young's modulus and Poisson's ratio to save it to your materials.")).toBeTruthy();
   });
 
   it("gives a new support the faces selected in the viewer, and shows an item's faces when opened", async () => {
@@ -563,7 +657,7 @@ describe("setup tree", () => {
     );
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Materials, incomplete" }));
-    fireEvent.click(settings().getByRole("button", { name: "Add a material" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add an empty material" }));
     expect(await tree().findByText("Not saved: The setup cannot be saved: something.")).toBeTruthy();
   });
 });

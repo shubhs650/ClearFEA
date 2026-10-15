@@ -78,8 +78,61 @@
         "thermalExpansion": {
           "description": "Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.",
           "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+        },
+        "source": {
+          "description": "Where the values came from, as text: a library material's citation, or a note the user saved with a custom material (M2.9, ADR-046). Information only; the setup drops it when a value is changed, since the values then no longer match it. Absent when unknown.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
         }
       }
+    },
+    "MaterialReference": {
+      "description": "A document the material library cites.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "citation", "links"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "citation": { "type": "string", "minLength": 1 },
+        "links": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "MaterialLibrary": {
+      "description": "packages/spec/library/materials.json, the generic library materials (M2.9, ADR-046). Each material holds its values exactly as its source prints them, and its source names the table they come from.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "description", "references", "materials"],
+      "properties": {
+        "version": { "const": 1 },
+        "description": { "type": "string" },
+        "references": { "type": "array", "items": { "$ref": "#/$defs/MaterialReference" } },
+        "materials": { "type": "array", "items": { "$ref": "#/$defs/IsotropicMaterial" } }
+      }
+    },
+    "MaterialsResponse": {
+      "description": "Answer to GET /api/materials: the library's materials in library order, and the signed-in user's own materials by name (M2.9, ADR-046). A material is copied into a simulation with a new id; later changes to either side do not reach the other.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["library", "custom"],
+      "properties": {
+        "library": { "type": "array", "items": { "$ref": "#/$defs/IsotropicMaterial" } },
+        "custom": { "type": "array", "items": { "$ref": "#/$defs/IsotropicMaterial" } }
+      }
+    },
+    "SaveMaterialRequest": {
+      "description": "Body of POST /api/materials: a material to keep among the user's own materials, usable in every simulation of theirs. Its id is ignored and a new one given. Young's modulus and Poisson's ratio must be entered; its name must not be one of theirs already.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material"],
+      "properties": { "material": { "$ref": "#/$defs/IsotropicMaterial" } }
+    },
+    "MaterialResponse": {
+      "description": "Answer to POST /api/materials (HTTP 201): the saved material with its new id.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["material"],
+      "properties": { "material": { "$ref": "#/$defs/IsotropicMaterial" } }
     },
     "FixedSupport": {
       "description": "All displacement components of the faces' nodes held at zero.",

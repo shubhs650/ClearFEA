@@ -162,6 +162,61 @@ export interface IsotropicMaterial {
    * Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.
    */
   thermalExpansion?: Quantity | null;
+  /**
+   * Where the values came from, as text: a library material's citation, or a note the user saved with a custom material (M2.9, ADR-046). Information only; the setup drops it when a value is changed, since the values then no longer match it. Absent when unknown.
+   */
+  source?: string;
+}
+/**
+ * A document the material library cites.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "MaterialReference".
+ */
+export interface MaterialReference {
+  id: string;
+  citation: string;
+  links: string[];
+}
+/**
+ * packages/spec/library/materials.json, the generic library materials (M2.9, ADR-046). Each material holds its values exactly as its source prints them, and its source names the table they come from.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "MaterialLibrary".
+ */
+export interface MaterialLibrary {
+  version: 1;
+  description: string;
+  references: MaterialReference[];
+  materials: IsotropicMaterial[];
+}
+/**
+ * Answer to GET /api/materials: the library's materials in library order, and the signed-in user's own materials by name (M2.9, ADR-046). A material is copied into a simulation with a new id; later changes to either side do not reach the other.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "MaterialsResponse".
+ */
+export interface MaterialsResponse {
+  library: IsotropicMaterial[];
+  custom: IsotropicMaterial[];
+}
+/**
+ * Body of POST /api/materials: a material to keep among the user's own materials, usable in every simulation of theirs. Its id is ignored and a new one given. Young's modulus and Poisson's ratio must be entered; its name must not be one of theirs already.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "SaveMaterialRequest".
+ */
+export interface SaveMaterialRequest {
+  material: IsotropicMaterial;
+}
+/**
+ * Answer to POST /api/materials (HTTP 201): the saved material with its new id.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "MaterialResponse".
+ */
+export interface MaterialResponse {
+  material: IsotropicMaterial;
 }
 /**
  * All displacement components of the faces' nodes held at zero.
@@ -865,6 +920,11 @@ export const AnalysisTypeValues = ["linear_static"] as const satisfies readonly 
 export const validateAnalysisType = validator<AnalysisType>(schema, "AnalysisType");
 export const validateBodyAssignment = validator<BodyAssignment>(schema, "BodyAssignment");
 export const validateIsotropicMaterial = validator<IsotropicMaterial>(schema, "IsotropicMaterial");
+export const validateMaterialReference = validator<MaterialReference>(schema, "MaterialReference");
+export const validateMaterialLibrary = validator<MaterialLibrary>(schema, "MaterialLibrary");
+export const validateMaterialsResponse = validator<MaterialsResponse>(schema, "MaterialsResponse");
+export const validateSaveMaterialRequest = validator<SaveMaterialRequest>(schema, "SaveMaterialRequest");
+export const validateMaterialResponse = validator<MaterialResponse>(schema, "MaterialResponse");
 export const validateFixedSupport = validator<FixedSupport>(schema, "FixedSupport");
 export const validateDisplacementComponent = validator<DisplacementComponent>(schema, "DisplacementComponent");
 export const validatePrescribedDisplacement = validator<PrescribedDisplacement>(schema, "PrescribedDisplacement");

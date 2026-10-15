@@ -230,18 +230,23 @@ function nextNumber(spec: SimulationSpec, prefix: string): number {
   return n;
 }
 
-/** Adds a material. If it is the only one, every body without a material gets it. */
-export function addMaterial(spec: SimulationSpec): { spec: SimulationSpec; id: string } {
+/**
+ * Adds a material: empty, or a copy of a library or saved material (M2.9) under a new id, so
+ * the simulation keeps its own values. If it is the only one, every body without a material gets it.
+ */
+export function addMaterial(spec: SimulationSpec, from?: IsotropicMaterial): { spec: SimulationSpec; id: string } {
   const n = nextNumber(spec, "material");
-  const material: IsotropicMaterial = {
-    id: `material-${n}`,
-    name: `Material ${n}`,
-    model: "isotropic_elastic",
-    youngsModulus: null,
-    poissonsRatio: null,
-    density: null,
-    thermalExpansion: null,
-  };
+  const material: IsotropicMaterial = from
+    ? { ...from, id: `material-${n}` }
+    : {
+        id: `material-${n}`,
+        name: `Material ${n}`,
+        model: "isotropic_elastic",
+        youngsModulus: null,
+        poissonsRatio: null,
+        density: null,
+        thermalExpansion: null,
+      };
   const first = spec.materials.length === 0;
   return {
     id: material.id,
@@ -333,6 +338,17 @@ export function addLocalSize(
 
 export function updateLocalSize(spec: SimulationSpec, item: LocalMeshSize): SimulationSpec {
   return { ...spec, mesh: { ...spec.mesh, local: (spec.mesh.local ?? []).map((l) => (l.id === item.id ? item : l)) } };
+}
+
+/**
+ * Changes a material's name or values. A changed value drops the material's source (M2.9), since
+ * the values no longer match it.
+ */
+export function editMaterial(spec: SimulationSpec, material: IsotropicMaterial, changes: Partial<IsotropicMaterial>): SimulationSpec {
+  const next: IsotropicMaterial = { ...material, ...changes };
+  const values = ["youngsModulus", "poissonsRatio", "density", "thermalExpansion"] as const;
+  if (values.some((key) => key in changes && changes[key] !== material[key])) delete next.source;
+  return updateMaterial(spec, next);
 }
 
 export function updateMaterial(spec: SimulationSpec, material: IsotropicMaterial): SimulationSpec {

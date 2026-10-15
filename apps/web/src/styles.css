@@ -694,3 +694,16 @@ fieldset.field {
   min-width: 0;
   padding: 6px 10px 8px;
 }
+
+/* The material library (M2.9): the chosen material's values and source. */
+.material-chooser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+}
+
+.material-chooser .pane-subtitle {
+  margin-bottom: 0;
+}
