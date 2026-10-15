@@ -6,6 +6,7 @@ written, so the API can stream it, and the whole log is kept in ``solver.log`` b
 deck. A crash of the solver ends only the child process, never the worker.
 """
 
+import os
 import shutil
 import subprocess
 import threading
@@ -17,6 +18,22 @@ from pathlib import Path
 POLL_SECONDS = 0.5
 #: How long a cancelled solver may take to stop before it is killed.
 TERMINATE_SECONDS = 5.0
+
+
+def solver_environment(base: dict[str, str] | None = None) -> dict[str, str]:
+    """CalculiX's environment, with SPOOLES held to one thread whatever else is set (ADR-048).
+
+    ccx 2.21's multithreaded SPOOLES (CCX_NPROC_EQUATION_SOLVER, or OMP_NUM_THREADS when that
+    is unset) now and then returns a wrong solution: solved 20 times on 4 threads, two of the
+    support check's decks (elastic support, turned support) came out off by up to 240 and 25
+    percent of their largest value, and V-07 and V-24 once failed make verify by up to 200
+    percent, while every single-threaded solve was identical (M2.11). Other threads (matrix
+    set-up, stresses) follow OMP_NUM_THREADS, which the worker leaves unset, so ccx uses one
+    core for everything.
+    """
+    env = dict(os.environ if base is None else base)
+    env["CCX_NPROC_EQUATION_SOLVER"] = "1"
+    return env
 
 
 @dataclass(frozen=True)
@@ -57,6 +74,7 @@ def run_calculix(
             solver_command(deck, executable),
             cwd=deck.parent,
             stdin=subprocess.DEVNULL,
+            env=solver_environment(),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

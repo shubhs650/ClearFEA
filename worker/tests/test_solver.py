@@ -6,7 +6,7 @@ import threading
 import time
 from pathlib import Path
 
-from clearfea_worker.solver import run_calculix
+from clearfea_worker.solver import run_calculix, solver_environment
 
 
 def fake_solver(tmp_path: Path, body: str) -> str:
@@ -67,3 +67,14 @@ def test_a_cancel_stops_the_solver(tmp_path: Path) -> None:
     run = run_calculix(deck(tmp_path), output, cancelled, executable=ccx)
     assert run.cancelled
     assert time.monotonic() - started < 10
+
+
+def test_spooles_runs_on_one_thread_whatever_the_environment_says(tmp_path: Path) -> None:
+    ccx = fake_solver(
+        tmp_path, 'import os\nprint(os.environ.get("CCX_NPROC_EQUATION_SOLVER"), flush=True)'
+    )
+    lines: list[str] = []
+    run_calculix(deck(tmp_path), lines.append, threading.Event(), executable=ccx)
+    assert lines == ["1\n"]
+    env = solver_environment({"CCX_NPROC_EQUATION_SOLVER": "4", "OMP_NUM_THREADS": "4"})
+    assert env == {"CCX_NPROC_EQUATION_SOLVER": "1", "OMP_NUM_THREADS": "4"}
