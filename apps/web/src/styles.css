@@ -320,3 +320,54 @@ button:disabled {
 .file-button:focus-within {
   outline: 2px solid var(--text);
 }
+
+/* Viewer (M1.3): the canvas fills the pane; hover text, toolbar and selection float on it. */
+.pane-viewer {
+  position: relative;
+  overflow: hidden;
+}
+
+.viewer-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.viewer-canvas canvas {
+  display: block;
+}
+
+.pane-viewer > .form-problem {
+  max-width: 480px;
+  margin: 0 24px;
+}
+
+.viewer-hover {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.viewer-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+}
+
+.viewer-selection {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.viewer-hint {
+  color: var(--muted);
+}
