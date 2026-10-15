@@ -2,7 +2,15 @@
 // Settings panels for the setup tree's items (M1.5): a material, a fixed support, a pressure,
 // and the three groups. Each edit produces a whole new spec, which the caller saves.
 
-import type { FixedSupport, IsotropicMaterial, PressureLoad, SimulationSpec } from "@clearfea/spec";
+import {
+  type DisplacementComponent,
+  displacementAxes,
+  type IsotropicMaterial,
+  type PressureLoad,
+  type SimulationSpec,
+  type Support,
+  supportKinds,
+} from "@clearfea/spec";
 import { QuantityInput } from "../units/QuantityInput";
 import { FacesField, NumberField, TextField } from "./fields";
 import {
@@ -10,6 +18,7 @@ import {
   type Group,
   type ItemStatus,
   removeItem,
+  type SupportType,
   updateLoad,
   updateMaterial,
   updateSupport,
@@ -26,6 +35,12 @@ const addLabels: Record<Group, string> = {
   supports: "Add a fixed support",
   loads: "Add a pressure",
 };
+
+const supportAdds: { type: SupportType; label: string }[] = [
+  { type: "fixed", label: "Add a fixed support" },
+  { type: "displacement", label: "Add a prescribed displacement" },
+  { type: "frictionless", label: "Add a frictionless support" },
+];
 
 export function Notes({ status }: { status: ItemStatus | undefined }) {
   if (status === undefined || status.notes.length === 0) return null;
@@ -45,7 +60,8 @@ export function GroupPanel({
 }: {
   group: Group;
   status: ItemStatus | undefined;
-  onAdd: () => void;
+  /** Adds an item; for supports, of the type chosen. */
+  onAdd: (type?: SupportType) => void;
 }) {
   return (
     <section className="setup-panel" aria-label={groupTitles[group]}>
@@ -54,9 +70,19 @@ export function GroupPanel({
       {(group === "supports" || group === "loads") && (
         <p className="field-hint">Select faces in the viewer first to give the new item those faces.</p>
       )}
-      <button type="button" onClick={onAdd}>
-        {addLabels[group]}
-      </button>
+      {group === "supports" ? (
+        <div className="field-actions field-actions-column">
+          {supportAdds.map(({ type, label }) => (
+            <button key={type} type="button" onClick={() => onAdd(type)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <button type="button" onClick={() => onAdd()}>
+          {addLabels[group]}
+        </button>
+      )}
     </section>
   );
 }
@@ -126,6 +152,38 @@ export function MaterialPanel({
   );
 }
 
+const supportHints: Record<SupportType, string> = {
+  fixed: "Holds every displacement component of the faces at zero.",
+  displacement:
+    "Moves the faces by the given amounts along the global x, y and z axes. 0 holds a direction; a free one is left to the solution.",
+  frictionless:
+    "Holds each flat face against moving along its normal and lets it slide in its plane, both ways (it does not lift off). Use it on symmetry planes.",
+};
+
+/** One global component of a prescribed displacement: free, or a length. */
+function ComponentField({
+  axis,
+  value,
+  onChange,
+}: {
+  axis: string;
+  value: DisplacementComponent;
+  onChange: (value: DisplacementComponent) => void;
+}) {
+  const free = value === "free";
+  return (
+    <div className="component-field">
+      <label className="checkbox">
+        <input type="checkbox" checked={free} onChange={(event) => onChange(event.target.checked ? "free" : null)} />
+        {axis} free
+      </label>
+      {!free && (
+        <QuantityInput label={`${axis} displacement`} kind="length" value={value} onChange={(next) => onChange(next)} />
+      )}
+    </div>
+  );
+}
+
 export function SupportPanel({
   spec,
   support,
@@ -134,18 +192,32 @@ export function SupportPanel({
   onChange,
 }: {
   spec: SimulationSpec;
-  support: FixedSupport;
+  support: Support;
   status: ItemStatus | undefined;
   selection: ReadonlySet<number>;
   onChange: (spec: SimulationSpec) => void;
 }) {
-  const set = (changes: Partial<FixedSupport>) => onChange(updateSupport(spec, { ...support, ...changes }));
+  const set = (changes: Partial<Support>) => onChange(updateSupport(spec, { ...support, ...changes } as Support));
+  const title = supportKinds[support.type];
   return (
-    <section className="setup-panel" aria-label="Fixed support">
-      <h2 className="pane-title">Fixed support</h2>
+    <section className="setup-panel" aria-label={title}>
+      <h2 className="pane-title">{title}</h2>
       <Notes status={status} />
       <TextField label="Name" value={support.name} onChange={(name) => set({ name })} />
-      <p className="field-hint">Holds every displacement component of the faces at zero.</p>
+      <p className="field-hint">{supportHints[support.type]}</p>
+      {support.type === "displacement" && (
+        <fieldset className="setup-components">
+          <legend>Displacement (global axes)</legend>
+          {displacementAxes.map((axis) => (
+            <ComponentField
+              key={axis}
+              axis={axis}
+              value={support[axis]}
+              onChange={(value) => set({ [axis]: value } as Partial<Support>)}
+            />
+          ))}
+        </fieldset>
+      )}
       <FacesField faces={support.faces} selection={selection} onChange={(faces) => set({ faces })} />
       <Remove what="support" onRemove={() => onChange(removeItem(spec, support.id))} />
     </section>

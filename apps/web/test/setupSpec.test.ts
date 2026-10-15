@@ -5,6 +5,7 @@ import {
   addFixedSupport,
   addMaterial,
   addPressure,
+  addSupport,
   assignMaterial,
   facesOf,
   meshStatus,
@@ -14,6 +15,7 @@ import {
   setupStatus,
   updateLoad,
   updateMaterial,
+  updateSupport,
 } from "../src/setup/spec";
 
 const topology = { bodies: [{ tag: 1 }], faces: [{ tag: 1 }, { tag: 2 }, { tag: 3 }] };
@@ -33,6 +35,21 @@ function complete(): SimulationSpec {
   const [load] = spec.loads;
   if (!load) throw new Error("no load");
   return updateLoad(spec, { ...load, magnitude: { value: 1, unit: "MPa" } });
+}
+
+function displacementCases(full: SimulationSpec): SimulationSpec[] {
+  const added = addSupport(full, "displacement", [2]);
+  const move = added.spec.supports.find((s) => s.id === added.id);
+  if (move?.type !== "displacement") throw new Error("no displacement");
+  const plane = addSupport(full, "frictionless", []).spec;
+  return [
+    added.spec,
+    updateSupport(added.spec, { ...move, x: null }),
+    updateSupport(added.spec, { ...move, y: { value: 0, unit: "mm" } }),
+    { ...updateSupport(added.spec, { ...move, y: { value: 0, unit: "mm" } }), loads: [] },
+    { ...updateSupport(added.spec, { ...move, y: { value: 0.2, unit: "mm" } }), loads: [] },
+    plane,
+  ];
 }
 
 describe("setup status marks", () => {
@@ -55,6 +72,9 @@ describe("setup status marks", () => {
       { ...full, materials: [{ ...material, poissonsRatio: null }] },
       { ...full, bodies: [{ tag: 1, material: null }] },
       { ...full, supports: [{ ...support, faces: [9] }] },
+      // M2.2: a prescribed displacement asks for every component and one value; one other
+      // than zero stands in for a load.
+      ...displacementCases(full),
     ];
     for (const spec of cases) {
       expect(allComplete(spec)).toBe(preRunProblems(spec, topology).length === 0);
@@ -64,7 +84,7 @@ describe("setup status marks", () => {
   it("marks an empty setup's groups incomplete and says what to add", () => {
     const status = setupStatus(empty(), topology);
     expect(status.get("materials")).toEqual({ mark: "incomplete", notes: ["Add a material."] });
-    expect(status.get("supports")).toEqual({ mark: "incomplete", notes: ["Add a fixed support."] });
+    expect(status.get("supports")).toEqual({ mark: "incomplete", notes: ["Add a support."] });
     expect(status.get("loads")).toEqual({ mark: "incomplete", notes: ["Add a load."] });
   });
 
@@ -120,6 +140,21 @@ describe("setup edits", () => {
     const second = addMaterial(first.spec);
     expect(second.id).toBe("material-2");
     expect(second.spec.bodies).toEqual([{ tag: 1, material: "material-1" }]);
+  });
+
+  it("adds each type of support with its own id, name and defaults", () => {
+    let spec = addSupport(empty(), "displacement", [1]).spec;
+    spec = addSupport(spec, "frictionless", [2]).spec;
+    expect(spec.supports).toEqual([
+      { id: "displacement-1", type: "displacement", name: "Prescribed displacement 1", faces: [1], x: "free", y: "free", z: "free" },
+      { id: "frictionless-1", type: "frictionless", name: "Frictionless support 1", faces: [2] },
+    ]);
+    const status = setupStatus(spec, topology);
+    expect(status.get("displacement-1")).toEqual({
+      mark: "incomplete",
+      notes: ["Give at least one component a value; every one is free."],
+    });
+    expect(status.get("frictionless-1")).toEqual({ mark: "complete", notes: [] });
   });
 
   it("numbers new items with the smallest free number", () => {

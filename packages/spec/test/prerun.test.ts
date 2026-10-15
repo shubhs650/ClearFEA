@@ -28,11 +28,12 @@ describe("pre-run validation", () => {
       { item: "materials", message: "There is no material. Add a material under Materials." },
       {
         item: "supports",
-        message: "There is no support, so the part is free to move. Add a fixed support.",
+        message: "There is no support, so the part is free to move. Add a support under Supports.",
       },
       {
         item: "loads",
-        message: "There is no load, so every result would be zero. Add a pressure under Loads.",
+        message:
+          "There is no load, so every result would be zero. Add a pressure under Loads, or give a prescribed displacement a value other than zero.",
       },
       { item: "mesh", message: "There is no global mesh size. Enter one under Mesh." },
     ]);
@@ -91,5 +92,55 @@ describe("pre-run validation", () => {
     for (const message of messages(emptySimulationSpec("g1", topology))) {
       expect(message).not.toMatch(/pass|fail|complian/i);
     }
+  });
+
+  it("asks a prescribed displacement for every component and at least one value", () => {
+    const s = spec();
+    const move = {
+      id: "move-1",
+      type: "displacement",
+      name: "Pull",
+      faces: [2],
+      x: null,
+      y: "free",
+      z: "free",
+    } as SimulationSpec["supports"][0];
+    expect(messages({ ...s, supports: [...s.supports, move] })).toEqual([
+      `Support "Pull" has no value for its x component. Enter one or set it free.`,
+    ]);
+    const loose = { ...move, x: "free" } as SimulationSpec["supports"][0];
+    expect(messages({ ...s, supports: [...s.supports, loose] })).toEqual([
+      `Support "Pull" leaves every component free, so it holds nothing. Give at least one component a value (0 holds the faces in that direction).`,
+    ]);
+    const noFaces = { ...move, faces: [], x: { value: 0, unit: "mm" } } as SimulationSpec["supports"][0];
+    expect(messages({ ...s, supports: [noFaces] })).toEqual([
+      `Support "Pull" has no faces. Select the faces to move and add them to it.`,
+    ]);
+  });
+
+  it("needs no load when a prescribed displacement moves the part", () => {
+    const s = spec();
+    const move = (value: number) =>
+      ({
+        id: "move-1",
+        type: "displacement",
+        name: "Pull",
+        faces: [2],
+        x: { value, unit: "mm" },
+        y: "free",
+        z: "free",
+      }) as SimulationSpec["supports"][0];
+    expect(messages({ ...s, supports: [...s.supports, move(0.1)], loads: [] })).toEqual([]);
+    expect(messages({ ...s, supports: [...s.supports, move(0)], loads: [] })).toEqual([
+      "There is no load, so every result would be zero. Add a pressure under Loads, or give a prescribed displacement a value other than zero.",
+    ]);
+  });
+
+  it("asks a frictionless support for faces", () => {
+    const s = spec();
+    const plane = { id: "f-1", type: "frictionless", name: "Symmetry", faces: [] } as SimulationSpec["supports"][0];
+    expect(messages({ ...s, supports: [...s.supports, plane] })).toEqual([
+      `Support "Symmetry" has no faces. Select the faces it holds and add them to it.`,
+    ]);
   });
 });
