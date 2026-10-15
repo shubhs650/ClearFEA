@@ -5,6 +5,7 @@ import {
   checkSimulationSpec,
   emptySimulationSpec,
   type SimulationSpec,
+  simulationSpecProblems,
   validateCreateSimulationRequest,
   validateSimulationSpec,
 } from "../src";
@@ -115,5 +116,19 @@ describe("checkSimulationSpec", () => {
     ]);
     s.bodies = [];
     expect(checkSimulationSpec(s, topology)).toContain("Body 1 of the geometry is not listed in bodies.");
+  });
+
+  it("names the item each problem belongs to", () => {
+    const s = spec();
+    s.materials[0] = { ...first(s.materials), youngsModulus: { value: 200, unit: "mm" } };
+    s.supports[0] = { ...first(s.supports), faces: [99] };
+    s.mesh.size = { value: 0, unit: "mm" };
+    s.bodies.push({ tag: 7, material: null });
+    expect(simulationSpecProblems(s, topology).map((p) => p.item)).toEqual([
+      "steel",
+      "mesh",
+      "bodies",
+      "fixed-1",
+    ]);
   });
 });
