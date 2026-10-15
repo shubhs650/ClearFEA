@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import fixture from "../fixtures/simulation-v1.json";
 import {
   checkSimulationSpec,
+  elementOrder,
   emptySimulationSpec,
+  type LocalMeshSize,
+  localSizeParams,
+  sameMeshSettings,
   type PressureLoad,
   type SimulationSpec,
   simulationSpecProblems,
@@ -318,5 +322,63 @@ describe("checkSimulationSpec", () => {
       { item: "a", message: 'The axis direction of load "a" is zero. Give the axis a direction, for example z = 1.' },
       { item: "b", message: 'Load "b" is a second centrifugal load. A setup can have one; delete the other.' },
     ]);
+  });
+
+  it("accepts local mesh sizes and checks their units, repeated tags and tags against the geometry (M2.8)", () => {
+    const s = spec();
+    const local = (changes: Partial<LocalMeshSize>): LocalMeshSize => ({
+      id: "local-1",
+      name: "Hole",
+      scope: "faces",
+      tags: [2],
+      size: { value: 0.5, unit: "mm" },
+      ...changes,
+    });
+    s.mesh = { ...s.mesh, order: 1, local: [local({})] };
+    expect(validateSimulationSpec(s).ok).toBe(true);
+    expect(checkSimulationSpec(s, { ...topology, edges: [{ tag: 7 }] })).toEqual([]);
+    s.mesh.local = [
+      local({ size: { value: 0, unit: "mm" } }),
+      local({ id: "local-2", name: "Edges", scope: "edges", tags: [7, 8, 7] }),
+      local({ id: "local-3", name: "Body", scope: "bodies", tags: [2] }),
+      local({ id: "steel", name: "Clash", size: { value: 1, unit: "N" } }),
+    ];
+    expect(simulationSpecProblems(s, { ...topology, edges: [{ tag: 7 }] })).toEqual([
+      { item: "steel", message: 'The id "steel" of local mesh size "Clash" is used by another item; ids must be unique.' },
+      { item: "local-1", message: 'The size of local mesh size "Hole" must be greater than zero; it is 0 mm.' },
+      { item: "local-2", message: 'Local mesh size "Edges" lists edge 7 more than once.' },
+      { item: "steel", message: expect.stringMatching(/^The size of local mesh size "Clash" is given in "N", which is not a length unit/) },
+      { item: "local-2", message: 'Local mesh size "Edges" uses edge 8, which the geometry does not have.' },
+      { item: "local-3", message: 'Local mesh size "Body" uses body 2, which the geometry does not have.' },
+    ]);
+  });
+
+  it("asks for a new upload to size edges of a geometry imported before M2.8", () => {
+    const s = spec();
+    s.mesh.local = [{ id: "e", name: "Edge", scope: "edges", tags: [3], size: null }];
+    expect(checkSimulationSpec(s, topology)).toEqual([
+      'Local mesh size "Edge" uses edges, but this geometry was imported before edges could be picked. Upload the STEP file again to size its edges.',
+    ]);
+  });
+
+  it("compares mesh settings by global size, order and complete local sizes (M2.8)", () => {
+    const s = spec();
+    const size = { value: 5, unit: "mm" };
+    s.mesh = { size };
+    expect(elementOrder(s)).toBe(2);
+    expect(sameMeshSettings(s, { size, order: 2, local: [] })).toBe(true);
+    expect(sameMeshSettings(s, { size, order: 1, local: [] })).toBe(false);
+    expect(sameMeshSettings(s, { size: { value: 0.5, unit: "cm" }, order: 2, local: [] })).toBe(false);
+    s.mesh.local = [
+      { id: "a", name: "A", scope: "faces", tags: [3, 1], size: { value: 1, unit: "mm" } },
+      // Incomplete local sizes do not take part in meshing.
+      { id: "b", name: "B", scope: "edges", tags: [], size: { value: 1, unit: "mm" } },
+      { id: "c", name: "C", scope: "bodies", tags: [1], size: null },
+    ];
+    const local = localSizeParams(s);
+    expect(local).toEqual([{ scope: "faces", tags: [1, 3], size: { value: 1, unit: "mm" } }]);
+    expect(sameMeshSettings(s, { size, order: 2, local })).toBe(true);
+    expect(sameMeshSettings(s, { size, order: 2, local: [] })).toBe(false);
+    expect(sameMeshSettings(s, { size, order: 2, local: [{ ...local[0]!, tags: [1] }] })).toBe(false);
   });
 });

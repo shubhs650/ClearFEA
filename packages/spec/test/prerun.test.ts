@@ -266,4 +266,16 @@ describe("pre-run validation", () => {
     s.loads = [{ id: "g", type: "gravity", name: "Weight", x: { value: 0, unit: "g" }, y: { value: 0, unit: "g" }, z: { value: -1, unit: "g" } }];
     expect(preRunProblems(s, topology)).toEqual([]);
   });
+
+  it("asks for the tags and size of each local mesh size (M2.8)", () => {
+    const s = spec();
+    s.mesh.local = [{ id: "local-1", name: "Hole", scope: "faces", tags: [], size: null }];
+    expect(preRunProblems(s, topology)).toEqual([
+      {
+        item: "local-1",
+        message: 'Local mesh size "Hole" has no faces. Select the faces to refine and add them to it, or delete it.',
+      },
+      { item: "local-1", message: 'Local mesh size "Hole" has no size. Enter it.' },
+    ]);
+  });
 });

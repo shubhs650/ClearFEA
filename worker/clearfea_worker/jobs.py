@@ -142,8 +142,9 @@ def run_import(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
 
 
 def run_mesh(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
-    """Meshes a geometry with a global size: mesh.bin and the mesh's display.bin (M1.6)."""
-    from .meshing.mesher import MeshFailure, mesh_geometry
+    """Meshes a geometry with a global size (M1.6) and local sizes (M2.8): mesh.bin and the
+    mesh's display.bin."""
+    from .meshing.mesher import LocalSize, MeshFailure, mesh_geometry
     from .spec.geometry_schema import Topology
     from .spec.simulation_schema import MeshParams
     from .units import UnitError, to_si
@@ -151,6 +152,15 @@ def run_mesh(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     try:
         params = MeshParams.model_validate(job.params or {})
         size = to_si(params.size.value, params.size.unit, "length")
+        local = tuple(
+            LocalSize(
+                scope=item.scope,
+                tags=tuple(item.tags),
+                size=to_si(item.size.value, item.size.unit, "length"),
+                text=f"{item.size.value:g} {item.size.unit}",
+            )
+            for item in params.local or []
+        )
     except (ValidationError, UnitError) as error:
         raise JobFailure("platform_fault", "bad_params", f"Mesh parameters: {error}") from None
     files = context.require_files()
@@ -170,6 +180,7 @@ def run_mesh(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
             size=size,
             unit=params.size.unit,
             order=params.order,
+            local=local,
         )
     except MeshFailure as failure:
         raise JobFailure(failure.category, failure.cause, failure.message) from None

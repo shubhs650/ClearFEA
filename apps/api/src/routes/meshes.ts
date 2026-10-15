@@ -19,10 +19,12 @@ export function meshView(mesh: Mesh): MeshView {
     geometryId: mesh.geometryId,
     size: mesh.size,
     order: mesh.order,
+    local: mesh.local,
     status: mesh.status,
     problem: mesh.problem,
     nodeCount: mesh.nodeCount,
     elementCount: mesh.elementCount,
+    quality: mesh.quality,
     createdAt: mesh.createdAt,
   };
 }

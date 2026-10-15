@@ -144,7 +144,7 @@ describe("creating a simulation", () => {
       materials: [],
       supports: [],
       loads: [],
-      mesh: { size: null },
+      mesh: { size: null, order: 2, local: [] },
     });
   });
 

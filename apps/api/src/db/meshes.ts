@@ -3,7 +3,7 @@
 // user id and filter on owner_id. recordMeshOutcome is called for a job the worker holds, and
 // touches only that job's own mesh.
 
-import type { ElementOrder, MeshResult, MeshStatus, Quantity } from "@clearfea/spec";
+import type { ElementOrder, LocalSizeParams, MeshQuality, MeshResult, MeshStatus, Quantity } from "@clearfea/spec";
 import { getJob, type Job, newJob } from "./jobs";
 
 export interface Mesh {
@@ -12,10 +12,12 @@ export interface Mesh {
   geometryId: string;
   size: Quantity;
   order: ElementOrder;
+  local: LocalSizeParams[];
   status: MeshStatus;
   problem: string | null;
   nodeCount: number | null;
   elementCount: number | null;
+  quality: MeshQuality | null;
   jobId: string | null;
   createdAt: string;
 }
@@ -26,10 +28,12 @@ interface MeshRow {
   geometry_id: string;
   size: string;
   element_order: ElementOrder;
+  local_sizes: string;
   status: MeshStatus;
   problem: string | null;
   node_count: number | null;
   element_count: number | null;
+  quality: string | null;
   job_id: string | null;
   created_at: string;
 }
@@ -41,17 +45,16 @@ function toMesh(row: MeshRow): Mesh {
     geometryId: row.geometry_id,
     size: JSON.parse(row.size),
     order: row.element_order,
+    local: JSON.parse(row.local_sizes),
     status: row.status,
     problem: row.problem,
     nodeCount: row.node_count,
     elementCount: row.element_count,
+    quality: row.quality === null ? null : JSON.parse(row.quality),
     jobId: row.job_id,
     createdAt: row.created_at,
   };
 }
-
-/** Every Phase 0 mesh is second order until M2.8 offers the choice (ADR-028). */
-export const MESH_ORDER: ElementOrder = 2;
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
@@ -76,6 +79,7 @@ export async function createMesh(
     scaling: number;
     size: Quantity;
     order: ElementOrder;
+    local: LocalSizeParams[];
   },
 ): Promise<{ mesh: Mesh; job: Job }> {
   const id = crypto.randomUUID();
@@ -84,15 +88,24 @@ export async function createMesh(
     scaling: request.scaling,
     size: request.size,
     order: request.order,
+    local: request.local,
   });
   const [, , linked] = await db.batch([
     job.statement,
     db
       .prepare(
-        `INSERT INTO meshes (id, owner_id, geometry_id, size, element_order, job_id)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO meshes (id, owner_id, geometry_id, size, element_order, local_sizes, job_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, userId, request.geometryId, JSON.stringify(request.size), request.order, job.id),
+      .bind(
+        id,
+        userId,
+        request.geometryId,
+        JSON.stringify(request.size),
+        request.order,
+        JSON.stringify(request.local),
+        job.id,
+      ),
     db
       .prepare(
         `UPDATE simulations SET mesh_id = ?, updated_at = ${NOW}
@@ -148,9 +161,17 @@ export async function recordMeshOutcome(db: D1Database, job: Job, outcome: MeshO
   await db
     .prepare(
       `UPDATE meshes
-          SET status = 'ready', problem = NULL, node_count = ?, element_count = ?, updated_at = ${NOW}
+          SET status = 'ready', problem = NULL, node_count = ?, element_count = ?, quality = ?,
+              updated_at = ${NOW}
         ${scope}`,
     )
-    .bind(outcome.result.nodes, outcome.result.elements, job.targetId, job.ownerId, job.id)
+    .bind(
+      outcome.result.nodes,
+      outcome.result.elements,
+      JSON.stringify(outcome.result.quality),
+      job.targetId,
+      job.ownerId,
+      job.id,
+    )
     .run();
 }

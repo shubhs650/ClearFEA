@@ -390,122 +390,75 @@ type Load = (
 )
 
 
-class MeshSettings(BaseModel):
+type LocalMeshScope = Literal["faces", "edges", "bodies"]
+"""
+What a local mesh size applies to: faces, edges or bodies of the geometry, by their topology.json tags.
+"""
+
+
+class LocalMeshSize(BaseModel):
+    """
+    A smaller element size on some faces, edges or bodies (M2.8, ADR-045). The mesh grows from it to the global size away from them.
+    """
+
     model_config = ConfigDict(
         extra="forbid",
         populate_by_name=True,
     )
+    id: ItemId
+    name: ItemName
+    scope: LocalMeshScope
+    tags: list[int]
+    """
+    Face, edge or body tags, as scope says; empty until picked.
+    """
     size: Quantity | None
     """
-    Global element size, a length quantity greater than zero; null until entered.
+    Element size on them, a length quantity greater than zero and no larger than the global size; null until entered.
     """
-
-
-class SimulationSpec(BaseModel):
-    """
-    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    version: Literal[1]
-    analysis: AnalysisType
-    geometry_id: Annotated[str, Field(alias="geometryId")]
-    """
-    The geometry whose face and body tags the spec uses.
-    """
-    bodies: list[BodyAssignment]
-    materials: list[IsotropicMaterial]
-    supports: list[Support]
-    loads: list[Load]
-    mesh: MeshSettings
-
-
-class SimulationView(BaseModel):
-    """
-    A simulation as its owner sees it.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    id: str
-    name: ItemName
-    geometry_id: Annotated[str, Field(alias="geometryId")]
-    spec: SimulationSpec
-    created_at: Annotated[str, Field(alias="createdAt")]
-    updated_at: Annotated[str, Field(alias="updatedAt")]
-
-
-class CreateSimulationRequest(BaseModel):
-    """
-    Body of POST /api/simulations. The geometry must be ready (its unit confirmed); from then on its unit is locked. Without spec the simulation starts empty, with every body of the geometry listed and no material assigned.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    geometry_id: Annotated[str, Field(alias="geometryId")]
-    name: ItemName
-    spec: SimulationSpec | None = None
-
-
-class SimulationResponse(BaseModel):
-    """
-    Answer to POST /api/simulations (HTTP 201), GET /api/simulations/{id} and PUT /api/simulations/{id}/spec.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    simulation: SimulationView
-
-
-class SimulationListResponse(BaseModel):
-    """
-    Answer to GET /api/simulations[?geometryId=]: the signed-in user's simulations, newest first.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    simulations: list[SimulationView]
 
 
 type ElementOrder = Literal[1, 2]
 """
-1: four-node tetrahedra. 2: ten-node tetrahedra with curved edges on curved faces. Phase 0 meshes always use 2 until M2.8 offers the choice (ADR-028).
+1: four-node tetrahedra (CalculiX C3D4). 2: ten-node tetrahedra with curved edges on curved faces (C3D10), the default (ADR-028, ADR-045).
 """
 
 
-class MeshParams(BaseModel):
+class LocalSizeParams(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    scope: LocalMeshScope
+    tags: list[int]
     """
-    Parameters of a mesh job (ADR-028). The worker re-imports the geometry's STEP file with scaling, checks it against topology.json, and meshes it with tetrahedra no larger than size.
+    Never empty when sent by the API.
+    """
+    size: Quantity
+
+
+type ShapeHistogramItem = Annotated[int, Field(ge=0)]
+
+
+class MeshQuality(BaseModel):
+    """
+    Quality summary of a mesh (M2.8, ADR-045). shape is Gmsh's gamma, the inscribed to circumscribed sphere radius ratio scaled so a regular tetrahedron is 1 and a flat one 0. jacobianMin is the smallest scaled Jacobian of any element, 1 for an undistorted one; curved second-order elements fall below 1.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         populate_by_name=True,
     )
-    geometry_id: Annotated[str, Field(alias="geometryId")]
+    shape_min: Annotated[float, Field(alias="shapeMin")]
+    shape_mean: Annotated[float, Field(alias="shapeMean")]
+    shape_histogram: Annotated[
+        list[ShapeHistogramItem],
+        Field(alias="shapeHistogram", max_length=10, min_length=10),
+    ]
     """
-    The geometry whose model.step and topology.json the job reads.
+    Number of elements with shape in [0, 0.1), [0.1, 0.2), ... [0.9, 1].
     """
-    scaling: Annotated[float, Field(gt=0.0)]
-    """
-    Geometry.OCCScaling of the geometry's topology.json; the re-import must use the same.
-    """
-    size: Quantity
-    """
-    Global element size as the user entered it (a length quantity); the worker converts it to metres.
-    """
-    order: ElementOrder
+    jacobian_min: Annotated[float, Field(alias="jacobianMin")]
 
 
 class Software(BaseModel):
@@ -531,6 +484,7 @@ class MeshResult(BaseModel):
         populate_by_name=True,
     )
     order: ElementOrder
+    quality: MeshQuality
     nodes: Annotated[int, Field(ge=4)]
     elements: Annotated[int, Field(ge=1)]
     """
@@ -568,6 +522,10 @@ class MeshView(BaseModel):
     The global size the mesh was made with, as entered.
     """
     order: ElementOrder
+    local: list[LocalSizeParams]
+    """
+    The local sizes the mesh was made with, as entered (M2.8).
+    """
     status: MeshStatus
     problem: str | None
     """
@@ -575,6 +533,10 @@ class MeshView(BaseModel):
     """
     node_count: Annotated[int | None, Field(alias="nodeCount")]
     element_count: Annotated[int | None, Field(alias="elementCount")]
+    quality: MeshQuality | None
+    """
+    Null until the mesh is ready, and for meshes made before M2.8.
+    """
     created_at: Annotated[str, Field(alias="createdAt")]
 
 
@@ -600,22 +562,6 @@ class SimulationMeshResponse(BaseModel):
         populate_by_name=True,
     )
     mesh: MeshView | None
-
-
-class SolveParams(BaseModel):
-    """
-    Parameters of a solve job (ADR-030): the run's frozen spec and the mesh it is solved on. The worker writes the deck from these two alone.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    mesh_id: Annotated[str, Field(alias="meshId")]
-    """
-    The mesh whose mesh.bin the job reads.
-    """
-    spec: SimulationSpec
 
 
 type XYZ = Annotated[list[float], Field(max_length=3, min_length=3)]
@@ -797,6 +743,159 @@ class RunCost(BaseModel):
     charged: bool
 
 
+class RunLogResponse(BaseModel):
+    """
+    Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    text: str
+    next: Annotated[int, Field(ge=0)]
+
+
+class MeshSettings(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    size: Quantity | None
+    """
+    Global element size, a length quantity greater than zero; null until entered.
+    """
+    order: ElementOrder | None = None
+    """
+    Element order (M2.8). Absent in specs saved before M2.8, which means 2.
+    """
+    local: list[LocalMeshSize] | None = None
+    """
+    Local mesh sizes (M2.8). Absent in specs saved before M2.8, which means none.
+    """
+
+
+class SimulationSpec(BaseModel):
+    """
+    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    version: Literal[1]
+    analysis: AnalysisType
+    geometry_id: Annotated[str, Field(alias="geometryId")]
+    """
+    The geometry whose face and body tags the spec uses.
+    """
+    bodies: list[BodyAssignment]
+    materials: list[IsotropicMaterial]
+    supports: list[Support]
+    loads: list[Load]
+    mesh: MeshSettings
+
+
+class SimulationView(BaseModel):
+    """
+    A simulation as its owner sees it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: str
+    name: ItemName
+    geometry_id: Annotated[str, Field(alias="geometryId")]
+    spec: SimulationSpec
+    created_at: Annotated[str, Field(alias="createdAt")]
+    updated_at: Annotated[str, Field(alias="updatedAt")]
+
+
+class CreateSimulationRequest(BaseModel):
+    """
+    Body of POST /api/simulations. The geometry must be ready (its unit confirmed); from then on its unit is locked. Without spec the simulation starts empty, with every body of the geometry listed and no material assigned.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    geometry_id: Annotated[str, Field(alias="geometryId")]
+    name: ItemName
+    spec: SimulationSpec | None = None
+
+
+class SimulationResponse(BaseModel):
+    """
+    Answer to POST /api/simulations (HTTP 201), GET /api/simulations/{id} and PUT /api/simulations/{id}/spec.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    simulation: SimulationView
+
+
+class SimulationListResponse(BaseModel):
+    """
+    Answer to GET /api/simulations[?geometryId=]: the signed-in user's simulations, newest first.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    simulations: list[SimulationView]
+
+
+class MeshParams(BaseModel):
+    """
+    Parameters of a mesh job (ADR-028). The worker re-imports the geometry's STEP file with scaling, checks it against topology.json, and meshes it with tetrahedra no larger than size.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    geometry_id: Annotated[str, Field(alias="geometryId")]
+    """
+    The geometry whose model.step and topology.json the job reads.
+    """
+    scaling: Annotated[float, Field(gt=0.0)]
+    """
+    Geometry.OCCScaling of the geometry's topology.json; the re-import must use the same.
+    """
+    size: Quantity
+    """
+    Global element size as the user entered it (a length quantity); the worker converts it to metres.
+    """
+    order: ElementOrder
+    local: list[LocalSizeParams] | None = None
+    """
+    Local sizes (M2.8), each complete: tags picked and a size entered.
+    """
+
+
+class SolveParams(BaseModel):
+    """
+    Parameters of a solve job (ADR-030): the run's frozen spec and the mesh it is solved on. The worker writes the deck from these two alone.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    mesh_id: Annotated[str, Field(alias="meshId")]
+    """
+    The mesh whose mesh.bin the job reads.
+    """
+    spec: SimulationSpec
+
+
 class RunView(BaseModel):
     """
     A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032, ADR-033).
@@ -863,16 +962,3 @@ class RunListResponse(BaseModel):
         populate_by_name=True,
     )
     runs: list[RunView]
-
-
-class RunLogResponse(BaseModel):
-    """
-    Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    text: str
-    next: Annotated[int, Field(ge=0)]

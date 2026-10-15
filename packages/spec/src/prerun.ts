@@ -12,6 +12,7 @@ import {
   hasBodyLoad,
   hasTemperatureChange,
   loadHasFaces,
+  localScopes,
   type SpecProblem,
   simulationSpecProblems,
   type TopologyTags,
@@ -139,5 +140,12 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
   }
 
   if (spec.mesh.size === null) add("mesh", "There is no global mesh size. Enter one under Mesh.");
+  for (const item of spec.mesh.local ?? []) {
+    const { many } = localScopes[item.scope];
+    if (item.tags.length === 0) {
+      add(item.id, `Local mesh size "${item.name}" has no ${many}. Select the ${many} to refine and add them to it, or delete it.`);
+    }
+    if (item.size === null) add(item.id, `Local mesh size "${item.name}" has no size. Enter it.`);
+  }
   return problems;
 }

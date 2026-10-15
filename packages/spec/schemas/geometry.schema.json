@@ -72,6 +72,24 @@
         "bodies": { "type": "array", "items": { "type": "integer" } }
       }
     },
+    "TopologyEdge": {
+      "description": "An edge (CAD curve) of the geometry (M2.8). points is a polyline along it, from the display tessellation, for drawing and picking it in the viewer; it is not part of the edge's identity.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag", "length", "bbox", "faces", "points"],
+      "properties": {
+        "tag": { "type": "integer" },
+        "length": { "description": "Metres.", "type": "number" },
+        "bbox": { "$ref": "#/$defs/BoundingBox" },
+        "faces": { "description": "The faces the edge bounds.", "type": "array", "items": { "type": "integer" } },
+        "points": {
+          "description": "x, y, z of each polyline point in turn, in metres; a closed edge repeats its first point at the end.",
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 6
+        }
+      }
+    },
     "Topology": {
       "description": "topology.json: the reference for face identity (ARCHITECTURE.md section 3). Written by the import job in metres, at the geometry's confirmed scale once the unit is confirmed.",
       "type": "object",
@@ -95,7 +113,12 @@
           "properties": { "gmsh": { "type": "string" }, "occt": { "type": "string" } }
         },
         "bodies": { "type": "array", "items": { "$ref": "#/$defs/TopologyBody" } },
-        "faces": { "type": "array", "items": { "$ref": "#/$defs/TopologyFace" } }
+        "faces": { "type": "array", "items": { "$ref": "#/$defs/TopologyFace" } },
+        "edges": {
+          "description": "Every edge of the geometry (M2.8). Absent for geometries imported before M2.8, whose edges cannot be picked until the file is uploaded again.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/TopologyEdge" }
+        }
       }
     },
     "ImportParams": {

@@ -92,6 +92,31 @@ class TopologyFace(BaseModel):
     bodies: list[int]
 
 
+class TopologyEdge(BaseModel):
+    """
+    An edge (CAD curve) of the geometry (M2.8). points is a polyline along it, from the display tessellation, for drawing and picking it in the viewer; it is not part of the edge's identity.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    tag: int
+    length: float
+    """
+    Metres.
+    """
+    bbox: BoundingBox
+    faces: list[int]
+    """
+    The faces the edge bounds.
+    """
+    points: Annotated[list[float], Field(min_length=6)]
+    """
+    x, y, z of each polyline point in turn, in metres; a closed edge repeats its first point at the end.
+    """
+
+
 class Software(BaseModel):
     """
     Versions that produced the tags. Tags are only stable for the same file and the same versions.
@@ -131,6 +156,10 @@ class Topology(BaseModel):
     """
     bodies: list[TopologyBody]
     faces: list[TopologyFace]
+    edges: list[TopologyEdge] | None = None
+    """
+    Every edge of the geometry (M2.8). Absent for geometries imported before M2.8, whose edges cannot be picked until the file is uploaded again.
+    """
 
 
 class ImportParams(BaseModel):
