@@ -314,7 +314,34 @@ class RemoteLoad(BaseModel):
     """
 
 
-type Load = PressureLoad | ForceLoad | RemoteLoad | GravityLoad | CentrifugalLoad
+class HydrostaticLoad(BaseModel):
+    """
+    The pressure of a still fluid on the faces: p = density × (gravity · (x − s)) at a point x at or below the free surface through s, zero above it. The fluid is on the outside of each face, so the pressure pushes on the face towards the body. Consistent nodal loads in the deck. Each value null until entered.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: ItemId
+    type: Literal["hydrostatic"]
+    name: ItemName
+    faces: FaceTags
+    fluid_density: Annotated[OptionalQuantity, Field(alias="fluidDensity")]
+    """
+    The fluid's density, a density quantity.
+    """
+    gravity: Components
+    """
+    The acceleration of gravity acting on the fluid, acceleration quantities in global axes (z = -1 g for gravity downwards along z). Depth is measured along it; it is not applied to the bodies (add a gravity load for their weight).
+    """
+    free_surface: Annotated[AxisPoint, Field(alias="freeSurface")]
+    """
+    A point on the fluid's free surface, the plane normal to gravity where the pressure is zero.
+    """
+
+
+type Load = PressureLoad | ForceLoad | RemoteLoad | HydrostaticLoad | GravityLoad | CentrifugalLoad
 
 
 class MeshSettings(BaseModel):

@@ -17,6 +17,7 @@ from ..spec.simulation_schema import (
     FixedSupport,
     ForceLoad,
     GravityLoad,
+    HydrostaticLoad,
     PrescribedDisplacement,
     PressureLoad,
     Quantity,
@@ -40,6 +41,7 @@ from .loads import (
     densities,
     fixed_support_nodes,
     force_vector,
+    hydrostatic_values,
     pressure_faces,
     remote_vectors,
 )
@@ -352,6 +354,21 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
             out.append(
                 f"** moment ({_entered(load.moment.x, load.moment.y, load.moment.z)})"
                 + f" = ({_vector(moment)}) N*m, carried to the faces as a linear traction"
+            )
+        elif isinstance(load, HydrostaticLoad):
+            density, gravity_on_fluid, surface = hydrostatic_values(load)
+            g, s = load.gravity, load.free_surface
+            out.append(
+                f'** Hydrostatic pressure {load.id} "{_label(load.name)}", faces '
+                + ", ".join(str(f) for f in load.faces)
+                + f": fluid density {_entered(load.fluid_density)} = {_number(density)} kg/m^3"
+            )
+            out.append(
+                f"** gravity ({_entered(g.x, g.y, g.z)}) = ({_vector(gravity_on_fluid)}) m/s^2"
+            )
+            out.append(
+                f"** free surface through ({_entered(s.x, s.y, s.z)}) = ({_vector(surface)}) m,"
+                + " pressure written as nodal loads"
             )
         elif isinstance(load, GravityLoad):
             out.append(

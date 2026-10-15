@@ -11,14 +11,16 @@ from pathlib import Path
 import pytest
 
 from clearfea_worker.deck.applied import applied_nodal_loads, force_loads
+from clearfea_worker.deck.common import DeckError
 from clearfea_worker.deck.elements import CCX_NODE_ORDER, FACE_NODES
 from clearfea_worker.deck.loads import BodyLoad, body_nodal_forces, fixed_support_nodes
 from clearfea_worker.deck.loads.body import RULES, shape
 from clearfea_worker.deck.loads.force import face_node_weights
+from clearfea_worker.deck.loads.hydrostatic import hydrostatic_nodal_loads
 from clearfea_worker.deck.loads.remote import remote_nodal_loads
 from clearfea_worker.meshing.volume import TET_FACES, VolumeMesh
 from clearfea_worker.results.summary import read_reactions
-from clearfea_worker.spec.simulation_schema import RemoteLoad, SimulationSpec
+from clearfea_worker.spec.simulation_schema import HydrostaticLoad, RemoteLoad, SimulationSpec
 
 from .deck_meshes import two_tets
 from .test_deck import fixture_spec
@@ -291,3 +293,110 @@ def test_applied_loads_include_remote_loads() -> None:
     applied = applied_nodal_loads(spec, mesh, range(mesh.node_count))
     total = [sum(f[i] for f in applied.values()) for i in range(3)]
     assert total == pytest.approx([1.0, 2.0, 13.0], rel=1e-12)
+
+
+def hydrostatic(
+    faces: list[int], surface: tuple[float, float, float], g: tuple[float, float, float]
+) -> dict:
+    """A hydrostatic pressure of water (1000 kg/m³) in SI units (m, m/s²)."""
+
+    def xyz(v: tuple[float, float, float], unit: str) -> dict:
+        return {a: {"value": c, "unit": unit} for a, c in zip("xyz", v, strict=True)}
+
+    return {
+        "id": "h",
+        "type": "hydrostatic",
+        "name": "H",
+        "faces": faces,
+        "fluidDensity": {"value": 1000, "unit": "kg/m³"},
+        "gravity": xyz(g, "m/s²"),
+        "freeSurface": xyz(surface, "m"),
+    }
+
+
+def wet_force(level: float) -> float:
+    """rho g times the integral of the depth (level - y) over the part of face 2 (the triangle
+    x, y >= 0, x + y <= A at z = 0) below y = level, under gravity 9.81 m/s² along -y."""
+    a = min(level, A)
+    return 1000 * 9.81 * (level * A * a - (level + A) * a * a / 2 + a**3 / 3)
+
+
+@pytest.mark.parametrize("order", [1, 2])
+@pytest.mark.parametrize(
+    ("level", "rel"),
+    # Wholly under water and crossed on a split line are exact; elsewhere the crossing pieces
+    # are integrated across the kink at the surface.
+    [(0.02, 1e-12), (0.005, 1e-12), (0.0031, 1e-5), (0.0087, 1e-5)],
+)
+def test_hydrostatic_force_is_the_pressure_integrated_over_the_wet_part(
+    order: int, level: float, rel: float
+) -> None:
+    mesh = two_tets(order=order)
+    load = HydrostaticLoad.model_validate(hydrostatic([2], (0.0, level, 0.0), (0, -9.81, 0)))
+    force, _ = resultant(mesh, hydrostatic_nodal_loads(mesh, load), (0.0, 0.0, 0.0))
+    # Face 2 lies at z = 0 with the body above it, so the water pushes along +z.
+    assert force[0] == pytest.approx(0.0, abs=1e-15)
+    assert force[1] == pytest.approx(0.0, abs=1e-15)
+    assert force[2] == pytest.approx(wet_force(level), rel=rel)
+
+
+@pytest.mark.parametrize("mesh", [two_tets(order=1), two_tets(order=2)])
+def test_hydrostatic_load_under_water_has_the_linear_pressures_force_and_moment(
+    mesh: VolumeMesh,
+) -> None:
+    # Wholly under water the pressure is linear, so on flat faces the rule is exact: the force
+    # on each face is p at its centroid times its area along the inward normal, and its moment
+    # follows from the first and second moments of area.
+    g, s = (2.0, -9.0, 3.5), (0.05, 0.08, -0.04)
+    load = HydrostaticLoad.model_validate(hydrostatic([1, 2, 3, 4], s, g))
+    loads = hydrostatic_nodal_loads(mesh, load)
+    force, moment = resultant(mesh, loads, (0.0, 0.0, 0.0))
+    expected_f, expected_m = [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+    p = mesh.positions
+    npe = 10 if mesh.order == 2 else 4
+    for tag in (1, 2, 3, 4):
+        for element, local in mesh.faces[tag]:
+            corners = [mesh.elements[element * npe + k] for k in TET_FACES[local]]
+            (o,) = set(range(4)) - set(TET_FACES[local])
+            x = [[p[3 * n + i] for i in range(3)] for n in corners]
+            inside = [p[3 * mesh.elements[element * npe + o] + i] - x[0][i] for i in range(3)]
+            u = [x[1][i] - x[0][i] for i in range(3)]
+            v = [x[2][i] - x[0][i] for i in range(3)]
+            n2 = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+            if sum(n2[i] * inside[i] for i in range(3)) < 0:
+                n2 = [-c for c in n2]
+            # n2 is twice the area along the inward normal. With p and y linear on the
+            # triangle, integral of p = A p(c) and integral of p y = A (sum of p_k x_k + 9 p(c) c)
+            # / 12 (integral of L_i L_j = A (1 + delta_ij) / 12).
+            c = [sum(x[k][i] for k in range(3)) / 3 for i in range(3)]
+            pk = [1000 * sum(g[i] * (x[k][i] - s[i]) for i in range(3)) for k in range(3)]
+            pc = sum(pk) / 3
+            first = [
+                (sum(pk[k] * x[k][i] for k in range(3)) + 9 * pc * c[i]) / 12 for i in range(3)
+            ]
+            for i in range(3):
+                expected_f[i] += pc * n2[i] / 2
+            # The moment about the origin: integral of y x (p n) = (integral of p y) x n.
+            expected_m[0] += (first[1] * n2[2] - first[2] * n2[1]) / 2
+            expected_m[1] += (first[2] * n2[0] - first[0] * n2[2]) / 2
+            expected_m[2] += (first[0] * n2[1] - first[1] * n2[0]) / 2
+    assert force == pytest.approx(expected_f, rel=1e-12, abs=1e-15)
+    assert moment == pytest.approx(expected_m, rel=1e-12, abs=1e-15)
+
+
+def test_hydrostatic_pressure_is_zero_above_the_free_surface() -> None:
+    # Gravity along -y with the surface at y = 0: only the plane y = 0 itself is reached, where
+    # the pressure is zero, so faces off it are dry and the load is refused as doing nothing.
+    mesh = two_tets(order=2)
+    load = HydrostaticLoad.model_validate(hydrostatic([3], (0.0, 0.0, 0.0), (0, -9.81, 0)))
+    with pytest.raises(DeckError, match="all above the free surface"):
+        hydrostatic_nodal_loads(mesh, load)
+
+
+def test_applied_loads_include_hydrostatic_loads() -> None:
+    mesh = two_tets(order=2)
+    water = hydrostatic([2], (0.0, 0.02, 0.0), (0, -9.81, 0))
+    spec = loaded_spec(loads=[force([2], 0, 0, 10), water])
+    applied = applied_nodal_loads(spec, mesh, range(mesh.node_count))
+    total = [sum(f[i] for f in applied.values()) for i in range(3)]
+    assert total == pytest.approx([0.0, 0.0, 10.0 + wet_force(0.02)], rel=1e-12)

@@ -187,6 +187,33 @@ def remote_spec() -> dict:
     return spec
 
 
+def hydrostatic_spec() -> dict:
+    """A hydrostatic pressure (M2.5) on two faces beside the fixture's pressure: water in
+    g/cm³ under gravity along -y in ft/s², its free surface at y = 6 mm (given in cm and in),
+    so it crosses the faces."""
+    spec = fixture_spec()
+    spec["loads"].append(
+        {
+            "id": "hydrostatic-1",
+            "type": "hydrostatic",
+            "name": "Water",
+            "faces": [2, 3],
+            "fluidDensity": {"value": 1, "unit": "g/cm³"},
+            "gravity": {
+                "x": {"value": 0, "unit": "g"},
+                "y": {"value": -32.17404855643045, "unit": "ft/s²"},
+                "z": {"value": 0, "unit": "m/s²"},
+            },
+            "freeSurface": {
+                "x": {"value": 3, "unit": "in"},
+                "y": {"value": 0.6, "unit": "cm"},
+                "z": {"value": 0, "unit": "mm"},
+            },
+        }
+    )
+    return spec
+
+
 def two_body_loads_spec() -> dict:
     return loads_spec() | {
         "bodies": [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
@@ -256,6 +283,7 @@ SNAPSHOT_CASES = {
     "loads-c3d10": (loads_spec, lambda: two_tets(order=2)),
     "loads-two-bodies-c3d4": (two_body_loads_spec, lambda: two_tets(order=1, bodies=2)),
     "remote-c3d10": (remote_spec, lambda: two_tets(order=2)),
+    "hydrostatic-c3d10": (hydrostatic_spec, lambda: two_tets(order=2)),
 }
 
 
@@ -546,6 +574,58 @@ def test_remote_cloads_add_up_to_the_force_with_the_moment_about_the_point() -> 
         moment[1] += r[2] * v[0] - r[0] * v[2]
         moment[2] += r[0] * v[1] - r[1] * v[0]
     assert moment == pytest.approx(m, rel=1e-12)
+
+
+def hydrostatic_load_spec(change) -> dict:  # type: ignore[no-untyped-def]
+    spec = hydrostatic_spec()
+    change(spec["loads"][1])
+    return spec
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda h: h.update(faces=[]), "Water has no faces"),
+        (lambda h: h.update(faces=[3, 9]), "uses faces [9], which the mesh does not have"),
+        (
+            lambda h: h.update(fluidDensity=None),
+            'Hydrostatic pressure "Water": fluid density has no value',
+        ),
+        (
+            lambda h: h.update(fluidDensity={"value": 0, "unit": "kg/m³"}),
+            "the fluid density must be greater than zero",
+        ),
+        (lambda h: h.update(fluidDensity={"value": 1, "unit": "Pa"}), "not a density"),
+        (
+            lambda h: h["gravity"].update(y=None),
+            'Hydrostatic pressure "Water": y component of its gravity has no value',
+        ),
+        (lambda h: h["gravity"].update(x={"value": 1, "unit": "m"}), "not an acceleration"),
+        (
+            lambda h: h["gravity"].update(y={"value": 0, "unit": "g"}),
+            "gravity is zero, so the fluid has no depth",
+        ),
+        (
+            lambda h: h["freeSurface"].update(z=None),
+            'Hydrostatic pressure "Water": z component of its free-surface point has no value',
+        ),
+        (
+            lambda h: h["freeSurface"].update(y={"value": -1, "unit": "mm"}),
+            "its faces are all above the free surface",
+        ),
+        (
+            lambda h: (
+                h["gravity"].update(y={"value": 1, "unit": "g"}),
+                h["freeSurface"].update(y={"value": 2, "unit": "cm"}),
+            ),
+            "its faces are all above the free surface",
+        ),
+    ],
+)
+def test_refuses_hydrostatic_loads_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(DeckError) as error:
+        deck(hydrostatic_load_spec(change), two_tets(order=2))
+    assert message in str(error.value)
 
 
 def test_refuses_a_mesh_with_nodes_outside_every_element() -> None:

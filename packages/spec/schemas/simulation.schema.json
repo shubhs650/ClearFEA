@@ -237,11 +237,33 @@
         "moment": { "description": "The moment at the reference point.", "$ref": "#/$defs/Components" }
       }
     },
+    "HydrostaticLoad": {
+      "description": "The pressure of a still fluid on the faces: p = density × (gravity · (x − s)) at a point x at or below the free surface through s, zero above it. The fluid is on the outside of each face, so the pressure pushes on the face towards the body. Consistent nodal loads in the deck. Each value null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces", "fluidDensity", "gravity", "freeSurface"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "hydrostatic" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" },
+        "fluidDensity": { "description": "The fluid's density, a density quantity.", "$ref": "#/$defs/OptionalQuantity" },
+        "gravity": {
+          "description": "The acceleration of gravity acting on the fluid, acceleration quantities in global axes (z = -1 g for gravity downwards along z). Depth is measured along it; it is not applied to the bodies (add a gravity load for their weight).",
+          "$ref": "#/$defs/Components"
+        },
+        "freeSurface": {
+          "description": "A point on the fluid's free surface, the plane normal to gravity where the pressure is zero.",
+          "$ref": "#/$defs/AxisPoint"
+        }
+      }
+    },
     "Load": {
       "oneOf": [
         { "$ref": "#/$defs/PressureLoad" },
         { "$ref": "#/$defs/ForceLoad" },
         { "$ref": "#/$defs/RemoteLoad" },
+        { "$ref": "#/$defs/HydrostaticLoad" },
         { "$ref": "#/$defs/GravityLoad" },
         { "$ref": "#/$defs/CentrifugalLoad" }
       ]
