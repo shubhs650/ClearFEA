@@ -28,9 +28,23 @@ class DeckError(ValueError):
     """The spec cannot be turned into solver input. The message says what to change."""
 
 
+#: CalculiX reads at most this many characters of a number and silently ignores the rest, so
+#: "1.234567890123456e-16" (21 characters) is read as 0.1234... (checked with ccx 2.21; M1.13).
+FIELD_WIDTH = 20
+
+
 def _number(value: float) -> str:
-    """Shortest text that reads back as the same double; integers keep a decimal point."""
-    return repr(float(value))
+    """Shortest text that reads back as the same double, in at most FIELD_WIDTH characters.
+
+    Integers keep a decimal point. A value whose shortest text is longer is rounded to as many
+    significant digits as fit (at least 13, a relative change below 1e-12).
+    """
+    text = repr(float(value))
+    digits = 17
+    while len(text) > FIELD_WIDTH:
+        digits -= 1
+        text = f"{float(value):.{digits}g}"
+    return text
 
 
 def _label(text: str) -> str:
