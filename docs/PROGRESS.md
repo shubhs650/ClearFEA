@@ -65,7 +65,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M2.5 Hydrostatic pressure (fluid density, free-surface level, direction)
 - [x] M2.6 Elastic support
 - [x] M2.7 Uniform temperature change
-- [ ] M2.8 Local mesh sizes on faces, edges and bodies; element order choice; quality summary
+- [x] M2.8 Local mesh sizes on faces, edges and bodies; element order choice; quality summary
 - [ ] M2.9 Material library (generic values with sources), custom materials saved per user
 - [ ] M2.10 Mesh reuse across runs by settings hash
 - [ ] M2.11 Benchmark: solver build
@@ -86,8 +86,8 @@ Things only the maintainer can do.
 | Tier | Last run | Result |
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
-| Nightly coarse | 2026-10-15 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-01, V-02, V-04, V-05, V-06, V-07, V-08, V-09, V-10, V-24 and V-25, 101 of 101 checks (M2.7) |
-| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7) |
+| Nightly coarse | 2026-10-15 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-01 to V-10, V-24, V-25 and V-26, 116 of 116 checks (M2.8) |
+| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8) |
 | Browser end-to-end | 2026-10-15 (`make e2e`, run locally) | Green, E-01 (M1.14) |
 | Phase end (CI) | 2026-10-15 (`phase-end.yml` by hand on main 4e42c8d, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); closed M1) | Green: full tier V-01 and V-02, 15 of 15 checks; E-01 |
 
@@ -163,6 +163,8 @@ Written by the last session for the next one. Replace, do not append.
 
 > M2.7 (2026-10-15): uniform temperature change (ADR-044, accepted under Shubham's standing M2 instruction, pending his review). Spec: load type `temperature` (`change`, a temperatureDifference, positive warms; no faces; one per setup) and an optional `thermalExpansion` on materials, asked for only when the setup has a temperature change; still version 1. Worker: `deck/loads/thermal.py`; the deck starts every node at 0 (`*INITIAL CONDITIONS, TYPE=TEMPERATURE`), ends the step at the change (`*TEMPERATURE`, kelvin) and gives each used material `*EXPANSION` (1/K). The change counts from the stress-free state; with a constant coefficient the absolute temperature does not matter, so M5.4/M5.5 add a reference temperature when properties depend on it. It applies no nodal load, so reactions need no correction and balance each other. Decks without a temperature change are byte-identical (snapshots unchanged; new snapshot `thermal-two-bodies-c3d10`). Web: "Add a temperature change" under Loads (field "Change"), Thermal expansion on the material. Harness: a temperature change adds no applied load. Verification: new V-08 (bar between frictionless ends, two symmetry planes, +90 °F, ksi and µin/(in·°F)) checks von Mises EαΔT, end reactions ±EαΔT·A and the sideways growth to 0.1 percent; `worker/spikes/load_check/` gained a freely growing and an end-held heated bar (69 of 69); deck, solve and support checks still pass. Open: the temperature is not drawn in the viewer; no non-uniform temperatures (M5.4). Screenshots in the project's `m2.7/` folder.
 
+> M2.8 (2026-10-15): local mesh sizes, element order and mesh quality (ADR-045, accepted under Shubham's standing M2 instruction, pending his review). Spec: `mesh.order` (1 or 2, default 2) and `mesh.local` (items with a scope of faces, edges or bodies, tags and a size); still version 1. Topology: `topology.json` now lists edges (tag, length, bbox, faces, a polyline sampled from the curve); geometries imported earlier have none, and an edge local size on them asks for the STEP file again. Worker: faces and edges get a Gmsh Distance + Threshold field (local size at the entity, growing about 20 percent per element to the global size), bodies a Constant field; combined with Min. With no local sizes no field is set, so earlier meshes are unchanged. The element-count guard now estimates the graded zones and is rechecked after meshing (2,000,000 elements). Each mesh stores a quality summary (Gmsh gamma min, mean, 10-bin histogram; smallest scaled Jacobian). API: migration 0010 (`local_sizes`, `quality`); a run needs a mesh whose global size, order and local sizes all match the spec (`sameMeshSettings` in `packages/spec`, which M2.10 can reuse for its hash). Web: Element order select, three "Add a local size" buttons, a Local mesh size panel per item under Mesh in the tree, edge picking in the viewer while an edge size is open, and the quality section with a histogram. Harness: spec.json may carry `mesh.order` and `mesh.local` (face names as tags), case.yaml can set a local size per tier. Verification: V-03 plate with a hole (Kt 3.025, local size on the hole; without it the peak is 11.7 percent low) and V-26 bar with first-order elements. Deck and result reader untouched; deck, solve, support and load checks still pass. Surprise: Gmsh splits a circular edge into several curves, so an edge local size on a hole edge needs every piece. Open: picked edges are drawn 1 px and hard to see on the far side; no curvature-based sizing. Screenshots in the project's `m2.8/` folder.
+
 > Still to watch from the ADR review: browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -178,6 +180,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-15
 
+- M2.8: local mesh sizes on faces, edges and bodies as graded Gmsh fields, first or second order elements, a mesh quality summary with a shape histogram, edge picking in the viewer; new V-03 plate with a hole and V-26 first-order bar pass both tiers (ADR-045 accepted under the standing M2 instruction).
 - M2.6: elastic support as normal-only grounded springs (SPRING1 along each node's share of the face normal, stiffness k times its share of the area), its reaction from the nodes' displacements; new V-07 block and V-25 tube in an elastic sleeve pass both tiers and the support check's foundation case is exact at every node (ADR-043 accepted under the standing M2 instruction).
 - M2.5: hydrostatic pressure from a fluid density, gravity and a free-surface point, written as consistent nodal loads with faces the surface crosses split; new V-05 tank wall passes both tiers and the load check's sunk and side-wet columns balance (ADR-042 accepted under the standing M2 instruction).
 - M2.4: remote force and moment through a reference point, carried to the faces as the statically equivalent linear traction (consistent nodal loads, no reference node); new V-04 passes both tiers and the load check's remote case balances force and moment node by node (ADR-041 accepted under the standing M2 instruction).
