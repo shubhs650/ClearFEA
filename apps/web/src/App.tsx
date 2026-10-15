@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { type GeometryView, preRunProblems, type SessionUser, type SimulationSpec } from "@clearfea/spec";
+import {
+  type GeometryView,
+  preRunProblems,
+  type SessionUser,
+  type SimulationSpec,
+  systemUnit,
+} from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchSession, signOut } from "./api/session";
 import { GeometryPanel } from "./geometry/GeometryPanel";
@@ -11,7 +17,7 @@ import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { GroupPanel, MaterialPanel, PressurePanel, SupportPanel } from "./setup/ItemPanels";
 import { MeshPanel } from "./setup/MeshPanel";
-import { type ResultChoice, type RunBlocker, RunPanel, STRESS_UNIT } from "./setup/RunPanel";
+import { type ResultChoice, type ResultUnits, type RunBlocker, RunPanel } from "./setup/RunPanel";
 import {
   addFixedSupport,
   addMaterial,
@@ -27,6 +33,9 @@ import {
 import { useMesh } from "./setup/useMesh";
 import { useRun } from "./setup/useRun";
 import { useSimulation } from "./setup/useSimulation";
+import { UnitSystemField } from "./units/QuantityInput";
+import { UNIT_SYSTEMS, UnitSystemProvider } from "./units/system";
+import { useProject } from "./units/useProject";
 
 type SessionState =
   | { kind: "checking" }
@@ -89,9 +98,17 @@ export function App() {
   const { mesh } = meshes;
   const runs = useRun(setup.kind === "open" ? setup.id : null, signedOut);
   const { run } = runs;
-  const lengthUnit = geometry?.confirmedUnit ?? "mm";
-  // One object per unit choice, so the viewer does not redraw the results on every render.
-  const resultUnits = useMemo(() => ({ length: lengthUnit, pressure: STRESS_UNIT }), [lengthUnit]);
+  const project = useProject(session.kind === "signedIn", signedOut);
+  const { unitSystem } = project;
+  // One object per unit system, so the viewer does not redraw the results on every render.
+  const resultUnits = useMemo<ResultUnits>(
+    () => ({
+      length: systemUnit(unitSystem, "length"),
+      pressure: systemUnit(unitSystem, "pressure"),
+      force: systemUnit(unitSystem, "force"),
+    }),
+    [unitSystem],
+  );
   const statuses = useMemo(() => {
     if (setup.kind !== "open") return new Map<string, ItemStatus>();
     const result = setupStatus(setup.spec, setup.topology);
@@ -172,7 +189,6 @@ export function App() {
         <MeshPanel
           spec={spec}
           status={status}
-          defaultUnit={geometry?.confirmedUnit ?? "mm"}
           mesh={mesh}
           saved={simulation.save.kind === "saved"}
           requesting={meshes.requesting}
@@ -191,7 +207,7 @@ export function App() {
           log={runs.log}
           blockers={runBlockers()}
           onOpen={select}
-          lengthUnit={lengthUnit}
+          units={resultUnits}
           supportNames={new Map(spec.supports.map((s) => [s.id, s.name]))}
           requesting={runs.requesting}
           requestProblem={runs.requestProblem}
@@ -250,8 +266,18 @@ export function App() {
   const showGeometry = itemPanel === null;
 
   return (
+    <UnitSystemProvider value={unitSystem}>
     <div className="shell">
       <SimulationTree
+        units={
+          <UnitSystemField
+            value={unitSystem}
+            systems={UNIT_SYSTEMS}
+            onChange={(next) => void project.changeUnitSystem(next)}
+            disabled={project.saving}
+            problem={project.problem}
+          />
+        }
         geometry={geometry}
         setup={setup}
         statuses={statuses}
@@ -284,5 +310,6 @@ export function App() {
       </SettingsPanel>
       <StatusBar user={session.user} onSignOut={leave} />
     </div>
+    </UnitSystemProvider>
   );
 }

@@ -6,7 +6,8 @@
 // whether the setup has changed since, and links to view or download the deck and log. From
 // M1.11 the record also shows the machine size, its rate and what the run cost (ADR-033).
 // From M1.12 the button sits above the plain-language list of what stops the setup from being
-// run (ADR-034); each line opens the tree item it is about.
+// run (ADR-034); each line opens the tree item it is about. From M2.1 figures are shown in the
+// project's unit system (ADR-038).
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import type { RunFileName, RunView, SimulationSpec } from "@clearfea/spec";
@@ -19,9 +20,8 @@ import { QUANTITIES, type Quantity } from "../viewer/resultFields";
 import { Notes } from "./ItemPanels";
 import { type ItemStatus, sameSpec } from "./spec";
 
-/** Units the result figures are shown in until M2.1 brings display-unit choice. */
-export const STRESS_UNIT = "MPa";
-export const FORCE_UNIT = "N";
+/** The units result figures are shown in: the project system's units for these kinds. */
+export type ResultUnits = Readonly<Record<"length" | "pressure" | "force", string>>;
 
 /** One reason the setup cannot be run now, and the tree item that fixes it (null for none). */
 export interface RunBlocker {
@@ -173,7 +173,7 @@ export function RunPanel({
   log,
   blockers,
   onOpen,
-  lengthUnit,
+  units,
   supportNames,
   requesting,
   requestProblem,
@@ -190,8 +190,8 @@ export function RunPanel({
   blockers: readonly RunBlocker[];
   /** Opens a tree item, from a line of the blocker list. */
   onOpen: (item: string) => void;
-  /** The unit lengths are shown in: the geometry's own length unit. */
-  lengthUnit: string;
+  /** The units figures are shown in. */
+  units: ResultUnits;
   /** Names of the setup's supports by id, for the reaction lines. */
   supportNames: ReadonlyMap<string, string>;
   requesting: boolean;
@@ -255,22 +255,22 @@ export function RunPanel({
         <dl className="geometry-facts" aria-label="Run results">
           <dt>Largest displacement</dt>
           <dd>
-            {figure(result.displacement.max.value, lengthUnit, "length")}{" "}
-            <span className="field-hint">{at(result.displacement.max.position, lengthUnit)}</span>
+            {figure(result.displacement.max.value, units.length, "length")}{" "}
+            <span className="field-hint">{at(result.displacement.max.position, units.length)}</span>
           </dd>
           <dt>Largest von Mises stress</dt>
           <dd>
-            {figure(result.vonMises.max.value, STRESS_UNIT, "pressure")}{" "}
-            <span className="field-hint">{at(result.vonMises.max.position, lengthUnit)}</span>
+            {figure(result.vonMises.max.value, units.pressure, "pressure")}{" "}
+            <span className="field-hint">{at(result.vonMises.max.position, units.length)}</span>
           </dd>
           <dt>Smallest von Mises stress</dt>
-          <dd>{figure(result.vonMises.min.value, STRESS_UNIT, "pressure")}</dd>
+          <dd>{figure(result.vonMises.min.value, units.pressure, "pressure")}</dd>
           {result.reactions.map((reaction) => (
             <Fragment key={reaction.supportId}>
               <dt>Reaction, {supportNames.get(reaction.supportId) ?? reaction.supportId}</dt>
               <dd>
-                ({reaction.force.map((f) => Number(fromSi(f, FORCE_UNIT, "force").toPrecision(4))).join(", ")}){" "}
-                {FORCE_UNIT}
+                ({reaction.force.map((f) => Number(fromSi(f, units.force, "force").toPrecision(4))).join(", ")}){" "}
+                {units.force}
               </dd>
             </Fragment>
           ))}

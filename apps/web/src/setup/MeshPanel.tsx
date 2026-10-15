@@ -4,7 +4,7 @@
 // viewer draws the mesh.
 
 import type { MeshView, SimulationSpec } from "@clearfea/spec";
-import { QuantityField } from "./fields";
+import { QuantityInput } from "../units/QuantityInput";
 import { Notes } from "./ItemPanels";
 import { type ItemStatus, meshIsCurrent } from "./spec";
 
@@ -13,7 +13,6 @@ const count = (n: number | null) => (n ?? 0).toLocaleString("en-US");
 export function MeshPanel({
   spec,
   status,
-  defaultUnit,
   mesh,
   saved,
   requesting,
@@ -23,8 +22,6 @@ export function MeshPanel({
 }: {
   spec: SimulationSpec;
   status: ItemStatus | undefined;
-  /** The unit offered while no size is entered: the geometry's own length unit. */
-  defaultUnit: string;
   mesh: MeshView | null;
   /** True when the spec on screen is the one the API has, so a mesh request uses it. */
   saved: boolean;
@@ -41,12 +38,11 @@ export function MeshPanel({
     <section className="setup-panel" aria-label="Mesh">
       <h2 className="pane-title">Mesh</h2>
       <Notes status={status} />
-      <QuantityField
+      <QuantityInput
         label="Global size"
         kind="length"
         positive
         value={size}
-        defaultUnit={defaultUnit}
         hint="The largest element edge length. Second-order tetrahedra (10 nodes)."
         onChange={(next) => onChange({ ...spec, mesh: { ...spec.mesh, size: next } })}
       />

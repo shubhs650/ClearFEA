@@ -124,6 +124,7 @@ function routes(simulations: SimulationView[], extra: Record<string, Route> = {}
     "GET /api/simulations?geometryId=g1": { status: 200, json: { simulations } },
     "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: null } },
     "GET /api/simulations/s1/runs": { status: 200, json: { runs: [] } },
+    "GET /api/project": { status: 200, json: { project: { id: "p1", name: "My project", unitSystem: "metric-mm" } } },
     ...extra,
   };
 }
@@ -192,7 +193,9 @@ describe("setup tree", () => {
     expect(tree().getByRole("button", { name: "Material 1, incomplete" })).toBeTruthy();
     expect(settings().getByRole("checkbox", { name: "Body 1" })).toHaveProperty("checked", true);
 
-    fireEvent.change(settings().getByLabelText("Young's modulus"), { target: { value: "200" } });
+    // The project's system (millimetres, newtons, megapascals) gives the unit offered first.
+    expect(settings().getByLabelText("Young's modulus unit")).toHaveProperty("value", "MPa");
+    fireEvent.change(settings().getByLabelText("Young's modulus"), { target: { value: "200000" } });
     fireEvent.change(settings().getByLabelText("Poisson's ratio"), { target: { value: "0.3" } });
     expect(await screen.findByRole("button", { name: "Material 1, complete" })).toBeTruthy();
     expect(tree().getByRole("button", { name: "Materials, complete" })).toBeTruthy();
@@ -202,7 +205,7 @@ describe("setup tree", () => {
         id: "material-1",
         name: "Material 1",
         model: "isotropic_elastic",
-        youngsModulus: { value: 200, unit: "GPa" },
+        youngsModulus: { value: 200000, unit: "MPa" },
         poissonsRatio: 0.3,
       },
     ]);
@@ -408,6 +411,41 @@ const supported: SimulationSpec = {
   loads: [{ id: "pressure-1", type: "pressure", name: "Top", faces: [7], magnitude: { value: 1, unit: "MPa" } }],
 };
 
+/** Routes of a setup whose run has succeeded, with its result files. */
+function finishedRun(): Record<string, Route> {
+  const result: SolveResult = {
+    nodes: 7108,
+    displacement: { max: { value: 1.2e-4, node: 17, position: [0.1, 0.05, 0.02] } },
+    vonMises: {
+      min: { value: 1.5e3, node: 3, position: [0, 0.05, 0] },
+      max: { value: 2.4e8, node: 40, position: [0, 0, 0] },
+    },
+    reactions: [{ supportId: "fixed-1", force: [0, 0, -400] }],
+    software: { calculix: "2.21" },
+  };
+  return {
+    "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+    "GET /api/simulations/s1/runs": {
+      status: 200,
+      json: {
+        runs: [
+          run({
+            status: "succeeded",
+            stage: null,
+            result,
+            cost: { billedSeconds: 13, amount: 3611, charged: true },
+            finishedAt: "2026-10-15T12:01:00.000Z",
+          }),
+        ],
+      },
+    },
+    "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
+    "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
+    "GET /api/runs/r1/surface": { status: 200, bytes: display },
+    "GET /api/runs/r1/fields": { status: 200, bytes: twoFacesFields() },
+  };
+}
+
 describe("run", () => {
   it("lists what stops the setup from running, and each line opens its item", async () => {
     const incomplete: SimulationSpec = {
@@ -462,39 +500,7 @@ describe("run", () => {
   });
 
   it("shows a finished run's figures in display units, with numbers only", async () => {
-    const result: SolveResult = {
-      nodes: 7108,
-      displacement: { max: { value: 1.2e-4, node: 17, position: [0.1, 0.05, 0.02] } },
-      vonMises: {
-        min: { value: 1.5e3, node: 3, position: [0, 0.05, 0] },
-        max: { value: 2.4e8, node: 40, position: [0, 0, 0] },
-      },
-      reactions: [{ supportId: "fixed-1", force: [0, 0, -400] }],
-      software: { calculix: "2.21" },
-    };
-    serve(
-      routes([simulation(supported)], {
-        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
-        "GET /api/simulations/s1/runs": {
-          status: 200,
-          json: {
-            runs: [
-              run({
-                status: "succeeded",
-                stage: null,
-                result,
-                cost: { billedSeconds: 13, amount: 3611, charged: true },
-                finishedAt: "2026-10-15T12:01:00.000Z",
-              }),
-            ],
-          },
-        },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
-        "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
-        "GET /api/runs/r1/surface": { status: 200, bytes: display },
-        "GET /api/runs/r1/fields": { status: 200, bytes: twoFacesFields() },
-      }),
-    );
+    serve(routes([simulation(supported)], finishedRun()));
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
     // The viewer shows the results: von Mises on the exaggerated deformed shape by default.
@@ -612,5 +618,78 @@ describe("run", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Run, has a problem" }));
     expect(settings().getAllByText(problem)).toHaveLength(1);
+  });
+});
+
+describe("unit system", () => {
+  const unitSystem = () => tree().getByLabelText("Unit system") as HTMLSelectElement;
+
+  function patches() {
+    const sent: unknown[] = [];
+    const route = (init?: RequestInit): Reply => {
+      const body = JSON.parse(String(init?.body)) as { unitSystem: string };
+      sent.push(body);
+      return { status: 200, json: { project: { id: "p1", name: "My project", unitSystem: body.unitSystem } } };
+    };
+    return { sent, route };
+  }
+
+  it("offers the system's unit in an empty field and follows a change; a typed value keeps its unit", async () => {
+    const { sent, route } = patches();
+    const unloaded: SimulationSpec = {
+      ...supported,
+      loads: [{ id: "pressure-1", type: "pressure", name: "Top", faces: [7], magnitude: null }],
+    };
+    serve(routes([simulation(unloaded)], { "PATCH /api/project": route }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Top, incomplete" }));
+    await waitFor(() => expect(unitSystem().value).toBe("metric-mm"));
+    expect(settings().getByLabelText("Magnitude unit")).toHaveProperty("value", "MPa");
+
+    fireEvent.change(unitSystem(), { target: { value: "us-in" } });
+    expect(settings().getByLabelText("Magnitude unit")).toHaveProperty("value", "psi");
+    await waitFor(() => expect(sent).toEqual([{ unitSystem: "us-in" }]));
+
+    // The material's modulus was entered in GPa and stays so; nothing is converted.
+    fireEvent.click(tree().getByRole("button", { name: "Steel, complete" }));
+    expect(settings().getByLabelText("Young's modulus unit")).toHaveProperty("value", "GPa");
+    expect(settings().getByLabelText("Young's modulus")).toHaveProperty("value", "200");
+  });
+
+  it("shows result figures and the legend in the chosen system without running again", async () => {
+    const { route } = patches();
+    const fetchMock = serve(routes([simulation(supported)], { ...finishedRun(), "PATCH /api/project": route }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const legend = await screen.findByLabelText("Legend");
+    expect(legend.textContent).toContain("Von Mises stress (MPa)");
+
+    fireEvent.change(unitSystem(), { target: { value: "us-in" } });
+    expect(legend.textContent).toContain("Von Mises stress (psi)");
+    const figures = within(settings().getByLabelText("Run results"));
+    // 1.2e-4 m = 0.004724 in; 2.4e8 Pa = 34810 psi; 400 N = 89.92 lbf (to four figures).
+    expect(figures.getByText("0.004724 in")).toBeTruthy();
+    expect(figures.getByText("at (3.937, 1.969, 0.7874) in")).toBeTruthy();
+    expect(figures.getByText("34810 psi")).toBeTruthy();
+    expect(figures.getByText("(0, 0, -89.92) lbf")).toBeTruthy();
+
+    fireEvent.change(unitSystem(), { target: { value: "si" } });
+    expect(legend.textContent).toContain("Von Mises stress (Pa)");
+    expect(figures.getByText("240000000 Pa")).toBeTruthy();
+    expect(figures.getByText("0.00012 m")).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+  });
+
+  it("puts the system back and says why when the API refuses the change", async () => {
+    serve(
+      routes([simulation()], {
+        "PATCH /api/project": { status: 400, json: { error: "'us-in' is not a unit system." } },
+      }),
+    );
+    render(<App />);
+    await waitFor(() => expect(unitSystem().value).toBe("metric-mm"));
+    fireEvent.change(unitSystem(), { target: { value: "us-in" } });
+    expect(await tree().findByText("The unit system was not changed: 'us-in' is not a unit system.")).toBeTruthy();
+    expect(unitSystem().value).toBe("metric-mm");
   });
 });

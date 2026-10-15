@@ -444,6 +444,17 @@ button:disabled {
   gap: 6px;
 }
 
+/* The project's unit system, under the tree, set apart from the setup items. */
+.tree-units {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+  align-items: stretch;
+}
+
+.tree-units select {
+  width: 100%;
+}
+
 /* Settings panels for setup items. */
 .setup-panel {
   display: flex;

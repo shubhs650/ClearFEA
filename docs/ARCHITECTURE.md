@@ -73,7 +73,7 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | Table | Holds |
 | --- | --- |
 | `users` | Id, name, login, wallet balance (derived from ledger, cached) |
-| `projects` | Name, default unit system, visibility |
+| `projects` | Name, default unit system, visibility. Phase 0 makes one per user on first use (ADR-038) |
 | `geometries` | Project, original file key, length unit as read and as confirmed, import status, counts of bodies and faces |
 | `simulations` | Project, geometry, analysis type, current `SimulationSpec` JSON, spec schema version |
 | `meshes` | Geometry, mesh-settings hash, element and node counts, quality summary, file keys |
@@ -110,6 +110,7 @@ A run stores a frozen copy of the spec. Editing a simulation never changes an ex
 
 - **Internal system:** SI base units (m, kg, s, K; N, Pa, J, W). The solver deck is always written in these.
 - **Single table:** `packages/spec/units.json` lists every quantity kind (length, pressure, conductivity and so on), its SI unit, and the factor and offset of each allowed unit. Both the Python worker and the TypeScript frontend load this file.
+- **Unit systems:** the same table names unit systems (`metric-mm`, `si`, `us-in`), each giving one unit per kind (ADR-038). The project's system is the unit every quantity field offers first and the unit results are shown in. Values are stored as typed whatever the system.
 - **Conversion to SI for solving** happens in exactly one place, the Python deck generator. The frontend converts only for display.
 - **Temperature:** stored in kelvin. Temperature differences and absolute temperatures are distinct quantity kinds, so that a 50 °C rise is never converted with an offset.
 - **Results** are stored in SI and converted on display, which is why display units can change without a rerun.
@@ -244,7 +245,7 @@ React, Vite, TypeScript, three.js.
 - **Layout:** simulation tree on the left, 3D viewer in the centre, settings panel on the right for the selected tree item, run and status bar along the bottom.
 - **Tree items:** geometry, materials, bonds, supports, loads, mesh, runs, and under each run its results and report. Each shows complete, incomplete or error.
 - **Viewer:** renders the display mesh with one pickable group per face. Hover highlights a face; click adds it to the active selection. Result mode colours surface nodes from the field arrays with a legend, deformed shape scaling, cut planes and probes.
-- **Quantity input:** one shared component for every physical value: number field plus unit dropdown, limited to units of the right kind, defaulting to the project system.
+- **Quantity input:** one shared component for every physical value (`apps/web/src/units/QuantityInput.tsx`): number field plus unit dropdown, limited to units of the right kind, defaulting to the project system. The system is chosen under the simulation tree.
 - **State:** the `SimulationSpec` is the single source of truth for setup. The UI edits it and saves it through the API; nothing about the setup lives only in component state.
 - **Desktop only.** Minimum supported width is a laptop screen.
 

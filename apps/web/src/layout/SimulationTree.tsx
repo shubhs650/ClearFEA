@@ -4,6 +4,7 @@
 // Each row carries a complete / incomplete / error mark; selecting a row opens its settings.
 
 import type { GeometryStatus, GeometryView } from "@clearfea/spec";
+import type { ReactNode } from "react";
 import type { Group, ItemStatus, Mark } from "../setup/spec";
 import type { SaveState, Setup } from "../setup/useSimulation";
 
@@ -81,6 +82,7 @@ export function SimulationTree({
   onStart,
   starting,
   startProblem,
+  units,
 }: {
   geometry: GeometryView | null;
   setup: Setup;
@@ -91,6 +93,8 @@ export function SimulationTree({
   onStart: () => void;
   starting: boolean;
   startProblem?: string;
+  /** The project's unit system choice, shown under the tree. */
+  units?: ReactNode;
 }) {
   const geometryStatus: ItemStatus = {
     mark: geometry === null ? "incomplete" : geometryMarks[geometry.status],
@@ -170,6 +174,7 @@ export function SimulationTree({
           {saveText(save)}
         </p>
       )}
+      {units && <div className="tree-note tree-units">{units}</div>}
     </nav>
   );
 }

@@ -22,6 +22,21 @@ class UnitDefinition(BaseModel):
     """
 
 
+class UnitSystem(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    name: str
+    """
+    Shown in the unit system choice.
+    """
+    units: dict[str, str]
+    """
+    Quantity kind to unit symbol. Every kind of the table must appear, with a unit listed under that kind.
+    """
+
+
 class QuantityKind(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -37,7 +52,7 @@ class QuantityKind(BaseModel):
 
 class UnitsTable(BaseModel):
     """
-    Shape of packages/spec/units.json, the single table of quantity kinds and allowed units. A value in unit u converts to SI as value * factor + offset.
+    Shape of packages/spec/units.json, the single table of quantity kinds, allowed units and unit systems. A value in unit u converts to SI as value * factor + offset.
     """
 
     model_config = ConfigDict(
@@ -46,3 +61,11 @@ class UnitsTable(BaseModel):
     )
     version: Annotated[int, Field(ge=1)]
     kinds: dict[str, QuantityKind]
+    systems: Annotated[dict[str, UnitSystem], Field(min_length=1)]
+    """
+    Named unit systems, keyed by id. A system names one unit for every kind; it is the unit a quantity field offers first and the unit results are shown in. Values are still stored as typed.
+    """
+    default_system: Annotated[str, Field(alias="defaultSystem")]
+    """
+    Id of the system a project uses until its owner chooses another.
+    """

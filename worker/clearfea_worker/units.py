@@ -20,7 +20,11 @@ class UnitError(ValueError):
 
 
 def load_table(path: Path = DEFAULT_TABLE) -> UnitsTable:
-    """Reads and checks a units table. Each kind's SI unit must have factor 1 and no offset."""
+    """Reads and checks a units table (ADR-018, ADR-038), as packages/spec/src/units.ts does.
+
+    Each kind's SI unit must have factor 1 and no offset, and every unit system must name a unit
+    of the right kind for every kind.
+    """
     table = UnitsTable.model_validate(json.loads(path.read_text(encoding="utf-8")))
     for kind, entry in table.kinds.items():
         si = entry.units.get(entry.si)
@@ -28,6 +32,24 @@ def load_table(path: Path = DEFAULT_TABLE) -> UnitsTable:
             raise UnitError(
                 f"{path}: the {kind} SI unit {entry.si} must be listed with factor 1 and no offset."
             )
+    for system_id, system in table.systems.items():
+        for kind, entry in table.kinds.items():
+            unit = system.units.get(kind)
+            if unit is None or unit not in entry.units:
+                raise UnitError(
+                    f"{path}: the unit system {system_id} must name a {kind} unit"
+                    f" listed under {kind}."
+                )
+        for kind in system.units:
+            if kind not in table.kinds:
+                raise UnitError(
+                    f"{path}: the unit system {system_id} names '{kind}',"
+                    " which is not a quantity kind."
+                )
+    if table.default_system not in table.systems:
+        raise UnitError(
+            f"{path}: the default unit system {table.default_system} is not listed under systems."
+        )
     return table
 
 
