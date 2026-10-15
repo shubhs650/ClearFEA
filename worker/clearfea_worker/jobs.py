@@ -196,7 +196,7 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     from .deck import DeckError, generate_deck
     from .meshing.volume import read_volume_mesh
     from .results import DatError, FrdError, read_results, write_viewer_files
-    from .solver import equation_solver, run_calculix
+    from .solver import run_calculix
     from .spec.simulation_schema import SolveParams
     from .versions import calculix_version
 
@@ -215,7 +215,7 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
         raise JobFailure("platform_fault", "bad_mesh", f"mesh.bin: {error}") from None
     context.set_stage("writing input")
     try:
-        deck_text = generate_deck(params.spec, mesh, solver=equation_solver(mesh.node_count))
+        deck_text = generate_deck(params.spec, mesh)
     except DeckError as error:
         raise JobFailure("user_fault", "setup_invalid", str(error)) from None
     work = files.workdir / "solve"

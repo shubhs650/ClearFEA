@@ -36,5 +36,17 @@ Rows from before the stress check was added (250k to 1M elements, iterative) hav
 ## What was not measured, and why
 
 - **PaStiX.** CalculiX 2.21's PaStiX interface needs the CalculiX fork of PaStiX (`IPARM_REUSE_LU` and friends), published only at github.com/Dhondtguido/PaStiX4CalculiX. The Claude Code sandbox's network policy refuses that host, and upstream PaStiX (gitlab.inria.fr) would need CalculiX's interface patched. To add it: build `ccx_2.21_i8` with the fork as its `Makefile_i8` describes, then run this script with `--ccx` pointing at it and `--build ccx-2.21-pastix`.
-- **SPOOLES above about 140,000 nodes.** At 331,000 nodes (235,000 elements) it was killed by the kernel at the sandbox's 13.4 GiB memory limit, so it was not tried on larger meshes.
+- **SPOOLES above 140,000 nodes.** At 331,000 nodes (235,000 elements) it passed the script's limit of 11.4 GiB (85 percent of the sandbox's 13.4 GiB control group) after 275 s and was stopped; an earlier attempt without that limit was killed by the kernel at 13.4 GiB. It was not tried on larger meshes.
 - **Iterative scaling at the finest mesh.** It took 3,479 s at 945,000 elements, about 3.5 times iterative Cholesky, and would pass the 2-hour limit; it was not run.
+
+## Accuracy of the iterative solvers
+
+CalculiX stops both iterative solvers at a relative residual of 1e-4, fixed in its source (`preiter.c`, `eps=1.e-4`), with no keyword to tighten it. On the block, iterative Cholesky's largest displacement was 0.098 percent from SPOOLES's and iterative scaling's 0.002 percent. To see what that means for real setups, `make verify` (coarse tier) was run once with every deck naming each iterative solver (a local experiment, not committed):
+
+| Solver | Cases passing | Checks that failed |
+| --- | --- | --- |
+| SPOOLES (the build's default) | 13 of 13 | none |
+| ITERATIVE CHOLESKY | 7 of 13 | reaction balance on V-02, V-03, V-04, V-08, V-24, V-26 (0.11 to 0.45 percent against 0.1); V-08 support force 0.24 percent; V-24 stress, contraction and support force 0.14 to 0.35 percent |
+| ITERATIVE SCALING | 11 of 13 | V-08 support forces 0.24 and 0.32 percent; V-24 stress, contraction, support force and reaction balance 0.16 to 0.41 percent |
+
+Both are a few tenths of a percent off where a setup has prescribed displacements (V-24) or a constrained temperature change (V-08), more than the 0.1 percent the verification cases demand of every run.
