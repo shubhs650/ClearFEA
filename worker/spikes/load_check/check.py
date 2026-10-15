@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""M2.3-M2.5 load check: solve parts under a force on a face, gravity, a centrifugal load, a
-remote force and moment and hydrostatic pressure with CalculiX and compare with closed-form
-answers and with equilibrium (ADR-040, ADR-041, ADR-042).
+"""M2.3-M2.7 load check: solve parts under a force on a face, gravity, a centrifugal load, a
+remote force and moment, hydrostatic pressure and a uniform temperature change with CalculiX
+and compare with closed-form answers and with equilibrium (ADR-040 to ADR-042, ADR-044).
 
 Script only, like spikes/support_check (the fast tier runs no solver). It checks what the
 deck generator and result reader alone decide for the new loads: a force reaches the nodes
@@ -50,6 +50,8 @@ REMOTE_FORCE = (1000.0, -2000.0, -5000.0)
 REMOTE_MOMENT = (40.0, -25.0, 60.0)
 #: Water on the column: density (kg/m^3) and the free surface's height on one side (mm).
 WATER, LEVEL = 1000.0, 150.0
+#: Temperature change: expansion entered as 12 µm/(m·K), change as +90 °F (50 K).
+ALPHA, DELTA_T = 12e-6, 50.0
 
 Row = tuple[str, str, str, bool]
 
@@ -112,7 +114,9 @@ def q(value: float, unit: str) -> dict:
     return {"value": value, "unit": unit}
 
 
-def spec(supports: list[dict], loads: list[dict], density: bool = True) -> SimulationSpec:
+def spec(
+    supports: list[dict], loads: list[dict], density: bool = True, expansion: bool = False
+) -> SimulationSpec:
     material = {
         "id": "steel",
         "name": "Steel",
@@ -122,6 +126,8 @@ def spec(supports: list[dict], loads: list[dict], density: bool = True) -> Simul
     }
     if density:
         material["density"] = q(RHO / 1000, "g/cm³")
+    if expansion:
+        material["thermalExpansion"] = q(ALPHA * 1e6, "µm/(m·K)")
     return SimulationSpec.model_validate(
         {
             "version": 1,
@@ -284,6 +290,106 @@ def pulled(root: Path, order: int) -> list[Row]:
             max(map(abs, r["sym"])) < 1e-6 * force,
         ),
     ]
+
+
+def heated(root: Path, order: int) -> list[Row]:
+    """Bar warmed by 90 °F. Held on three planes through the origin it grows freely: every
+    node moves by alpha·dT times its position and nothing is stressed. Held at both ends as
+    well, its axial stress is -E·alpha·dT at every node and each end pushes back with that
+    stress times the section. Fields are compared to the .frd file's printed digits, as in
+    pulled()."""
+    mesh, topo = prepare(root, "bar", bar, order, 0.005)
+    start = face(topo, lambda x, y, z: abs(x) < 1e-6)
+    end = face(topo, lambda x, y, z: abs(x - L) < 1e-6)
+    sym_y = face(topo, lambda x, y, z: abs(y) < 1e-6)
+    sym_z = face(topo, lambda x, y, z: abs(z) < 1e-6)
+    warm = {"id": "warm", "type": "temperature", "name": "warm", "change": q(90, "°F")}
+    strain = ALPHA * DELTA_T
+    sigma = E_SI * strain
+    p = mesh.positions
+    rows: list[Row] = []
+
+    free = spec([frictionless("planes", [start, sym_y, sym_z])], [warm], False, True)
+    fields, result = solve(free, mesh, root / f"heated-free-p{order}")
+    off = max(
+        abs(fields.displacement[3 * n + i] - strain * p[3 * n + i])
+        for n in range(mesh.node_count)
+        for i in range(3)
+    )
+    mises = max(von_mises_field(fields))
+    (r,) = [x.force for x in result.reactions]
+    rows += [
+        (
+            f"p{order} heated, free: displacement alpha·dT·x at every node",
+            "0 m",
+            f"{off:.2e} m",
+            off < 1e-5 * strain * L / 1000,
+        ),
+        (
+            f"p{order} heated, free: no stress",
+            "0 Pa",
+            f"{mises:.2e} Pa",
+            mises < 1e-6 * sigma,
+        ),
+        (
+            f"p{order} heated, free: no reaction",
+            "0 N",
+            show(r),
+            max(map(abs, r)) < 1e-6 * sigma * A_SI,
+        ),
+    ]
+
+    held = spec(
+        [
+            frictionless("start", [start]),
+            frictionless("end", [end]),
+            frictionless("sym", [sym_y, sym_z]),
+        ],
+        [warm],
+        False,
+        True,
+    )
+    fields, result = solve(held, mesh, root / f"heated-held-p{order}")
+    s = fields.stress
+    worst = max(
+        max(abs(s[6 * n] + sigma), *(abs(v) for v in s[6 * n + 1 : 6 * n + 6])) / sigma
+        for n in range(mesh.node_count)
+    )
+    lateral = max(
+        abs(fields.displacement[3 * n + i] - (1 + NU) * strain * p[3 * n + i])
+        for n in range(mesh.node_count)
+        for i in (1, 2)
+    )
+    r = {x.support_id: x.force for x in result.reactions}
+    push = sigma * A_SI
+    rows += [
+        (
+            f"p{order} heated, held: stress -E·alpha·dT along x, nothing else, at every node",
+            f"{-sigma:.6g} Pa",
+            f"worst {worst:.2e}",
+            worst < 1e-4,
+        ),
+        (
+            f"p{order} heated, held: grows (1 + nu)·alpha·dT across",
+            "0 m",
+            f"{lateral:.2e} m",
+            lateral < 1e-5 * (1 + NU) * strain * H / 1000,
+        ),
+        (
+            f"p{order} heated, held: end reactions push back on the bar",
+            f"{push:.6g}, 0, 0 N and {-push:.6g}, 0, 0 N",
+            f"{show(r['start'])} and {show(r['end'])}",
+            math.dist(r["start"], (push, 0, 0)) < 1e-6 * push
+            and math.dist(r["end"], (-push, 0, 0)) < 1e-6 * push,
+        ),
+        (
+            f"p{order} heated, held: symmetry planes carry nothing",
+            "0 N",
+            show(r["sym"]),
+            max(map(abs, r["sym"])) < 1e-6 * push,
+        ),
+    ]
+    return rows
 
 
 def self_weight(root: Path, order: int) -> list[Row]:
@@ -681,6 +787,7 @@ def main() -> int:
         rows += spinning(root, order)
         rows += remote_load(root, order)
         rows += hydrostatic(root, order)
+        rows += heated(root, order)
     rows += refusals(root)
     print("| Check | Expected | Got | OK |\n| --- | --- | --- | --- |")
     for name, expected, got, ok in rows:

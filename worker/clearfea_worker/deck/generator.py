@@ -24,6 +24,7 @@ from ..spec.simulation_schema import (
     Quantity,
     RemoteLoad,
     SimulationSpec,
+    TemperatureLoad,
 )
 from .applied import force_loads
 from .common import DeckError, si
@@ -50,6 +51,7 @@ from .loads import (
     remote_vectors,
 )
 from .loads.body import gravity_vector, rotation
+from .loads.thermal import expansions, temperature_change
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
 DECK_FORMAT = 1
@@ -228,12 +230,14 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
     if not spec.supports:
         raise DeckError("The setup has no supports, so the part is free to move. Add a support.")
     for item in (*spec.supports, *spec.loads):
-        if not isinstance(item, (GravityLoad, CentrifugalLoad)):
+        if not isinstance(item, (GravityLoad, CentrifugalLoad, TemperatureLoad)):
             _check_faces(mesh, item.faces, f"{item.name}")
     bodies = _materials(spec, mesh)
     gravity, spin = body_loads(spec)
     if gravity is not None or spin is not None:
         densities(spec, mesh)  # body loads need every body's density; DeckError names a gap
+    thermal = temperature_change(spec)
+    alpha = {} if thermal is None else expansions(spec, mesh)
 
     npe = NODES_PER_ELEMENT[mesh.order]
     used = set(mesh.elements)
@@ -374,6 +378,12 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
             out.append(f"** Density {_number(material.density.value)} {material.density.unit}")
             out.append("*DENSITY")
             out.append(_number(rho))
+        if material.id in alpha:
+            entered = material.thermal_expansion
+            assert entered is not None  # expansions() refuses a missing one
+            out.append(f"** Thermal expansion {_number(entered.value)} {entered.unit}")
+            out.append("*EXPANSION")
+            out.append(_number(alpha[material.id]))
     for tag, _, name in bodies:
         out.append(f"*SOLID SECTION, ELSET=B{tag}, MATERIAL={name}")
     for j, (key, stiffness) in enumerate(spring_sets):
@@ -440,6 +450,13 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
                 f'** Gravity {load.id} "{_label(load.name)}": '
                 + f"({_entered(load.x, load.y, load.z)}) = ({_vector(gravity_vector(load))}) m/s^2"
             )
+        elif isinstance(load, TemperatureLoad):
+            assert thermal is not None and load.change is not None
+            out.append(
+                f'** Temperature change {load.id} "{_label(load.name)}": '
+                + f"{_number(load.change.value)} {load.change.unit} = {_number(thermal[1])} K,"
+                + " every node from 0 to the change"
+            )
         else:
             r = rotation(load)
             w = load.angular_velocity
@@ -450,6 +467,9 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
             )
             out.append(f"** ({_vector(r.point)}) m along ({_vector(r.axis)})")
     cloads = force_loads(spec, mesh)
+    if thermal is not None:
+        out.append("*INITIAL CONDITIONS, TYPE=TEMPERATURE")
+        out.append("NALL, 0.0")
 
     out.append("*STEP")
     out.append("*STATIC")
@@ -485,6 +505,9 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
     if body:
         out.append("*DLOAD")
         out.extend(body)
+    if thermal is not None:
+        out.append("*TEMPERATURE")
+        out.append(f"NALL, {_number(thermal[1])}")
     out.append("*NODE FILE")
     out.append("U")
     out.append("*EL FILE")

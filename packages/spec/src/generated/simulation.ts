@@ -56,7 +56,8 @@ export type Support = FixedSupport | PrescribedDisplacement | FrictionlessSuppor
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "Load".
  */
-export type Load = PressureLoad | ForceLoad | RemoteLoad | HydrostaticLoad | GravityLoad | CentrifugalLoad;
+export type Load =
+  PressureLoad | ForceLoad | RemoteLoad | HydrostaticLoad | GravityLoad | CentrifugalLoad | TemperatureLoad;
 /**
  * 1: four-node tetrahedra. 2: ten-node tetrahedra with curved edges on curved faces. Phase 0 meshes always use 2 until M2.8 offers the choice (ADR-028).
  *
@@ -150,6 +151,10 @@ export interface IsotropicMaterial {
    * Mass density, a density quantity greater than zero (M2.3). Needed only by gravity and centrifugal loads; absent or null until entered.
    */
   density?: Quantity | null;
+  /**
+   * Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.
+   */
+  thermalExpansion?: Quantity | null;
 }
 /**
  * All displacement components of the faces' nodes held at zero.
@@ -250,6 +255,18 @@ export interface GravityLoad {
   x: OptionalQuantity;
   y: OptionalQuantity;
   z: OptionalQuantity;
+}
+/**
+ * A uniform temperature change of every body from the stress-free state (M2.7): each material expands by its thermal expansion coefficient times the change, and the supports resist it. change is a temperatureDifference quantity, null until entered; a fall is negative. One per setup.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "TemperatureLoad".
+ */
+export interface TemperatureLoad {
+  id: ItemId;
+  type: "temperature";
+  name: ItemName;
+  change: OptionalQuantity;
 }
 /**
  * A point in global coordinates; each coordinate a length quantity, null until entered.
@@ -401,7 +418,7 @@ export interface MeshSettings {
   size: Quantity | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -718,7 +735,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -780,6 +797,7 @@ export const validateSupport = validator<Support>(schema, "Support");
 export const validatePressureLoad = validator<PressureLoad>(schema, "PressureLoad");
 export const validateForceLoad = validator<ForceLoad>(schema, "ForceLoad");
 export const validateGravityLoad = validator<GravityLoad>(schema, "GravityLoad");
+export const validateTemperatureLoad = validator<TemperatureLoad>(schema, "TemperatureLoad");
 export const validateAxisPoint = validator<AxisPoint>(schema, "AxisPoint");
 export const validateAxisDirection = validator<AxisDirection>(schema, "AxisDirection");
 export const validateCentrifugalLoad = validator<CentrifugalLoad>(schema, "CentrifugalLoad");

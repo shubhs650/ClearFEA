@@ -10,6 +10,7 @@ import copy
 import json
 import math
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -266,6 +267,24 @@ def elastic_sym_spec() -> dict:
     return spec
 
 
+def thermal_spec() -> dict:
+    """A temperature change of M2.7 in °F on two bodies whose materials expand differently,
+    one coefficient per °F and one per °C, beside the two-body spec's pressures."""
+    spec = two_body_spec()
+    spec["materials"][0]["thermalExpansion"] = None  # not assigned, so not needed
+    spec["materials"][1]["thermalExpansion"] = {"value": 6.5e-6, "unit": "1/°F"}
+    spec["materials"][2]["thermalExpansion"] = {"value": 23e-6, "unit": "1/°C"}
+    spec["loads"].append(
+        {
+            "id": "temperature-1",
+            "type": "temperature",
+            "name": "Cool down",
+            "change": {"value": -90, "unit": "°F"},
+        }
+    )
+    return spec
+
+
 def two_body_loads_spec() -> dict:
     return loads_spec() | {
         "bodies": [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
@@ -339,6 +358,7 @@ SNAPSHOT_CASES = {
     "elastic-c3d10": (elastic_spec, lambda: two_tets(order=2)),
     "elastic-sym-c3d10": (elastic_sym_spec, lambda: two_tets(order=2)),
     "elastic-sym-c3d4": (elastic_sym_spec, lambda: two_tets(order=1)),
+    "thermal-two-bodies-c3d10": (thermal_spec, lambda: two_tets(order=2, bodies=2)),
 }
 
 
@@ -828,3 +848,75 @@ def test_an_elastic_support_on_one_flat_face_leaves_the_part_free_to_slide() -> 
     with pytest.raises(DeckError) as error:
         deck(spec, two_tets(order=2))
     assert "slide along x, slide along y and turn about the z axis" in str(error.value)
+
+
+# --- Uniform temperature change (M2.7) ---
+
+
+def test_temperature_change_starts_every_node_at_zero_and_ends_at_the_change() -> None:
+    text = deck(thermal_spec(), two_tets(order=2, bodies=2))
+    lines = text.splitlines()
+    start = lines.index("*INITIAL CONDITIONS, TYPE=TEMPERATURE")
+    assert lines[start + 1] == "NALL, 0.0"
+    assert start < lines.index("*STEP")
+    end = lines.index("*TEMPERATURE")
+    assert lines.index("*STEP") < end < lines.index("*END STEP")
+    # -90 °F is a change of -50 K.
+    assert float(lines[end + 1].split(", ")[1]) == pytest.approx(-50.0, rel=1e-15)
+
+
+def test_each_used_material_gets_its_expansion_in_per_kelvin() -> None:
+    text = deck(thermal_spec(), two_tets(order=2, bodies=2))
+    expansion = text.split("*EXPANSION\n")
+    assert len(expansion) == 3  # steel and aluminium; the unassigned material has none
+    values = [float(part.splitlines()[0]) for part in expansion[1:]]
+    assert values == pytest.approx([6.5e-6 * 1.8, 23e-6], rel=1e-15)
+    assert "*MATERIAL, NAME=M1" not in text
+
+
+def test_expansion_is_left_out_without_a_temperature_change() -> None:
+    spec = thermal_spec()
+    spec["loads"].pop()
+    text = deck(spec, two_tets(order=2, bodies=2))
+    assert text == deck(two_body_spec(), two_tets(order=2, bodies=2))
+    assert "EXPANSION" not in text and "TEMPERATURE" not in text
+
+
+def thermal_load_spec(change) -> dict:  # type: ignore[no-untyped-def]
+    spec = thermal_spec()
+    change(spec)
+    return spec
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            lambda s: s["loads"][2].update(change=None),
+            "Cool down: temperature change has no value",
+        ),
+        (
+            lambda s: s["loads"][2].update(change={"value": 1, "unit": "1/°C"}),
+            "not a temperature difference unit",
+        ),
+        (
+            lambda s: s["materials"][2].update(thermalExpansion=None),
+            'Material "Aluminium" has no thermal expansion',
+        ),
+        (
+            lambda s: s["materials"][1].pop("thermalExpansion"),
+            'Material "Steel\n(US units)" has no thermal expansion',
+        ),
+        (
+            lambda s: s["materials"][1].update(thermalExpansion={"value": 1, "unit": "°C"}),
+            "not a thermal expansion unit",
+        ),
+        (
+            lambda s: s["loads"].append(s["loads"][2] | {"id": "t2", "name": "Again"}),
+            '"Again" is a second one',
+        ),
+    ],
+)
+def test_refuses_temperature_changes_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(DeckError, match=re.escape(message)):
+        deck(thermal_load_spec(change), two_tets(order=2, bodies=2))

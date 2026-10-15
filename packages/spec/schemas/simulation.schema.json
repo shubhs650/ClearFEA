@@ -74,6 +74,10 @@
         "density": {
           "description": "Mass density, a density quantity greater than zero (M2.3). Needed only by gravity and centrifugal loads; absent or null until entered.",
           "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+        },
+        "thermalExpansion": {
+          "description": "Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.",
+          "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
         }
       }
     },
@@ -189,6 +193,18 @@
         "z": { "$ref": "#/$defs/OptionalQuantity" }
       }
     },
+    "TemperatureLoad": {
+      "description": "A uniform temperature change of every body from the stress-free state (M2.7): each material expands by its thermal expansion coefficient times the change, and the supports resist it. change is a temperatureDifference quantity, null until entered; a fall is negative. One per setup.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "change"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "temperature" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "change": { "$ref": "#/$defs/OptionalQuantity" }
+      }
+    },
     "AxisPoint": {
       "description": "A point in global coordinates; each coordinate a length quantity, null until entered.",
       "type": "object",
@@ -282,7 +298,8 @@
         { "$ref": "#/$defs/RemoteLoad" },
         { "$ref": "#/$defs/HydrostaticLoad" },
         { "$ref": "#/$defs/GravityLoad" },
-        { "$ref": "#/$defs/CentrifugalLoad" }
+        { "$ref": "#/$defs/CentrifugalLoad" },
+        { "$ref": "#/$defs/TemperatureLoad" }
       ]
     },
     "MeshSettings": {
@@ -297,7 +314,7 @@
       }
     },
     "SimulationSpec": {
-      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
+      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
       "type": "object",
       "additionalProperties": false,
       "required": ["version", "analysis", "geometryId", "bodies", "materials", "supports", "loads", "mesh"],

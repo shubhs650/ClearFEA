@@ -10,6 +10,7 @@ import type { SimulationSpec } from "./generated/simulation";
 import {
   displacementAxes,
   hasBodyLoad,
+  hasTemperatureChange,
   loadHasFaces,
   type SpecProblem,
   simulationSpecProblems,
@@ -47,6 +48,7 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
     }
   }
   const bodyLoad = hasBodyLoad(spec);
+  const temperatureChange = hasTemperatureChange(spec);
   for (const material of spec.materials) {
     if (material.youngsModulus === null) {
       add(material.id, `Material "${material.name}" has no Young's modulus. Enter it.`);
@@ -56,6 +58,9 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
     }
     if (bodyLoad && (material.density ?? null) === null) {
       add(material.id, `Material "${material.name}" has no density, which gravity and centrifugal loads need. Enter it.`);
+    }
+    if (temperatureChange && (material.thermalExpansion ?? null) === null) {
+      add(material.id, `Material "${material.name}" has no thermal expansion, which a temperature change needs. Enter it.`);
     }
   }
 
@@ -120,6 +125,8 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
       if (displacementAxes.some((axis) => load.freeSurface[axis] === null)) {
         add(load.id, `Load "${load.name}" has no complete point on the free surface. Enter x, y and z.`);
       }
+    } else if (load.type === "temperature") {
+      if (load.change === null) add(load.id, `Load "${load.name}" has no temperature change. Enter it (negative for cooling).`);
     } else {
       if (load.angularVelocity === null) add(load.id, `Load "${load.name}" has no angular velocity. Enter it.`);
       if (displacementAxes.some((axis) => load.axisPoint[axis] === null)) {

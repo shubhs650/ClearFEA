@@ -32,9 +32,10 @@ export const loadKinds = {
   hydrostatic: "Hydrostatic pressure",
   gravity: "Gravity",
   centrifugal: "Centrifugal load",
+  temperature: "Temperature change",
 } as const;
 
-/** True when the load acts on faces the user picks (gravity and centrifugal act on every body). */
+/** True when the load acts on faces the user picks (gravity, centrifugal and temperature act on every body). */
 export function loadHasFaces(load: Load): load is Extract<Load, { faces: number[] }> {
   return load.type === "pressure" || load.type === "force" || load.type === "remote" || load.type === "hydrostatic";
 }
@@ -42,6 +43,11 @@ export function loadHasFaces(load: Load): load is Extract<Load, { faces: number[
 /** True when the setup has a gravity or centrifugal load, which need every material's density. */
 export function hasBodyLoad(spec: SimulationSpec): boolean {
   return spec.loads.some((l) => l.type === "gravity" || l.type === "centrifugal");
+}
+
+/** True when the setup has a temperature change, which needs every material's thermal expansion. */
+export function hasTemperatureChange(spec: SimulationSpec): boolean {
+  return spec.loads.some((l) => l.type === "temperature");
 }
 
 /** A new, empty spec for a geometry: every body listed, nothing else set. */
@@ -68,6 +74,8 @@ const kindNames = {
   acceleration: "an acceleration",
   angularVelocity: "an angular velocity",
   foundationStiffness: "a foundation stiffness",
+  temperatureDifference: "a temperature difference",
+  thermalExpansion: "a thermal expansion",
 } as const;
 
 function unitProblem(
@@ -140,6 +148,10 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
   for (const material of spec.materials) {
     add(material.id, unitProblem(material.youngsModulus, "pressure", `Young's modulus of material "${material.name}"`, true));
     add(material.id, unitProblem(material.density ?? null, "density", `The density of material "${material.name}"`, true));
+    add(
+      material.id,
+      unitProblem(material.thermalExpansion ?? null, "thermalExpansion", `The thermal expansion of material "${material.name}"`, false),
+    );
   }
   for (const support of spec.supports) {
     if (support.type === "elastic") {
@@ -153,6 +165,7 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
     }
   }
   let centrifugal = 0;
+  let temperature = 0;
   for (const load of spec.loads) {
     if (load.type === "pressure") {
       add(load.id, unitProblem(load.magnitude, "pressure", `The magnitude of load "${load.name}"`, false));
@@ -175,6 +188,13 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
       }
       if (displacementAxes.every((axis) => load.gravity[axis]?.value === 0)) {
         add(load.id, `The gravity of load "${load.name}" is zero, so the fluid has no depth. Enter it, for example z = -1 g.`);
+      }
+    } else if (load.type === "temperature") {
+      add(load.id, unitProblem(load.change, "temperatureDifference", `The temperature change of load "${load.name}"`, false));
+      // One uniform temperature field per setup (ADR-044).
+      temperature += 1;
+      if (temperature === 2) {
+        add(load.id, `Load "${load.name}" is a second temperature change. A setup can have one; delete the other.`);
       }
     } else {
       add(load.id, unitProblem(load.angularVelocity, "angularVelocity", `The angular velocity of load "${load.name}"`, false));

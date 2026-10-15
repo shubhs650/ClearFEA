@@ -55,6 +55,7 @@ const loadAdds: { type: LoadType; label: string }[] = [
   { type: "hydrostatic", label: "Add a hydrostatic pressure" },
   { type: "gravity", label: "Add gravity" },
   { type: "centrifugal", label: "Add a centrifugal load" },
+  { type: "temperature", label: "Add a temperature change" },
 ];
 
 export function Notes({ status }: { status: ItemStatus | undefined }) {
@@ -88,8 +89,8 @@ export function GroupPanel({
       )}
       {group === "loads" && (
         <p className="field-hint">
-          Select faces in the viewer first to give a new pressure, force, remote load or hydrostatic pressure those faces. Gravity and a centrifugal load
-          act on every body.
+          Select faces in the viewer first to give a new pressure, force, remote load or hydrostatic pressure those faces. Gravity, a centrifugal load and
+          a temperature change act on every body.
         </p>
       )}
       {adds === null ? (
@@ -156,6 +157,13 @@ export function MaterialPanel({
         value={material.density ?? null}
         hint="Needed for gravity and centrifugal loads."
         onChange={(density) => set({ density })}
+      />
+      <QuantityInput
+        label="Thermal expansion"
+        kind="thermalExpansion"
+        value={material.thermalExpansion ?? null}
+        hint="Coefficient of linear thermal expansion, for example 12e-6 1/°C for steel. Needed for a temperature change."
+        onChange={(thermalExpansion) => set({ thermalExpansion })}
       />
       <fieldset className="setup-bodies">
         <legend>Bodies made of this material</legend>
@@ -298,6 +306,8 @@ const loadHints: Record<LoadType, string> = {
     "The acceleration of gravity along the global axes, acting on every body through its density; the weight points along it. For gravity downwards along z, enter z = -1 g.",
   centrifugal:
     "Every body spinning steadily about an axis, pushed outwards by density × angular velocity² × distance from the axis. The sense of rotation does not matter. A setup can have one.",
+  temperature:
+    "Every body warms (positive) or cools (negative) by the same amount from the temperature at which it is free of stress. Each material expands by its thermal expansion × the change, and the supports resist it. A setup can have one.",
 };
 
 function PressureFields({ load, set }: { load: PressureLoad; set: (changes: Partial<PressureLoad>) => void }) {
@@ -432,6 +442,14 @@ export function LoadPanel({
       {load.type === "remote" && <RemoteFields load={load} set={set} />}
       {load.type === "hydrostatic" && <HydrostaticFields load={load} set={set} />}
       {load.type === "centrifugal" && <CentrifugalFields load={load} set={set} />}
+      {load.type === "temperature" && (
+        <QuantityInput
+          label="Temperature change"
+          kind="temperatureDifference"
+          value={load.change}
+          onChange={(change) => set({ change })}
+        />
+      )}
       {loadHasFaces(load) && (
         <FacesField faces={load.faces} selection={selection} onChange={(faces) => set({ faces })} />
       )}
