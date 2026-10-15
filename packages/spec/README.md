@@ -9,7 +9,9 @@ The single definition of every shape shared between the web app, the API and the
 | `display-mesh.md` | The binary display mesh format the import job writes and the viewer reads. |
 | `fixtures/unit-conversions.json` | Conversions worked out by hand from the unit definitions. Both the TypeScript and the Python unit modules must reproduce them. |
 | `src/generated/` | TypeScript types, enum value lists and validators. Generated; do not edit. |
+| `fixtures/simulation-v1.json` | A complete `SimulationSpec` in mixed units, read by the TypeScript, API and worker tests. |
 | `src/validate.ts`, `src/units.ts` | The validator helper and the checked units table. |
+| `src/simulation.ts` | `checkSimulationSpec` (what the schema cannot express: unit kinds, references, tags against the topology) and `emptySimulationSpec` (ADR-026). |
 | `scripts/` | The generators for TypeScript (`generate.mjs`) and for the worker's Pydantic models (`generate-python.sh`, writing `worker/clearfea_worker/spec/`). |
 
 ## Changing a shape

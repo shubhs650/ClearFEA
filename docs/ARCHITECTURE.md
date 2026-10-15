@@ -102,6 +102,8 @@ Files in R2, keyed by owner and record id:
 
 One JSON document describes a complete setup: analysis type, per-body material assignment, bonds, supports, loads, mesh settings, output requests and solver options. Every physical quantity is stored as `{ "value": number, "unit": "MPa" }` exactly as the user typed it. The schema lives in `packages/spec`; TypeScript types and Pydantic models are generated from it.
 
+Version 1 (`packages/spec/schemas/simulation.schema.json`, ADR-026) holds the bodies with their material, isotropic materials, fixed supports, pressures and the global mesh size. Values may be null while the setup is built; `checkSimulationSpec` refuses what is wrong (units of the wrong kind, unknown tags), and pre-run validation lists what is missing. Once a simulation uses a geometry, the geometry's unit is locked.
+
 A run stores a frozen copy of the spec. Editing a simulation never changes an existing run.
 
 ## 5. Units
