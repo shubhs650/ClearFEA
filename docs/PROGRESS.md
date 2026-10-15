@@ -62,7 +62,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M2.2 Prescribed displacement and frictionless/symmetry support (planar faces)
 - [x] M2.3 Force on a face; gravity; centrifugal load
 - [x] M2.4 Remote force and moment through a reference point
-- [ ] M2.5 Hydrostatic pressure (fluid density, free-surface level, direction)
+- [x] M2.5 Hydrostatic pressure (fluid density, free-surface level, direction)
 - [ ] M2.6 Elastic support
 - [ ] M2.7 Uniform temperature change
 - [ ] M2.8 Local mesh sizes on faces, edges and bodies; element order choice; quality summary
@@ -86,8 +86,8 @@ Things only the maintainer can do.
 | Tier | Last run | Result |
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
-| Nightly coarse | 2026-10-15 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-01, V-02, V-04, V-06, V-09, V-10 and V-24, 64 of 64 checks (M2.4) |
-| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4) |
+| Nightly coarse | 2026-10-15 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-01, V-02, V-04, V-05, V-06, V-09, V-10 and V-24, 72 of 72 checks (M2.5) |
+| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5) |
 | Browser end-to-end | 2026-10-15 (`make e2e`, run locally) | Green, E-01 (M1.14) |
 | Phase end (CI) | 2026-10-15 (`phase-end.yml` by hand on main 4e42c8d, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); closed M1) | Green: full tier V-01 and V-02, 15 of 15 checks; E-01 |
 
@@ -157,6 +157,8 @@ Written by the last session for the next one. Replace, do not append.
 >
 > M2.4 (2026-10-15): remote force and moment (ADR-041, accepted under Shubham's standing M2 instruction, pending his review). Spec: load type `remote` (faces, `point`, `force` and `moment`, each three quantities in global axes; new `Components` schema def); still version 1. Worker: `deck/loads/remote.py` carries the force and moment at the point to the faces as the statically equivalent linear traction F/A + α × (x − c), J α = M + (P − c) × F (deformable, like a distributing coupling with area weights) and writes consistent nodal loads (`*CLOAD`) with the force's seven-point rule, now shared through `face_points` in `force.py`; the nodal loads add up to F with moment M about P to 1e-12, also on curved faces. No reference node or `*COUPLING` (ARCHITECTURE section 7 updated). `deck/applied.py` adds remote loads to the force loads, so they come out of reactions at held nodes. Other decks are byte-identical (snapshots unchanged; new snapshot `remote-c3d10`). Web: "Add a remote force and moment" under Loads; the panel has reference point, force and moment groups and takes the selected faces. Verification: new V-04 (round stub, axial force through a point 10 mm off the axis, torque and bending moment, mixed cm/kN/lbf/N·m/lbf·in) passes coarse and full; `worker/spikes/load_check/` gained a remote case (44 of 44, reaction moment about the point checked node by node); the other spikes still pass. Open: reaction moments are not in the run's result (M3.2), so V-04 checks the clamp's moment through the section stresses; no rigid (kinematic) option and the point is not drawn in the viewer (both in Parked ideas for Shubham). Screenshots in the project's `m2.4/` folder.
 
+> M2.5 (2026-10-15): hydrostatic pressure (ADR-042, accepted under Shubham's standing M2 instruction, pending his review). Spec: load type `hydrostatic` (faces, `fluidDensity`, `gravity` as three accelerations, `freeSurface` as a point); p = ρ g · (x − s) below the free surface, zero above, pushing into the body; still version 1. Worker: `deck/loads/hydrostatic.py` writes consistent nodal loads (`*CLOAD`, the force's seven-point rule, exact on flat faces under water) and splits element faces the free surface crosses up to six times, so the total is right to a few parts in a million; a load whose faces are all above the surface is refused. Not `*DLOAD` as ARCHITECTURE planned, so `deck/applied.py` takes hydrostatic load on held nodes out of the reactions like a force (ARCHITECTURE section 7 updated). Other decks are byte-identical (snapshots unchanged; new snapshot `hydrostatic-c3d10`). Web: "Add a hydrostatic pressure" under Loads with fluid density, gravity on the fluid and a free-surface point; component fieldsets no longer overflow the panel with wide unit lists (`min-width: 0`). Harness: the balance check integrates hydrostatic pressure exactly over each surface triangle's wet part. Verification: new V-05 (tank wall strip, water to 100 mm below its top, ν = 0) passes coarse and full; `worker/spikes/load_check/` gained a sunk column (Archimedes, wet held base) and a column wet on one side (55 of 55); the other spikes still pass. Surprise: after confirming the unit of a tall thin part, the viewer's first framing was zoomed far in until "Reset view" (seen on the 100 × 20 × 500 mm wall; not investigated). Screenshots in the project's `m2.5/` folder (the screenshot model is clamped at z = 500 mm with gravity along +z, since the base faces away from the starting camera).
+
 > Still to watch from the ADR review: browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -172,6 +174,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-15
 
+- M2.5: hydrostatic pressure from a fluid density, gravity and a free-surface point, written as consistent nodal loads with faces the surface crosses split; new V-05 tank wall passes both tiers and the load check's sunk and side-wet columns balance (ADR-042 accepted under the standing M2 instruction).
 - M2.4: remote force and moment through a reference point, carried to the faces as the statically equivalent linear traction (consistent nodal loads, no reference node); new V-04 passes both tiers and the load check's remote case balances force and moment node by node (ADR-041 accepted under the standing M2 instruction).
 - M2.3: force on faces as a uniform traction, gravity and centrifugal load as CalculiX body loads with material density; applied load taken out of reactions at held nodes; V-02 switched to a face force, new V-06 and V-10 pass (ADR-040 accepted under the standing M2 instruction).
 - M2.2: prescribed displacement and frictionless (symmetry) support through the UI, written as per-node constraints with local axes for leaning planes; setups the supports do not hold are refused with the free motions named; reactions shared per node between supports; V-09 and the new V-24 pass both tiers (ADR-039 accepted under the standing M2 instruction).
