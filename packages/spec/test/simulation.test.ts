@@ -4,6 +4,7 @@ import fixture from "../fixtures/simulation-v1.json";
 import {
   checkSimulationSpec,
   emptySimulationSpec,
+  type PressureLoad,
   type SimulationSpec,
   simulationSpecProblems,
   validateCreateSimulationRequest,
@@ -16,6 +17,13 @@ function first<T>(items: T[]): T {
   const item = items[0];
   if (item === undefined) throw new Error("The fixture has no such item.");
   return item;
+}
+
+/** The fixture's first load, a pressure. */
+function pressure(s: SimulationSpec): PressureLoad {
+  const load = first(s.loads);
+  if (load.type !== "pressure") throw new Error("The fixture's first load is not a pressure.");
+  return load;
 }
 
 const topology = {
@@ -72,7 +80,7 @@ describe("checkSimulationSpec", () => {
 
   it("refuses a unit of the wrong kind and names the allowed ones", () => {
     const s = spec();
-    s.loads[0] = { ...first(s.loads), magnitude: { value: 10, unit: "mm" } };
+    s.loads[0] = { ...pressure(s), magnitude: { value: 10, unit: "mm" } };
     const [problem] = checkSimulationSpec(s);
     expect(problem).toMatch(/"mm", which is not a pressure unit/);
     expect(problem).toMatch(/MPa/);
@@ -88,7 +96,7 @@ describe("checkSimulationSpec", () => {
     const s = spec();
     s.materials[0] = { ...first(s.materials), youngsModulus: { value: 0, unit: "GPa" } };
     s.mesh.size = { value: -1, unit: "mm" };
-    s.loads[0] = { ...first(s.loads), magnitude: { value: -0.5, unit: "bar" } };
+    s.loads[0] = { ...pressure(s), magnitude: { value: -0.5, unit: "bar" } };
     expect(checkSimulationSpec(s)).toEqual([
       expect.stringMatching(/Young's modulus .* greater than zero/),
       expect.stringMatching(/mesh size must be greater than zero/),
@@ -155,6 +163,55 @@ describe("checkSimulationSpec", () => {
         message:
           'Frictionless support "Symmetry" uses faces 2, 3, which are not flat. It holds flat faces only; use a fixed support or a prescribed displacement on curved faces.',
       },
+    ]);
+  });
+
+  it("accepts the M2.3 loads and checks their units", () => {
+    const s = spec();
+    s.materials[0] = { ...first(s.materials), density: { value: 7.85, unit: "g/cm³" } };
+    s.loads.push(
+      { id: "force-1", type: "force", name: "Push", faces: [2], x: { value: 1, unit: "kN" }, y: null, z: { value: 0, unit: "lbf" } },
+      { id: "gravity-1", type: "gravity", name: "Weight", x: null, y: null, z: { value: -1, unit: "g" } },
+      {
+        id: "spin-1",
+        type: "centrifugal",
+        name: "Spin",
+        angularVelocity: { value: 3000, unit: "rpm" },
+        axisPoint: { x: { value: 0, unit: "mm" }, y: null, z: { value: 1, unit: "in" } },
+        axisDirection: { x: 0, y: null, z: 1 },
+      },
+    );
+    expect(validateSimulationSpec(s).ok).toBe(true);
+    expect(checkSimulationSpec(s, topology)).toEqual([]);
+    // A gravity load has no faces.
+    expect(validateSimulationSpec({ ...s, loads: [{ ...s.loads[2], faces: [1] }] }).ok).toBe(false);
+
+    s.materials[0] = { ...first(s.materials), density: { value: 7.85, unit: "GPa" } };
+    s.loads[1] = { id: "force-1", type: "force", name: "Push", faces: [2], x: { value: 1, unit: "MPa" }, y: null, z: null };
+    s.loads[2] = { id: "gravity-1", type: "gravity", name: "Weight", x: { value: 1, unit: "rpm" }, y: null, z: null };
+    expect(checkSimulationSpec(s, topology)).toEqual([
+      expect.stringMatching(/^The density of material "Structural steel" is given in "GPa", which is not a density unit/),
+      expect.stringMatching(/^The x component of load "Push" is given in "MPa", which is not a force unit/),
+      expect.stringMatching(/^The x component of load "Weight" is given in "rpm", which is not an acceleration unit/),
+    ]);
+  });
+
+  it("refuses a zero axis, a second centrifugal load and a density of zero", () => {
+    const s = spec();
+    s.materials[0] = { ...first(s.materials), density: { value: 0, unit: "kg/m³" } };
+    const spin = (id: string) => ({
+      id,
+      type: "centrifugal" as const,
+      name: id,
+      angularVelocity: { value: 100, unit: "rad/s" },
+      axisPoint: { x: null, y: null, z: null },
+      axisDirection: { x: 0, y: 0, z: 0 },
+    });
+    s.loads.push(spin("a"), { ...spin("b"), axisDirection: { x: 1, y: null, z: null } });
+    expect(simulationSpecProblems(s, topology)).toEqual([
+      { item: "steel", message: expect.stringMatching(/density of material "Structural steel" must be greater than zero/) },
+      { item: "a", message: 'The axis direction of load "a" is zero. Give the axis a direction, for example z = 1.' },
+      { item: "b", message: 'Load "b" is a second centrifugal load. A setup can have one; delete the other.' },
     ]);
   });
 });

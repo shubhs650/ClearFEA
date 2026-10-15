@@ -13,6 +13,10 @@
         "unit": { "type": "string", "minLength": 1, "maxLength": 20 }
       }
     },
+    "OptionalQuantity": {
+      "description": "A Quantity, or null until the user has entered it.",
+      "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+    },
     "ItemId": {
       "description": "Identifier of a material, support or load, chosen by the client and unique within the spec.",
       "type": "string",
@@ -66,6 +70,10 @@
             { "type": "number", "exclusiveMinimum": -1, "exclusiveMaximum": 0.5 },
             { "type": "null" }
           ]
+        },
+        "density": {
+          "description": "Mass density, a density quantity greater than zero (M2.3). Needed only by gravity and centrifugal loads; absent or null until entered.",
+          "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
         }
       }
     },
@@ -135,6 +143,82 @@
         }
       }
     },
+    "ForceLoad": {
+      "description": "A total force in the global x, y and z directions spread over the faces in proportion to area, as a uniform traction (consistent nodal loads in the deck). Each component is a force quantity, null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces", "x", "y", "z"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "force" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" },
+        "x": { "$ref": "#/$defs/OptionalQuantity" },
+        "y": { "$ref": "#/$defs/OptionalQuantity" },
+        "z": { "$ref": "#/$defs/OptionalQuantity" }
+      }
+    },
+    "GravityLoad": {
+      "description": "The acceleration of gravity in the global x, y and z directions, acting on every body through its material's density: the weight points along it (z = -1 g for gravity downwards along z). Each component is an acceleration quantity, null until entered. Several gravity loads add up.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "x", "y", "z"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "gravity" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "x": { "$ref": "#/$defs/OptionalQuantity" },
+        "y": { "$ref": "#/$defs/OptionalQuantity" },
+        "z": { "$ref": "#/$defs/OptionalQuantity" }
+      }
+    },
+    "AxisPoint": {
+      "description": "A point in global coordinates; each coordinate a length quantity, null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "$ref": "#/$defs/OptionalQuantity" },
+        "y": { "$ref": "#/$defs/OptionalQuantity" },
+        "z": { "$ref": "#/$defs/OptionalQuantity" }
+      }
+    },
+    "AxisDirection": {
+      "description": "A direction in global axes, dimensionless and of any length other than zero; each component null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": ["number", "null"] },
+        "y": { "type": ["number", "null"] },
+        "z": { "type": ["number", "null"] }
+      }
+    },
+    "CentrifugalLoad": {
+      "description": "Every body spinning steadily about an axis: a body force density times angular velocity squared times the distance from the axis, pointing away from it. The sense of rotation does not matter. One per setup.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "angularVelocity", "axisPoint", "axisDirection"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "centrifugal" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "angularVelocity": {
+          "description": "An angular velocity quantity; null until entered.",
+          "$ref": "#/$defs/OptionalQuantity"
+        },
+        "axisPoint": { "description": "A point on the axis of rotation.", "$ref": "#/$defs/AxisPoint" },
+        "axisDirection": { "description": "The direction of the axis of rotation.", "$ref": "#/$defs/AxisDirection" }
+      }
+    },
+    "Load": {
+      "oneOf": [
+        { "$ref": "#/$defs/PressureLoad" },
+        { "$ref": "#/$defs/ForceLoad" },
+        { "$ref": "#/$defs/GravityLoad" },
+        { "$ref": "#/$defs/CentrifugalLoad" }
+      ]
+    },
     "MeshSettings": {
       "type": "object",
       "additionalProperties": false,
@@ -147,7 +231,7 @@
       }
     },
     "SimulationSpec": {
-      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
+      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
       "type": "object",
       "additionalProperties": false,
       "required": ["version", "analysis", "geometryId", "bodies", "materials", "supports", "loads", "mesh"],
@@ -158,7 +242,7 @@
         "bodies": { "type": "array", "items": { "$ref": "#/$defs/BodyAssignment" } },
         "materials": { "type": "array", "items": { "$ref": "#/$defs/IsotropicMaterial" } },
         "supports": { "type": "array", "items": { "$ref": "#/$defs/Support" } },
-        "loads": { "type": "array", "items": { "$ref": "#/$defs/PressureLoad" } },
+        "loads": { "type": "array", "items": { "$ref": "#/$defs/Load" } },
         "mesh": { "$ref": "#/$defs/MeshSettings" }
       }
     },

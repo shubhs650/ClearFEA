@@ -33,7 +33,7 @@ describe("pre-run validation", () => {
       {
         item: "loads",
         message:
-          "There is no load, so every result would be zero. Add a pressure under Loads, or give a prescribed displacement a value other than zero.",
+          "There is no load, so every result would be zero. Add a load under Loads, or give a prescribed displacement a value other than zero.",
       },
       { item: "mesh", message: "There is no global mesh size. Enter one under Mesh." },
     ]);
@@ -132,7 +132,7 @@ describe("pre-run validation", () => {
       }) as SimulationSpec["supports"][0];
     expect(messages({ ...s, supports: [...s.supports, move(0.1)], loads: [] })).toEqual([]);
     expect(messages({ ...s, supports: [...s.supports, move(0)], loads: [] })).toEqual([
-      "There is no load, so every result would be zero. Add a pressure under Loads, or give a prescribed displacement a value other than zero.",
+      "There is no load, so every result would be zero. Add a load under Loads, or give a prescribed displacement a value other than zero.",
     ]);
   });
 
@@ -142,5 +142,42 @@ describe("pre-run validation", () => {
     expect(messages({ ...s, supports: [...s.supports, plane] })).toEqual([
       `Support "Symmetry" has no faces. Select the faces it holds and add them to it.`,
     ]);
+  });
+
+  it("asks the M2.3 loads for their values and every material for a density", () => {
+    const s = spec();
+    s.loads = [
+      { id: "force-1", type: "force", name: "Push", faces: [], x: null, y: { value: 0, unit: "N" }, z: null },
+      { id: "gravity-1", type: "gravity", name: "Weight", x: null, y: null, z: { value: -1, unit: "g" } },
+      {
+        id: "spin-1",
+        type: "centrifugal",
+        name: "Spin",
+        angularVelocity: null,
+        axisPoint: { x: null, y: { value: 0, unit: "mm" }, z: { value: 0, unit: "mm" } },
+        axisDirection: { x: 0, y: 0, z: null },
+      },
+    ];
+    expect(preRunProblems(s, topology)).toEqual([
+      {
+        item: "steel",
+        message: 'Material "Structural steel" has no density, which gravity and centrifugal loads need. Enter it.',
+      },
+      { item: "force-1", message: 'Load "Push" has no faces. Select the faces it acts on and add them to it.' },
+      { item: "force-1", message: 'Load "Push" has no value for its x component. Enter one (0 for none).' },
+      { item: "force-1", message: 'Load "Push" has no value for its z component. Enter one (0 for none).' },
+      { item: "gravity-1", message: 'Load "Weight" has no value for its x component. Enter one (0 for none).' },
+      { item: "gravity-1", message: 'Load "Weight" has no value for its y component. Enter one (0 for none).' },
+      { item: "spin-1", message: 'Load "Spin" has no angular velocity. Enter it.' },
+      { item: "spin-1", message: 'Load "Spin" has no complete point on its axis. Enter x, y and z.' },
+      { item: "spin-1", message: 'Load "Spin" has no complete axis direction. Enter x, y and z.' },
+    ]);
+  });
+
+  it("runs gravity alone once the material has a density", () => {
+    const s = spec();
+    s.materials[0] = { ...s.materials[0], density: { value: 0.284, unit: "lb/in³" } } as SimulationSpec["materials"][0];
+    s.loads = [{ id: "g", type: "gravity", name: "Weight", x: { value: 0, unit: "g" }, y: { value: 0, unit: "g" }, z: { value: -1, unit: "g" } }];
+    expect(preRunProblems(s, topology)).toEqual([]);
   });
 });

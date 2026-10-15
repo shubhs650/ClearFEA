@@ -4,7 +4,7 @@
 // geometry. A spec that passes may still be incomplete; what is missing for a run is
 // pre-run validation's job (preRunProblems in prerun.ts, M1.12).
 
-import type { Quantity, SimulationSpec } from "./generated/simulation";
+import type { Load, Quantity, SimulationSpec } from "./generated/simulation";
 import { unitsTable } from "./units";
 
 /** The bodies and faces of a geometry, as topology.json lists them (a face's type when known). */
@@ -20,8 +20,26 @@ export const supportKinds = {
   frictionless: "Frictionless support",
 } as const;
 
-/** The global components of a prescribed displacement. */
+/** The global components of a prescribed displacement, a force, gravity or a point. */
 export const displacementAxes = ["x", "y", "z"] as const;
+
+/** The kind of a load as the setup and its messages name it. */
+export const loadKinds = {
+  pressure: "Pressure",
+  force: "Force",
+  gravity: "Gravity",
+  centrifugal: "Centrifugal load",
+} as const;
+
+/** True when the load acts on faces the user picks (gravity and centrifugal act on every body). */
+export function loadHasFaces(load: Load): load is Extract<Load, { faces: number[] }> {
+  return load.type === "pressure" || load.type === "force";
+}
+
+/** True when the setup has a gravity or centrifugal load, which need every material's density. */
+export function hasBodyLoad(spec: SimulationSpec): boolean {
+  return spec.loads.some((l) => l.type === "gravity" || l.type === "centrifugal");
+}
 
 /** A new, empty spec for a geometry: every body listed, nothing else set. */
 export function emptySimulationSpec(geometryId: string, topology: TopologyTags): SimulationSpec {
@@ -37,16 +55,26 @@ export function emptySimulationSpec(geometryId: string, topology: TopologyTags):
   };
 }
 
+/** Each quantity kind a spec field uses, as a message names it ("not a length unit"). */
+const kindNames = {
+  length: "a length",
+  pressure: "a pressure",
+  force: "a force",
+  density: "a density",
+  acceleration: "an acceleration",
+  angularVelocity: "an angular velocity",
+} as const;
+
 function unitProblem(
   quantity: Quantity | null,
-  kind: "length" | "pressure",
+  kind: keyof typeof kindNames,
   what: string,
   positive: boolean,
 ): string | null {
   if (quantity === null) return null;
   const units = unitsTable.kinds[kind]?.units ?? {};
   if (!Object.hasOwn(units, quantity.unit)) {
-    return `${what} is given in "${quantity.unit}", which is not a ${kind} unit. Use one of: ${Object.keys(units).join(", ")}.`;
+    return `${what} is given in "${quantity.unit}", which is not ${kindNames[kind]} unit. Use one of: ${Object.keys(units).join(", ")}.`;
   }
   if (positive && !(quantity.value > 0)) {
     return `${what} must be greater than zero; it is ${quantity.value} ${quantity.unit}.`;
@@ -106,6 +134,7 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
 
   for (const material of spec.materials) {
     add(material.id, unitProblem(material.youngsModulus, "pressure", `Young's modulus of material "${material.name}"`, true));
+    add(material.id, unitProblem(material.density ?? null, "density", `The density of material "${material.name}"`, true));
   }
   for (const support of spec.supports) {
     if (support.type !== "displacement") continue;
@@ -115,8 +144,30 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
       add(support.id, unitProblem(component, "length", `The ${axis} component of support "${support.name}"`, false));
     }
   }
+  let centrifugal = 0;
   for (const load of spec.loads) {
-    add(load.id, unitProblem(load.magnitude, "pressure", `The magnitude of load "${load.name}"`, false));
+    if (load.type === "pressure") {
+      add(load.id, unitProblem(load.magnitude, "pressure", `The magnitude of load "${load.name}"`, false));
+    } else if (load.type === "force" || load.type === "gravity") {
+      const kind = load.type === "force" ? "force" : "acceleration";
+      for (const axis of displacementAxes) {
+        add(load.id, unitProblem(load[axis], kind, `The ${axis} component of load "${load.name}"`, false));
+      }
+    } else {
+      add(load.id, unitProblem(load.angularVelocity, "angularVelocity", `The angular velocity of load "${load.name}"`, false));
+      for (const axis of displacementAxes) {
+        add(load.id, unitProblem(load.axisPoint[axis], "length", `The ${axis} coordinate of the axis point of load "${load.name}"`, false));
+      }
+      const d = load.axisDirection;
+      if (displacementAxes.every((axis) => d[axis] === 0)) {
+        add(load.id, `The axis direction of load "${load.name}" is zero. Give the axis a direction, for example z = 1.`);
+      }
+      // CalculiX takes one centrifugal load per body (ADR-040).
+      centrifugal += 1;
+      if (centrifugal === 2) {
+        add(load.id, `Load "${load.name}" is a second centrifugal load. A setup can have one; delete the other.`);
+      }
+    }
   }
   add("mesh", unitProblem(spec.mesh.size, "length", "The global mesh size", true));
 
@@ -130,7 +181,7 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
     const faces = new Set(topology.faces.map((f) => f.tag));
     const faceItems = [
       ...spec.supports.map((s) => ({ id: s.id, faces: s.faces, label: `Support "${s.name}"` })),
-      ...spec.loads.map((l) => ({ id: l.id, faces: l.faces, label: `Load "${l.name}"` })),
+      ...spec.loads.filter(loadHasFaces).map((l) => ({ id: l.id, faces: l.faces, label: `Load "${l.name}"` })),
     ];
     for (const entry of faceItems) {
       const unknown = entry.faces.filter((tag) => !faces.has(tag));

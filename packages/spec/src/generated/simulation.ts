@@ -6,6 +6,13 @@ import schema from "../../schemas/simulation.schema.json";
 import { validator } from "../validate";
 
 /**
+ * A Quantity, or null until the user has entered it.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "OptionalQuantity".
+ */
+export type OptionalQuantity = Quantity | null;
+/**
  * Identifier of a material, support or load, chosen by the client and unique within the spec.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -45,6 +52,11 @@ export type DisplacementComponent = Quantity | "free" | null;
  * via the `definition` "Support".
  */
 export type Support = FixedSupport | PrescribedDisplacement | FrictionlessSupport;
+/**
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "Load".
+ */
+export type Load = PressureLoad | ForceLoad | GravityLoad | CentrifugalLoad;
 /**
  * 1: four-node tetrahedra. 2: ten-node tetrahedra with curved edges on curved faces. Phase 0 meshes always use 2 until M2.8 offers the choice (ADR-028).
  *
@@ -134,6 +146,10 @@ export interface IsotropicMaterial {
    * Poisson's ratio, dimensionless, between -1 and 0.5 exclusive; null until entered.
    */
   poissonsRatio: number | null;
+  /**
+   * Mass density, a density quantity greater than zero (M2.3). Needed only by gravity and centrifugal loads; absent or null until entered.
+   */
+  density?: Quantity | null;
 }
 /**
  * All displacement components of the faces' nodes held at zero.
@@ -191,6 +207,90 @@ export interface PressureLoad {
   magnitude: Quantity | null;
 }
 /**
+ * A total force in the global x, y and z directions spread over the faces in proportion to area, as a uniform traction (consistent nodal loads in the deck). Each component is a force quantity, null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "ForceLoad".
+ */
+export interface ForceLoad {
+  id: ItemId;
+  type: "force";
+  name: ItemName;
+  faces: FaceTags;
+  x: OptionalQuantity;
+  y: OptionalQuantity;
+  z: OptionalQuantity;
+}
+/**
+ * The acceleration of gravity in the global x, y and z directions, acting on every body through its material's density: the weight points along it (z = -1 g for gravity downwards along z). Each component is an acceleration quantity, null until entered. Several gravity loads add up.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "GravityLoad".
+ */
+export interface GravityLoad {
+  id: ItemId;
+  type: "gravity";
+  name: ItemName;
+  x: OptionalQuantity;
+  y: OptionalQuantity;
+  z: OptionalQuantity;
+}
+/**
+ * A point in global coordinates; each coordinate a length quantity, null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "AxisPoint".
+ */
+export interface AxisPoint {
+  x: OptionalQuantity;
+  y: OptionalQuantity;
+  z: OptionalQuantity;
+}
+/**
+ * A direction in global axes, dimensionless and of any length other than zero; each component null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "AxisDirection".
+ */
+export interface AxisDirection {
+  x: number | null;
+  y: number | null;
+  z: number | null;
+}
+/**
+ * Every body spinning steadily about an axis: a body force density times angular velocity squared times the distance from the axis, pointing away from it. The sense of rotation does not matter. One per setup.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "CentrifugalLoad".
+ */
+export interface CentrifugalLoad {
+  id: ItemId;
+  type: "centrifugal";
+  name: ItemName;
+  /**
+   * A Quantity, or null until the user has entered it.
+   */
+  angularVelocity: Quantity | null;
+  axisPoint: AxisPoint1;
+  axisDirection: AxisDirection1;
+}
+/**
+ * A point on the axis of rotation.
+ */
+export interface AxisPoint1 {
+  x: OptionalQuantity;
+  y: OptionalQuantity;
+  z: OptionalQuantity;
+}
+/**
+ * The direction of the axis of rotation.
+ */
+export interface AxisDirection1 {
+  x: number | null;
+  y: number | null;
+  z: number | null;
+}
+/**
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "MeshSettings".
  */
@@ -201,7 +301,7 @@ export interface MeshSettings {
   size: Quantity | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -216,7 +316,7 @@ export interface SimulationSpec {
   bodies: BodyAssignment[];
   materials: IsotropicMaterial[];
   supports: Support[];
-  loads: PressureLoad[];
+  loads: Load[];
   mesh: MeshSettings;
 }
 /**
@@ -518,7 +618,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -530,7 +630,7 @@ export interface SimulationSpec1 {
   bodies: BodyAssignment[];
   materials: IsotropicMaterial[];
   supports: Support[];
-  loads: PressureLoad[];
+  loads: Load[];
   mesh: MeshSettings;
 }
 /**
@@ -563,6 +663,7 @@ export interface RunLogResponse {
 }
 
 export const validateQuantity = validator<Quantity>(schema, "Quantity");
+export const validateOptionalQuantity = validator<OptionalQuantity>(schema, "OptionalQuantity");
 export const validateItemId = validator<ItemId>(schema, "ItemId");
 export const validateItemName = validator<ItemName>(schema, "ItemName");
 export const validateFaceTags = validator<FaceTags>(schema, "FaceTags");
@@ -576,6 +677,12 @@ export const validatePrescribedDisplacement = validator<PrescribedDisplacement>(
 export const validateFrictionlessSupport = validator<FrictionlessSupport>(schema, "FrictionlessSupport");
 export const validateSupport = validator<Support>(schema, "Support");
 export const validatePressureLoad = validator<PressureLoad>(schema, "PressureLoad");
+export const validateForceLoad = validator<ForceLoad>(schema, "ForceLoad");
+export const validateGravityLoad = validator<GravityLoad>(schema, "GravityLoad");
+export const validateAxisPoint = validator<AxisPoint>(schema, "AxisPoint");
+export const validateAxisDirection = validator<AxisDirection>(schema, "AxisDirection");
+export const validateCentrifugalLoad = validator<CentrifugalLoad>(schema, "CentrifugalLoad");
+export const validateLoad = validator<Load>(schema, "Load");
 export const validateMeshSettings = validator<MeshSettings>(schema, "MeshSettings");
 export const validateSimulationSpec = validator<SimulationSpec>(schema, "SimulationSpec");
 export const validateSimulationView = validator<SimulationView>(schema, "SimulationView");

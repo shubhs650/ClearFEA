@@ -12,7 +12,17 @@ import re
 from collections.abc import Iterable
 
 from ..meshing.volume import NODES_PER_ELEMENT, VolumeMesh
-from ..spec.simulation_schema import FixedSupport, PrescribedDisplacement, SimulationSpec
+from ..spec.simulation_schema import (
+    CentrifugalLoad,
+    FixedSupport,
+    ForceLoad,
+    GravityLoad,
+    PrescribedDisplacement,
+    PressureLoad,
+    Quantity,
+    SimulationSpec,
+)
+from .applied import force_loads
 from .common import DeckError, si
 from .constraints import (
     AXES,
@@ -23,7 +33,9 @@ from .constraints import (
     support_kind,
 )
 from .elements import CCX_NODE_ORDER, ELEMENT_TYPE
-from .loads import fixed_support_nodes, pressure_faces
+from .linalg import norm
+from .loads import body_loads, densities, fixed_support_nodes, force_vector, pressure_faces
+from .loads.body import gravity_vector, rotation
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
 DECK_FORMAT = 1
@@ -133,6 +145,11 @@ def _vector(v: Iterable[float]) -> str:
     return ", ".join(_number(x + 0.0) for x in v)
 
 
+def _entered(*quantities: Quantity | None) -> str:
+    """Components as the user entered them, for a deck comment; callers have checked them."""
+    return ", ".join(f"{_number(q.value)} {q.unit}" for q in quantities if q is not None)
+
+
 def _hold_lines(h: Hold) -> tuple[str | None, "_Dofs"]:
     """How a node's Hold is written: the *TRANSFORM data line or None (global axes), and the
     (degree of freedom, value or None for zero) to hold in that system. Values below 1e-12 of
@@ -181,8 +198,12 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
     if not spec.supports:
         raise DeckError("The setup has no supports, so the part is free to move. Add a support.")
     for item in (*spec.supports, *spec.loads):
-        _check_faces(mesh, item.faces, f"{item.name}")
+        if not isinstance(item, (GravityLoad, CentrifugalLoad)):
+            _check_faces(mesh, item.faces, f"{item.name}")
     bodies = _materials(spec, mesh)
+    gravity, spin = body_loads(spec)
+    if gravity is not None or spin is not None:
+        densities(spec, mesh)  # body loads need every body's density; DeckError names a gap
 
     npe = NODES_PER_ELEMENT[mesh.order]
     used = set(mesh.elements)
@@ -276,22 +297,52 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
         out.append(f"*MATERIAL, NAME=M{k + 1}")
         out.append("*ELASTIC")
         out.append(f"{_number(modulus)}, {_number(material.poissons_ratio)}")
+        if material.density is not None:
+            rho = _si(material.density, "density", f"{what}: density")
+            if rho <= 0:
+                raise DeckError(f"{what}: the density must be greater than zero.")
+            out.append(f"** Density {_number(material.density.value)} {material.density.unit}")
+            out.append("*DENSITY")
+            out.append(_number(rho))
     for tag, _, name in bodies:
         out.append(f"*SOLID SECTION, ELSET=B{tag}, MATERIAL={name}")
 
     # Pressures on the same element face add up (linear analysis), so each face gets one line.
     pressure: dict[tuple[int, int], float] = {}
     for load in spec.loads:
-        value = _si(load.magnitude, "pressure", f"{load.name}: magnitude")
-        entered = load.magnitude
-        assert entered is not None  # _si refuses a missing magnitude
-        out.append(
-            f'** Pressure {load.id} "{_label(load.name)}", faces '
-            + ", ".join(str(f) for f in load.faces)
-            + f": {_number(entered.value)} {entered.unit} = {_number(value)} Pa"
-        )
-        for key in pressure_faces(mesh, load.faces):
-            pressure[key] = pressure.get(key, 0.0) + value
+        if isinstance(load, PressureLoad):
+            value = _si(load.magnitude, "pressure", f"{load.name}: magnitude")
+            entered = load.magnitude
+            assert entered is not None  # _si refuses a missing magnitude
+            out.append(
+                f'** Pressure {load.id} "{_label(load.name)}", faces '
+                + ", ".join(str(f) for f in load.faces)
+                + f": {_number(entered.value)} {entered.unit} = {_number(value)} Pa"
+            )
+            for key in pressure_faces(mesh, load.faces):
+                pressure[key] = pressure.get(key, 0.0) + value
+        elif isinstance(load, ForceLoad):
+            out.append(
+                f'** Force {load.id} "{_label(load.name)}", faces '
+                + ", ".join(str(f) for f in load.faces)
+                + f": ({_entered(load.x, load.y, load.z)}) = ({_vector(force_vector(load))}) N,"
+                + " spread over the faces by area"
+            )
+        elif isinstance(load, GravityLoad):
+            out.append(
+                f'** Gravity {load.id} "{_label(load.name)}": '
+                + f"({_entered(load.x, load.y, load.z)}) = ({_vector(gravity_vector(load))}) m/s^2"
+            )
+        else:
+            r = rotation(load)
+            w = load.angular_velocity
+            assert w is not None  # rotation() refuses a missing angular velocity
+            out.append(
+                f'** Centrifugal load {load.id} "{_label(load.name)}": '
+                + f"{_number(w.value)} {w.unit} = {_number(r.omega)} rad/s about the axis through"
+            )
+            out.append(f"** ({_vector(r.point)}) m along ({_vector(r.axis)})")
+    cloads = force_loads(spec, mesh)
 
     out.append("*STEP")
     out.append("*STATIC")
@@ -310,6 +361,23 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
             f"{element + 1}, P{face}, {_number(value)}"
             for (element, face), value in sorted(pressure.items())
         )
+    if cloads:
+        out.append("*CLOAD")
+        for node, force in cloads.items():
+            out.extend(
+                f"{node + 1}, {i + 1}, {_number(force[i])}" for i in range(3) if force[i] != 0.0
+            )
+    body: list[str] = []
+    if gravity is not None and norm(gravity) > 0.0:
+        size = norm(gravity)
+        direction = _vector(g / size for g in gravity)
+        body.extend(f"B{tag}, GRAV, {_number(size)}, {direction}" for tag, _, _ in bodies)
+    if spin is not None and spin.omega != 0.0:
+        axis = f"{_vector(spin.point)}, {_vector(spin.axis)}"
+        body.extend(f"B{tag}, CENTRIF, {_number(spin.omega**2)}, {axis}" for tag, _, _ in bodies)
+    if body:
+        out.append("*DLOAD")
+        out.extend(body)
     out.append("*NODE FILE")
     out.append("U")
     out.append("*EL FILE")

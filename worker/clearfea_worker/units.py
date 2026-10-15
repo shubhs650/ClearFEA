@@ -6,6 +6,7 @@ A value in unit u converts to SI as value * factor + offset. No other module hol
 """
 
 import json
+import re
 from functools import cache
 from pathlib import Path
 
@@ -66,7 +67,11 @@ def _unit(kind: str, unit: str, table: UnitsTable) -> UnitDefinition:
         )
     definition = entry.units.get(unit)
     if definition is None:
-        raise UnitError(f"'{unit}' is not a {kind} unit. Use one of: {', '.join(entry.units)}.")
+        words = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", kind).lower()  # angularVelocity
+        article = "an" if words[0] in "aeiou" else "a"
+        raise UnitError(
+            f"'{unit}' is not {article} {words} unit. Use one of: {', '.join(entry.units)}."
+        )
     return definition
 
 
