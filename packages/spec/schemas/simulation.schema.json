@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Simulation",
+  "description": "The SimulationSpec, the one document that describes a simulation's setup (docs/ARCHITECTURE.md section 4, ADR-006, ADR-026), and the wire shapes of /api/simulations. Physical quantities are stored as the user typed them, { value, unit }, and converted to SI only by the deck generator. A spec may be incomplete (null values, items without faces) so the setup can be saved as it is built; pre-run validation (M1.12) lists what is missing. Each message is a definition under $defs.",
+  "$defs": {
+    "Quantity": {
+      "description": "A physical value exactly as the user entered it. unit is a symbol from packages/spec/units.json of the kind the field names; a unit of the wrong kind is refused when the spec is saved.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "unit"],
+      "properties": {
+        "value": { "type": "number" },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 20 }
+      }
+    },
+    "ItemId": {
+      "description": "Identifier of a material, support or load, chosen by the client and unique within the spec.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,64}$"
+    },
+    "ItemName": {
+      "description": "The name shown in the simulation tree and the report.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "FaceTags": {
+      "description": "Face tags from the geometry's topology.json (ARCHITECTURE.md section 3). Empty while the user has not picked any.",
+      "type": "array",
+      "items": { "type": "integer" },
+      "uniqueItems": true
+    },
+    "AnalysisType": {
+      "description": "linear_static: small-displacement linear elastic static analysis, one load step.",
+      "enum": ["linear_static"]
+    },
+    "BodyAssignment": {
+      "description": "A body of the geometry and the material it is made of. Every body of the geometry appears exactly once.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag", "material"],
+      "properties": {
+        "tag": { "description": "Body (volume) tag from topology.json.", "type": "integer" },
+        "material": {
+          "description": "Id of an entry in materials; null until one is assigned.",
+          "oneOf": [{ "$ref": "#/$defs/ItemId" }, { "type": "null" }]
+        }
+      }
+    },
+    "IsotropicMaterial": {
+      "description": "A linear elastic isotropic material. The spec holds its own copy of the values, so a run made from it never changes when a library material does.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "model", "youngsModulus", "poissonsRatio"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "model": { "const": "isotropic_elastic" },
+        "youngsModulus": {
+          "description": "Young's modulus, a pressure quantity greater than zero; null until entered.",
+          "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+        },
+        "poissonsRatio": {
+          "description": "Poisson's ratio, dimensionless, between -1 and 0.5 exclusive; null until entered.",
+          "oneOf": [
+            { "type": "number", "exclusiveMinimum": -1, "exclusiveMaximum": 0.5 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "FixedSupport": {
+      "description": "All displacement components of the faces' nodes held at zero.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "fixed" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" }
+      }
+    },
+    "PressureLoad": {
+      "description": "A uniform pressure normal to each face. A positive magnitude pushes on the face towards the body (along the inward normal), as a fluid does; a negative one pulls (suction).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces", "magnitude"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "pressure" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" },
+        "magnitude": {
+          "description": "A pressure quantity; null until entered.",
+          "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+        }
+      }
+    },
+    "MeshSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size"],
+      "properties": {
+        "size": {
+          "description": "Global element size, a length quantity greater than zero; null until entered.",
+          "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+        }
+      }
+    },
+    "SimulationSpec": {
+      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, pressures and a global mesh size. version changes whenever the shape does; older stored specs are upgraded by code, never reinterpreted.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "analysis", "geometryId", "bodies", "materials", "supports", "loads", "mesh"],
+      "properties": {
+        "version": { "const": 1 },
+        "analysis": { "$ref": "#/$defs/AnalysisType" },
+        "geometryId": { "description": "The geometry whose face and body tags the spec uses.", "type": "string" },
+        "bodies": { "type": "array", "items": { "$ref": "#/$defs/BodyAssignment" } },
+        "materials": { "type": "array", "items": { "$ref": "#/$defs/IsotropicMaterial" } },
+        "supports": { "type": "array", "items": { "$ref": "#/$defs/FixedSupport" } },
+        "loads": { "type": "array", "items": { "$ref": "#/$defs/PressureLoad" } },
+        "mesh": { "$ref": "#/$defs/MeshSettings" }
+      }
+    },
+    "SimulationView": {
+      "description": "A simulation as its owner sees it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "geometryId", "spec", "createdAt", "updatedAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "geometryId": { "type": "string" },
+        "spec": { "$ref": "#/$defs/SimulationSpec" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "CreateSimulationRequest": {
+      "description": "Body of POST /api/simulations. The geometry must be ready (its unit confirmed); from then on its unit is locked. Without spec the simulation starts empty, with every body of the geometry listed and no material assigned.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geometryId", "name"],
+      "properties": {
+        "geometryId": { "type": "string" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "spec": { "$ref": "#/$defs/SimulationSpec" }
+      }
+    },
+    "SimulationResponse": {
+      "description": "Answer to POST /api/simulations (HTTP 201), GET /api/simulations/{id} and PUT /api/simulations/{id}/spec.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["simulation"],
+      "properties": { "simulation": { "$ref": "#/$defs/SimulationView" } }
+    },
+    "SimulationListResponse": {
+      "description": "Answer to GET /api/simulations[?geometryId=]: the signed-in user's simulations, newest first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["simulations"],
+      "properties": { "simulations": { "type": "array", "items": { "$ref": "#/$defs/SimulationView" } } }
+    }
+  }
+}

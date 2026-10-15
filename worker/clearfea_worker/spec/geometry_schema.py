@@ -201,6 +201,10 @@ class GeometryView(BaseModel):
     Geometry.OCCScaling of the current topology.
     """
     confirmed_unit: Annotated[LengthUnit | None, Field(alias="confirmedUnit")]
+    unit_locked: Annotated[bool, Field(alias="unitLocked")]
+    """
+    True once a simulation uses the geometry: its face tags and sizes are then fixed, so the unit can no longer be changed (ADR-026).
+    """
     body_count: Annotated[int | None, Field(alias="bodyCount")]
     face_count: Annotated[int | None, Field(alias="faceCount")]
     size: float | None

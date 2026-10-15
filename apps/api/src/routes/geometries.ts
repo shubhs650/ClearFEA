@@ -51,6 +51,7 @@ function view(geometry: Geometry): GeometryView {
     readingFactor: geometry.readingFactor,
     scaling: geometry.scaling,
     confirmedUnit: geometry.confirmedUnit,
+    unitLocked: geometry.unitLocked,
     bodyCount: geometry.bodyCount,
     faceCount: geometry.faceCount,
     size: geometry.size,
@@ -177,6 +178,14 @@ geometries.post("/:id/unit", async (c) => {
         ? "The file is still being imported. Choose the unit when the import has finished."
         : "The import failed, so there is no geometry to set a unit on. Upload the file again.";
     return c.json({ error: why }, 409);
+  }
+  if (change.kind === "locked") {
+    return c.json(
+      {
+        error: `This geometry is used by a simulation, so its unit stays ${geometry.confirmedUnit}: changing it would move every face the simulation refers to. Upload the file again to use it in a different unit.`,
+      },
+      409,
+    );
   }
   return c.json({ geometry: view(change.geometry) } satisfies GeometryResponse);
 });

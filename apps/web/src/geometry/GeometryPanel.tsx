@@ -120,8 +120,11 @@ export function GeometryPanel({
     if (updated) show(updated);
   }
 
+  // Once a simulation uses the geometry, its faces are fixed and so is its unit (ADR-026).
   const settable =
-    geometry !== null && ["needs_unit", "unconfirmed", "ready"].includes(geometry.status);
+    geometry !== null &&
+    !geometry.unitLocked &&
+    ["needs_unit", "unconfirmed", "ready"].includes(geometry.status);
 
   return (
     <section className="geometry" aria-label="Geometry">
@@ -166,6 +169,12 @@ export function GeometryPanel({
         <p className="geometry-unit-note">
           {geometry.unitProblem} Its coordinates span {sizeInFile(geometry)}. Choose the unit they
           are in.
+        </p>
+      )}
+      {geometry?.unitLocked && (
+        <p className="geometry-unit-note">
+          The unit is {geometry.confirmedUnit} and is locked, because a simulation uses this
+          geometry. To use the file in another unit, upload it again.
         </p>
       )}
       {settable && (

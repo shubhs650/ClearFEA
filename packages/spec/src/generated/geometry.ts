@@ -186,6 +186,10 @@ export interface GeometryView {
    */
   scaling: number | null;
   confirmedUnit: LengthUnit | null;
+  /**
+   * True once a simulation uses the geometry: its face tags and sizes are then fixed, so the unit can no longer be changed (ADR-026).
+   */
+  unitLocked: boolean;
   bodyCount: number | null;
   faceCount: number | null;
   /**

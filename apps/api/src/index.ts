@@ -7,6 +7,7 @@ import { internal } from "./internal";
 import { geometries } from "./routes/geometries";
 import { jobs } from "./routes/jobs";
 import { session } from "./routes/session";
+import { simulations } from "./routes/simulations";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -29,6 +30,7 @@ app.get("/api/health", async (c) => {
 app.route("/api/session", session);
 app.route("/api/jobs", jobs);
 app.route("/api/geometries", geometries);
+app.route("/api/simulations", simulations);
 app.route("/internal", internal);
 
 export default app;

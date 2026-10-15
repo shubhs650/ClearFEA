@@ -18,6 +18,8 @@ export interface Geometry {
   unitProblem: string | null;
   readingFactor: number | null;
   confirmedUnit: string | null;
+  /** True once a simulation uses the geometry; its unit can then no longer change (ADR-026). */
+  unitLocked: boolean;
   scaling: number | null;
   bodyCount: number | null;
   faceCount: number | null;
@@ -39,6 +41,7 @@ interface GeometryRow {
   unit_problem: string | null;
   reading_factor: number | null;
   confirmed_unit: string | null;
+  unit_locked: number;
   scaling: number | null;
   body_count: number | null;
   face_count: number | null;
@@ -61,6 +64,7 @@ function toGeometry(row: GeometryRow): Geometry {
     unitProblem: row.unit_problem,
     readingFactor: row.reading_factor,
     confirmedUnit: row.confirmed_unit,
+    unitLocked: row.unit_locked !== 0,
     scaling: row.scaling,
     bodyCount: row.body_count,
     faceCount: row.face_count,
@@ -72,6 +76,10 @@ function toGeometry(row: GeometryRow): Geometry {
 }
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+
+/** True when a simulation uses the geometry in the surrounding statement. */
+const USED = "EXISTS (SELECT 1 FROM simulations s WHERE s.geometry_id = geometries.id)";
+const SELECT = `SELECT geometries.*, ${USED} AS unit_locked FROM geometries`;
 
 /** The files of a geometry in R2. */
 export type GeometryFile = "model.step" | "topology.json" | "display.bin";
@@ -112,7 +120,7 @@ export async function getGeometry(
   geometryId: string,
 ): Promise<Geometry | null> {
   const row = await db
-    .prepare("SELECT * FROM geometries WHERE id = ? AND owner_id = ?")
+    .prepare(`${SELECT} WHERE id = ? AND owner_id = ?`)
     .bind(geometryId, userId)
     .first<GeometryRow>();
   return row === null ? null : toGeometry(row);
@@ -126,7 +134,7 @@ export async function listGeometries(
 ): Promise<Geometry[]> {
   const { results } = await db
     .prepare(
-      "SELECT * FROM geometries WHERE owner_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+      `${SELECT} WHERE owner_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
     )
     .bind(userId, limit)
     .all<GeometryRow>();
@@ -136,7 +144,8 @@ export async function listGeometries(
 export type UnitChange =
   | { kind: "confirmed"; geometry: Geometry }
   | { kind: "reimporting"; geometry: Geometry; job: Job }
-  | { kind: "notAllowed"; geometry: Geometry };
+  | { kind: "notAllowed"; geometry: Geometry }
+  | { kind: "locked"; geometry: Geometry };
 
 /** Statuses in which the user may set the unit: the file has been read and is not busy. */
 const UNIT_SETTABLE: readonly GeometryStatus[] = ["needs_unit", "unconfirmed", "ready"];
@@ -145,6 +154,8 @@ const UNIT_SETTABLE: readonly GeometryStatus[] = ["needs_unit", "unconfirmed", "
  * Sets the unit the user says the file is in. If the current topology was already made at
  * that unit, the geometry becomes ready. Otherwise the file is imported again with the
  * unit applied by OpenCASCADE at import (ADR-023), never by scaling the old result.
+ * Once a simulation uses the geometry its face tags and sizes are fixed, so only the unit
+ * already confirmed may be confirmed again (ADR-026).
  */
 export async function confirmUnit(
   db: D1Database,
@@ -153,6 +164,11 @@ export async function confirmUnit(
   unit: string,
 ): Promise<UnitChange> {
   if (!UNIT_SETTABLE.includes(geometry.status)) return { kind: "notAllowed", geometry };
+  if (geometry.unitLocked) {
+    return geometry.confirmedUnit === unit
+      ? { kind: "confirmed", geometry }
+      : { kind: "locked", geometry };
+  }
   const current =
     geometry.status === "ready"
       ? geometry.confirmedUnit
@@ -163,11 +179,13 @@ export async function confirmUnit(
     await db
       .prepare(
         `UPDATE geometries SET status = 'ready', confirmed_unit = ?, updated_at = ${NOW}
-          WHERE id = ? AND owner_id = ?`,
+          WHERE id = ? AND owner_id = ? AND NOT ${USED}`,
       )
       .bind(unit, geometry.id, userId)
       .run();
   } else {
+    // If a simulation is created between the check above and this batch, the guarded update
+    // changes nothing and the queued job's answer is ignored, since it is not import_job_id.
     const job = newJob(db, userId, "import", geometry.id, { confirmedUnit: unit });
     await db.batch([
       job.statement,
@@ -176,7 +194,7 @@ export async function confirmUnit(
           `UPDATE geometries
               SET status = 'importing', confirmed_unit = ?, import_job_id = ?, problem = NULL,
                   updated_at = ${NOW}
-            WHERE id = ? AND owner_id = ?`,
+            WHERE id = ? AND owner_id = ? AND NOT ${USED}`,
         )
         .bind(unit, job.id, geometry.id, userId),
     ]);

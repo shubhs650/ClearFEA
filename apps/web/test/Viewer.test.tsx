@@ -79,6 +79,7 @@ function geometry(overrides: Partial<GeometryView> = {}): GeometryView {
     readingFactor: 0.001,
     scaling: 1,
     confirmedUnit: "mm",
+    unitLocked: false,
     bodyCount: 1,
     faceCount: 2,
     size: 0.1136,
