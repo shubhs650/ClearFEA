@@ -90,6 +90,8 @@ make dev         API (wrangler dev, :8787), web (Vite, :5173, proxies /api) and 
 make test        fast tier: generated-code drift check, Biome lint, tsc, Vitest, ruff, pytest
 make verify      verification cases (verification/cases) through a fresh API on :8788 and a worker
                  container; prints the result table (VERIFY_TIER=full, CASES="V-01 V-02")
+make e2e         browser end-to-end tests (apps/web/e2e, Playwright) through a fresh API on :8789,
+                 a worker container and the web app on :5174
 make lint        lint only (Biome for TypeScript, ruff for Python)
 make format      format Python code with ruff
 make spec        regenerate TypeScript types and Pydantic models from packages/spec/schemas
@@ -101,7 +103,7 @@ make worker-image  build the worker image on its own
 - `make dev` seeds two local test users (`alice` / `alice-local`, `bob` / `bob-local`, ADR-022). Sign in at http://localhost:5173 and use "Queue a no-op job" to see a job go from queued to succeeded. `pnpm --filter @clearfea/api db:seed` re-seeds them.
 - `make verify` needs the same running Docker daemon and `BUILD_CA` as `make dev`; it leaves `make dev`'s data alone and can run beside it. Logs and `results.md`/`results.json` go to a temporary folder it names (or `VERIFY_OUT`). A case is a folder in `verification/cases/` (layout in `verification/README.md`).
 - After changing the deck generator or the result reader, also run the exact checks that the platform path cannot see: `cd worker && uv run python spikes/deck_check/check.py` (ADR-029) and `spikes/solve_check/check.py` (ADR-030); they need `ccx` and Gmsh's system libraries on the host. Deck snapshots live in `worker/tests/snapshots/deck/`; a missing one is written only with `CLEARFEA_WRITE_SNAPSHOTS=1`.
-- Planned, not yet present: `make e2e` (browser tests, M1.14).
+- `make e2e` runs the Playwright browser tests (`apps/web/e2e`, E-01) through a fresh API on :8789, a worker container (Compose project `clearfea-e2e`) and a dev server on :5174 (ADR-036); it needs the same Docker daemon and `BUILD_CA` as `make verify` and Playwright's Chromium once (`pnpm --filter @clearfea/web exec playwright install chromium`; the cloud environment has it). Report, traces and a contour screenshot go to the folder it names (or `E2E_OUT`); extra arguments go to Playwright.
 
 ## When unsure
 

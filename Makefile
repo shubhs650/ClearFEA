@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Single entry point for ClearFEA. `make e2e` arrives with the suite it runs (M1.14).
+# Single entry point for ClearFEA.
 
-.PHONY: help dev install spec spec-check test test-ts test-py lint format clean worker-image verify
+.PHONY: help dev install spec spec-check test test-ts test-py lint format clean worker-image verify e2e
 
 help:
 	@echo "make install   install TypeScript (pnpm) and Python (uv) dependencies"
@@ -9,6 +9,7 @@ help:
 	@echo "make spec      regenerate TypeScript types and Pydantic models from packages/spec/schemas"
 	@echo "make test      fast tier: generated-code check, unit tests, type checks and lint"
 	@echo "make verify    verification cases through a fresh API and worker (VERIFY_TIER=full, CASES=\"V-01\")"
+	@echo "make e2e       browser end-to-end tests (Playwright) through a fresh API, worker and web app"
 	@echo "make lint      lint only"
 	@echo "make format    format Python code"
 	@echo "make clean     remove installed dependencies and caches"
@@ -60,6 +61,10 @@ clean:
 # BUILD_CA as for `make dev`; the worker image is built if it is out of date.
 verify:
 	CLEARFEA_BUILD_CA=$(BUILD_CA) infra/verify.sh
+
+# BUILD_CA as for `make dev`. Needs Playwright's Chromium once: see apps/web/README.md.
+e2e:
+	CLEARFEA_BUILD_CA=$(BUILD_CA) infra/e2e.sh
 
 comma := ,
 worker-image:
