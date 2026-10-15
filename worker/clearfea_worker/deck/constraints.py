@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from ..meshing.volume import VolumeMesh
 from ..spec.simulation_schema import (
+    ElasticSupport,
     FixedSupport,
     FrictionlessSupport,
     PrescribedDisplacement,
@@ -24,7 +25,7 @@ from ..spec.simulation_schema import (
 )
 from .common import DeckError
 from .linalg import Vector, cross, dot, norm, solve, symmetric_eigen
-from .loads import face_normal, fixed_support_nodes, prescribed_components
+from .loads import Spring, face_normal, fixed_support_nodes, prescribed_components
 
 AXES: tuple[Vector, Vector, Vector] = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 
@@ -64,17 +65,22 @@ class Hold:
         return (u[0], u[1], u[2])
 
 
-def support_kind(support: FixedSupport | PrescribedDisplacement | FrictionlessSupport) -> str:
+def support_kind(
+    support: FixedSupport | PrescribedDisplacement | FrictionlessSupport | ElasticSupport,
+) -> str:
     """The support's type as the deck comments and messages name it."""
     return {
         "fixed": "Fixed support",
         "displacement": "Prescribed displacement",
         "frictionless": "Frictionless support",
+        "elastic": "Elastic support",
     }[support.type]
 
 
 def node_constraints(spec: SimulationSpec, mesh: VolumeMesh) -> dict[int, list[Constraint]]:
-    """The constraints at every supported node (0-based), in spec order. Faces must exist."""
+    """The constraints at every supported node (0-based), in spec order. Faces must exist.
+
+    Elastic supports hold nothing; their springs are separate elements (loads/elastic.py)."""
     out: dict[int, list[Constraint]] = {}
 
     def add(nodes: Sequence[int], constraint: Constraint) -> None:
@@ -90,7 +96,7 @@ def node_constraints(spec: SimulationSpec, mesh: VolumeMesh) -> dict[int, list[C
             nodes = fixed_support_nodes(mesh, support.faces)
             for axis, value in prescribed_components(support):
                 add(nodes, Constraint(k, AXES[axis], value))
-        else:
+        elif isinstance(support, FrictionlessSupport):
             what = f'Frictionless support "{support.name}"'
             for tag in support.faces:
                 normal = face_normal(mesh, tag, what)
@@ -174,14 +180,17 @@ _MOTIONS = (
 )
 
 
-def free_motions(mesh: VolumeMesh, held: dict[int, Hold]) -> list[str]:
+def free_motions(
+    mesh: VolumeMesh, held: dict[int, Hold], springs: Sequence[Spring] = ()
+) -> list[str]:
     """Rigid-body motions of the part that no support resists, in words; empty when held.
 
     A rigid-body motion u(p) = t + w × (p - c) is resisted at a node held along q when
     q·u = t·q + w·((p - c) × q) is not zero. Summing the outer products of the rows
     (q, (p - c) × q / R) over every held direction gives a 6x6 matrix whose eigenvectors with
     a (relative) zero eigenvalue are the free motions. c is the centre of the mesh's bounding
-    box and R half its diagonal, so the translation and rotation parts are comparable.
+    box and R half its diagonal, so the translation and rotation parts are comparable. A
+    grounded spring of an elastic support resists motion along its direction like a hold.
     """
     p = mesh.positions
     lo = [min(p[i::3]) for i in range(3)]
@@ -189,14 +198,15 @@ def free_motions(mesh: VolumeMesh, held: dict[int, Hold]) -> list[str]:
     centre = [(lo[i] + hi[i]) / 2 for i in range(3)]
     radius = norm([hi[i] - lo[i] for i in range(3)]) / 2 or 1.0
     matrix = [[0.0] * 6 for _ in range(6)]
-    for node, h in held.items():
+    rows = [(node, q) for node, h in held.items() for q in h.basis]
+    rows.extend((s.node, s.direction) for s in springs)
+    for node, q in rows:
         x = _position(mesh, node)
         arm = [(x[i] - centre[i]) / radius for i in range(3)]
-        for q in h.basis:
-            row = (*q, *cross(arm, q))
-            for i in range(6):
-                for j in range(6):
-                    matrix[i][j] += row[i] * row[j]
+        row = (*q, *cross(arm, q))
+        for i in range(6):
+            for j in range(6):
+                matrix[i][j] += row[i] * row[j]
     values, vectors = symmetric_eigen(matrix)
     largest = values[-1]
     if largest <= 0.0:
@@ -216,16 +226,17 @@ def free_motions(mesh: VolumeMesh, held: dict[int, Hold]) -> list[str]:
     return named
 
 
-def check_held(mesh: VolumeMesh, held: dict[int, Hold]) -> None:
+def check_held(mesh: VolumeMesh, held: dict[int, Hold], springs: Sequence[Spring] = ()) -> None:
     """DeckError when the supports leave the part free to move as a rigid body."""
-    motions = free_motions(mesh, held)
+    motions = free_motions(mesh, held, springs)
     if motions:
         listed = ", ".join(motions[:-1]) + (" and " if len(motions) > 1 else "") + motions[-1]
         raise DeckError(
             f"The supports do not hold the part in place: it can still {listed}. CalculiX "
             "would solve this without a warning and give meaningless displacements. Add "
             "supports that stop these motions, for example a fixed support or frictionless "
-            "supports on faces facing other directions."
+            "supports on faces facing other directions (an elastic support only resists motion "
+            "along its faces' normals)."
         )
 
 

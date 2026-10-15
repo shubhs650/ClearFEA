@@ -64,8 +64,11 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
   }
   for (const support of spec.supports) {
     if (support.faces.length === 0) {
-      const what = { fixed: "to fix", displacement: "to move", frictionless: "it holds" }[support.type];
+      const what = { fixed: "to fix", displacement: "to move", frictionless: "it holds", elastic: "it supports" }[support.type];
       add(support.id, `Support "${support.name}" has no faces. Select the faces ${what} and add them to it.`);
+    }
+    if (support.type === "elastic" && support.stiffness === null) {
+      add(support.id, `Support "${support.name}" has no foundation stiffness. Enter it.`);
     }
     if (support.type === "displacement") {
       const missing = displacementAxes.filter((axis) => support[axis] === null);

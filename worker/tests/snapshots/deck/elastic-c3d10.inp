@@ -1,0 +1,86 @@
+** ClearFEA solver input, deck format 1. Generated from the simulation's
+** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
+** Geometry 00000000-0000-4000-8000-000000000001
+*HEADING
+ClearFEA linear static analysis
+** 14 nodes, 2 C3D10 elements
+*NODE, NSET=NALL
+1, 0.0, 0.0, 0.0
+2, 0.01, 0.0, 0.0
+3, 0.0, 0.01, 0.0
+4, 0.0, 0.0, 0.01
+5, 0.01, 0.01, 0.01
+6, 0.005, 0.0, 0.0
+7, 0.005, 0.005, 0.0
+8, 0.0, 0.005, 0.0
+9, 0.0, 0.0, 0.005
+10, 0.0, 0.005, 0.005
+11, 0.005, 0.0, 0.005
+12, 0.01, 0.005, 0.005
+13, 0.005, 0.005, 0.01
+14, 0.005, 0.01, 0.005
+** Body 1
+*ELEMENT, TYPE=C3D10, ELSET=B1
+1, 1, 2, 3, 4, 6, 7, 8, 9, 11, 10
+2, 2, 3, 4, 5, 7, 10, 11, 12, 14, 13
+** Fixed support fixed-1 "Fixed support 1", faces 1
+*NSET, NSET=S1
+1, 3, 4, 8, 9, 10
+** Elastic support elastic-1 "Foundation", faces 4: foundation stiffness 500.0 lbf/in³ = 135723568.7631567 N/m^3
+*NSET, NSET=S2
+1, 2, 3, 4, 5, 6, 9, 10, 11, 13, 14
+** Elastic supports: a grounded spring per node and face along the face's
+** normal at the node, stiffness = foundation stiffness x the node's share of
+** the face area (N/m); the far node of each spring is held
+*NODE, NSET=G2
+15, 0.005, -1000.0, 0.0
+16, 0.0, -1000.0, 0.005
+17, -577.3502691896258, 577.3552691896258, 577.3552691896257
+18, 0.005, -1000.0, 0.005
+19, -577.3452691896257, 577.3552691896257, 577.3602691896257
+20, -577.3452691896258, 577.3602691896257, 577.3552691896257
+*ELEMENT, TYPE=SPRINGA, ELSET=K1
+3, 6, 15
+*ELEMENT, TYPE=SPRINGA, ELSET=K2
+4, 9, 16
+6, 11, 18
+*ELEMENT, TYPE=SPRINGA, ELSET=K3
+5, 10, 17
+*ELEMENT, TYPE=SPRINGA, ELSET=K4
+7, 13, 19
+*ELEMENT, TYPE=SPRINGA, ELSET=K5
+8, 14, 20
+** Material steel "Structural steel"
+*MATERIAL, NAME=M1
+*ELASTIC
+200000000000.0, 0.3
+*SOLID SECTION, ELSET=B1, MATERIAL=M1
+*SPRING, ELSET=K1
+2262.059479385941
+*SPRING, ELSET=K2
+2262.059479385945
+*SPRING, ELSET=K3
+3918.001948039253
+*SPRING, ELSET=K4
+3918.001948039259
+*SPRING, ELSET=K5
+3918.0019480392593
+** Pressure pressure-1 "Pressure 1", faces 2, 3: 10.0 bar = 1000000.0 Pa
+*STEP
+*STATIC
+*BOUNDARY
+S1, 1, 3
+G2, 1, 3
+*DLOAD
+1, P1, 1000000.0
+2, P2, 1000000.0
+2, P4, 1000000.0
+*NODE FILE, NSET=NALL
+U
+*EL FILE, NSET=NALL
+S
+*NODE PRINT, NSET=S2, GLOBAL=YES
+U
+*NODE PRINT, NSET=S1, TOTALS=ONLY
+RF
+*END STEP

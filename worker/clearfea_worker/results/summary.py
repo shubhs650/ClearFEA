@@ -11,10 +11,10 @@ from pathlib import Path
 from ..deck import REACTION_SET, only_fixed_supports, support_set_names
 from ..deck.applied import applied_nodal_loads
 from ..deck.constraints import node_constraints, support_reactions
-from ..deck.loads import fixed_support_nodes
+from ..deck.loads import elastic_springs, fixed_support_nodes, spring_reaction
 from ..meshing.volume import VolumeMesh
-from ..spec.simulation_schema import SimulationSpec, SolveResult
-from .dat import DatError, read_node_forces, read_reaction_totals
+from ..spec.simulation_schema import ElasticSupport, FixedSupport, SimulationSpec, SolveResult
+from .dat import DatError, read_node_displacements, read_node_forces, read_reaction_totals
 from .fields import NodalFields, displacement_magnitude, read_fields, von_mises_field
 
 
@@ -79,13 +79,26 @@ def read_reactions(
     force at each held node, shared between the supports holding it (deck.constraints), so a
     node on the edge between a symmetry plane and an end face is not counted twice. Either
     way CalculiX's figure includes the force and body loads applied at the held nodes, which
-    are taken back out (deck.applied); a pressure on held nodes still counts (M3.2).
+    are taken back out (deck.applied); a pressure on held nodes still counts (M3.2). An
+    elastic support's reaction is the force of its springs, worked out from the displacement
+    of their nodes (deck.loads.elastic, M2.6).
     """
     names = support_set_names(spec)
+    elastic = {
+        k: _elastic_reaction(mesh, s, dat, names[k])
+        for k, s in enumerate(spec.supports)
+        if isinstance(s, ElasticSupport)
+    }
     if only_fixed_supports(spec):
-        totals = read_reaction_totals(dat, names)
+        fixed = [
+            n for s, n in zip(spec.supports, names, strict=True) if isinstance(s, FixedSupport)
+        ]
+        totals = read_reaction_totals(dat, fixed) if fixed else {}
         out = []
-        for support, name in zip(spec.supports, names, strict=True):
+        for k, (support, name) in enumerate(zip(spec.supports, names, strict=True)):
+            if k in elastic:
+                out.append(elastic[k])
+                continue
             nodes = fixed_support_nodes(mesh, support.faces)
             loads = applied_nodal_loads(spec, mesh, nodes).values()
             out.append(tuple(totals[name][i] - sum(f[i] for f in loads) for i in range(3)))
@@ -97,6 +110,19 @@ def read_reactions(
             fx, fy, fz = forces[node]
             forces[node] = (fx - lx, fy - ly, fz - lz)
     try:
-        return support_reactions(spec, mesh, forces)
+        reactions = support_reactions(spec, mesh, forces)
     except ValueError as error:
         raise DatError(str(error)) from None
+    for k, force in elastic.items():
+        reactions[k] = force
+    return reactions
+
+
+def _elastic_reaction(
+    mesh: VolumeMesh, support: ElasticSupport, dat: Path, name: str
+) -> tuple[float, float, float]:
+    displacements = read_node_displacements(dat, name)
+    try:
+        return spring_reaction(elastic_springs(mesh, support), displacements)
+    except KeyError as error:
+        raise DatError(f"The solver gave no displacement for node {error.args[0] + 1}.") from None
