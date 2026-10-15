@@ -190,8 +190,8 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 
 | ClearFEA item | CalculiX approach |
 | --- | --- |
-| Fixed support, prescribed displacement | `*BOUNDARY` on the face's node set |
-| Frictionless / symmetry support | `*BOUNDARY` on the normal direction; local system via `*TRANSFORM` for planes not aligned with global axes. Planar faces only at the gate |
+| Fixed support, prescribed displacement | `*BOUNDARY` on the face's node set (fixed); a prescribed displacement's components through the per-node constraint groups below (ADR-039) |
+| Frictionless / symmetry support | Every support becomes constraints u·d = v per node; nodes with the same holds form a group, held by `*BOUNDARY` on global degrees of freedom or, for directions off the axes, through a `*TRANSFORM` of the group (one per node). Supports that disagree at a shared node, and supports that leave a rigid-body motion free, are refused (ADR-039). Planar faces only at the gate |
 | Elastic support | Grounded spring elements per node, stiffness weighted by nodal area |
 | Force on a face | Distributed as consistent nodal loads over the face |
 | Pressure | `*DLOAD` on element faces |
@@ -206,7 +206,7 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 | Radiation to ambient | `*RADIATE` with the absolute-zero and Stefan-Boltzmann constants set for SI |
 | Thermal stress | Heat transfer step followed by a static step in one deck |
 | Modal | `*FREQUENCY` step |
-| Reactions | Reaction force totals requested per support node set |
+| Reactions | Reaction force totals per support node set when all supports are fixed; otherwise the force at each held node, shared between the supports holding it along their own directions (ADR-039) |
 
 ### Solver configuration
 

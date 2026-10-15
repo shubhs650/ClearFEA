@@ -385,7 +385,7 @@ export interface NodeValue {
   position: XYZ;
 }
 /**
- * Total reaction force of one support, in newtons, as CalculiX reports it for the support's node set.
+ * Total reaction force of one support, in newtons: CalculiX's total for the support's node set when every support is fixed, otherwise the sum over its nodes of the force along the directions it holds, shared with other supports at nodes they also hold (ADR-039).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SupportReaction".
