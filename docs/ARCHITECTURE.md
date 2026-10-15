@@ -52,7 +52,7 @@ This is the highest-risk design point. A user clicks a face in the viewer and ap
 
 1. **Import.** Gmsh reads the STEP file with its OpenCASCADE kernel and converts lengths to metres. Each body (volume) and face (surface) gets an integer tag.
 2. **Topology file.** The worker writes `topology.json`: for each body and face, its tag, type (plane, cylinder, other), area, centroid, bounding box and parent body. This file is the reference for face identity.
-3. **Display mesh.** The worker tessellates each face and writes one binary file with triangles grouped by face tag. The viewer uses this for rendering and picking, so a click resolves to a face tag.
+3. **Display mesh.** The worker tessellates each face and writes one binary file with triangles grouped by face tag (`packages/spec/display-mesh.md`). The viewer uses this for rendering and picking, so a click resolves to a face tag.
 4. **Spec.** Loads and supports in the `SimulationSpec` reference face tags (and body tags) of a specific geometry id.
 5. **Mesh.** Gmsh meshes the same imported geometry. Surface elements carry their face tag. The worker writes, for every face tag, the list of volume-element faces lying on it.
 6. **Deck.** The deck generator turns face tags into CalculiX node sets and element-face surfaces.
@@ -125,7 +125,7 @@ queued -> claimed -> running -> succeeded
 ```
 
 - The API creates a job row and, for metered jobs, checks the wallet balance against the estimate.
-- A worker calls `POST /internal/jobs/claim` with its worker token and capabilities. The API marks one job claimed, atomically, and returns the job payload plus transfer URLs.
+- A worker calls `POST /internal/jobs/claim` with its worker token and capabilities. The API marks one job claimed, atomically, and returns the job payload (type, target, parameters) plus transfer URLs, one per named input or output file (ADR-024).
 - The worker sends a heartbeat every few seconds with stage, progress and new log text. The response tells it whether to cancel or stop.
 - A job whose heartbeat goes silent past a timeout is marked failed as a platform fault and may be retried.
 - On completion the worker uploads outputs and posts a result summary with metering figures.

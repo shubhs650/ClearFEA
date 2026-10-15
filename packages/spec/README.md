@@ -6,6 +6,7 @@ The single definition of every shape shared between the web app, the API and the
 | --- | --- |
 | `schemas/*.schema.json` | JSON Schemas (draft 2020-12). One file per area; a file with several messages keeps each under `$defs`. |
 | `units.json` | Quantity kinds, their SI unit, and the factor and offset of every allowed unit. Physics-critical. |
+| `display-mesh.md` | The binary display mesh format the import job writes and the viewer reads. |
 | `fixtures/unit-conversions.json` | Conversions worked out by hand from the unit definitions. Both the TypeScript and the Python unit modules must reproduce them. |
 | `src/generated/` | TypeScript types, enum value lists and validators. Generated; do not edit. |
 | `src/validate.ts`, `src/units.ts` | The validator helper and the checked units table. |

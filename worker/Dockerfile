@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:1
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# ClearFEA job worker. Build from the repository root:
-#   docker build -t clearfea-worker worker
+# ClearFEA job worker. Build from the repository root (or use `make worker-image`):
+#   docker build --build-context spec=packages/spec -t clearfea-worker worker
+# The `spec` context supplies packages/spec/units.json, the one units table (CLAUDE.md).
 # Behind a TLS-intercepting proxy, pass its CA bundle as a build secret (ADR-012);
 # it is read only during the build and never stored in a layer:
-#   docker build --secret id=extra_ca,src=/path/to/ca-bundle.crt -t clearfea-worker worker
+#   docker build --secret id=extra_ca,src=/path/to/ca-bundle.crt --build-context spec=packages/spec \
+#     -t clearfea-worker worker
 #
 # Pinned on purpose (CLAUDE.md, ADR-015). Changing any of these is its own pull
 # request with a full verification run:
@@ -45,6 +47,9 @@ COPY --from=build /opt/venv /opt/venv
 # The package itself is pure Python with no build step, so it is copied, not
 # installed: installing would pull an unlocked build backend from PyPI.
 COPY clearfea_worker /opt/worker/clearfea_worker
+# Where clearfea_worker.units looks for the table: packages/spec/units.json beside the package's
+# parent folder, as in a source checkout.
+COPY --from=spec units.json /opt/packages/spec/units.json
 RUN useradd --create-home --uid 10001 worker
 USER worker
 WORKDIR /home/worker

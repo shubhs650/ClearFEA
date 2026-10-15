@@ -12,20 +12,40 @@ export type ApiResult<T> =
 const unreachable =
   "The API did not answer. Start it with `pnpm --filter @clearfea/api dev` and try again.";
 
-export async function apiRequest<T>(
+export function apiRequest<T>(
   method: string,
   path: string,
   validate: ((value: unknown) => Validation<T>) | null,
   body?: unknown,
 ): Promise<ApiResult<T>> {
+  return send(path, validate, {
+    method,
+    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
+/** Sends a file as the raw request body, as the upload routes expect. */
+export function apiUpload<T>(
+  path: string,
+  validate: (value: unknown) => Validation<T>,
+  file: Blob,
+): Promise<ApiResult<T>> {
+  return send(path, validate, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: file,
+  });
+}
+
+async function send<T>(
+  path: string,
+  validate: ((value: unknown) => Validation<T>) | null,
+  init: RequestInit,
+): Promise<ApiResult<T>> {
   let response: Response;
   try {
-    response = await fetch(path, {
-      method,
-      headers: body === undefined ? {} : { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      credentials: "same-origin",
-    });
+    response = await fetch(path, { ...init, credentials: "same-origin" });
   } catch {
     return { kind: "error", problem: unreachable };
   }

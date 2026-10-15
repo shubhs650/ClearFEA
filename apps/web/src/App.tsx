@@ -2,6 +2,7 @@
 import type { SessionUser } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
 import { fetchSession, signOut } from "./api/session";
+import { GeometryPanel } from "./geometry/GeometryPanel";
 import { TestJobs } from "./jobs/TestJobs";
 import { SettingsPanel } from "./layout/SettingsPanel";
 import { SimulationTree } from "./layout/SimulationTree";
@@ -60,6 +61,7 @@ export function App() {
       <SimulationTree />
       <Viewer />
       <SettingsPanel>
+        <GeometryPanel onSignedOut={signedOut} />
         <TestJobs onSignedOut={signedOut} />
       </SettingsPanel>
       <StatusBar user={session.user} onSignOut={leave} />

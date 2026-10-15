@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .spec.units_schema import UnitDefinition, UnitsTable
 
-#: Location in a source checkout. The worker image does not contain it yet; see docs/PROGRESS.md.
+#: Location in a source checkout; the worker image copies the table to the same place.
 DEFAULT_TABLE = Path(__file__).resolve().parents[2] / "packages" / "spec" / "units.json"
 
 

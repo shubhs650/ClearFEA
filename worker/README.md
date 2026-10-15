@@ -12,8 +12,11 @@ uv run python -m clearfea_worker check   # print CalculiX and Gmsh versions, loa
 | Module | Holds |
 | --- | --- |
 | `runner.py` | Claim loop, heartbeats, outcome reporting |
-| `api.py` | Client for the API's `/internal/jobs` routes |
-| `jobs.py` | One handler per job type; only `noop` so far |
+| `api.py` | Client for the API's `/internal/jobs` routes and the job's transfer URLs |
+| `jobs.py` | One handler per job type: `noop`, `import` |
+| `geometry/step_units.py` | Reads the STEP file's declared length unit and how OpenCASCADE scales it (ADR-023, ADR-024) |
+| `geometry/importer.py` | Gmsh import in metres, `topology.json`, display tessellation |
+| `geometry/display.py` | Writes and reads the display mesh (`packages/spec/display-mesh.md`) |
 | `config.py` | Settings from environment variables |
 | `versions.py` | CalculiX and Gmsh versions |
 
@@ -32,9 +35,11 @@ uv run python -m clearfea_worker check   # print CalculiX and Gmsh versions, loa
 The Dockerfile pins the base image by digest, `calculix-ccx=2.21-1` and Gmsh 4.15.2 (through `uv.lock`); see ADR-015. A version bump is its own pull request with a full verification run.
 
 ```
-make worker-image                       # docker build -t clearfea-worker worker
+make worker-image                       # docker build --build-context spec=packages/spec -t clearfea-worker worker
 docker run --rm clearfea-worker check   # CalculiX 2.21, Gmsh 4.15.2 initialised
 ```
+
+The image copies `packages/spec/units.json` from the `spec` build context, so the worker converts units with the same table as everything else; Compose passes that context too.
 
 Behind a TLS-intercepting proxy (the Claude Code cloud environment), pass its CA bundle as a build secret; it never lands in a layer: `make worker-image BUILD_CA=/root/.ccr/ca-bundle.crt`.
 
@@ -55,3 +60,7 @@ docker compose -f infra/docker-compose.yml -f infra/docker-compose.linux.yml up 
 ```
 
 The worker logs `Claimed job noop-1 (noop)` and `Job noop-1 finished: succeeded`, and the row's `status` becomes `succeeded`.
+
+## The import job
+
+Upload a STEP file in the web app (settings pane, "Upload a STEP file"), or `POST /api/geometries?name=part.step` with the file as an `application/octet-stream` body. The worker downloads `model.step`, reads the declared length unit, imports with Gmsh in metres, and uploads `topology.json` and `display.bin`. The user then confirms the unit, or chooses another, which queues a second import with `Geometry.OCCScaling` set from the chosen unit (ADR-024). Tests build their STEP models with Gmsh in `tests/step_models.py`; no STEP file is stored in the repository.

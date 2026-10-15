@@ -34,6 +34,23 @@ What the worker should do next: carry on, or end the job because the user cancel
 type WorkerId = Annotated[str, Field(max_length=200, min_length=1)]
 
 
+class Transfer(BaseModel):
+    """
+    One file a job reads or writes (ADR-005). Locally the url points at the API's /internal/jobs/{id}/files route and needs the worker token; in the cloud it is a presigned storage URL.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    name: Annotated[str, Field(min_length=1)]
+    """
+    The file's name within the job, for example model.step.
+    """
+    direction: Literal["download", "upload"]
+    url: Annotated[str, Field(min_length=1)]
+
+
 class ClaimedJob(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -42,6 +59,11 @@ class ClaimedJob(BaseModel):
     id: str
     type: JobType
     target_id: Annotated[str | None, Field(alias="targetId")]
+    params: dict[str, Any] | None
+    """
+    Job-type specific parameters, for example an ImportParams (geometry.schema.json); null when the type has none.
+    """
+    transfers: list[Transfer]
 
 
 class ClaimRequest(BaseModel):
@@ -112,6 +134,10 @@ class CompleteFailed(BaseModel):
     status: Literal["failed"]
     failure_category: Annotated[FailureCategory, Field(alias="failureCategory")]
     failure_cause: Annotated[str, Field(alias="failureCause", min_length=1)]
+    failure_message: Annotated[str | None, Field(alias="failureMessage", min_length=1)] = None
+    """
+    What went wrong and what to do about it, in plain language for the job's owner.
+    """
 
 
 type CompleteRequest = CompleteSucceeded | CompleteFailed
@@ -167,6 +193,7 @@ class JobView(BaseModel):
     stage: str | None
     failure_category: Annotated[FailureCategory | None, Field(alias="failureCategory")]
     failure_cause: Annotated[str | None, Field(alias="failureCause")]
+    failure_message: Annotated[str | None, Field(alias="failureMessage")]
     created_at: Annotated[str, Field(alias="createdAt")]
     claimed_at: Annotated[str | None, Field(alias="claimedAt")]
     finished_at: Annotated[str | None, Field(alias="finishedAt")]

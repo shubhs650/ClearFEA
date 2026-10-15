@@ -45,6 +45,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M1 Thin slice
 
 - [x] M1.1 Spike: face identity chain
+- [x] M1.2 Upload a STEP file; import job writes `topology.json` and the display mesh; unit detected and confirmed by the user
 
 ## Maintainer to-do
 
@@ -94,6 +95,8 @@ Written by the last session for the next one. Replace, do not append.
 >
 > M1.1 (2026-10-14): the face identity spike is `worker/spikes/face_identity/` (script only; run command and result table in its README); findings are ADR-023 (accepted). The chain in `ARCHITECTURE.md` section 3 holds on all three models in mm, m and in, for first- and second-order tetrahedra. Confirmed: Gmsh does not report the STEP file's declared unit, so `step_units.py` reads it from the file; M1.2 should move it into the worker with unit tests. Import with `Geometry.OCCTargetUnit = "M"` (Gmsh's default is millimetres), and apply a user-corrected unit by re-importing with `Geometry.OCCScaling`, never `occ.dilate` (it turns faces into B-splines and moves areas by up to 0.3 percent). Not covered: CalculiX face numbering (M1.7), multiple bodies (M4), files from commercial CAD. To run Gmsh on the cloud host, `apt-get install libglu1-mesa libxrender1 libxcursor1 libxft2 libxinerama1 libgl1` first. numpy is not a worker dependency; the spike uses `uv run --with numpy==2.3.4`.
 >
+> M1.2 (2026-10-14): STEP upload, the `import` job and unit confirmation (ADR-024, accepted under Shubham's standing M1 instruction, pending his review). Upload in the web app's settings pane ("Geometry"), or `POST /api/geometries?name=…` with an `application/octet-stream` body (100 MB limit). The worker (`clearfea_worker/geometry/`) reads the unit with `step_units.py` (moved from the spike, now also reporting OpenCASCADE's reading factor), imports in metres, and uploads `topology.json` (schema `Topology` in `packages/spec/schemas/geometry.schema.json`) and `display.bin` (`packages/spec/display-mesh.md`; each face owns its vertex run). A geometry goes `importing` → `needs_unit` or `unconfirmed` → `ready`; choosing a unit other than the one the topology was made at re-imports with `OCCScaling`. Claimed jobs now carry `params` and `transfers`; locally the transfer URLs are `/internal/jobs/:id/files/:name?worker=…` (`apps/api/src/jobs/files.ts`). The worker image gets `units.json` through `--build-context spec=packages/spec` (the Makefile and Compose pass it). Checked end to end with `make dev` and headless Chromium: a mm file detected and confirmed, a file with no unit set to inches and re-imported (screenshots in the project's `m1.2/` folder). For M1.3: fetch `GET /api/geometries/:id/display` and `/topology`; positions are metres, so scale the camera from `size`. For M1.4/M1.5: lock the unit once a simulation references the geometry (today it can be changed while `ready`), and give geometries a project (`project_id` is null). Not done, on purpose: the heartbeat-timeout sweep (a worker that dies mid-import leaves the geometry `importing`), isolating Gmsh in a child process against crashes on malformed files, and µm or mixed-unit files, which fail with a request to re-export. The "Worker check" list now shows each job's type, since import jobs appear in it too. CI (`fast.yml`) now installs Gmsh's system libraries, approved by Shubham, so worker tests may load Gmsh.
+>
 > Still to watch from the ADR review: browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -108,6 +111,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-14
 
+- M1.2: STEP upload, `import` job writing `topology.json` and the display mesh, unit detected from the file and confirmed or corrected by the user (re-import at the chosen unit), per-job file transfer routes, `units.json` in the worker image (ADR-024 accepted under the standing M1 instruction).
 - M1.1: face identity spike on three generated models in three declared units; tags stable across processes, every surface triangle maps to one tetrahedron face and lies on its own face; Gmsh does not report the STEP unit, so the file is read directly (ADR-023 accepted).
 - M0.9: seeded test users `alice` and `bob`, session login with a signed cookie (ADR-022 accepted), owner-scoped `/api/jobs` routes, sign-in form and a worker check in the web app; M0 exit (no-op job queued to succeeded from the browser) checked with `make dev`.
 - M0.8: GitHub Actions fast tier (`make test`) on every pull request (DCO sign-off left to the already-installed DCO App), nightly workflow placeholder (ADR-021 accepted).

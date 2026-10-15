@@ -27,6 +27,7 @@ function view(job: Job): JobView {
     stage: job.stage,
     failureCategory: job.failureCategory,
     failureCause: job.failureCause,
+    failureMessage: job.failureMessage,
     createdAt: job.createdAt,
     claimedAt: job.claimedAt,
     finishedAt: job.finishedAt,
