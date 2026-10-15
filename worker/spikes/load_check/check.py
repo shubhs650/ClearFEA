@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""M2.3/M2.4 load check: solve parts under a force on a face, gravity, a centrifugal load and a
-remote force and moment with CalculiX and compare with closed-form answers and with
-equilibrium (ADR-040, ADR-041).
+"""M2.3-M2.5 load check: solve parts under a force on a face, gravity, a centrifugal load, a
+remote force and moment and hydrostatic pressure with CalculiX and compare with closed-form
+answers and with equilibrium (ADR-040, ADR-041, ADR-042).
 
 Script only, like spikes/support_check (the fast tier runs no solver). It checks what the
 deck generator and result reader alone decide for the new loads: a force reaches the nodes
@@ -48,6 +48,8 @@ RPM = 10000.0
 REMOTE_POINT = (30.0, -10.0, L + 50.0)
 REMOTE_FORCE = (1000.0, -2000.0, -5000.0)
 REMOTE_MOMENT = (40.0, -25.0, 60.0)
+#: Water on the column: density (kg/m^3) and the free surface's height on one side (mm).
+WATER, LEVEL = 1000.0, 150.0
 
 Row = tuple[str, str, str, bool]
 
@@ -542,6 +544,72 @@ def remote_load(root: Path, order: int) -> list[Row]:
     return rows
 
 
+def water(id_: str, faces: list[int], level: float) -> dict:
+    """Water under -1 g with its free surface at z = ``level`` mm."""
+    return {
+        "id": id_,
+        "type": "hydrostatic",
+        "name": id_,
+        "faces": faces,
+        "fluidDensity": q(WATER, "kg/m³"),
+        "gravity": {"x": q(0, "g"), "y": q(0, "g"), "z": q(-1, "g")},
+        "freeSurface": {"x": q(0, "mm"), "y": q(0, "mm"), "z": q(level, "mm")},
+    }
+
+
+def hydrostatic(root: Path, order: int) -> list[Row]:
+    """Column on its fixed base under water. Sunk with every face wet (the held base too), the
+    nodal loads must be Archimedes' buoyancy rho g V upwards with no moment about the centre,
+    exact for flat faces; wet on one side up to LEVEL, they must be rho g H h^2/2 across, with
+    the free surface crossing the side. Both times the base reaction balances the loads."""
+    mesh, topo = prepare(root, "column", column, order, 0.005)
+    base = face(topo, lambda x, y, z: abs(z) < 1e-6)
+    side = face(topo, lambda x, y, z: abs(x) < 1e-6)
+    fixed = [{"id": "base", "type": "fixed", "name": "base", "faces": [base]}]
+    every = [f.tag for f in topo.faces]
+    rows: list[Row] = []
+
+    sunk = spec(fixed, [water("sunk", every, L + 100)], density=False)
+    nodal = force_loads(sunk, mesh)
+    total = [sum(v[i] for v in nodal.values()) for i in range(3)]
+    lift = WATER * G * A_SI * L / 1000
+    turning = moment_about(mesh, nodal, (H / 2000, H / 2000, L / 2000))
+    _, result = solve(sunk, mesh, root / f"sunk-p{order}")
+    rows += [
+        (
+            f"p{order} sunk: nodal loads are the buoyancy",
+            f"0, 0, {lift:.6g} N",
+            show(total),
+            math.dist(total, (0, 0, lift)) < 1e-12 * lift,
+        ),
+        (
+            f"p{order} sunk: no moment about the centre",
+            "0, 0, 0 N·m",
+            show(turning),
+            math.hypot(*turning) < 1e-12 * lift * L / 1000,
+        ),
+        balance_row(f"p{order} sunk", sunk, mesh, result),
+    ]
+
+    wet = spec(fixed, [water("side", [side], LEVEL)], density=False)
+    nodal = force_loads(wet, mesh)
+    total = [sum(v[i] for v in nodal.values()) for i in range(3)]
+    push = WATER * G * (H / 1000) * (LEVEL / 1000) ** 2 / 2
+    _, result = solve(wet, mesh, root / f"side-p{order}")
+    # The free surface crosses element faces, whose wet part is found by splitting them
+    # (loads/hydrostatic.py), so the total is close but not exact.
+    rows += [
+        (
+            f"p{order} side: nodal loads are rho g H h^2/2",
+            f"{push:.6g}, 0, 0 N",
+            show(total),
+            math.dist(total, (push, 0, 0)) < 1e-5 * push,
+        ),
+        balance_row(f"p{order} side", wet, mesh, result),
+    ]
+    return rows
+
+
 def refusals(root: Path) -> list[Row]:
     mesh, topo = prepare(root, "short-column", column, 1, 0.01)
     base = [
@@ -583,6 +651,11 @@ def refusals(root: Path) -> list[Row]:
             ),
             "y component of its moment has no value",
         ),
+        (
+            "water whose faces are above its free surface",
+            spec(base, [water("w", base[0]["faces"], -1)], density=False),
+            "all above the free surface",
+        ),
     ]
     rows = []
     for name, s, expected in cases:
@@ -607,6 +680,7 @@ def main() -> int:
         rows += self_weight(root, order)
         rows += spinning(root, order)
         rows += remote_load(root, order)
+        rows += hydrostatic(root, order)
     rows += refusals(root)
     print("| Check | Expected | Got | OK |\n| --- | --- | --- | --- |")
     for name, expected, got, ok in rows:

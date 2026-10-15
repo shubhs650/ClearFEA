@@ -204,6 +204,36 @@ describe("pre-run validation", () => {
     expect(preRunProblems({ ...s, loads: [complete] }, topology)).toEqual([]);
   });
 
+  it("asks a hydrostatic pressure for faces, a fluid density, gravity and a free-surface point (M2.5)", () => {
+    const s = spec();
+    const mm = (value: number) => ({ value, unit: "mm" });
+    const water = {
+      id: "hydrostatic-1",
+      type: "hydrostatic",
+      name: "Water",
+      faces: [],
+      fluidDensity: null,
+      gravity: { x: null, y: { value: 0, unit: "g" }, z: null },
+      freeSurface: { x: mm(0), y: null, z: mm(0) },
+    } as SimulationSpec["loads"][0];
+    expect(preRunProblems({ ...s, loads: [water] }, topology)).toEqual([
+      { item: "hydrostatic-1", message: 'Load "Water" has no faces. Select the faces it acts on and add them to it.' },
+      { item: "hydrostatic-1", message: 'Load "Water" has no fluid density. Enter it.' },
+      { item: "hydrostatic-1", message: 'Load "Water" has no complete gravity. Enter x, y and z (0 for none).' },
+      { item: "hydrostatic-1", message: 'Load "Water" has no complete point on the free surface. Enter x, y and z.' },
+    ]);
+    const g = (value: number) => ({ value, unit: "g" });
+    const complete = {
+      ...water,
+      faces: [2],
+      fluidDensity: { value: 1000, unit: "kg/m³" },
+      gravity: { x: g(0), y: g(0), z: g(-1) },
+      freeSurface: { x: mm(0), y: mm(0), z: mm(500) },
+    } as SimulationSpec["loads"][0];
+    // Water presses on the faces only: the material needs no density.
+    expect(preRunProblems({ ...s, loads: [complete] }, topology)).toEqual([]);
+  });
+
   it("runs gravity alone once the material has a density", () => {
     const s = spec();
     s.materials[0] = { ...s.materials[0], density: { value: 0.284, unit: "lb/in³" } } as SimulationSpec["materials"][0];

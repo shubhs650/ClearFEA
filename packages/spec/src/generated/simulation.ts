@@ -56,7 +56,7 @@ export type Support = FixedSupport | PrescribedDisplacement | FrictionlessSuppor
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "Load".
  */
-export type Load = PressureLoad | ForceLoad | RemoteLoad | GravityLoad | CentrifugalLoad;
+export type Load = PressureLoad | ForceLoad | RemoteLoad | HydrostaticLoad | GravityLoad | CentrifugalLoad;
 /**
  * 1: four-node tetrahedra. 2: ten-node tetrahedra with curved edges on curved faces. Phase 0 meshes always use 2 until M2.8 offers the choice (ADR-028).
  *
@@ -336,6 +336,40 @@ export interface Components1 {
  * The moment at the reference point.
  */
 export interface Components2 {
+  x: OptionalQuantity;
+  y: OptionalQuantity;
+  z: OptionalQuantity;
+}
+/**
+ * The pressure of a still fluid on the faces: p = density × (gravity · (x − s)) at a point x at or below the free surface through s, zero above it. The fluid is on the outside of each face, so the pressure pushes on the face towards the body. Consistent nodal loads in the deck. Each value null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "HydrostaticLoad".
+ */
+export interface HydrostaticLoad {
+  id: ItemId;
+  type: "hydrostatic";
+  name: ItemName;
+  faces: FaceTags;
+  /**
+   * A Quantity, or null until the user has entered it.
+   */
+  fluidDensity: Quantity | null;
+  gravity: Components3;
+  freeSurface: AxisPoint3;
+}
+/**
+ * The acceleration of gravity acting on the fluid, acceleration quantities in global axes (z = -1 g for gravity downwards along z). Depth is measured along it; it is not applied to the bodies (add a gravity load for their weight).
+ */
+export interface Components3 {
+  x: OptionalQuantity;
+  y: OptionalQuantity;
+  z: OptionalQuantity;
+}
+/**
+ * A point on the fluid's free surface, the plane normal to gravity where the pressure is zero.
+ */
+export interface AxisPoint3 {
   x: OptionalQuantity;
   y: OptionalQuantity;
   z: OptionalQuantity;
@@ -734,6 +768,7 @@ export const validateAxisDirection = validator<AxisDirection>(schema, "AxisDirec
 export const validateCentrifugalLoad = validator<CentrifugalLoad>(schema, "CentrifugalLoad");
 export const validateComponents = validator<Components>(schema, "Components");
 export const validateRemoteLoad = validator<RemoteLoad>(schema, "RemoteLoad");
+export const validateHydrostaticLoad = validator<HydrostaticLoad>(schema, "HydrostaticLoad");
 export const validateLoad = validator<Load>(schema, "Load");
 export const validateMeshSettings = validator<MeshSettings>(schema, "MeshSettings");
 export const validateSimulationSpec = validator<SimulationSpec>(schema, "SimulationSpec");

@@ -541,6 +541,9 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 4px;
   margin: 0;
+  /* A fieldset is at least as wide as its content by default, which pushed wide unit lists
+     past the panel's edge. */
+  min-width: 0;
   padding: 6px 10px 8px;
   display: flex;
   flex-direction: column;

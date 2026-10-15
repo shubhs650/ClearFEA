@@ -28,13 +28,14 @@ export const loadKinds = {
   pressure: "Pressure",
   force: "Force",
   remote: "Remote load",
+  hydrostatic: "Hydrostatic pressure",
   gravity: "Gravity",
   centrifugal: "Centrifugal load",
 } as const;
 
 /** True when the load acts on faces the user picks (gravity and centrifugal act on every body). */
 export function loadHasFaces(load: Load): load is Extract<Load, { faces: number[] }> {
-  return load.type === "pressure" || load.type === "force" || load.type === "remote";
+  return load.type === "pressure" || load.type === "force" || load.type === "remote" || load.type === "hydrostatic";
 }
 
 /** True when the setup has a gravity or centrifugal load, which need every material's density. */
@@ -160,6 +161,15 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
         add(load.id, unitProblem(load.point[axis], "length", `The ${axis} coordinate of the reference point of load "${load.name}"`, false));
         add(load.id, unitProblem(load.force[axis], "force", `The ${axis} component of the force of load "${load.name}"`, false));
         add(load.id, unitProblem(load.moment[axis], "moment", `The ${axis} component of the moment of load "${load.name}"`, false));
+      }
+    } else if (load.type === "hydrostatic") {
+      add(load.id, unitProblem(load.fluidDensity, "density", `The fluid density of load "${load.name}"`, true));
+      for (const axis of displacementAxes) {
+        add(load.id, unitProblem(load.gravity[axis], "acceleration", `The ${axis} component of the gravity of load "${load.name}"`, false));
+        add(load.id, unitProblem(load.freeSurface[axis], "length", `The ${axis} coordinate of the free-surface point of load "${load.name}"`, false));
+      }
+      if (displacementAxes.every((axis) => load.gravity[axis]?.value === 0)) {
+        add(load.id, `The gravity of load "${load.name}" is zero, so the fluid has no depth. Enter it, for example z = -1 g.`);
       }
     } else {
       add(load.id, unitProblem(load.angularVelocity, "angularVelocity", `The angular velocity of load "${load.name}"`, false));

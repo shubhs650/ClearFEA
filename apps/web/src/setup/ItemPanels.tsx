@@ -8,8 +8,10 @@ import {
   displacementAxes,
   type ForceLoad,
   type GravityLoad,
+  type HydrostaticLoad,
   type IsotropicMaterial,
   type Load,
+  loadHasFaces,
   loadKinds,
   type PressureLoad,
   type Quantity,
@@ -49,6 +51,7 @@ const loadAdds: { type: LoadType; label: string }[] = [
   { type: "pressure", label: "Add a pressure" },
   { type: "force", label: "Add a force" },
   { type: "remote", label: "Add a remote force and moment" },
+  { type: "hydrostatic", label: "Add a hydrostatic pressure" },
   { type: "gravity", label: "Add gravity" },
   { type: "centrifugal", label: "Add a centrifugal load" },
 ];
@@ -84,7 +87,7 @@ export function GroupPanel({
       )}
       {group === "loads" && (
         <p className="field-hint">
-          Select faces in the viewer first to give a new pressure, force or remote load those faces. Gravity and a centrifugal load
+          Select faces in the viewer first to give a new pressure, force, remote load or hydrostatic pressure those faces. Gravity and a centrifugal load
           act on every body.
         </p>
       )}
@@ -278,6 +281,8 @@ const loadHints: Record<LoadType, string> = {
     "A total force along the global axes, spread over the faces in proportion to their area (a uniform traction). Enter 0 for a component it does not have.",
   remote:
     "A force and a moment acting at a reference point, carried to the faces they are attached to. The faces stay free to deform, and the force also turns them about the point when it is off their centre. Enter 0 for a component it does not have.",
+  hydrostatic:
+    "The pressure of a still fluid on the faces: fluid density × gravity × depth below the free surface, and nothing above it. The fluid is outside the body and pushes on the faces towards it. Gravity here acts on the fluid only; add gravity under Loads for the part's own weight.",
   gravity:
     "The acceleration of gravity along the global axes, acting on every body through its density; the weight points along it. For gravity downwards along z, enter z = -1 g.",
   centrifugal:
@@ -310,6 +315,37 @@ function RemoteFields({ load, set }: { load: RemoteLoad; set: (changes: Partial<
         kind="moment"
         values={load.moment}
         onChange={(axis, value) => set({ moment: { ...load.moment, [axis]: value } })}
+      />
+    </>
+  );
+}
+
+function HydrostaticFields({
+  load,
+  set,
+}: {
+  load: HydrostaticLoad;
+  set: (changes: Partial<HydrostaticLoad>) => void;
+}) {
+  return (
+    <>
+      <QuantityInput
+        label="Fluid density"
+        kind="density"
+        value={load.fluidDensity}
+        onChange={(fluidDensity) => set({ fluidDensity })}
+      />
+      <ComponentsField
+        legend="Gravity on the fluid (global axes; z = -1 g for downwards along z)"
+        kind="acceleration"
+        values={load.gravity}
+        onChange={(axis, value) => set({ gravity: { ...load.gravity, [axis]: value } })}
+      />
+      <ComponentsField
+        legend="A point on the free surface (global coordinates)"
+        kind="length"
+        values={load.freeSurface}
+        onChange={(axis, value) => set({ freeSurface: { ...load.freeSurface, [axis]: value } })}
       />
     </>
   );
@@ -383,8 +419,9 @@ export function LoadPanel({
         />
       )}
       {load.type === "remote" && <RemoteFields load={load} set={set} />}
+      {load.type === "hydrostatic" && <HydrostaticFields load={load} set={set} />}
       {load.type === "centrifugal" && <CentrifugalFields load={load} set={set} />}
-      {(load.type === "pressure" || load.type === "force" || load.type === "remote") && (
+      {loadHasFaces(load) && (
         <FacesField faces={load.faces} selection={selection} onChange={(faces) => set({ faces })} />
       )}
       <Remove what={title.toLowerCase()} onRemove={() => onChange(removeItem(spec, load.id))} />

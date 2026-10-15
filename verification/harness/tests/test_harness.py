@@ -268,6 +268,33 @@ def test_applied_load_adds_a_remote_loads_force_but_not_its_moment() -> None:
     assert gross == pytest.approx(5000, rel=1e-12)
 
 
+def test_applied_load_adds_a_hydrostatic_pressure_on_the_wet_part_only() -> None:
+    # Water up to z = 0.06 m against the box's x = 0 face (0.1 wide in y, 0.1 tall in z) and
+    # its bottom z = 0: rho g h^2/2 per unit width across, rho g h times the bottom upwards.
+    surface = box_surface((0, 0, 0), (0.1, 0.1, 0.1))
+    m = {"value": 0, "unit": "m"}
+    spec = body_spec(
+        [
+            {
+                "type": "hydrostatic",
+                "faces": [1, 5],
+                "fluidDensity": {"value": 1, "unit": "g/cm³"},
+                "gravity": {
+                    "x": {"value": 0, "unit": "g"},
+                    "y": {"value": 0, "unit": "g"},
+                    "z": {"value": -1, "unit": "g"},
+                },
+                "freeSurface": {"x": m, "y": m, "z": {"value": 6, "unit": "cm"}},
+            }
+        ]
+    )
+    total, gross = applied_load(spec, surface)
+    g = 9.80665
+    across, up = 1000 * g * 0.06**2 / 2 * 0.1, 1000 * g * 0.06 * 0.1 * 0.1
+    assert total == pytest.approx([across, 0, up], rel=1e-12, abs=1e-12)
+    assert gross == pytest.approx(across + up, rel=1e-12)
+
+
 def test_distance_integral_about_an_axis_through_a_square_section() -> None:
     # A 2 x 2 square about its own axis, height 1: (4/3)(sqrt 2 + ln(1 + sqrt 2)) for a = 1.
     # The coarse box surface only gets near it with finer triangles, so check the far case

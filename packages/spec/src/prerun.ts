@@ -109,6 +109,14 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
       if (displacementAxes.some((axis) => load.moment[axis] === null)) {
         add(load.id, `Load "${load.name}" has no complete moment. Enter x, y and z (0 for none).`);
       }
+    } else if (load.type === "hydrostatic") {
+      if (load.fluidDensity === null) add(load.id, `Load "${load.name}" has no fluid density. Enter it.`);
+      if (displacementAxes.some((axis) => load.gravity[axis] === null)) {
+        add(load.id, `Load "${load.name}" has no complete gravity. Enter x, y and z (0 for none).`);
+      }
+      if (displacementAxes.some((axis) => load.freeSurface[axis] === null)) {
+        add(load.id, `Load "${load.name}" has no complete point on the free surface. Enter x, y and z.`);
+      }
     } else {
       if (load.angularVelocity === null) add(load.id, `Load "${load.name}" has no angular velocity. Enter it.`);
       if (displacementAxes.some((axis) => load.axisPoint[axis] === null)) {
