@@ -643,3 +643,54 @@ button:disabled {
   flex-direction: column;
   gap: 2px;
 }
+
+/* The mesh's quality summary (M2.8): figures, then one bar per tenth of the shape measure. */
+.mesh-quality h3 {
+  font-size: 13px;
+  margin: 12px 0 2px;
+}
+
+.mesh-quality .field-hint {
+  margin: 0 0 6px;
+}
+
+.mesh-histogram {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mesh-histogram li {
+  display: grid;
+  grid-template-columns: 70px 1fr 52px;
+  align-items: center;
+  gap: 6px;
+}
+
+.mesh-histogram-range {
+  color: var(--muted);
+}
+
+.mesh-histogram-bar {
+  display: block;
+  height: 10px;
+  min-width: 1px;
+  background: #1c7ed6;
+  border-radius: 2px;
+}
+
+.mesh-histogram-count {
+  text-align: right;
+}
+
+fieldset.field {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 0;
+  min-width: 0;
+  padding: 6px 10px 8px;
+}

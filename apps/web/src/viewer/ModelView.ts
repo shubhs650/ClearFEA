@@ -3,6 +3,7 @@
 // mouse, and reports which face is under the pointer and which face was clicked. React state
 // (selection, hover text) lives in Viewer.tsx; this class only draws what it is told. Given
 // band coordinates per vertex (M1.9), it colours the model in result bands instead of by face.
+// Given the geometry's edges (M2.8), it draws them and picks edges instead of faces.
 
 import {
   AmbientLight,
@@ -26,6 +27,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { type DisplayFace, type DisplayMesh, faceAtTriangle, faceOutlines, triangleEdges } from "./displayMesh";
+import { type EdgePolyline, type EdgeSegments, edgeSegments, nearestEdge } from "./edges";
 import { BAND_COLOURS } from "./resultFields";
 
 const COLOURS = {
@@ -36,6 +38,7 @@ const COLOURS = {
   selectedHover: new Color("#4dabf7"),
   outline: new Color("#495057"),
   elementEdge: new Color("#343a40"),
+  edge: new Color("#212529"),
 };
 
 /** Lines drawn over the faces: the face outlines of a geometry, or every element edge of a mesh. */
@@ -59,11 +62,17 @@ function bandTexture(): DataTexture {
 /** A press that moves less than this many pixels before release is a click, not an orbit. */
 const CLICK_SLOP_PX = 4;
 
+/** How near the pointer an edge must pass on screen to be hovered or picked. */
+const EDGE_SLOP_PX = 8;
+
+/** What a click picks: faces, or (while edges are shown, M2.8) edges. */
+export type PickMode = "faces" | "edges";
+
 export type ModelViewEvents = {
-  /** The face under the pointer changed; null when the pointer is off the model. */
-  onHover: (faceTag: number | null) => void;
-  /** A face was clicked (not dragged). */
-  onPick: (faceTag: number) => void;
+  /** The face (or edge, in edge mode) under the pointer changed; null when there is none. */
+  onHover: (tag: number | null) => void;
+  /** A face (or edge, in edge mode) was clicked (not dragged). */
+  onPick: (tag: number) => void;
 };
 
 export class ModelView {
@@ -77,8 +86,13 @@ export class ModelView {
   private facesByTag = new Map<number, DisplayFace>();
   private surface: Mesh<BufferGeometry, MeshStandardMaterial> | null = null;
   private outlines: LineSegments | null = null;
+  private edges: EdgeSegments | null = null;
+  private edgeLines: LineSegments | null = null;
+  private mode: PickMode = "faces";
   private hovered: number | null = null;
+  private hoveredEdge: number | null = null;
   private selected = new Set<number>();
+  private selectedEdges = new Set<number>();
   private pressedAt: { x: number; y: number } | null = null;
   private frame = 0;
   private bands: DataTexture | null = null;
@@ -196,6 +210,32 @@ export class ModelView {
     this.requestRender();
   }
 
+  /**
+   * Draws the geometry's edges over the model and picks edges instead of faces, or with null
+   * goes back to picking faces. Call after setMesh, which clears them.
+   */
+  setEdges(edges: readonly EdgePolyline[] | null): void {
+    this.clearEdges();
+    this.mode = edges === null ? "faces" : "edges";
+    if (edges !== null) {
+      this.setHovered(null);
+      this.edges = edgeSegments(edges);
+      const geometry = new BufferGeometry();
+      geometry.setAttribute("position", new BufferAttribute(this.edges.positions, 3));
+      geometry.setAttribute("color", new BufferAttribute(new Float32Array(this.edges.positions.length), 3));
+      this.edgeLines = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true }));
+      this.scene.add(this.edgeLines);
+      this.paintEdges();
+    }
+    this.requestRender();
+  }
+
+  setEdgeSelection(tags: ReadonlySet<number>): void {
+    this.selectedEdges = new Set(tags);
+    this.paintEdges();
+    this.requestRender();
+  }
+
   dispose(): void {
     cancelAnimationFrame(this.frame);
     this.resize.disconnect();
@@ -206,7 +246,42 @@ export class ModelView {
     this.renderer.domElement.remove();
   }
 
+  private clearEdges(): void {
+    if (this.edgeLines) {
+      this.scene.remove(this.edgeLines);
+      this.edgeLines.geometry.dispose();
+      const material = this.edgeLines.material;
+      if (!Array.isArray(material)) material.dispose();
+    }
+    this.edgeLines = null;
+    this.edges = null;
+    this.hoveredEdge = null;
+    this.mode = "faces";
+  }
+
+  private paintEdges(): void {
+    const attribute = this.edgeLines?.geometry.getAttribute("color");
+    if (!this.edges || !(attribute instanceof BufferAttribute)) return;
+    const colours = attribute.array as Float32Array;
+    for (const run of this.edges.runs) {
+      const selected = this.selectedEdges.has(run.tag);
+      const colour =
+        run.tag === this.hoveredEdge
+          ? selected
+            ? COLOURS.selectedHover
+            : COLOURS.hover
+          : selected
+            ? COLOURS.selected
+            : COLOURS.edge;
+      for (let p = run.firstPoint; p < run.firstPoint + run.pointCount; p++) {
+        colours.set([colour.r, colour.g, colour.b], p * 3);
+      }
+    }
+    attribute.needsUpdate = true;
+  }
+
   private clearModel(): void {
+    this.clearEdges();
     for (const object of [this.surface, this.outlines]) {
       if (!object) continue;
       this.scene.remove(object);
@@ -262,18 +337,51 @@ export class ModelView {
     attribute.needsUpdate = true;
   }
 
-  /** The face tag under a pointer position, or null. */
-  private faceAt(event: PointerEvent): number | null {
-    if (!this.surface || !this.mesh) return null;
+  /** The first hit of the model's surface under a pointer position, if any. */
+  private surfaceHit(event: PointerEvent) {
+    if (!this.surface) return undefined;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
-    const hit = this.raycaster.intersectObject(this.surface, false)[0];
+    return this.raycaster.intersectObject(this.surface, false)[0];
+  }
+
+  /** The face tag under a pointer position, or null. */
+  private faceAt(event: PointerEvent): number | null {
+    if (!this.mesh) return null;
+    const hit = this.surfaceHit(event);
     if (hit?.faceIndex == null) return null;
     return faceAtTriangle(this.mesh, hit.faceIndex)?.tag ?? null;
+  }
+
+  /** The tag of the visible edge nearest the pointer on screen, or null. */
+  private edgeAt(event: PointerEvent): number | null {
+    if (!this.edges) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const pointer: [number, number] = [event.clientX - rect.left, event.clientY - rect.top];
+    // A point is hidden when the surface under the pointer is clearly nearer the camera.
+    const surface = this.surfaceHit(event)?.distance ?? Number.POSITIVE_INFINITY;
+    const radius = this.surface?.geometry.boundingSphere?.radius ?? 1;
+    const point = new Vector3();
+    const project = (p: readonly number[]) => {
+      point.set(p[0] ?? 0, p[1] ?? 0, p[2] ?? 0);
+      const depth = point.distanceTo(this.camera.position);
+      point.project(this.camera);
+      if (point.z > 1) return null;
+      return { x: ((point.x + 1) / 2) * rect.width, y: ((1 - point.y) / 2) * rect.height, depth };
+    };
+    return nearestEdge(this.edges, pointer, EDGE_SLOP_PX, project, (depth) => depth > surface + radius * 0.01);
+  }
+
+  private setHoveredEdge(tag: number | null): void {
+    if (tag === this.hoveredEdge) return;
+    this.hoveredEdge = tag;
+    this.paintEdges();
+    this.requestRender();
+    this.events.onHover(tag);
   }
 
   private setHovered(tag: number | null): void {
@@ -289,10 +397,14 @@ export class ModelView {
   private readonly pointerMove = (event: PointerEvent) => {
     // While a button is held the user is orbiting or panning; leave the hover alone.
     if (event.buttons !== 0) return;
-    this.setHovered(this.faceAt(event));
+    if (this.mode === "edges") this.setHoveredEdge(this.edgeAt(event));
+    else this.setHovered(this.faceAt(event));
   };
 
-  private readonly pointerLeave = () => this.setHovered(null);
+  private readonly pointerLeave = () => {
+    if (this.mode === "edges") this.setHoveredEdge(null);
+    else this.setHovered(null);
+  };
 
   private readonly pointerDown = (event: PointerEvent) => {
     this.pressedAt = event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
@@ -303,6 +415,12 @@ export class ModelView {
     this.pressedAt = null;
     if (!start || event.button !== 0) return;
     if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return;
+    if (this.mode === "edges") {
+      const edge = this.edgeAt(event);
+      this.setHoveredEdge(edge);
+      if (edge !== null && this.picking) this.events.onPick(edge);
+      return;
+    }
     const tag = this.faceAt(event);
     this.setHovered(tag);
     if (tag !== null && this.picking) this.events.onPick(tag);

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import {
   type GeometryView,
+  type LocalMeshScope,
+  type LocalMeshSize,
   preRunProblems,
   type SessionUser,
   type SimulationSpec,
@@ -16,16 +18,18 @@ import { StatusBar } from "./layout/StatusBar";
 import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { GroupPanel, LoadPanel, MaterialPanel, SupportPanel } from "./setup/ItemPanels";
-import { MeshPanel } from "./setup/MeshPanel";
+import { LocalSizePanel, MeshPanel } from "./setup/MeshPanel";
 import { type ResultChoice, type ResultUnits, type RunBlocker, RunPanel } from "./setup/RunPanel";
 import {
   addLoad,
+  addLocalSize,
   addMaterial,
   addSupport,
   facesOf,
   type Group,
   type ItemStatus,
   type LoadType,
+  localSizeOf,
   meshIsCurrent,
   meshStatus,
   runStatus,
@@ -62,6 +66,8 @@ export function App() {
   const [session, setSession] = useState<SessionState>({ kind: "checking" });
   const [geometry, setGeometry] = useState<GeometryView | null>(null);
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
+  // Edges picked in the viewer while a local size on edges is open (M2.8).
+  const [edgeSelection, setEdgeSelection] = useState<ReadonlySet<number>>(new Set());
   // The tree item whose settings are shown: "geometry", a group, or a spec item's id.
   const [selected, setSelected] = useState("geometry");
   const [geometryRefresh, setGeometryRefresh] = useState(0);
@@ -72,6 +78,7 @@ export function App() {
   useEffect(() => {
     void geometryId;
     setSelection(new Set());
+    setEdgeSelection(new Set());
     setSelected("geometry");
   }, [geometryId]);
 
@@ -136,7 +143,7 @@ export function App() {
       if (mesh === null || mesh.status === "failed") {
         blockers.push({ message: "There is no mesh. Generate it under Mesh.", item: "mesh" });
       } else if (!meshIsCurrent(setup.spec, mesh)) {
-        blockers.push({ message: "The mesh size changed after the mesh was made. Generate the mesh again.", item: "mesh" });
+        blockers.push({ message: "The mesh settings changed after the mesh was made. Generate the mesh again.", item: "mesh" });
       } else if (mesh.status === "meshing") {
         blockers.push({ message: "The mesh is still being made. Wait for it to finish.", item: "mesh" });
       }
@@ -149,20 +156,59 @@ export function App() {
     signedOut();
   }
 
-  /** Opens a tree item; a support or load also shows its faces as the viewer's selection. */
+  /** The faces of the bodies a local size on bodies applies to, to show them in the viewer. */
+  function bodyFaces(item: LocalMeshSize): number[] {
+    if (setup.kind !== "open") return [];
+    return setup.topology.bodies.filter((b) => item.tags.includes(b.tag)).flatMap((b) => b.faces);
+  }
+
+  /**
+   * Opens a tree item; a support, load or local size on faces also shows its faces as the viewer's
+   * selection, a local size on edges its edges, and one on bodies the faces of its bodies.
+   */
   function select(id: string) {
     setSelected(id);
-    const faces = spec === null ? null : facesOf(spec, id);
+    if (spec === null) return;
+    const local = localSizeOf(spec, id);
+    if (local?.scope === "edges") setEdgeSelection(new Set(local.tags));
+    else if (local?.scope === "bodies") setSelection(new Set(bodyFaces(local)));
+    const faces = facesOf(spec, id);
     if (faces !== null) setSelection(new Set(faces));
   }
 
-  /** Saves an edit; when it removed the open item, its group opens instead. */
+  /** Saves an edit; when it removed the open item, its group (or the mesh) opens instead. */
   function change(next: SimulationSpec) {
     if (spec !== null) {
       const group = groupOf(spec, selected);
       if (group !== null && groupOf(next, selected) === null) setSelected(group);
+      if (localSizeOf(spec, selected) !== undefined && localSizeOf(next, selected) === undefined) setSelected("mesh");
+      const local = localSizeOf(next, selected);
+      if (local?.scope === "bodies") setSelection(new Set(bodyFaces(local)));
     }
     edit(next);
+  }
+
+  /**
+   * Adds a local mesh size (M2.8): on faces it takes the faces selected in the viewer, on edges
+   * the selected edges, and on bodies the only body of a single-body geometry.
+   */
+  function addLocal(scope: LocalMeshScope) {
+    if (spec === null) return;
+    const sorted = (tags: ReadonlySet<number>) => [...tags].sort((a, b) => a - b);
+    const tags =
+      scope === "faces"
+        ? sorted(selection)
+        : scope === "edges"
+          ? sorted(edgeSelection)
+          : spec.bodies.length === 1
+            ? spec.bodies.map((b) => b.tag)
+            : [];
+    const added = addLocalSize(spec, scope, tags);
+    edit(added.spec);
+    setSelected(added.id);
+    const item = localSizeOf(added.spec, added.id);
+    if (item?.scope === "bodies") setSelection(new Set(bodyFaces(item)));
+    else if (item?.scope === "edges") setEdgeSelection(new Set(item.tags));
   }
 
   /** Adds an item to a group; a new support, pressure or force takes the faces selected in the viewer. */
@@ -197,6 +243,22 @@ export function App() {
           requestProblem={meshes.requestProblem}
           onChange={change}
           onGenerate={() => void meshes.generate()}
+          onAddLocal={addLocal}
+        />
+      );
+    }
+    const local = localSizeOf(spec, selected);
+    if (local) {
+      return (
+        <LocalSizePanel
+          key={selected}
+          spec={spec}
+          item={local}
+          status={status}
+          selection={selection}
+          edgeSelection={edgeSelection}
+          edgesAvailable={setup.kind === "open" && setup.topology.edges !== undefined}
+          onChange={change}
         />
       );
     }
@@ -300,6 +362,9 @@ export function App() {
         }
         selection={selection}
         onSelectionChange={setSelection}
+        pickEdges={!showGeometry && spec !== null && localSizeOf(spec, selected)?.scope === "edges"}
+        edgeSelection={edgeSelection}
+        onEdgeSelectionChange={setEdgeSelection}
         onSignedOut={signedOut}
       />
       <SettingsPanel>

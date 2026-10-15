@@ -379,6 +379,8 @@ describe("checkSimulationSpec", () => {
     expect(local).toEqual([{ scope: "faces", tags: [1, 3], size: { value: 1, unit: "mm" } }]);
     expect(sameMeshSettings(s, { size, order: 2, local })).toBe(true);
     expect(sameMeshSettings(s, { size, order: 2, local: [] })).toBe(false);
-    expect(sameMeshSettings(s, { size, order: 2, local: [{ ...local[0]!, tags: [1] }] })).toBe(false);
+    expect(sameMeshSettings(s, { size, order: 2, local: [{ scope: "faces", tags: [1], size: { value: 1, unit: "mm" } }] })).toBe(
+      false,
+    );
   });
 });

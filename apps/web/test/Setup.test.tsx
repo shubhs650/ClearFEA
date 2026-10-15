@@ -11,7 +11,14 @@ import { readFixture } from "./fixtures";
 import { twoFacesFields } from "./resultFiles";
 
 // jsdom has no WebGL: a stand-in scene lets the test pick faces and see the selection.
-const scene = vi.hoisted(() => ({ events: [] as ModelViewEvents[], selections: [] as number[][], edges: [] as string[] }));
+const scene = vi.hoisted(() => ({
+  events: [] as ModelViewEvents[],
+  selections: [] as number[][],
+  edges: [] as string[],
+  // Each setEdges call (M2.8): the geometry edge tags drawn, or null for none.
+  geometryEdges: [] as (number[] | null)[],
+  edgeSelections: [] as number[][],
+}));
 
 vi.mock("../src/viewer/ModelView", () => ({
   ModelView: class {
@@ -23,6 +30,12 @@ vi.mock("../src/viewer/ModelView", () => ({
     }
     setSelection(tags: ReadonlySet<number>) {
       scene.selections.push([...tags].sort((a, b) => a - b));
+    }
+    setEdges(edges: { tag: number }[] | null) {
+      scene.geometryEdges.push(edges === null ? null : edges.map((e) => e.tag));
+    }
+    setEdgeSelection(tags: ReadonlySet<number>) {
+      scene.edgeSelections.push([...tags].sort((a, b) => a - b));
     }
     resetView() {}
     dispose() {}
@@ -47,6 +60,13 @@ const topology = {
     centroid: [0.05, 0.025, 0],
     bbox: [0, 0, 0, 0.1, 0.05, 0],
     bodies: [1],
+  })),
+  edges: [5, 6].map((tag) => ({
+    tag,
+    length: 0.1,
+    bbox: [0, 0, 0, 0.1, 0, 0],
+    faces: [3, 7],
+    points: [0, 0, 0, 0.1, 0, 0],
   })),
 };
 
@@ -554,10 +574,12 @@ function mesh(overrides: Partial<MeshView> = {}): MeshView {
     geometryId: "g1",
     size: { value: 5, unit: "mm" },
     order: 2,
+    local: [],
     status: "ready",
     problem: null,
     nodeCount: 7108,
     elementCount: 4000,
+    quality: null,
     createdAt: "2026-10-15T12:00:00.000Z",
     ...overrides,
   };
@@ -592,6 +614,84 @@ describe("mesh", () => {
     expect(fetchMock.mock.calls.some(([path, init]) => path === "/api/simulations/s1/mesh" && init?.method === "POST")).toBe(true);
   });
 
+  it("adds local sizes on faces, edges and bodies, and sets the element order (M2.8)", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation(meshed)], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+    act(() => scene.events[0]?.onPick(7));
+    fireEvent.click(tree().getByRole("button", { name: "Mesh, incomplete" }));
+    fireEvent.change(settings().getByLabelText("Element order"), { target: { value: "1" } });
+    await waitFor(() => expect(sent.at(-1)?.mesh.order).toBe(1));
+
+    // On faces: the selected face, then a size.
+    fireEvent.click(settings().getByRole("button", { name: "Add a local size on faces" }));
+    expect(tree().getByRole("button", { name: "Local size 1, incomplete" }).getAttribute("title")).toBe("Enter the local size.");
+    expect(settings().getByText("7")).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Size"), { target: { value: "1" } });
+    expect(tree().getByRole("button", { name: "Local size 1, complete" })).toBeTruthy();
+
+    // A local size larger than the global size is refused by name.
+    fireEvent.change(settings().getByLabelText("Size"), { target: { value: "8" } });
+    expect(settings().getByText(/^The local size is larger than the global size/)).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Size"), { target: { value: "1" } });
+
+    // On edges: the viewer draws the geometry's edges and a click picks one.
+    fireEvent.click(tree().getByRole("button", { name: /^Mesh,/ }));
+    fireEvent.click(settings().getByRole("button", { name: "Add a local size on edges" }));
+    expect(scene.geometryEdges.at(-1)).toEqual([5, 6]);
+    expect(await screen.findByText(/Click an edge to select it/)).toBeTruthy();
+    act(() => scene.events[0]?.onPick(6));
+    expect(scene.edgeSelections.at(-1)).toEqual([6]);
+    expect(screen.getByText(/1 edge selected/)).toBeTruthy();
+    fireEvent.click(settings().getByRole("button", { name: "Use the selected edge" }));
+    fireEvent.change(settings().getByLabelText("Size"), { target: { value: "0.5" } });
+
+    // On bodies: a single-body geometry's body, shown by its faces.
+    fireEvent.click(tree().getByRole("button", { name: /^Mesh,/ }));
+    fireEvent.click(settings().getByRole("button", { name: "Add a local size on bodies" }));
+    expect(scene.geometryEdges.at(-1)).toBeNull();
+    expect(scene.selections.at(-1)).toEqual([3, 7]);
+    expect(settings().getByRole("checkbox", { name: "Body 1" })).toHaveProperty("checked", true);
+    fireEvent.change(settings().getByLabelText("Size"), { target: { value: "2" } });
+
+    await waitFor(() =>
+      expect(sent.at(-1)?.mesh.local).toEqual([
+        { id: "local-1", name: "Local size 1", scope: "faces", tags: [7], size: { value: 1, unit: "mm" } },
+        { id: "local-2", name: "Local size 2", scope: "edges", tags: [6], size: { value: 0.5, unit: "mm" } },
+        { id: "local-3", name: "Local size 3", scope: "bodies", tags: [1], size: { value: 2, unit: "mm" } },
+      ]),
+    );
+    expect(sent.at(-1)?.mesh).toMatchObject({ size: { value: 5, unit: "mm" }, order: 1 });
+
+    // Deleting a local size opens the Mesh panel.
+    fireEvent.click(settings().getByRole("button", { name: "Delete local size" }));
+    expect(settings().getByRole("heading", { name: "Mesh" })).toBeTruthy();
+    expect(tree().queryByRole("button", { name: /Local size 3/ })).toBeNull();
+  });
+
+  it("shows the quality summary of a ready mesh (M2.8)", async () => {
+    const quality = {
+      shapeMin: 0.183,
+      shapeMean: 0.742,
+      shapeHistogram: [0, 2, 10, 50, 200, 600, 1100, 1300, 600, 138],
+      jacobianMin: 0.912,
+    };
+    serve(
+      routes([simulation(meshed)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh({ quality }) } },
+        "GET /api/meshes/m1/display": { status: 200, bytes: display },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Mesh, complete" }));
+    const summary = await settings().findByRole("region", { name: "Mesh quality" });
+    expect(within(summary).getByText("0.183")).toBeTruthy();
+    expect(within(summary).getByText("0.742")).toBeTruthy();
+    expect(within(summary).getByText("0.912")).toBeTruthy();
+    expect(within(summary).getByTitle("0.6 to 0.7: 1,100 elements")).toBeTruthy();
+  });
+
   it("draws a ready mesh with its element edges and counts while the Mesh item is open", async () => {
     const fetchMock = serve(
       routes([simulation(meshed)], {
@@ -620,7 +720,7 @@ describe("mesh", () => {
     serve(routes([simulation(stale)], { "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } } }));
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Mesh, incomplete" }));
-    expect(settings().getByText("The mesh size changed after the mesh was made. Generate the mesh again.")).toBeTruthy();
+    expect(settings().getByText("The mesh settings changed after the mesh was made. Generate the mesh again.")).toBeTruthy();
     cleanup();
 
     const problem = "Enter a mesh size of at least 0.656 mm.";

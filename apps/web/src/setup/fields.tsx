@@ -116,22 +116,37 @@ export function FacesField({
   selection: ReadonlySet<number>;
   onChange: (faces: number[]) => void;
 }) {
+  return <TagsField tags={faces} selection={selection} onChange={onChange} noun={{ label: "Faces", one: "face", many: "faces" }} />;
+}
+
+/** Faces or edges of an item (M2.8 adds edges), and buttons that take them from the viewer's selection. */
+export function TagsField({
+  tags,
+  selection,
+  onChange,
+  noun,
+}: {
+  tags: readonly number[];
+  selection: ReadonlySet<number>;
+  onChange: (tags: number[]) => void;
+  noun: { label: string; one: string; many: string };
+}) {
   const picked = [...selection].sort((a, b) => a - b);
-  const same = picked.length === faces.length && picked.every((tag) => faces.includes(tag));
+  const same = picked.length === tags.length && picked.every((tag) => tags.includes(tag));
   return (
     <div className="field">
-      <span>Faces</span>
-      <span className={faces.length === 0 ? "field-hint" : undefined}>
-        {faces.length === 0
-          ? "None yet. Click faces in the viewer, then use them here."
-          : [...faces].sort((a, b) => a - b).join(", ")}
+      <span>{noun.label}</span>
+      <span className={tags.length === 0 ? "field-hint" : undefined}>
+        {tags.length === 0
+          ? `None yet. Click ${noun.many} in the viewer, then use them here.`
+          : [...tags].sort((a, b) => a - b).join(", ")}
       </span>
       <div className="field-actions">
         <button type="button" disabled={picked.length === 0 || same} onClick={() => onChange(picked)}>
-          {picked.length < 2 ? "Use the selected face" : `Use the ${picked.length} selected faces`}
+          {picked.length < 2 ? `Use the selected ${noun.one}` : `Use the ${picked.length} selected ${noun.many}`}
         </button>
-        <button type="button" disabled={faces.length === 0} onClick={() => onChange([])}>
-          Remove all faces
+        <button type="button" disabled={tags.length === 0} onClick={() => onChange([])}>
+          Remove all {noun.many}
         </button>
       </div>
     </div>

@@ -5,9 +5,10 @@
 // Given a ready analysis mesh (M1.6), it draws that mesh's surface with its element edges
 // instead, with the element and node counts; faces stay pickable. Given a succeeded run (M1.9),
 // it draws the run's mesh surface coloured in bands of one result quantity, optionally on the
-// deformed shape, with a legend; faces are then not picked.
+// deformed shape, with a legend; faces are then not picked. While a local mesh size on edges is
+// open (M2.8), it draws the geometry's edges and a click adds or removes an edge instead.
 
-import type { GeometryStatus, GeometryView, MeshView, RunView, TopologyFace } from "@clearfea/spec";
+import type { GeometryStatus, GeometryView, MeshView, RunView, TopologyEdge, TopologyFace } from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchDisplayMesh, fetchTopology } from "../api/geometries";
 import { fetchMeshDisplay } from "../api/meshes";
@@ -59,6 +60,8 @@ const faceTypes: Record<TopologyFace["type"], string> = {
 type Model = {
   mesh: DisplayMesh;
   faces: Map<number, TopologyFace>;
+  /** The geometry's edges; null for a geometry imported before M2.8. */
+  edges: TopologyEdge[] | null;
   analysis: MeshView | null;
   /** The run's result fields when the model is a run's surface. */
   results: ResultFields | null;
@@ -69,6 +72,9 @@ type Load =
   | { kind: "loading" }
   | { kind: "failed"; problem: string }
   | { kind: "shown"; key: string; model: Model };
+
+const NO_EDGES: ReadonlySet<number> = new Set();
+const ignoreEdges = () => {};
 
 /** Adds the face to the selection, or removes it if it is already there. */
 export function toggleFace(selection: ReadonlySet<number>, tag: number): Set<number> {
@@ -171,6 +177,9 @@ export function Viewer({
   result = null,
   selection,
   onSelectionChange,
+  pickEdges = false,
+  edgeSelection = NO_EDGES,
+  onEdgeSelectionChange = ignoreEdges,
   onSignedOut,
 }: {
   geometry: GeometryView | null;
@@ -180,6 +189,10 @@ export function Viewer({
   result?: ResultDisplay | null;
   selection: ReadonlySet<number>;
   onSelectionChange: (next: Set<number>) => void;
+  /** Draw the geometry's edges and pick edges instead of faces (M2.8). */
+  pickEdges?: boolean;
+  edgeSelection?: ReadonlySet<number>;
+  onEdgeSelectionChange?: (next: Set<number>) => void;
   onSignedOut: (problem: string) => void;
 }) {
   const canvasHost = useRef<HTMLDivElement>(null);
@@ -190,8 +203,8 @@ export function Viewer({
   const areaUnit = useSystemUnit("area");
 
   // The pick handler must see the latest selection without recreating the scene.
-  const latest = useRef({ selection, onSelectionChange });
-  latest.current = { selection, onSelectionChange };
+  const latest = useRef({ selection, onSelectionChange, pickEdges, edgeSelection, onEdgeSelectionChange });
+  latest.current = { selection, onSelectionChange, pickEdges, edgeSelection, onEdgeSelectionChange };
 
   useEffect(() => {
     const host = canvasHost.current;
@@ -201,8 +214,9 @@ export function Viewer({
       created = new ModelView(host, {
         onHover: setHovered,
         onPick: (tag) => {
-          const { selection: current, onSelectionChange: change } = latest.current;
-          change(toggleFace(current, tag));
+          const now = latest.current;
+          if (now.pickEdges) now.onEdgeSelectionChange(toggleFace(now.edgeSelection, tag));
+          else now.onSelectionChange(toggleFace(now.selection, tag));
         },
       });
     } catch {
@@ -250,7 +264,8 @@ export function Viewer({
         const parsed = parseDisplayMesh(display.value);
         const results = values?.kind === "ok" ? parseResultFields(values.value) : null;
         const faces = new Map(topology.value.faces.map((face) => [face.tag, face]));
-        setLoad({ kind: "shown", key, model: { mesh: parsed, faces, analysis: shownMesh, results } });
+        const edges = topology.value.edges ?? null;
+        setLoad({ kind: "shown", key, model: { mesh: parsed, faces, edges, analysis: shownMesh, results } });
       } catch (error) {
         if (!(error instanceof DisplayMeshError || error instanceof ResultFieldsError)) throw error;
         setLoad({ kind: "failed", problem: error.message });
@@ -284,20 +299,41 @@ export function Viewer({
     framed.current = id;
   }, [model, contour, id]);
 
+  // Edges are drawn over the geometry itself, never over a mesh or results; setMesh clears them.
+  const edges = pickEdges && model !== null && model.analysis === null && model.results === null ? model.edges : null;
+  useEffect(() => {
+    if (!model) return;
+    view.current?.setEdges(edges);
+  }, [model, edges]);
+
   useEffect(() => {
     view.current?.setSelection(selection);
   }, [selection]);
 
-  const clear = useCallback(() => onSelectionChange(new Set()), [onSelectionChange]);
+  useEffect(() => {
+    view.current?.setEdgeSelection(edgeSelection);
+  }, [edgeSelection]);
+
+  const clear = useCallback(() => {
+    if (latest.current.pickEdges) latest.current.onEdgeSelectionChange(new Set());
+    else onSelectionChange(new Set());
+  }, [onSelectionChange]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && latest.current.selection.size > 0) clear();
+      const now = latest.current;
+      if (event.key === "Escape" && (now.pickEdges ? now.edgeSelection : now.selection).size > 0) clear();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [clear]);
 
+  const lengthUnit = useSystemUnit("length");
   const describe = (tag: number) => {
+    if (edges !== null) {
+      const edge = edges.find((e) => e.tag === tag);
+      if (edge === undefined) return `Edge ${tag}`;
+      return `Edge ${tag}, ${Number(fromSi(edge.length, lengthUnit, "length").toPrecision(4))} ${lengthUnit} long`;
+    }
     const face = model?.faces.get(tag);
     if (face === undefined) return `Face ${tag}`;
     const area = Number(fromSi(face.area, areaUnit, "area").toPrecision(4));
@@ -316,7 +352,8 @@ export function Viewer({
 
   const shown = webgl && model !== null && message === null;
   const legend = model?.results && contour !== null && typeof contour !== "string" ? contour : null;
-  const sorted = [...selection].sort((a, b) => a - b);
+  const picking = edges !== null ? { one: "edge", many: "edges" } : { one: "face", many: "faces" };
+  const sorted = [...(edges !== null ? edgeSelection : selection)].sort((a, b) => a - b);
 
   return (
     <main className="pane pane-viewer" aria-label="3D viewer">
@@ -346,13 +383,13 @@ export function Viewer({
             </button>
           </div>
           {!legend && (
-            <section className="viewer-selection" aria-label="Selected faces">
+            <section className="viewer-selection" aria-label={`Selected ${picking.many}`}>
               {sorted.length === 0 ? (
-                <span className="viewer-hint">Click a face to select it. Drag to orbit, scroll to zoom.</span>
+                <span className="viewer-hint">Click {picking.one === "edge" ? "an edge" : "a face"} to select it. Drag to orbit, scroll to zoom.</span>
               ) : (
                 <>
                   <span>
-                    {sorted.length === 1 ? "1 face selected" : `${sorted.length} faces selected`}:{" "}
+                    {sorted.length === 1 ? `1 ${picking.one} selected` : `${sorted.length} ${picking.many} selected`}:{" "}
                     {sorted.join(", ")}
                   </span>
                   <button type="button" onClick={clear}>
