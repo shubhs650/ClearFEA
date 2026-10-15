@@ -2,7 +2,7 @@
 // The setup flow in the whole app (M1.5): start a simulation on a ready geometry, add a
 // material, a fixed support and a pressure from the tree, and see each edit saved.
 
-import type { GeometryView, MeshView, RunView, SimulationSpec, SimulationView, SolveResult } from "@clearfea/spec";
+import type { GeometryView, MeshQuality, MeshView, RunView, SimulationSpec, SimulationView, SolveResult } from "@clearfea/spec";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -671,7 +671,7 @@ describe("mesh", () => {
   });
 
   it("shows the quality summary of a ready mesh (M2.8)", async () => {
-    const quality = {
+    const quality: MeshQuality = {
       shapeMin: 0.183,
       shapeMean: 0.742,
       shapeHistogram: [0, 2, 10, 50, 200, 600, 1100, 1300, 600, 138],

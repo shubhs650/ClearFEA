@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel with no lateral contraction (case values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200, "unit": "GPa" },
+      "poissonsRatio": 0
+    }
+  ],
+  "supports": [
+    { "id": "sym-x", "type": "frictionless", "name": "Symmetry across the hole", "faces": ["x0"] },
+    { "id": "sym-y", "type": "frictionless", "name": "Symmetry along the plate", "faces": ["y0"] },
+    { "id": "mid", "type": "frictionless", "name": "Mid-thickness plane", "faces": ["z0"] }
+  ],
+  "loads": [
+    {
+      "id": "pull",
+      "type": "force",
+      "name": "Pull",
+      "faces": ["end"],
+      "x": { "value": 12.5, "unit": "kN" },
+      "y": { "value": 0, "unit": "lbf" },
+      "z": { "value": 0, "unit": "N" }
+    }
+  ],
+  "mesh": {
+    "size": { "value": 5, "unit": "mm" },
+    "order": 2,
+    "local": [
+      { "id": "hole", "name": "Hole", "scope": "faces", "tags": ["hole"], "size": { "value": 0.02, "unit": "in" } }
+    ]
+  }
+}

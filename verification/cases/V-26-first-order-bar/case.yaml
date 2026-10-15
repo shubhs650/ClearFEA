@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-26: a quarter of a square bar pulled by a force on its end, meshed with first-order
+# (four-node) tetrahedra. Reference values and their derivation: reference.md.
+id: V-26
+title: Bar in tension with first-order elements
+analysis: linear_static
+features: [first-order elements, force, frictionless support, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  start: { min: [0, 0, 0], max: [0, 10, 10] }
+  end: { min: [200, 0, 0], max: [200, 10, 10] }
+  y0: { min: [0, 0, 0], max: [200, 0, 10] }
+  z0: { min: [0, 0, 0], max: [200, 10, 0] }
+  side-y: { min: [0, 10, 0], max: [200, 10, 10] }
+  side-z: { min: [0, 0, 10], max: [200, 10, 10] }
+mesh:
+  coarse: { value: 5, unit: mm }
+  full: { value: 2, unit: mm }
+# The field is uniform stress and linear displacement, which four-node tetrahedra reproduce
+# exactly (reference.md), so every check is tight on both tiers.
+checks:
+  - name: Uniform axial stress F / A (von Mises)
+    quantity: vonMises
+    face: side-y
+    reference: { value: 44.4822, unit: MPa }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: End moves by F L / (E A)
+    quantity: displacement.x
+    face: end
+    reference: { value: 0.00508, unit: in }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Side contracts in y (−ν ε y)
+    quantity: displacement.y
+    face: side-y
+    reference: { value: -0.00212903, unit: mm }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Side contracts in z (−ν ε z)
+    quantity: displacement.z
+    face: side-z
+    reference: { value: -0.00212903, unit: mm }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: The start holds the pull
+    quantity: reaction.x
+    support: start
+    reference: { value: -1000, unit: lbf }
+    tolerance: { coarse: 0.001, full: 0.001 }

@@ -50,7 +50,7 @@ Stress is checked away from supports and load application points unless the case
 | --- | --- | --- | --- |
 | V-01 | Thick cylinder, internal pressure, one end fixed and one open | Lamé (open ends): von Mises stress and radial displacement at the bore and the outside | M1 |
 | V-02 | Cantilever, end load: a force on an end patch of the top face (a pressure until M2.3) | Timoshenko beam: tip deflection under the patch load, bending stress at mid-length; clamp reaction | M1 |
-| V-03 | Plate with central hole in tension | Kirsch factor 3 for a wide plate, with finite-width correction | M2 |
+| V-03 | Plate with central hole in tension: an eighth on three symmetry planes (ν = 0), d/W = 0.1, a local mesh size on the hole | Kirsch factor 3 for a wide plate, with Howland's finite-width correction (Ktg = 3.025): peak stress at the side of the hole; uniform stress at the pulled end | M2 |
 | V-04 | Remote force and moment on a round stub: an axial force through a point off the axis, a torque and a bending moment | Saint-Venant extension, bending and torsion: von Mises on top, underneath and on the side along the middle, which carry the remote point's lever; clamp reaction equals the force (reaction moments with M3.2) | M2 |
 | V-05 | Tank wall strip clamped at its base, water against one side up to 100 mm below its top (ν = 0) | Base reaction ρ g b H²/2 (ρg × depth-weighted area); bending stress from the cubic moment ρ g b (H − z)³/6 at two depths; top deflection of a cantilever under a triangular load | M2 |
 | V-06 | Thin rotating ring: a quarter on three symmetry planes | Plane stress rotating disc (hoop stress ρω²r² in the thin limit): hoop stress and radial growth on both faces; hoop force ρω²t(b³ − a³)/3 across each cut | M2 |
@@ -73,6 +73,7 @@ Stress is checked away from supports and load application points unless the case
 | V-23 | NAFEMS LE10, thick plate under pressure | Published target stress at point D; take the value from the NAFEMS document when implementing | M3 |
 | V-24 | Quarter bar stretched by prescribed end displacements on two symmetry planes | Uniform stress Eδ/L, lateral contraction νεy, end reaction σA | M2 |
 | V-25 | V-09's quarter tube with its outside on an elastic support (a stiff sleeve) | Lamé with σr(b) = −k u(b): von Mises and radial displacement at the bore and the outside; the sleeve's and the cut planes' reactions | M2 |
+| V-26 | V-24's kind of quarter bar pulled by a force on its end, meshed with first-order (four-node) tetrahedra | Uniform stress F/A, end displacement FL/(EA), lateral contraction νεy, start reaction F (exact for four-node tetrahedra) | M2 |
 
 More published benchmarks (NAFEMS thermal and free-vibration sets) are added as their feature lands. Reference values from publications are cited in `reference.md` and never copied wholesale.
 
@@ -82,11 +83,11 @@ Every gate feature must appear in at least one case. Update this table in the sa
 
 | Feature | Cases |
 | --- | --- |
-| Fixed support | V-01, V-02, V-03, V-04, V-05, V-10 |
+| Fixed support | V-01, V-02, V-04, V-05, V-10 |
 | Prescribed displacement | V-24, V-12 |
-| Frictionless / symmetry support | V-09, V-24, V-06, V-07, V-08, V-25 |
+| Frictionless / symmetry support | V-09, V-24, V-06, V-07, V-08, V-25, V-03, V-26 |
 | Elastic support | V-07, V-25 |
-| Force | V-02, V-12 |
+| Force | V-02, V-12, V-03, V-26 |
 | Pressure | V-01, V-23 |
 | Remote force and moment | V-04 |
 | Hydrostatic pressure | V-05 |
@@ -103,9 +104,9 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Thermal stress | V-18 |
 | Temperature-dependent properties | V-19 |
 | Modal | V-20, V-21, V-22 |
-| Reaction balance check | V-04, V-05, V-06, V-07, V-08, V-10, V-25 |
+| Reaction balance check | V-04, V-05, V-06, V-07, V-08, V-10, V-25, V-03, V-26 |
 | Local mesh refinement | V-03 |
-| First-order elements | to be added in M2 |
+| First-order elements | V-26 |
 | Mixed input units | all |
 
 ### Automatic checks on every case
