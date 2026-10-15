@@ -302,7 +302,7 @@
   },
   "systems": {
     "metric-mm": {
-      "name": "Metric, millimetres (mm, N, MPa)",
+      "name": "Metric (mm, N, MPa)",
       "units": {
         "length": "mm",
         "area": "mm²",
@@ -336,7 +336,7 @@
       }
     },
     "us-in": {
-      "name": "US customary, inches (in, lbf, psi)",
+      "name": "US (in, lbf, psi)",
       "units": {
         "length": "in",
         "area": "in²",

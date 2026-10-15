@@ -15,7 +15,7 @@ Current state of the project. Update this file at the end of every working sessi
 | --- | --- | --- | --- |
 | M0 | Bootstrap | In progress | |
 | M1 | Thin slice | Verifying (all tasks merged; exit check is the maintainer's) | |
-| M2 | Structural setup | Not started | |
+| M2 | Structural setup | In progress | |
 | M3 | Results tools | Not started | |
 | M4 | Assemblies | Not started | |
 | M5 | Thermal | Not started | |
@@ -55,6 +55,21 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M1.12 Pre-run validation with a plain-language list beside the Run button
 - [x] M1.13 First verification cases and the `make verify` harness
 - [x] M1.14 One browser end-to-end test of the full slice on a tiny model
+
+### M2 Structural setup
+
+- [x] M2.1 Complete `units.json`; quantity input component; project default system; fixture tests in both languages
+- [ ] M2.2 Prescribed displacement and frictionless/symmetry support (planar faces)
+- [ ] M2.3 Force on a face; gravity; centrifugal load
+- [ ] M2.4 Remote force and moment through a reference point
+- [ ] M2.5 Hydrostatic pressure (fluid density, free-surface level, direction)
+- [ ] M2.6 Elastic support
+- [ ] M2.7 Uniform temperature change
+- [ ] M2.8 Local mesh sizes on faces, edges and bodies; element order choice; quality summary
+- [ ] M2.9 Material library (generic values with sources), custom materials saved per user
+- [ ] M2.10 Mesh reuse across runs by settings hash
+- [ ] M2.11 Benchmark: solver build
+- [ ] M2.12 Estimator v1 fitted from the benchmark data; estimate shown before run; machine size recommendation
 
 ## Maintainer to-do
 
@@ -134,6 +149,8 @@ Written by the last session for the next one. Replace, do not append.
 >
 > Phase-end CI (2026-10-15, ADR-037, Shubham's choice; details await his review): `.github/workflows/phase-end.yml` runs `make verify` (full tier) and `make e2e` as two parallel jobs on GitHub's Ubuntu runners, which have Docker and need no `BUILD_CA`. It runs on a pushed `m<N>-complete` tag, by hand from the Actions tab (tier choice), and on pull requests that touch it or `infra/stack.sh`/`verify.sh`/`e2e.sh`. Closing a milestone now means: all tasks merged, then tag `main` with `m<N>-complete`, and the run on the tag must be green; a red run is fixed first and the tag moved. The result table is on the run's summary page; logs are printed on failure; no artifacts are uploaded. `nightly.yml` stays a no-op placeholder with its schedule. First green run on PR #25 (full tier 15 of 15 in about 2.5 minutes of solving, E-01 passing; each job about 4 minutes in all). Getting there needed three fixes, all in ADR-037 item 6: `verify.sh` creates `VERIFY_OUT`, `e2e.sh` binds Vite to 127.0.0.1 (the runner resolves `localhost` to `::1`), and the workflow sets `BUILDX_BAKE_ENTITLEMENTS_FS=0`. Open: the `m1-complete` tag on main, which closes M1 under the new rule; a timing race in `apps/web/test/Setup.test.tsx` line 357 (`getByText` right after clicking Mesh, before the mesh fetch lands) failed `make test` once in CI and passed on re-run; the fix is `await findByText`, not done here (outside this change).
 
+> M2.1 (2026-10-15): units table version 2, the project's unit system and the shared quantity input (ADR-038, accepted under Shubham's standing M2 instruction, pending his review). `units.json` now has every kind M2 needs (area, moment, density, acceleration, angular velocity, foundation stiffness, temperature, temperature difference, thermal expansion besides length, force and pressure) and three `systems` (`metric-mm` default, `si`, `us-in`); both loaders refuse a system that misses a kind or names a wrong unit. The shared fixture gained 35 hand-worked conversions (temperatures with offsets, differences without) and three refusals, run in both languages. `GET`/`PATCH /api/project` give each user one project ("My project", made on first use) holding `default_unit_system`; `apps/web/src/units/` has `QuantityInput` (replaces the M1.5 `QuantityField`), the `UnitSystemProvider` context and `useProject`. The "Unit system" list sits under the tree; an empty field offers the system's unit and follows a change, stored values keep theirs. Run figures, the legend and the hover line's new face area use the system's units, so switching redraws results without a rerun. Checked with `make dev` and headless Chromium on the V-02 cantilever in inches: system kept after reload, material and pressure entered in psi, area in in², results in psi, MPa and Pa (screenshots in the project's `m2.1/` folder). For M2.2 onward: give each new field a kind from `units.json` (prescribed displacement: length; gravity: acceleration; centrifugal: angularVelocity; elastic support: foundationStiffness; ΔT: temperatureDifference; α: thermalExpansion), and add a kind to every system when one is added. Not done, on purpose: thermal and modal kinds (M5, M6), several projects and attaching geometries to the project, a separate result display-unit choice (M3.7), converting stored values when the system changes.
+
 > Still to watch from the ADR review: browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -148,6 +165,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-15
 
+- M2.1: `units.json` version 2 with every M2 quantity kind and three unit systems checked by both loaders; one project per user holds the chosen system; one shared quantity input offers the system's unit first; results, legend and face areas follow the system without a rerun (ADR-038 accepted under the standing M2 instruction).
 - CI: phase-end workflow runs `make verify` (full tier) and `make e2e` on a milestone tag, by hand, and on changes to it; closing a milestone means tagging `main` with a green run (ADR-037, Shubham's choice of phase-end over nightly).
 - M1.14: `make e2e` runs the first browser end-to-end test, E-01, through a fresh API, worker and web dev server: a 40 × 20 × 10 mm block goes from STEP upload through faces picked in the viewer, material, support, pressure and mesh to a von Mises contour, all in the UI (ADR-036 accepted under the standing M1 instruction). All M1 tasks are merged; the milestone waits on the maintainer's exit check.
 - M1.13: `make verify` runs V-01 (thick cylinder, Lamé) and V-02 (cantilever, Timoshenko beam) through a fresh API and worker, reading results from the run's viewer files, with the automatic balance, warning and metering checks; both pass the coarse and full tiers. V-01 exposed CalculiX's 20-character number fields, now respected by the deck generator (ADR-035 accepted under the standing M1 instruction).
