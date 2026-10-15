@@ -101,6 +101,38 @@ export function sameMeshSettings(
   );
 }
 
+/** Bumped when the mesher changes what the same settings produce, so older meshes stop being reused. */
+export const MESH_SETTINGS_VERSION = 1;
+
+/**
+ * The text the mesh-settings hash is taken of (M2.10, ADR-047): everything that decides a mesh,
+ * which is the geometry, the scale it is imported at (its unit), the global size, the element
+ * order and the local sizes, in the form sameMeshSettings compares them (sizes as entered, local
+ * sizes complete and with sorted tags, in setup order). Keys are written in a fixed order so equal
+ * settings always give equal text.
+ */
+export function meshSettingsText(settings: {
+  geometryId: string;
+  scaling: number;
+  size: Quantity;
+  order: ElementOrder;
+  local: readonly LocalSizeParams[];
+}): string {
+  const quantity = (q: Quantity) => ({ value: q.value, unit: q.unit });
+  return JSON.stringify({
+    version: MESH_SETTINGS_VERSION,
+    geometryId: settings.geometryId,
+    scaling: settings.scaling,
+    size: quantity(settings.size),
+    order: settings.order,
+    local: settings.local.map((l) => ({
+      scope: l.scope,
+      tags: [...l.tags].sort((a, b) => a - b),
+      size: quantity(l.size),
+    })),
+  });
+}
+
 /** True when the load acts on faces the user picks (gravity, centrifugal and temperature act on every body). */
 export function loadHasFaces(load: Load): load is Extract<Load, { faces: number[] }> {
   return load.type === "pressure" || load.type === "force" || load.type === "remote" || load.type === "hydrostatic";

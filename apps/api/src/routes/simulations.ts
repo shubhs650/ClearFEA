@@ -27,7 +27,14 @@ import {
 import { Hono } from "hono";
 import { readBody } from "../body";
 import { type Geometry, geometryKey, getGeometry } from "../db/geometries";
-import { createMesh, simulationMesh } from "../db/meshes";
+import {
+  createMesh,
+  findReusableMesh,
+  linkMesh,
+  type MeshRequest,
+  meshSettingsHash,
+  simulationMesh,
+} from "../db/meshes";
 import { createRun, listRuns } from "../db/runs";
 import {
   createSimulation,
@@ -164,7 +171,9 @@ simulations.get("/:id/mesh", async (c) => {
 
 /**
  * Meshes the simulation's geometry with the mesh settings of its saved spec: global size (M1.6,
- * ADR-028), element order and local sizes (M2.8, ADR-045).
+ * ADR-028), element order and local sizes (M2.8, ADR-045). When the user already has a ready or
+ * still-meshing mesh of the same geometry, scaling and settings, that mesh becomes the
+ * simulation's mesh instead (M2.10, ADR-047).
  */
 simulations.post("/:id/mesh", async (c) => {
   const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
@@ -193,15 +202,24 @@ simulations.post("/:id/mesh", async (c) => {
   if (geometry.status !== "ready" || geometry.scaling === null) {
     return c.json({ error: "Confirm the geometry's length unit before meshing it." }, 409);
   }
-  const { mesh } = await createMesh(c.env.DB, c.var.userId, {
-    simulationId: simulation.id,
+  const request: MeshRequest = {
     geometryId: geometry.id,
     scaling: geometry.scaling,
     size,
     order: elementOrder(simulation.spec),
     local: localSizeParams(simulation.spec),
-  });
-  return c.json({ mesh: meshView(mesh) } satisfies MeshResponse, 201);
+  };
+  const hash = await meshSettingsHash(request);
+  // A mesh with the same settings is reused: no job is queued and nothing is charged (ADR-047).
+  const existing = await findReusableMesh(c.env.DB, c.var.userId, hash);
+  const reuse =
+    existing !== null &&
+    (existing.id === current?.id || (await linkMesh(c.env.DB, c.var.userId, simulation.id, existing.id)));
+  if (reuse) {
+    return c.json({ mesh: meshView(existing), reused: true } satisfies MeshResponse, 200);
+  }
+  const { mesh } = await createMesh(c.env.DB, c.var.userId, { ...request, simulationId: simulation.id, hash });
+  return c.json({ mesh: meshView(mesh), reused: false } satisfies MeshResponse, 201);
 });
 
 simulations.get("/:id/runs", async (c) => {

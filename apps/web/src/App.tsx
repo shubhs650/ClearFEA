@@ -253,6 +253,7 @@ export function App() {
           saved={simulation.save.kind === "saved"}
           requesting={meshes.requesting}
           requestProblem={meshes.requestProblem}
+          reused={meshes.reused}
           onChange={change}
           onGenerate={() => void meshes.generate()}
           onAddLocal={addLocal}

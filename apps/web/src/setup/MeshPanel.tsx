@@ -72,6 +72,7 @@ export function MeshPanel({
   saved,
   requesting,
   requestProblem,
+  reused = false,
   onChange,
   onGenerate,
   onAddLocal,
@@ -83,6 +84,8 @@ export function MeshPanel({
   saved: boolean;
   requesting: boolean;
   requestProblem?: string;
+  /** True when the last request reused this mesh, made earlier with the same settings (M2.10). */
+  reused?: boolean;
   onChange: (spec: SimulationSpec) => void;
   onGenerate: () => void;
   /** Adds a local size of the scope, taking the viewer's selection where it fits. */
@@ -149,6 +152,13 @@ export function MeshPanel({
       {/* A failed mesh's reason is the first note above. */}
       {mesh !== null && mesh.status !== "failed" && (
         <div className="mesh-summary" role="status" aria-label="Latest mesh">
+          {reused && (
+            <p className="field-hint">
+              {mesh.status === "meshing"
+                ? "A mesh with these settings is already being made, so this simulation will use it. It is not made or charged twice."
+                : "Reused the mesh made earlier with these settings. Nothing was meshed or charged again."}
+            </p>
+          )}
           {mesh.status === "meshing" && (
             <p>
               Meshing with a size of {mesh.size.value} {mesh.size.unit}

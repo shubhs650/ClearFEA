@@ -11,11 +11,14 @@ export async function getSimulationMesh(simulationId: string): Promise<ApiResult
   return result.kind === "ok" ? { kind: "ok", value: result.value.mesh } : result;
 }
 
-/** Meshes the simulation's geometry with the mesh size of its saved spec. */
-export async function requestMesh(simulationId: string): Promise<ApiResult<MeshView>> {
+/**
+ * Meshes the simulation's geometry with the mesh settings of its saved spec. reused is true when
+ * a mesh with the same settings already existed and became the simulation's mesh (M2.10).
+ */
+export async function requestMesh(simulationId: string): Promise<ApiResult<{ mesh: MeshView; reused: boolean }>> {
   const path = `/api/simulations/${encodeURIComponent(simulationId)}/mesh`;
   const result = await apiRequest("POST", path, validateMeshResponse);
-  return result.kind === "ok" ? { kind: "ok", value: result.value.mesh } : result;
+  return result.kind === "ok" ? { kind: "ok", value: { mesh: result.value.mesh, reused: result.value.reused === true } } : result;
 }
 
 /** The mesh's surface in the display mesh format (packages/spec/display-mesh.md), unparsed. */

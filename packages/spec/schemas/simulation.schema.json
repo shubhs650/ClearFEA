@@ -547,11 +547,14 @@
       }
     },
     "MeshResponse": {
-      "description": "Answer to POST /api/simulations/{id}/mesh (HTTP 201) and GET /api/meshes/{id}.",
+      "description": "Answer to POST /api/simulations/{id}/mesh (HTTP 201 for a new mesh, 200 when a mesh with the same settings hash is reused, ADR-047) and GET /api/meshes/{id}.",
       "type": "object",
       "additionalProperties": false,
       "required": ["mesh"],
-      "properties": { "mesh": { "$ref": "#/$defs/MeshView" } }
+      "properties": {
+        "mesh": { "$ref": "#/$defs/MeshView" },
+        "reused": { "description": "Present on POST /api/simulations/{id}/mesh: true when an existing mesh of the same geometry, unit and mesh settings was reused, so no mesh job was queued or charged.", "type": "boolean" }
+      }
     },
     "SimulationMeshResponse": {
       "description": "Answer to GET /api/simulations/{id}/mesh: the simulation's latest mesh, or null before the first one is requested.",

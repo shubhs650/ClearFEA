@@ -143,6 +143,8 @@ queued -> claimed -> running -> succeeded
 | `solve` | Frozen spec, mesh | Deck, log, raw output, viewer result files, reaction table | Yes |
 | `report` | Run records, figures, options | PDF and DOCX | No |
 
+A mesh job is queued only when the user has no ready or still-meshing mesh with the same settings hash: SHA-256 of the geometry, its scaling and the global size, order and local sizes as entered (`meshSettingsText` in `packages/spec`). Otherwise that mesh becomes the simulation's mesh, shared by its simulations and runs, and nothing is meshed or charged again (M2.10, ADR-047).
+
 ### Metering
 
 The worker records wall-clock start and end of the billable phase, CPU seconds and peak memory of the Gmsh or CalculiX process. The API computes cost as billable seconds × the hourly rate of the run's machine size ÷ 3600, and writes one ledger entry. Machine start-up and queue time are outside the billable phase.
