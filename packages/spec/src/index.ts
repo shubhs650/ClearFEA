@@ -6,6 +6,7 @@ export {
   displacementAxes,
   emptySimulationSpec,
   hasBodyLoad,
+  hasTemperatureChange,
   loadHasFaces,
   loadKinds,
   type SpecProblem,

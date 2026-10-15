@@ -40,7 +40,7 @@ function complete(): SimulationSpec {
 
 /**
  * M2.3: a force, gravity and a centrifugal load; M2.4: a remote load; M2.5: a hydrostatic pressure;
- * each incomplete and complete.
+ * M2.7: a temperature change; each incomplete and complete.
  */
 function loadCases(full: SimulationSpec): SimulationSpec[] {
   const n = (value: number) => ({ value, unit: "N" });
@@ -55,6 +55,9 @@ function loadCases(full: SimulationSpec): SimulationSpec[] {
   const remote = addLoad(full, "remote", [2]).spec;
   const nm = (value: number) => ({ value, unit: "N·m" });
   const water = addLoad(full, "hydrostatic", [2]).spec;
+  const expanding = { ...full, materials: [{ ...material, thermalExpansion: { value: 12e-6, unit: "1/°C" } }] };
+  const heat = addLoad(full, "temperature", [2]).spec;
+  const warm = { change: { value: 50, unit: "°C" } };
   const fluid = {
     fluidDensity: { value: 1, unit: "g/cm³" },
     gravity: { x: g(0), y: g(0), z: g(-1) },
@@ -94,6 +97,11 @@ function loadCases(full: SimulationSpec): SimulationSpec[] {
     set(water, fluid),
     set(water, { ...fluid, gravity: { x: g(0), y: g(0), z: g(0) } }),
     set(water, { ...fluid, faces: [] }),
+    heat,
+    set(heat, warm),
+    { ...set(heat, warm), materials: expanding.materials },
+    { ...set(heat, { change: { value: 50, unit: "1/°C" } }), materials: expanding.materials },
+    addLoad({ ...set(heat, warm), materials: expanding.materials }, "temperature", []).spec,
   ];
 }
 

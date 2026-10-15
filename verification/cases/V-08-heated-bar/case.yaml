@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-08: a bar held at both ends and warmed uniformly.
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-08
+title: Bar with ends restrained, uniform temperature rise
+analysis: linear_static
+features: [uniform temperature change, frictionless support, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  start: { min: [0, 0, 0], max: [0, 20, 10] }
+  end: { min: [200, 0, 0], max: [200, 20, 10] }
+  y0: { min: [0, 0, 0], max: [200, 0, 10] }
+  z0: { min: [0, 0, 0], max: [200, 20, 0] }
+  side: { min: [0, 20, 0], max: [200, 20, 10] }
+  top: { min: [0, 0, 10], max: [200, 20, 10] }
+mesh:
+  coarse: { value: 10, unit: mm }
+  full: { value: 2.5, unit: mm }
+# The stress is uniform and the displacement linear in position, which the mesh represents
+# exactly (reference.md), so every check is tight on both tiers.
+checks:
+  - name: Uniform axial stress E alpha dT (von Mises)
+    quantity: vonMises
+    face: side
+    reference: { value: 116.969557, unit: MPa }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Start pushes the bar towards +x with E alpha dT A
+    quantity: reaction.x
+    support: start
+    reference: { value: 23.3939115, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: End pushes the bar towards -x with E alpha dT A
+    quantity: reaction.x
+    support: end
+    reference: { value: -23.3939115, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Side grows by (1 + nu) alpha dT b
+    quantity: displacement.y
+    face: side
+    reference: { value: 0.01521, unit: mm }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Top grows by (1 + nu) alpha dT h
+    quantity: displacement.z
+    face: top
+    reference: { value: 0.007605, unit: mm }
+    tolerance: { coarse: 0.001, full: 0.001 }

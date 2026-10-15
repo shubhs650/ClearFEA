@@ -7,6 +7,7 @@
 import {
   displacementAxes,
   hasBodyLoad,
+  hasTemperatureChange,
   type IsotropicMaterial,
   type Load,
   loadHasFaces,
@@ -27,7 +28,7 @@ export type SupportType = Support["type"];
 
 /**
  * The types of load the setup offers (M1.5 pressure; M2.3 force, gravity, centrifugal; M2.4 remote;
- * M2.5 hydrostatic).
+ * M2.5 hydrostatic; M2.7 temperature change).
  */
 export type LoadType = Load["type"];
 
@@ -66,11 +67,15 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   const result = new Map<string, ItemStatus>();
 
   const bodyLoad = hasBodyLoad(spec);
+  const temperatureChange = hasTemperatureChange(spec);
   const materials = spec.materials.map((m) => {
     const missing: string[] = [];
     if (m.youngsModulus === null) missing.push("Enter Young's modulus.");
     if (m.poissonsRatio === null) missing.push("Enter Poisson's ratio.");
     if (bodyLoad && (m.density ?? null) === null) missing.push("Enter the density; gravity and centrifugal loads need it.");
+    if (temperatureChange && (m.thermalExpansion ?? null) === null) {
+      missing.push("Enter the thermal expansion; the temperature change needs it.");
+    }
     const s = status(errorsOf(m.id), missing);
     result.set(m.id, s);
     return s;
@@ -136,6 +141,7 @@ const loadNoun: Record<LoadType, string> = {
   hydrostatic: "hydrostatic pressure",
   gravity: "gravity",
   centrifugal: "centrifugal load",
+  temperature: "temperature change",
 };
 
 function loadMissing(load: Load): string[] {
@@ -157,6 +163,8 @@ function loadMissing(load: Load): string[] {
     if (load.fluidDensity === null) missing.push("Enter the fluid density.");
     if (displacementAxes.some((axis) => load.gravity[axis] === null)) missing.push("Enter the gravity (0 for none).");
     if (displacementAxes.some((axis) => load.freeSurface[axis] === null)) missing.push("Enter a point on the free surface.");
+  } else if (load.type === "temperature") {
+    if (load.change === null) missing.push("Enter the temperature change (negative for cooling).");
   } else {
     if (load.angularVelocity === null) missing.push("Enter the angular velocity.");
     if (displacementAxes.some((axis) => load.axisPoint[axis] === null)) missing.push("Enter a point on the axis.");
@@ -208,6 +216,7 @@ export function addMaterial(spec: SimulationSpec): { spec: SimulationSpec; id: s
     youngsModulus: null,
     poissonsRatio: null,
     density: null,
+    thermalExpansion: null,
   };
   const first = spec.materials.length === 0;
   return {
@@ -248,8 +257,8 @@ export function addFixedSupport(spec: SimulationSpec, faces: readonly number[]):
 
 /**
  * Adds a load of the given type, with every value still to enter. A pressure, force, remote load
- * or hydrostatic pressure takes the given faces; gravity and a centrifugal load act on every body
- * and have none.
+ * or hydrostatic pressure takes the given faces; gravity, a centrifugal load and a temperature
+ * change act on every body and have none.
  */
 export function addLoad(
   spec: SimulationSpec,
@@ -276,8 +285,10 @@ export function addLoad(
                 freeSurface: { ...empty },
               }
             : type === "gravity"
-          ? { ...base, type, ...empty }
-          : { ...base, type, angularVelocity: null, axisPoint: { ...empty }, axisDirection: { ...empty } };
+              ? { ...base, type, ...empty }
+              : type === "temperature"
+                ? { ...base, type, change: null }
+                : { ...base, type, angularVelocity: null, axisPoint: { ...empty }, axisDirection: { ...empty } };
   return { id: load.id, spec: { ...spec, loads: [...spec.loads, load] } };
 }
 

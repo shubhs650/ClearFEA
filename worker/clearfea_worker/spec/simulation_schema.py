@@ -106,6 +106,10 @@ class IsotropicMaterial(BaseModel):
     """
     Mass density, a density quantity greater than zero (M2.3). Needed only by gravity and centrifugal loads; absent or null until entered.
     """
+    thermal_expansion: Annotated[Quantity | None, Field(alias="thermalExpansion")] = None
+    """
+    Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.
+    """
 
 
 class FixedSupport(BaseModel):
@@ -238,6 +242,21 @@ class GravityLoad(BaseModel):
     z: OptionalQuantity
 
 
+class TemperatureLoad(BaseModel):
+    """
+    A uniform temperature change of every body from the stress-free state (M2.7): each material expands by its thermal expansion coefficient times the change, and the supports resist it. change is a temperatureDifference quantity, null until entered; a fall is negative. One per setup.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: ItemId
+    type: Literal["temperature"]
+    name: ItemName
+    change: OptionalQuantity
+
+
 class AxisPoint(BaseModel):
     """
     A point in global coordinates; each coordinate a length quantity, null until entered.
@@ -360,7 +379,15 @@ class HydrostaticLoad(BaseModel):
     """
 
 
-type Load = PressureLoad | ForceLoad | RemoteLoad | HydrostaticLoad | GravityLoad | CentrifugalLoad
+type Load = (
+    PressureLoad
+    | ForceLoad
+    | RemoteLoad
+    | HydrostaticLoad
+    | GravityLoad
+    | CentrifugalLoad
+    | TemperatureLoad
+)
 
 
 class MeshSettings(BaseModel):
@@ -376,7 +403,7 @@ class MeshSettings(BaseModel):
 
 class SimulationSpec(BaseModel):
     """
-    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
     """
 
     model_config = ConfigDict(

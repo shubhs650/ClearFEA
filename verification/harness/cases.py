@@ -327,7 +327,8 @@ def applied_load(spec: dict[str, Any], surface: Surface) -> tuple[list[float], f
     force (its moment adds no force). A hydrostatic pressure, rho g . (x - s) below the free
     surface through s and nothing above it, also pushes into the body; it is integrated
     exactly over each triangle's wet part. Gravity and a centrifugal load act on the volume the
-    surface encloses, with the density of the (single) material.
+    surface encloses, with the density of the (single) material. A temperature change adds
+    nothing.
     Values in newtons.
     """
     magnitude: dict[int, float] = {}
@@ -361,8 +362,9 @@ def applied_load(spec: dict[str, Any], surface: Surface) -> tuple[list[float], f
             g = [to_si(load[a]["value"], load[a]["unit"], "acceleration") for a in "xyz"]
             for i in range(3):
                 gravity[i] += g[i]
-        else:
+        elif load["type"] == "centrifugal":
             spins.append(load)
+        # A temperature change applies no force: its reactions balance each other (M2.7).
     for tag, a, b, c in _triangles(surface):
         p = magnitude.get(tag)
         if p is None:

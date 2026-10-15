@@ -183,6 +183,23 @@ describe("pre-run validation", () => {
     ]);
   });
 
+  it("asks a temperature change for its value and every material for a thermal expansion (M2.7)", () => {
+    const s = spec();
+    s.loads = [{ id: "heat-1", type: "temperature", name: "Warm-up", change: null }];
+    expect(preRunProblems(s, topology)).toEqual([
+      {
+        item: "steel",
+        message: 'Material "Structural steel" has no thermal expansion, which a temperature change needs. Enter it.',
+      },
+      { item: "heat-1", message: 'Load "Warm-up" has no temperature change. Enter it (negative for cooling).' },
+    ]);
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    s.materials = [{ ...steel, thermalExpansion: { value: 6.5, unit: "µin/(in·°F)" } }];
+    s.loads = [{ id: "heat-1", type: "temperature", name: "Warm-up", change: { value: -40, unit: "°F" } }];
+    expect(preRunProblems(s, topology)).toEqual([]);
+  });
+
   it("asks a remote load for faces, a reference point, a force and a moment (M2.4)", () => {
     const s = spec();
     const mm = (value: number) => ({ value, unit: "mm" });
