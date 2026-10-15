@@ -23,15 +23,22 @@ describe("generated validators", () => {
   });
 
   it("tell the two completion shapes apart", () => {
-    expect(validateCompleteRequest({ workerId: "w", status: "succeeded", result: {} }).ok).toBe(true);
+    const metering = { billableMs: 2500 };
+    expect(validateCompleteRequest({ workerId: "w", status: "succeeded", result: {}, metering }).ok).toBe(true);
     expect(
       validateCompleteRequest({
         workerId: "w",
         status: "failed",
         failureCategory: "user_fault",
         failureCause: "mesh_failed",
+        metering,
       }).ok,
     ).toBe(true);
+    // Every completion carries the measured time (ADR-033), in whole milliseconds.
+    expect(validateCompleteRequest({ workerId: "w", status: "succeeded", result: {} }).ok).toBe(false);
+    expect(validateCompleteRequest({ workerId: "w", status: "succeeded", metering: { billableMs: 1.5 } }).ok).toBe(
+      false,
+    );
     expect(validateCompleteRequest({ workerId: "w", status: "failed" }).ok).toBe(false);
     expect(validateCompleteRequest({ workerId: "", status: "succeeded" }).ok).toBe(false);
   });
