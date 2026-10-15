@@ -47,11 +47,12 @@ class Box:
 class Check:
     name: str
     quantity: str
-    face: str
+    face: str | None  # None for a reaction check
     box: Box | None
     reference: float  # SI
     unit: str  # the reference's unit as entered, used for the table
     tolerance: dict[str, float]  # tier -> relative tolerance
+    support: str | None = None  # the spec support id of a reaction check
 
 
 @dataclass(frozen=True)
@@ -67,7 +68,8 @@ class Case:
     spec: dict[str, Any]  # spec.json, faces by name
 
 
-#: Quantity a check can compare -> its units.json kind. Radial is about the z axis.
+#: Quantity a check can compare -> its units.json kind. Radial is about the z axis. A reaction
+#: is a component of one support's total reaction in the run's result (M2.2).
 QUANTITIES = {
     "vonMises": "pressure",
     "displacement": "length",
@@ -75,6 +77,9 @@ QUANTITIES = {
     "displacement.y": "length",
     "displacement.z": "length",
     "displacement.radial": "length",
+    "reaction.x": "force",
+    "reaction.y": "force",
+    "reaction.z": "force",
 }
 
 
@@ -106,7 +111,14 @@ def load_case(folder: Path) -> Case:
             raise CaseError(
                 f"{folder.name}: unknown quantity {quantity}; use one of {list(QUANTITIES)}."
             )
-        if item["face"] not in faces:
+        support = None
+        if quantity.startswith("reaction."):
+            support = item.get("support")
+            if support not in {s["id"] for s in spec["supports"]}:
+                raise CaseError(
+                    f"{folder.name}: check {item['name']!r} must name a support id of spec.json."
+                )
+        elif item.get("face") not in faces:
             raise CaseError(f"{folder.name}: check {item['name']!r} names an unknown face.")
         ref = item["reference"]
         tolerance = {tier: float(item["tolerance"][tier]) for tier in TIERS}
@@ -114,11 +126,12 @@ def load_case(folder: Path) -> Case:
             Check(
                 name=item["name"],
                 quantity=quantity,
-                face=item["face"],
+                face=item.get("face"),
                 box=_box(item["box"], unit, item["name"]) if "box" in item else None,
                 reference=to_si(float(ref["value"]), ref["unit"], QUANTITIES[quantity]),
                 unit=ref["unit"],
                 tolerance=tolerance,
+                support=support,
             )
         )
     allowed = [re.compile(p) for p in raw.get("allowedWarnings", [])]
@@ -179,6 +192,7 @@ def evaluate(
     check: Check, surface: Surface, fields: dict[str, list[tuple[float, ...]]], tags: dict[str, int]
 ) -> tuple[float, int]:
     """Mean of the check's quantity over the surface vertices of its face inside its box."""
+    assert check.face is not None
     tag = tags[check.face]
     values = []
     for patch in surface.patches:
@@ -195,6 +209,22 @@ def evaluate(
             f"No surface vertex of face {check.face} lies in the box of {check.name!r}."
         )
     return sum(values) / len(values), len(values)
+
+
+def reaction(check: Check, reactions: list[dict[str, Any]]) -> float:
+    """The component a reaction check names of its support's total reaction, in newtons."""
+    [force] = [r["force"] for r in reactions if r["supportId"] == check.support]
+    return float(force["xyz".index(check.quantity[-1])])
+
+
+def balance(load: list[float], gross: float, reactions: list[list[float]]) -> tuple[float, float]:
+    """How far the reactions are from balancing the applied load, and the size it is measured
+    against: the sum of the applied loads' sizes, or with no load (a prescribed displacement,
+    M2.2) the sum of the reactions' sizes, which must then balance each other."""
+    total = [sum(r[i] for r in reactions) for i in range(3)]
+    if gross == 0.0:
+        gross = sum(math.sqrt(sum(c * c for c in r)) for r in reactions)
+    return math.dist(total, [-c for c in load]), gross
 
 
 def applied_load(spec: dict[str, Any], surface: Surface) -> tuple[list[float], float]:

@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-24: a quarter of a square bar stretched by prescribed displacements of its ends, on two
+# frictionless symmetry planes. Reference values and their derivation: reference.md.
+id: V-24
+title: Bar stretched by a prescribed displacement
+analysis: linear_static
+features: [prescribed displacement, frictionless support, no load, mixed input units]
+geometry:
+  unit: in
+faces:
+  start: { min: [0, 0, 0], max: [0, 0.5, 0.5] }
+  end: { min: [4, 0, 0], max: [4, 0.5, 0.5] }
+  sym-y: { min: [0, 0, 0], max: [4, 0, 0.5] }
+  sym-z: { min: [0, 0, 0], max: [4, 0.5, 0] }
+  side-y: { min: [0, 0.5, 0], max: [4, 0.5, 0.5] }
+  side-z: { min: [0, 0, 0.5], max: [4, 0.5, 0.5] }
+mesh:
+  coarse: { value: 0.25, unit: in }
+  full: { value: 2, unit: mm }
+# The field is uniform stress and linear displacement, which every element reproduces
+# exactly; the tolerances only allow for the six digits of the solver's result file.
+checks:
+  - name: von Mises stress at the end (E ε)
+    quantity: vonMises
+    face: end
+    reference: { value: 14.5, unit: ksi }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: von Mises stress along the side
+    quantity: vonMises
+    face: side-y
+    reference: { value: 14.5, unit: ksi }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: End moved by the prescribed 0.0508 mm
+    quantity: displacement.x
+    face: end
+    reference: { value: 0.002, unit: in }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Side contracts in y (−ν ε y)
+    quantity: displacement.y
+    face: side-y
+    reference: { value: -0.0000725, unit: in }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Side contracts in z (−ν ε z)
+    quantity: displacement.z
+    face: side-z
+    reference: { value: -0.0000725, unit: in }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Force needed at the end (σ A)
+    quantity: reaction.x
+    support: end
+    reference: { value: 3.625, unit: kip }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Force at the start
+    quantity: reaction.x
+    support: start
+    reference: { value: -3.625, unit: kip }
+    tolerance: { coarse: 0.001, full: 0.001 }

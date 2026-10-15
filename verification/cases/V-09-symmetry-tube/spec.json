@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200000000000, "unit": "Pa" },
+      "poissonsRatio": 0.3
+    }
+  ],
+  "supports": [
+    { "id": "cut-30", "type": "frictionless", "name": "Symmetry plane at 30°", "faces": ["cut-30"] },
+    { "id": "cut-120", "type": "frictionless", "name": "Symmetry plane at 120°", "faces": ["cut-120"] },
+    { "id": "base", "type": "frictionless", "name": "Base", "faces": ["base"] }
+  ],
+  "loads": [
+    {
+      "id": "pressure-1",
+      "type": "pressure",
+      "name": "Internal pressure",
+      "faces": ["bore"],
+      "magnitude": { "value": 10000, "unit": "kPa" }
+    }
+  ],
+  "mesh": { "size": { "value": 1, "unit": "cm" } }
+}

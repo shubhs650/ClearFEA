@@ -11,7 +11,6 @@ JSON, to --out. Exit status 1 if any check fails.
 
 import argparse
 import json
-import math
 import subprocess
 import sys
 import tempfile
@@ -31,10 +30,12 @@ from .cases import (
     CaseError,
     Check,
     applied_load,
+    balance,
     build_spec,
     evaluate,
     load_case,
     name_faces,
+    reaction,
     unexpected_warnings,
 )
 from .client import ApiError, Client
@@ -142,14 +143,18 @@ def run_case(
     log = api.bytes(f"/api/runs/{rid}/files/solver.log").decode("utf-8", "replace")
 
     for check in case.checks:
-        value, count = evaluate(check, surface, fields, tags)
+        if check.support is not None:
+            value, where = reaction(check, run["result"]["reactions"]), f"support {check.support}"
+        else:
+            value, count = evaluate(check, surface, fields, tags)
+            where = f"{count} vertices"
         error = value / check.reference - 1
         limit = check.tolerance[tier]
         outcome.rows.append(
             Row(
                 check.name,
                 _shown(check.reference, check),
-                f"{_shown(value, check)} ({count} vertices)",
+                f"{_shown(value, check)} ({where})",
                 f"{100 * error:+.2f} %",
                 f"{100 * limit:g} %",
                 abs(error) <= limit,
@@ -158,14 +163,16 @@ def run_case(
 
     # Automatic checks on every case (docs/VERIFICATION.md).
     load, gross = applied_load(spec, surface)
-    reaction = [sum(r["force"][i] for r in run["result"]["reactions"]) for i in range(3)]
-    imbalance = math.dist(reaction, [-c for c in load]) / gross
+    forces = [r["force"] for r in run["result"]["reactions"]]
+    total = [sum(f[i] for f in forces) for i in range(3)]
+    miss, size = balance(load, gross, forces)
+    imbalance = miss / size
     outcome.rows.append(
         Row(
             "Reactions balance the applied load",
             "applied " + ", ".join(f"{c:.5g}" for c in load) + " N",
-            "reactions " + ", ".join(f"{c:.5g}" for c in reaction) + " N",
-            f"{100 * imbalance:.4f} % of {gross:.5g} N",
+            "reactions " + ", ".join(f"{c:.5g}" for c in total) + " N",
+            f"{100 * imbalance:.4f} % of {size:.5g} N",
             f"{100 * BALANCE_TOLERANCE:g} %",
             imbalance <= BALANCE_TOLERANCE,
         )
