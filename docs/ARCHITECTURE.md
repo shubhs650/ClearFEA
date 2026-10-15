@@ -215,7 +215,7 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 
 1. Parse nodal displacement, stress, strain, temperature and heat flux from the solver output.
 2. Compute derived fields: von Mises, principal stresses, safety factor against yield.
-3. Extract the outer surface of each body. Write per-field binary arrays for surface nodes only. This is what the viewer loads first, and it stays small even for the 2-million-element target.
+3. Extract the outer surface of each body. Write per-field binary arrays for surface nodes only. This is what the viewer loads first, and it stays small even for the 2-million-element target. Since M1.9 these are `surface.bin` (display mesh format) and `fields.bin` (`packages/spec/result-fields.md`, ADR-031).
 4. Write volume data in a chunked binary form for cut planes and probes.
 5. Write a summary JSON: min and max per field with locations, reaction table, applied-load totals and the balance check, mode frequencies, solver warnings.
 
