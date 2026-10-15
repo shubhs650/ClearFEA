@@ -175,7 +175,7 @@ const SOLVED: SolveResult = {
   software: { calculix: "2.21" },
 };
 
-const RUN_FILES = ["deck.inp", "solver.log", "results.frd", "results.dat"];
+const RUN_FILES = ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin"];
 
 /** Alice's simulation with a ready mesh of its saved size. */
 async function meshed(): Promise<string> {
@@ -351,6 +351,45 @@ describe("a finished solve job", () => {
     expect(runs.value.runs.map((r) => r.id)).toEqual([run.id]);
     // A finished run lets the next one start.
     expect((await startRun(id)).status).toBe(201);
+  });
+
+  it("serves the viewer's result files once the run has succeeded", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    for (const file of ["surface", "fields"]) {
+      const early = await call("GET", `/api/runs/${run.id}/${file}`, { cookie: alice });
+      expect(early.status).toBe(409);
+      expect(((await early.json()) as { error: string }).error).toContain("still solving");
+    }
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    for (const [file, name] of [
+      ["surface", "surface.bin"],
+      ["fields", "fields.bin"],
+    ]) {
+      const response = await call("GET", `/api/runs/${run.id}/${file}`, { cookie: alice });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toBe("application/octet-stream");
+      expect(new TextDecoder().decode(await response.arrayBuffer())).toBe(`${name} content`);
+      // Another user's run answers like a missing one.
+      expect((await call("GET", `/api/runs/${run.id}/${file}`, { cookie: bob })).status).toBe(404);
+    }
+  });
+
+  it("has no result files for a failed run", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await complete(job.id, {
+      status: "failed",
+      failureCategory: "user_fault",
+      failureCause: "setup_invalid",
+      failureMessage: "Add a support.",
+    });
+    const response = await call("GET", `/api/runs/${run.id}/surface`, { cookie: alice });
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as { error: string }).error).toContain("failed");
   });
 
   it("shows the worker's message when the setup could not be solved", async () => {

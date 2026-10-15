@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import type { ModelViewEvents } from "../src/viewer/ModelView";
 import { readFixture } from "./fixtures";
+import { twoFacesFields } from "./resultFiles";
 
 // jsdom has no WebGL: a stand-in scene lets the test pick faces and see the selection.
 const scene = vi.hoisted(() => ({ events: [] as ModelViewEvents[], selections: [] as number[][], edges: [] as string[] }));
@@ -440,10 +441,20 @@ describe("run", () => {
         },
         "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
         "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
+        "GET /api/runs/r1/surface": { status: 200, bytes: display },
+        "GET /api/runs/r1/fields": { status: 200, bytes: twoFacesFields() },
       }),
     );
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    // The viewer shows the results: von Mises on the exaggerated deformed shape by default.
+    const legend = await screen.findByLabelText("Legend");
+    expect(legend.textContent).toContain("Von Mises stress (MPa)");
+    expect(legend.textContent).toContain("Deformed shape, scale ×5");
+    fireEvent.change(settings().getByLabelText("Quantity"), { target: { value: "displacement" } });
+    fireEvent.change(settings().getByLabelText("Shape"), { target: { value: "undeformed" } });
+    expect(legend.textContent).toContain("Displacement magnitude (mm)");
+    expect(legend.textContent).toContain("Undeformed shape");
     const figures = within(settings().getByLabelText("Run results"));
     expect(figures.getByText("0.12 mm")).toBeTruthy();
     expect(figures.getByText("at (100, 50, 20) mm")).toBeTruthy();

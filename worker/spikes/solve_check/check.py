@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """M1.8 solve check: run the solve job's steps on a meshed bar and compare the result reader's
-figures with closed-form answers.
+figures with closed-form answers. M1.9 adds checks of the viewer's result files.
 
 Script only, not part of the worker package or its tests (the fast tier runs no solver). It
 checks what the result reader alone decides: which numbers of the .frd and .dat files become
@@ -25,11 +25,13 @@ from check import E_SI, P_SI, H, L, box_faces, spec, write_bar  # noqa: E402
 
 from clearfea_worker.deck import generate_deck  # noqa: E402
 from clearfea_worker.deck.elements import FACE_NODES  # noqa: E402
+from clearfea_worker.geometry.display import read_display  # noqa: E402
 from clearfea_worker.geometry.importer import import_geometry  # noqa: E402
 from clearfea_worker.meshing.mesher import mesh_geometry  # noqa: E402
 from clearfea_worker.meshing.volume import read_volume_mesh  # noqa: E402
 from clearfea_worker.results import read_results  # noqa: E402
 from clearfea_worker.results.fields import von_mises_field  # noqa: E402
+from clearfea_worker.results.surface import read_fields, write_viewer_files  # noqa: E402
 from clearfea_worker.solver import run_calculix  # noqa: E402
 from clearfea_worker.spec.geometry_schema import Topology  # noqa: E402
 from clearfea_worker.versions import calculix_version  # noqa: E402
@@ -51,6 +53,60 @@ def solve(spec_, mesh, work: Path):  # type: ignore[no-untyped-def]
 
 def rel(a: float, b: float) -> float:
     return abs(a - b) / abs(b)
+
+
+def viewer_rows(mesh, fields, result, faces, work: Path) -> list[Row]:  # type: ignore[no-untyped-def]
+    """M1.9: the viewer's surface.bin and fields.bin, read back as the viewer would."""
+    files = write_viewer_files(mesh, fields, work)
+    patches = read_display(files.surface_path)
+    _, (displacement, mises) = read_fields(files.fields_path)
+    rows: list[Row] = []
+    total, wrong = 0.0, 0
+    tag_normal = {tag: normal for tag, normal, _ in faces.values()}
+    for patch in patches:
+        p = patch.positions
+        for k in range(len(patch.triangles) // 3):
+            a, b, c = (p[3 * v : 3 * v + 3] for v in patch.triangles[3 * k : 3 * k + 3])
+            u = [b[i] - a[i] for i in range(3)]
+            w = [c[i] - a[i] for i in range(3)]
+            n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]]
+            total += 0.5 * math.sqrt(sum(x * x for x in n))
+            if sum(n[i] * tag_normal[patch.tag][i] for i in range(3)) <= 0:
+                wrong += 1
+    length, side = L / 1000, H / 1000
+    surface_area = 4 * length * side + 2 * side * side
+    rows.append(
+        (
+            "viewer: surface area, triangles facing outwards",
+            f"{surface_area:.6g} m^2, all outwards",
+            f"{total:.6g} m^2, {wrong} facing inwards",
+            rel(total, surface_area) < 1e-5 and wrong == 0,
+        )
+    )
+    v = displacement.values
+    largest = max(
+        math.sqrt(v[3 * k] ** 2 + v[3 * k + 1] ** 2 + v[3 * k + 2] ** 2) for k in range(len(v) // 3)
+    )
+    d = result.displacement.max.value
+    rows.append(
+        (
+            "viewer: largest surface displacement",
+            f"{d:.6g} m (the summary's, float32)",
+            f"{largest:.6g} m",
+            rel(largest, d) < 1e-6,
+        )
+    )
+    vm = result.von_mises
+    lo, hi = min(mises.values), max(mises.values)
+    rows.append(
+        (
+            "viewer: surface von Mises range",
+            f"{vm.min.value:.6g} to {vm.max.value:.6g} Pa or inside it, max equal",
+            f"{lo:.6g} to {hi:.6g} Pa",
+            lo >= vm.min.value * (1 - 1e-6) and rel(hi, vm.max.value) < 1e-6,
+        )
+    )
+    return rows
 
 
 def main() -> int:
@@ -194,6 +250,9 @@ def main() -> int:
             math.dist(reaction, [0, free, 0]) < 1e-6 * load,
         )
     )
+    viewer_dir = root / "beam-viewer"
+    viewer_dir.mkdir()
+    rows.extend(viewer_rows(mesh, fields, result, faces, viewer_dir))
     d = result.displacement.max
     rows.append(
         (

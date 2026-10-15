@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Client for a simulation's runs and /api/runs (M1.8). Shapes: simulation.schema.json.
+// Client for a simulation's runs and /api/runs (M1.8), and a run's result files (M1.9).
+// Shapes: simulation.schema.json.
 
 import {
   type RunLogResponse,
@@ -8,7 +9,7 @@ import {
   validateRunLogResponse,
   validateRunResponse,
 } from "@clearfea/spec";
-import { type ApiResult, apiRequest } from "./request";
+import { type ApiResult, apiBinary, apiRequest } from "./request";
 
 /** The simulation's runs, newest first. */
 export async function listRuns(simulationId: string): Promise<ApiResult<RunView[]>> {
@@ -32,4 +33,14 @@ export async function getRun(runId: string): Promise<ApiResult<RunView>> {
 /** The solver log written after chunk `after`. */
 export function getRunLog(runId: string, after: number): Promise<ApiResult<RunLogResponse>> {
   return apiRequest("GET", `/api/runs/${encodeURIComponent(runId)}/log?after=${after}`, validateRunLogResponse);
+}
+
+/** The run's mesh surface in the display mesh format (packages/spec/display-mesh.md), unparsed. */
+export function fetchRunSurface(runId: string): Promise<ApiResult<ArrayBuffer>> {
+  return apiBinary(`/api/runs/${encodeURIComponent(runId)}/surface`);
+}
+
+/** The run's result values per surface vertex (packages/spec/result-fields.md), unparsed. */
+export function fetchRunFields(runId: string): Promise<ApiResult<ArrayBuffer>> {
+  return apiBinary(`/api/runs/${encodeURIComponent(runId)}/fields`);
 }

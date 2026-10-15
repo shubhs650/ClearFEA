@@ -1,27 +1,32 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The three.js scene behind the viewer: renders a display mesh, orbits and zooms with the
 // mouse, and reports which face is under the pointer and which face was clicked. React state
-// (selection, hover text) lives in Viewer.tsx; this class only draws what it is told.
+// (selection, hover text) lives in Viewer.tsx; this class only draws what it is told. Given
+// band coordinates per vertex (M1.9), it colours the model in result bands instead of by face.
 
 import {
   AmbientLight,
   BufferAttribute,
   BufferGeometry,
   Color,
+  DataTexture,
   DirectionalLight,
   LineBasicMaterial,
   LineSegments,
   Mesh,
   MeshStandardMaterial,
+  NearestFilter,
   PerspectiveCamera,
   Raycaster,
   Scene,
+  SRGBColorSpace,
   Vector2,
   Vector3,
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { type DisplayFace, type DisplayMesh, faceAtTriangle, faceOutlines, triangleEdges } from "./displayMesh";
+import { BAND_COLOURS } from "./resultFields";
 
 const COLOURS = {
   background: new Color("#e9ecef"),
@@ -35,6 +40,21 @@ const COLOURS = {
 
 /** Lines drawn over the faces: the face outlines of a geometry, or every element edge of a mesh. */
 export type Edges = "outlines" | "elements";
+
+/** A texture with one texel per result band, sampled without blending so bands stay sharp. */
+function bandTexture(): DataTexture {
+  const texels = new Uint8Array(BAND_COLOURS.length * 4);
+  BAND_COLOURS.forEach((hex, k) => {
+    const value = Number.parseInt(hex.slice(1), 16);
+    texels.set([(value >> 16) & 255, (value >> 8) & 255, value & 255, 255], k * 4);
+  });
+  const texture = new DataTexture(texels, BAND_COLOURS.length, 1);
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.colorSpace = SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
 
 /** A press that moves less than this many pixels before release is a click, not an orbit. */
 const CLICK_SLOP_PX = 4;
@@ -61,6 +81,9 @@ export class ModelView {
   private selected = new Set<number>();
   private pressedAt: { x: number; y: number } | null = null;
   private frame = 0;
+  private bands: DataTexture | null = null;
+  /** Whether a click picks a face; off while the model shows results. */
+  private picking = true;
 
   /** Throws if the browser cannot create a WebGL context. */
   constructor(
@@ -95,23 +118,36 @@ export class ModelView {
 
   /**
    * Replaces the model. The camera is framed on it unless `keepView` is set, which a switch
-   * between a geometry and its mesh uses so the user keeps looking where they were.
+   * between a geometry, its mesh and its results uses so the user keeps looking where they were.
+   * With `bandCoordinates` (0 for the smallest value to 1 for the largest, one per vertex) the
+   * model is coloured in result bands and clicks no longer pick faces.
    */
-  setMesh(mesh: DisplayMesh, edges: Edges = "outlines", keepView = false): void {
+  setMesh(mesh: DisplayMesh, edges: Edges = "outlines", keepView = false, bandCoordinates?: Float32Array): void {
     this.clearModel();
     this.mesh = mesh;
     this.facesByTag = new Map(mesh.faces.map((face) => [face.tag, face]));
+    this.picking = bandCoordinates === undefined;
 
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new BufferAttribute(mesh.positions, 3));
     geometry.setAttribute("color", new BufferAttribute(new Float32Array(mesh.positions.length), 3));
+    if (bandCoordinates !== undefined) {
+      const uv = new Float32Array(bandCoordinates.length * 2);
+      bandCoordinates.forEach((u, v) => {
+        uv[v * 2] = u;
+        uv[v * 2 + 1] = 0.5;
+      });
+      geometry.setAttribute("uv", new BufferAttribute(uv, 2));
+      this.bands ??= bandTexture();
+    }
     geometry.setIndex(new BufferAttribute(mesh.indices, 1));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
     this.surface = new Mesh(
       geometry,
       new MeshStandardMaterial({
-        vertexColors: true,
+        vertexColors: bandCoordinates === undefined,
+        map: bandCoordinates === undefined ? null : this.bands,
         roughness: 0.75,
         metalness: 0.05,
         // Push the faces back a little so the outlines draw cleanly on top.
@@ -165,6 +201,7 @@ export class ModelView {
     this.resize.disconnect();
     this.controls.dispose();
     this.clearModel();
+    this.bands?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -268,6 +305,6 @@ export class ModelView {
     if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return;
     const tag = this.faceAt(event);
     this.setHovered(tag);
-    if (tag !== null) this.events.onPick(tag);
+    if (tag !== null && this.picking) this.events.onPick(tag);
   };
 }

@@ -11,7 +11,7 @@ import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { GroupPanel, MaterialPanel, PressurePanel, SupportPanel } from "./setup/ItemPanels";
 import { MeshPanel } from "./setup/MeshPanel";
-import { RunPanel } from "./setup/RunPanel";
+import { type ResultChoice, RunPanel, STRESS_UNIT } from "./setup/RunPanel";
 import {
   addFixedSupport,
   addMaterial,
@@ -54,6 +54,7 @@ export function App() {
   // The tree item whose settings are shown: "geometry", a group, or a spec item's id.
   const [selected, setSelected] = useState("geometry");
   const [geometryRefresh, setGeometryRefresh] = useState(0);
+  const [resultChoice, setResultChoice] = useState<ResultChoice>({ quantity: "vonMises", deformation: "auto" });
 
   // Face tags belong to one geometry, so a different geometry starts with no selection.
   const geometryId = geometry?.id;
@@ -88,6 +89,9 @@ export function App() {
   const { mesh } = meshes;
   const runs = useRun(setup.kind === "open" ? setup.id : null, signedOut);
   const { run } = runs;
+  const lengthUnit = geometry?.confirmedUnit ?? "mm";
+  // One object per unit choice, so the viewer does not redraw the results on every render.
+  const resultUnits = useMemo(() => ({ length: lengthUnit, pressure: STRESS_UNIT }), [lengthUnit]);
   const statuses = useMemo(() => {
     if (setup.kind !== "open") return new Map<string, ItemStatus>();
     const result = setupStatus(setup.spec, setup.topology);
@@ -171,11 +175,13 @@ export function App() {
           run={run}
           log={runs.log}
           blocked={runBlocked()}
-          lengthUnit={geometry?.confirmedUnit ?? "mm"}
+          lengthUnit={lengthUnit}
           supportNames={new Map(spec.supports.map((s) => [s.id, s.name]))}
           requesting={runs.requesting}
           requestProblem={runs.requestProblem}
           onRun={() => void runs.start()}
+          choice={resultChoice}
+          onChoiceChange={setResultChoice}
         />
       );
     }
@@ -243,6 +249,11 @@ export function App() {
       <Viewer
         geometry={geometry}
         mesh={!showGeometry && selected === "mesh" ? mesh : null}
+        result={
+          !showGeometry && selected === "run" && run?.status === "succeeded"
+            ? { run, ...resultChoice, units: resultUnits }
+            : null
+        }
         selection={selection}
         onSelectionChange={setSelection}
         onSignedOut={signedOut}
