@@ -15,7 +15,7 @@ CalculiX is well tested. ClearFEA adds layers where errors can enter: unit conve
 
 Rules:
 
-- A milestone closes by tagging `main` with `m<N>-complete` once its tasks have merged. It counts as closed only when the phase-end run on that tag is green; a red run is fixed before the next milestone starts, and the tag moves to the fixing commit.
+- A milestone closes, once its tasks have merged, on a green phase-end run on `main`: started by pushing an `m<N>-complete` tag, or by hand from the Actions tab on `main` at the full tier, with the run linked in `docs/PROGRESS.md`. A red run is fixed before the next milestone starts, and the run is repeated on the fixing commit.
 - A red phase-end or local verification run is fixed before new feature work.
 - Before opening a pull request that touches a physics-critical module, run the affected cases locally and paste the result table into the description.
 - Tolerances are never loosened to make a case pass without a written reason in the case file.
