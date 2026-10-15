@@ -211,10 +211,37 @@
         "axisDirection": { "description": "The direction of the axis of rotation.", "$ref": "#/$defs/AxisDirection" }
       }
     },
+    "Components": {
+      "description": "Components along the global x, y and z axes; each a quantity, null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "$ref": "#/$defs/OptionalQuantity" },
+        "y": { "$ref": "#/$defs/OptionalQuantity" },
+        "z": { "$ref": "#/$defs/OptionalQuantity" }
+      }
+    },
+    "RemoteLoad": {
+      "description": "A force and a moment acting at a reference point, carried to the faces as the statically equivalent linear traction (a deformable, distributing connection; consistent nodal loads in the deck). The force acting at the point also turns the faces about it. Force components are force quantities, moment components moment quantities, in global axes and right-handed; each null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces", "point", "force", "moment"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "remote" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" },
+        "point": { "description": "The reference point the force and moment act at.", "$ref": "#/$defs/AxisPoint" },
+        "force": { "description": "The force at the reference point.", "$ref": "#/$defs/Components" },
+        "moment": { "description": "The moment at the reference point.", "$ref": "#/$defs/Components" }
+      }
+    },
     "Load": {
       "oneOf": [
         { "$ref": "#/$defs/PressureLoad" },
         { "$ref": "#/$defs/ForceLoad" },
+        { "$ref": "#/$defs/RemoteLoad" },
         { "$ref": "#/$defs/GravityLoad" },
         { "$ref": "#/$defs/CentrifugalLoad" }
       ]

@@ -15,9 +15,10 @@ from clearfea_worker.deck.elements import CCX_NODE_ORDER, FACE_NODES
 from clearfea_worker.deck.loads import BodyLoad, body_nodal_forces, fixed_support_nodes
 from clearfea_worker.deck.loads.body import RULES, shape
 from clearfea_worker.deck.loads.force import face_node_weights
+from clearfea_worker.deck.loads.remote import remote_nodal_loads
 from clearfea_worker.meshing.volume import TET_FACES, VolumeMesh
 from clearfea_worker.results.summary import read_reactions
-from clearfea_worker.spec.simulation_schema import SimulationSpec
+from clearfea_worker.spec.simulation_schema import RemoteLoad, SimulationSpec
 
 from .deck_meshes import two_tets
 from .test_deck import fixture_spec
@@ -194,3 +195,99 @@ def test_reactions_have_the_loads_on_held_nodes_taken_out(tmp_path: Path) -> Non
     )
     (reaction,) = read_reactions(spec, mesh, dat)
     assert reaction == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
+
+
+def remote(
+    faces: list[int],
+    point: tuple[float, float, float],
+    f: tuple[float, float, float],
+    m: tuple[float, float, float],
+) -> dict:
+    """A remote load in SI units (m, N, N·m)."""
+
+    def xyz(v: tuple[float, float, float], unit: str) -> dict:
+        return {a: {"value": c, "unit": unit} for a, c in zip("xyz", v, strict=True)}
+
+    return {
+        "id": "r",
+        "type": "remote",
+        "name": "R",
+        "faces": faces,
+        "point": xyz(point, "m"),
+        "force": xyz(f, "N"),
+        "moment": xyz(m, "N·m"),
+    }
+
+
+def bent(mesh: VolumeMesh) -> VolumeMesh:
+    """``mesh`` with every mid-edge node pushed off its edge, so element faces are curved."""
+    p = list(mesh.positions)
+    for n in range(5, mesh.node_count):
+        p[3 * n] += 0.0007 * (n % 3 - 1)
+        p[3 * n + 1] += 0.0005 * (n % 2)
+        p[3 * n + 2] -= 0.0004 * (n % 4 - 1.5)
+    return VolumeMesh(mesh.order, p, mesh.elements, mesh.bodies, mesh.faces)
+
+
+def resultant(
+    mesh: VolumeMesh, loads: dict[int, tuple[float, float, float]], about: tuple[float, ...]
+) -> tuple[list[float], list[float]]:
+    """Total force and its moment about ``about`` of nodal loads."""
+    p = mesh.positions
+    force, moment = [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]
+    for node, f in loads.items():
+        r = [p[3 * node + i] - about[i] for i in range(3)]
+        for i in range(3):
+            force[i] += f[i]
+        moment[0] += r[1] * f[2] - r[2] * f[1]
+        moment[1] += r[2] * f[0] - r[0] * f[2]
+        moment[2] += r[0] * f[1] - r[1] * f[0]
+    return force, moment
+
+
+@pytest.mark.parametrize("mesh", [two_tets(order=1), two_tets(order=2), bent(two_tets(order=2))])
+@pytest.mark.parametrize("faces", [[2], [3], [1, 3, 4]])
+def test_remote_load_has_its_force_and_moment_about_the_point(
+    mesh: VolumeMesh, faces: list[int]
+) -> None:
+    point = (0.03, -0.02, 0.05)
+    f, m = (120.0, -340.0, 75.0), (4.0, 2.5, -6.0)
+    load = RemoteLoad.model_validate(remote(faces, point, f, m))
+    force, moment = resultant(mesh, remote_nodal_loads(mesh, load), point)
+    assert force == pytest.approx(f, rel=1e-12)
+    assert moment == pytest.approx(m, rel=1e-12)
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_remote_force_through_the_centroid_is_the_uniform_traction(order: int) -> None:
+    # A force at the faces' centroid with no moment needs no linear part: the remote load is
+    # then the same as a force on the faces (force.py).
+    mesh = bent(two_tets(order=2)) if order == 2 else two_tets(order=1)
+    weights = face_node_weights(mesh, [2, 3])
+    area = sum(weights.values())
+    p = mesh.positions
+    c = [sum(w * p[3 * n + i] for n, w in weights.items()) / area for i in range(3)]
+    f = (10.0, 20.0, -30.0)
+    load = RemoteLoad.model_validate(remote([2, 3], (c[0], c[1], c[2]), f, (0.0, 0.0, 0.0)))
+    loads = remote_nodal_loads(mesh, load)
+    assert set(loads) == set(weights)
+    for node, w in weights.items():
+        assert loads[node] == pytest.approx([fi * w / area for fi in f], rel=1e-9, abs=1e-12)
+
+
+def test_remote_moment_about_a_flat_faces_normal_shears_it_without_net_force() -> None:
+    mesh = two_tets(order=2)
+    load = RemoteLoad.model_validate(remote([2], (1.0, 2.0, 3.0), (0, 0, 0), (0, 0, 5.0)))
+    loads = remote_nodal_loads(mesh, load)
+    force, moment = resultant(mesh, loads, (0.0, 0.0, 0.0))
+    assert force == pytest.approx([0, 0, 0], abs=1e-9)
+    assert moment == pytest.approx([0, 0, 5.0], rel=1e-12, abs=1e-12)
+    assert all(f[2] == 0.0 for f in loads.values())  # in the face's plane only
+
+
+def test_applied_loads_include_remote_loads() -> None:
+    mesh = two_tets(order=2)
+    spec = loaded_spec(loads=[force([2], 0, 0, 10), remote([3], (0, 0, 0), (1, 2, 3), (0, 0, 0))])
+    applied = applied_nodal_loads(spec, mesh, range(mesh.node_count))
+    total = [sum(f[i] for f in applied.values()) for i in range(3)]
+    assert total == pytest.approx([1.0, 2.0, 13.0], rel=1e-12)

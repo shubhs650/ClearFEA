@@ -13,6 +13,7 @@ import {
   loadKinds,
   type PressureLoad,
   type Quantity,
+  type RemoteLoad,
   type SimulationSpec,
   type Support,
   supportKinds,
@@ -47,6 +48,7 @@ const supportAdds: { type: SupportType; label: string }[] = [
 const loadAdds: { type: LoadType; label: string }[] = [
   { type: "pressure", label: "Add a pressure" },
   { type: "force", label: "Add a force" },
+  { type: "remote", label: "Add a remote force and moment" },
   { type: "gravity", label: "Add gravity" },
   { type: "centrifugal", label: "Add a centrifugal load" },
 ];
@@ -82,7 +84,7 @@ export function GroupPanel({
       )}
       {group === "loads" && (
         <p className="field-hint">
-          Select faces in the viewer first to give a new pressure or force those faces. Gravity and a centrifugal load
+          Select faces in the viewer first to give a new pressure, force or remote load those faces. Gravity and a centrifugal load
           act on every body.
         </p>
       )}
@@ -274,6 +276,8 @@ const loadHints: Record<LoadType, string> = {
   pressure: "Uniform and normal to each face. Positive pushes on the face towards the body; negative pulls (suction).",
   force:
     "A total force along the global axes, spread over the faces in proportion to their area (a uniform traction). Enter 0 for a component it does not have.",
+  remote:
+    "A force and a moment acting at a reference point, carried to the faces they are attached to. The faces stay free to deform, and the force also turns them about the point when it is off their centre. Enter 0 for a component it does not have.",
   gravity:
     "The acceleration of gravity along the global axes, acting on every body through its density; the weight points along it. For gravity downwards along z, enter z = -1 g.",
   centrifugal:
@@ -283,6 +287,31 @@ const loadHints: Record<LoadType, string> = {
 function PressureFields({ load, set }: { load: PressureLoad; set: (changes: Partial<PressureLoad>) => void }) {
   return (
     <QuantityInput label="Magnitude" kind="pressure" value={load.magnitude} onChange={(magnitude) => set({ magnitude })} />
+  );
+}
+
+function RemoteFields({ load, set }: { load: RemoteLoad; set: (changes: Partial<RemoteLoad>) => void }) {
+  return (
+    <>
+      <ComponentsField
+        legend="Reference point (global coordinates)"
+        kind="length"
+        values={load.point}
+        onChange={(axis, value) => set({ point: { ...load.point, [axis]: value } })}
+      />
+      <ComponentsField
+        legend="Force at the point (global axes)"
+        kind="force"
+        values={load.force}
+        onChange={(axis, value) => set({ force: { ...load.force, [axis]: value } })}
+      />
+      <ComponentsField
+        legend="Moment at the point (global axes, right-hand rule)"
+        kind="moment"
+        values={load.moment}
+        onChange={(axis, value) => set({ moment: { ...load.moment, [axis]: value } })}
+      />
+    </>
   );
 }
 
@@ -353,8 +382,9 @@ export function LoadPanel({
           onChange={(axis, value) => set({ [axis]: value } as Partial<Load>)}
         />
       )}
+      {load.type === "remote" && <RemoteFields load={load} set={set} />}
       {load.type === "centrifugal" && <CentrifugalFields load={load} set={set} />}
-      {(load.type === "pressure" || load.type === "force") && (
+      {(load.type === "pressure" || load.type === "force" || load.type === "remote") && (
         <FacesField faces={load.faces} selection={selection} onChange={(faces) => set({ faces })} />
       )}
       <Remove what={title.toLowerCase()} onRemove={() => onChange(removeItem(spec, load.id))} />

@@ -56,7 +56,7 @@ export type Support = FixedSupport | PrescribedDisplacement | FrictionlessSuppor
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "Load".
  */
-export type Load = PressureLoad | ForceLoad | GravityLoad | CentrifugalLoad;
+export type Load = PressureLoad | ForceLoad | RemoteLoad | GravityLoad | CentrifugalLoad;
 /**
  * 1: four-node tetrahedra. 2: ten-node tetrahedra with curved edges on curved faces. Phase 0 meshes always use 2 until M2.8 offers the choice (ADR-028).
  *
@@ -289,6 +289,56 @@ export interface AxisDirection1 {
   x: number | null;
   y: number | null;
   z: number | null;
+}
+/**
+ * Components along the global x, y and z axes; each a quantity, null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "Components".
+ */
+export interface Components {
+  x: OptionalQuantity;
+  y: OptionalQuantity;
+  z: OptionalQuantity;
+}
+/**
+ * A force and a moment acting at a reference point, carried to the faces as the statically equivalent linear traction (a deformable, distributing connection; consistent nodal loads in the deck). The force acting at the point also turns the faces about it. Force components are force quantities, moment components moment quantities, in global axes and right-handed; each null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RemoteLoad".
+ */
+export interface RemoteLoad {
+  id: ItemId;
+  type: "remote";
+  name: ItemName;
+  faces: FaceTags;
+  point: AxisPoint2;
+  force: Components1;
+  moment: Components2;
+}
+/**
+ * The reference point the force and moment act at.
+ */
+export interface AxisPoint2 {
+  x: OptionalQuantity;
+  y: OptionalQuantity;
+  z: OptionalQuantity;
+}
+/**
+ * The force at the reference point.
+ */
+export interface Components1 {
+  x: OptionalQuantity;
+  y: OptionalQuantity;
+  z: OptionalQuantity;
+}
+/**
+ * The moment at the reference point.
+ */
+export interface Components2 {
+  x: OptionalQuantity;
+  y: OptionalQuantity;
+  z: OptionalQuantity;
 }
 /**
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -682,6 +732,8 @@ export const validateGravityLoad = validator<GravityLoad>(schema, "GravityLoad")
 export const validateAxisPoint = validator<AxisPoint>(schema, "AxisPoint");
 export const validateAxisDirection = validator<AxisDirection>(schema, "AxisDirection");
 export const validateCentrifugalLoad = validator<CentrifugalLoad>(schema, "CentrifugalLoad");
+export const validateComponents = validator<Components>(schema, "Components");
+export const validateRemoteLoad = validator<RemoteLoad>(schema, "RemoteLoad");
 export const validateLoad = validator<Load>(schema, "Load");
 export const validateMeshSettings = validator<MeshSettings>(schema, "MeshSettings");
 export const validateSimulationSpec = validator<SimulationSpec>(schema, "SimulationSpec");

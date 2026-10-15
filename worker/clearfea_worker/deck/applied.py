@@ -3,28 +3,40 @@
 
 Physics-critical. CalculiX's RF at a held node is the reaction plus the load applied at that
 node (manual section 6.11.5), so the result reader subtracts the loads this module computes:
-forces on faces exactly as the deck writes them (*CLOAD) and gravity and centrifugal loads the
-way CalculiX integrates them (loads/body.py). Pressures are not included yet: a pressure on a
-held node still shows in its support's reaction (ADR-029, M3.2).
+forces on faces and remote loads exactly as the deck writes them (*CLOAD) and gravity and
+centrifugal loads the way CalculiX integrates them (loads/body.py). Pressures are not included
+yet: a pressure on a held node still shows in its support's reaction (ADR-029, M3.2).
 """
 
 from collections.abc import Iterable
 
 from ..meshing.volume import VolumeMesh
-from ..spec.simulation_schema import ForceLoad, SimulationSpec
+from ..spec.simulation_schema import ForceLoad, RemoteLoad, SimulationSpec
 from .linalg import Vector
-from .loads import body_load, body_nodal_forces, densities, force_nodal_loads
+from .loads import (
+    body_load,
+    body_nodal_forces,
+    densities,
+    force_nodal_loads,
+    remote_nodal_loads,
+)
 
 #: Nodal force components below this fraction of the largest are rounding and set to zero.
 ROUNDING = 1e-12
 
 
 def force_loads(spec: SimulationSpec, mesh: VolumeMesh) -> dict[int, Vector]:
-    """The *CLOAD of every node with a force on it, all force loads added up, in node order."""
+    """The *CLOAD of every node with a force on it, all force and remote loads added up, in
+    node order."""
     total: dict[int, list[float]] = {}
     for load in spec.loads:
-        if isinstance(load, ForceLoad):
-            for node, f in force_nodal_loads(mesh, load).items():
+        if isinstance(load, (ForceLoad, RemoteLoad)):
+            nodal = (
+                force_nodal_loads(mesh, load)
+                if isinstance(load, ForceLoad)
+                else remote_nodal_loads(mesh, load)
+            )
+            for node, f in nodal.items():
                 t = total.setdefault(node, [0.0, 0.0, 0.0])
                 for i in range(3):
                     t[i] += f[i]

@@ -20,6 +20,7 @@ from ..spec.simulation_schema import (
     PrescribedDisplacement,
     PressureLoad,
     Quantity,
+    RemoteLoad,
     SimulationSpec,
 )
 from .applied import force_loads
@@ -34,7 +35,14 @@ from .constraints import (
 )
 from .elements import CCX_NODE_ORDER, ELEMENT_TYPE
 from .linalg import norm
-from .loads import body_loads, densities, fixed_support_nodes, force_vector, pressure_faces
+from .loads import (
+    body_loads,
+    densities,
+    fixed_support_nodes,
+    force_vector,
+    pressure_faces,
+    remote_vectors,
+)
 from .loads.body import gravity_vector, rotation
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
@@ -327,6 +335,23 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
                 + ", ".join(str(f) for f in load.faces)
                 + f": ({_entered(load.x, load.y, load.z)}) = ({_vector(force_vector(load))}) N,"
                 + " spread over the faces by area"
+            )
+        elif isinstance(load, RemoteLoad):
+            point, force, moment = remote_vectors(load)
+            out.append(
+                f'** Remote load {load.id} "{_label(load.name)}", faces '
+                + ", ".join(str(f) for f in load.faces)
+                + ": at ("
+                + _entered(load.point.x, load.point.y, load.point.z)
+                + f") = ({_vector(point)}) m"
+            )
+            out.append(
+                f"** force ({_entered(load.force.x, load.force.y, load.force.z)})"
+                + f" = ({_vector(force)}) N"
+            )
+            out.append(
+                f"** moment ({_entered(load.moment.x, load.moment.y, load.moment.z)})"
+                + f" = ({_vector(moment)}) N*m, carried to the faces as a linear traction"
             )
         elif isinstance(load, GravityLoad):
             out.append(

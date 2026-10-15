@@ -273,7 +273,48 @@ class CentrifugalLoad(BaseModel):
     """
 
 
-type Load = PressureLoad | ForceLoad | GravityLoad | CentrifugalLoad
+class Components(BaseModel):
+    """
+    Components along the global x, y and z axes; each a quantity, null until entered.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    x: OptionalQuantity
+    y: OptionalQuantity
+    z: OptionalQuantity
+
+
+class RemoteLoad(BaseModel):
+    """
+    A force and a moment acting at a reference point, carried to the faces as the statically equivalent linear traction (a deformable, distributing connection; consistent nodal loads in the deck). The force acting at the point also turns the faces about it. Force components are force quantities, moment components moment quantities, in global axes and right-handed; each null until entered.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: ItemId
+    type: Literal["remote"]
+    name: ItemName
+    faces: FaceTags
+    point: AxisPoint
+    """
+    The reference point the force and moment act at.
+    """
+    force: Components
+    """
+    The force at the reference point.
+    """
+    moment: Components
+    """
+    The moment at the reference point.
+    """
+
+
+type Load = PressureLoad | ForceLoad | RemoteLoad | GravityLoad | CentrifugalLoad
 
 
 class MeshSettings(BaseModel):
