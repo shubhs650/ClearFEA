@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200, "unit": "GPa" },
+      "poissonsRatio": 0.3
+    }
+  ],
+  "supports": [{ "id": "fixed-1", "type": "fixed", "name": "Fixed end", "faces": ["fixed-end"] }],
+  "loads": [
+    {
+      "id": "pressure-1",
+      "type": "pressure",
+      "name": "Internal pressure",
+      "faces": ["bore"],
+      "magnitude": { "value": 100, "unit": "bar" }
+    }
+  ],
+  "mesh": { "size": { "value": 1, "unit": "cm" } }
+}

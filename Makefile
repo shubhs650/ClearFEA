@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Single entry point for ClearFEA. `make verify` and `make e2e` arrive with the suites they run.
+# Single entry point for ClearFEA. `make e2e` arrives with the suite it runs (M1.14).
 
-.PHONY: help dev install spec spec-check test test-ts test-py lint format clean worker-image
+.PHONY: help dev install spec spec-check test test-ts test-py lint format clean worker-image verify
 
 help:
 	@echo "make install   install TypeScript (pnpm) and Python (uv) dependencies"
 	@echo "make dev       start the API (:8787), web app (:5173) and worker container; Ctrl-C stops all"
 	@echo "make spec      regenerate TypeScript types and Pydantic models from packages/spec/schemas"
 	@echo "make test      fast tier: generated-code check, unit tests, type checks and lint"
+	@echo "make verify    verification cases through a fresh API and worker (VERIFY_TIER=full, CASES=\"V-01\")"
 	@echo "make lint      lint only"
 	@echo "make format    format Python code"
 	@echo "make clean     remove installed dependencies and caches"
@@ -40,16 +41,25 @@ test-py:
 	uv run --directory worker --locked ruff check .
 	uv run --directory worker --locked ruff format --check .
 	uv run --directory worker --locked pytest
+	cd verification && uv run --project ../worker --locked ruff check .
+	cd verification && uv run --project ../worker --locked ruff format --check .
+	cd verification && uv run --project ../worker --locked pytest -q harness/tests
 
 lint:
 	pnpm run lint
 	uv run --directory worker --locked ruff check .
+	cd verification && uv run --project ../worker --locked ruff check .
 
 format:
 	uv run --directory worker --locked ruff format .
+	cd verification && uv run --project ../worker --locked ruff format .
 
 clean:
 	rm -rf node_modules apps/*/node_modules packages/*/node_modules worker/.venv
+
+# BUILD_CA as for `make dev`; the worker image is built if it is out of date.
+verify:
+	CLEARFEA_BUILD_CA=$(BUILD_CA) infra/verify.sh
 
 comma := ,
 worker-image:

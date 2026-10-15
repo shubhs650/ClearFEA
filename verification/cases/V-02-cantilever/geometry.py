@@ -39,7 +39,9 @@ def main(path: str) -> None:
     step.write_text(in_inches(step.read_text()))
 
 
-_MM_UNIT = re.compile(r"\(\s*LENGTH_UNIT\(\)\s*NAMED_UNIT\(\*\)\s*SI_UNIT\(\.MILLI\.,\.METRE\.\)\s*\)")
+_MM_UNIT = re.compile(
+    r"\(\s*LENGTH_UNIT\(\)\s*NAMED_UNIT\(\*\)\s*SI_UNIT\(\.MILLI\.,\.METRE\.\)\s*\)"
+)
 
 
 def in_inches(text: str) -> str:
