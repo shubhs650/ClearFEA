@@ -113,6 +113,48 @@ class FixedSupport(BaseModel):
     faces: FaceTags
 
 
+type DisplacementComponent = Quantity | Literal["free"] | None
+"""
+One global component of a prescribed displacement: a length quantity (zero holds it, any other value moves the faces by that much), "free" when the component is not prescribed, or null until the user has chosen.
+"""
+
+
+class PrescribedDisplacement(BaseModel):
+    """
+    The faces' nodes moved by a given displacement in the global x, y and z directions; a free component is left to the solution. At least one component must have a value before a run.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: ItemId
+    type: Literal["displacement"]
+    name: ItemName
+    faces: FaceTags
+    x: DisplacementComponent
+    y: DisplacementComponent
+    z: DisplacementComponent
+
+
+class FrictionlessSupport(BaseModel):
+    """
+    Each face held against moving along its own normal and free to slide in its plane, in both directions (it does not lift off). The support for symmetry planes. Flat faces only (DECISIONS.md, gate scope).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: ItemId
+    type: Literal["frictionless"]
+    name: ItemName
+    faces: FaceTags
+
+
+type Support = FixedSupport | PrescribedDisplacement | FrictionlessSupport
+
+
 class PressureLoad(BaseModel):
     """
     A uniform pressure normal to each face. A positive magnitude pushes on the face towards the body (along the inward normal), as a fluid does; a negative one pulls (suction).
@@ -145,7 +187,7 @@ class MeshSettings(BaseModel):
 
 class SimulationSpec(BaseModel):
     """
-    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, pressures and a global mesh size. version changes whenever the shape does; older stored specs are upgraded by code, never reinterpreted.
+    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
     """
 
     model_config = ConfigDict(
@@ -160,7 +202,7 @@ class SimulationSpec(BaseModel):
     """
     bodies: list[BodyAssignment]
     materials: list[IsotropicMaterial]
-    supports: list[FixedSupport]
+    supports: list[Support]
     loads: list[PressureLoad]
     mesh: MeshSettings
 

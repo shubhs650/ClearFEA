@@ -34,6 +34,18 @@ export type FaceTags = number[];
  */
 export type AnalysisType = "linear_static";
 /**
+ * One global component of a prescribed displacement: a length quantity (zero holds it, any other value moves the faces by that much), "free" when the component is not prescribed, or null until the user has chosen.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "DisplacementComponent".
+ */
+export type DisplacementComponent = Quantity | "free" | null;
+/**
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "Support".
+ */
+export type Support = FixedSupport | PrescribedDisplacement | FrictionlessSupport;
+/**
  * 1: four-node tetrahedra. 2: ten-node tetrahedra with curved edges on curved faces. Phase 0 meshes always use 2 until M2.8 offers the choice (ADR-028).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -136,6 +148,33 @@ export interface FixedSupport {
   faces: FaceTags;
 }
 /**
+ * The faces' nodes moved by a given displacement in the global x, y and z directions; a free component is left to the solution. At least one component must have a value before a run.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "PrescribedDisplacement".
+ */
+export interface PrescribedDisplacement {
+  id: ItemId;
+  type: "displacement";
+  name: ItemName;
+  faces: FaceTags;
+  x: DisplacementComponent;
+  y: DisplacementComponent;
+  z: DisplacementComponent;
+}
+/**
+ * Each face held against moving along its own normal and free to slide in its plane, in both directions (it does not lift off). The support for symmetry planes. Flat faces only (DECISIONS.md, gate scope).
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "FrictionlessSupport".
+ */
+export interface FrictionlessSupport {
+  id: ItemId;
+  type: "frictionless";
+  name: ItemName;
+  faces: FaceTags;
+}
+/**
  * A uniform pressure normal to each face. A positive magnitude pushes on the face towards the body (along the inward normal), as a fluid does; a negative one pulls (suction).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -162,7 +201,7 @@ export interface MeshSettings {
   size: Quantity | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, pressures and a global mesh size. version changes whenever the shape does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -176,7 +215,7 @@ export interface SimulationSpec {
   geometryId: string;
   bodies: BodyAssignment[];
   materials: IsotropicMaterial[];
-  supports: FixedSupport[];
+  supports: Support[];
   loads: PressureLoad[];
   mesh: MeshSettings;
 }
@@ -479,7 +518,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, pressures and a global mesh size. version changes whenever the shape does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -490,7 +529,7 @@ export interface SimulationSpec1 {
   geometryId: string;
   bodies: BodyAssignment[];
   materials: IsotropicMaterial[];
-  supports: FixedSupport[];
+  supports: Support[];
   loads: PressureLoad[];
   mesh: MeshSettings;
 }
@@ -532,6 +571,10 @@ export const validateAnalysisType = validator<AnalysisType>(schema, "AnalysisTyp
 export const validateBodyAssignment = validator<BodyAssignment>(schema, "BodyAssignment");
 export const validateIsotropicMaterial = validator<IsotropicMaterial>(schema, "IsotropicMaterial");
 export const validateFixedSupport = validator<FixedSupport>(schema, "FixedSupport");
+export const validateDisplacementComponent = validator<DisplacementComponent>(schema, "DisplacementComponent");
+export const validatePrescribedDisplacement = validator<PrescribedDisplacement>(schema, "PrescribedDisplacement");
+export const validateFrictionlessSupport = validator<FrictionlessSupport>(schema, "FrictionlessSupport");
+export const validateSupport = validator<Support>(schema, "Support");
 export const validatePressureLoad = validator<PressureLoad>(schema, "PressureLoad");
 export const validateMeshSettings = validator<MeshSettings>(schema, "MeshSettings");
 export const validateSimulationSpec = validator<SimulationSpec>(schema, "SimulationSpec");
