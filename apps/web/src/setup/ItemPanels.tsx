@@ -1,22 +1,30 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Settings panels for the setup tree's items (M1.5): a material, a fixed support, a pressure,
-// and the three groups. Each edit produces a whole new spec, which the caller saves.
+// Settings panels for the setup tree's items (M1.5): a material, a support, a load, and the
+// three groups. Each edit produces a whole new spec, which the caller saves.
 
 import {
+  type CentrifugalLoad,
   type DisplacementComponent,
   displacementAxes,
+  type ForceLoad,
+  type GravityLoad,
   type IsotropicMaterial,
+  type Load,
+  loadKinds,
   type PressureLoad,
+  type Quantity,
   type SimulationSpec,
   type Support,
   supportKinds,
 } from "@clearfea/spec";
 import { QuantityInput } from "../units/QuantityInput";
+import type { QuantityKind } from "../units/system";
 import { FacesField, NumberField, TextField } from "./fields";
 import {
   assignMaterial,
   type Group,
   type ItemStatus,
+  type LoadType,
   removeItem,
   type SupportType,
   updateLoad,
@@ -30,16 +38,17 @@ const groupTitles: Record<Group, string> = {
   loads: "Loads",
 };
 
-const addLabels: Record<Group, string> = {
-  materials: "Add a material",
-  supports: "Add a fixed support",
-  loads: "Add a pressure",
-};
-
 const supportAdds: { type: SupportType; label: string }[] = [
   { type: "fixed", label: "Add a fixed support" },
   { type: "displacement", label: "Add a prescribed displacement" },
   { type: "frictionless", label: "Add a frictionless support" },
+];
+
+const loadAdds: { type: LoadType; label: string }[] = [
+  { type: "pressure", label: "Add a pressure" },
+  { type: "force", label: "Add a force" },
+  { type: "gravity", label: "Add gravity" },
+  { type: "centrifugal", label: "Add a centrifugal load" },
 ];
 
 export function Notes({ status }: { status: ItemStatus | undefined }) {
@@ -60,28 +69,35 @@ export function GroupPanel({
 }: {
   group: Group;
   status: ItemStatus | undefined;
-  /** Adds an item; for supports, of the type chosen. */
-  onAdd: (type?: SupportType) => void;
+  /** Adds an item; for supports and loads, of the type chosen. */
+  onAdd: (type?: SupportType | LoadType) => void;
 }) {
+  const adds = group === "supports" ? supportAdds : group === "loads" ? loadAdds : null;
   return (
     <section className="setup-panel" aria-label={groupTitles[group]}>
       <h2 className="pane-title">{groupTitles[group]}</h2>
       <Notes status={status} />
-      {(group === "supports" || group === "loads") && (
+      {group === "supports" && (
         <p className="field-hint">Select faces in the viewer first to give the new item those faces.</p>
       )}
-      {group === "supports" ? (
+      {group === "loads" && (
+        <p className="field-hint">
+          Select faces in the viewer first to give a new pressure or force those faces. Gravity and a centrifugal load
+          act on every body.
+        </p>
+      )}
+      {adds === null ? (
+        <button type="button" onClick={() => onAdd()}>
+          Add a material
+        </button>
+      ) : (
         <div className="field-actions field-actions-column">
-          {supportAdds.map(({ type, label }) => (
+          {adds.map(({ type, label }) => (
             <button key={type} type="button" onClick={() => onAdd(type)}>
               {label}
             </button>
           ))}
         </div>
-      ) : (
-        <button type="button" onClick={() => onAdd()}>
-          {addLabels[group]}
-        </button>
       )}
     </section>
   );
@@ -126,6 +142,14 @@ export function MaterialPanel({
         hint="Between -1 and 0.5, for example 0.3."
         range={{ above: -1, below: 0.5 }}
         onChange={(poissonsRatio) => set({ poissonsRatio })}
+      />
+      <QuantityInput
+        label="Density"
+        positive
+        kind="density"
+        value={material.density ?? null}
+        hint="Needed for gravity and centrifugal loads."
+        onChange={(density) => set({ density })}
       />
       <fieldset className="setup-bodies">
         <legend>Bodies made of this material</legend>
@@ -224,7 +248,82 @@ export function SupportPanel({
   );
 }
 
-export function PressurePanel({
+/** Three global components of one quantity kind: a force or an acceleration. */
+function ComponentsField({
+  legend,
+  kind,
+  values,
+  onChange,
+}: {
+  legend: string;
+  kind: QuantityKind;
+  values: { x: Quantity | null; y: Quantity | null; z: Quantity | null };
+  onChange: (axis: "x" | "y" | "z", value: Quantity | null) => void;
+}) {
+  return (
+    <fieldset className="setup-components">
+      <legend>{legend}</legend>
+      {displacementAxes.map((axis) => (
+        <QuantityInput key={axis} label={axis} kind={kind} value={values[axis]} onChange={(v) => onChange(axis, v)} />
+      ))}
+    </fieldset>
+  );
+}
+
+const loadHints: Record<LoadType, string> = {
+  pressure: "Uniform and normal to each face. Positive pushes on the face towards the body; negative pulls (suction).",
+  force:
+    "A total force along the global axes, spread over the faces in proportion to their area (a uniform traction). Enter 0 for a component it does not have.",
+  gravity:
+    "The acceleration of gravity along the global axes, acting on every body through its density; the weight points along it. For gravity downwards along z, enter z = -1 g.",
+  centrifugal:
+    "Every body spinning steadily about an axis, pushed outwards by density × angular velocity² × distance from the axis. The sense of rotation does not matter. A setup can have one.",
+};
+
+function PressureFields({ load, set }: { load: PressureLoad; set: (changes: Partial<PressureLoad>) => void }) {
+  return (
+    <QuantityInput label="Magnitude" kind="pressure" value={load.magnitude} onChange={(magnitude) => set({ magnitude })} />
+  );
+}
+
+function CentrifugalFields({
+  load,
+  set,
+}: {
+  load: CentrifugalLoad;
+  set: (changes: Partial<CentrifugalLoad>) => void;
+}) {
+  return (
+    <>
+      <QuantityInput
+        label="Angular velocity"
+        kind="angularVelocity"
+        value={load.angularVelocity}
+        onChange={(angularVelocity) => set({ angularVelocity })}
+      />
+      <ComponentsField
+        legend="A point on the axis (global coordinates)"
+        kind="length"
+        values={load.axisPoint}
+        onChange={(axis, value) => set({ axisPoint: { ...load.axisPoint, [axis]: value } })}
+      />
+      <fieldset className="setup-components">
+        <legend>Axis direction (global axes)</legend>
+        {displacementAxes.map((axis) => (
+          <NumberField
+            key={axis}
+            label={axis}
+            value={load.axisDirection[axis]}
+            hint={axis === "x" ? "Any length, for example 0, 0, 1 for the z axis." : undefined}
+            onChange={(value) => set({ axisDirection: { ...load.axisDirection, [axis]: value } })}
+          />
+        ))}
+      </fieldset>
+    </>
+  );
+}
+
+export function LoadPanel({
   spec,
   load,
   status,
@@ -232,26 +331,33 @@ export function PressurePanel({
   onChange,
 }: {
   spec: SimulationSpec;
-  load: PressureLoad;
+  load: Load;
   status: ItemStatus | undefined;
   selection: ReadonlySet<number>;
   onChange: (spec: SimulationSpec) => void;
 }) {
-  const set = (changes: Partial<PressureLoad>) => onChange(updateLoad(spec, { ...load, ...changes }));
+  const set = (changes: Partial<Load>) => onChange(updateLoad(spec, { ...load, ...changes } as Load));
+  const title = loadKinds[load.type];
   return (
-    <section className="setup-panel" aria-label="Pressure">
-      <h2 className="pane-title">Pressure</h2>
+    <section className="setup-panel" aria-label={title}>
+      <h2 className="pane-title">{title}</h2>
       <Notes status={status} />
       <TextField label="Name" value={load.name} onChange={(name) => set({ name })} />
-      <QuantityInput
-        label="Magnitude"
-        kind="pressure"
-        value={load.magnitude}
-        hint="Uniform and normal to each face. Positive pushes on the face towards the body; negative pulls (suction)."
-        onChange={(magnitude) => set({ magnitude })}
-      />
-      <FacesField faces={load.faces} selection={selection} onChange={(faces) => set({ faces })} />
-      <Remove what="pressure" onRemove={() => onChange(removeItem(spec, load.id))} />
+      <p className="field-hint">{loadHints[load.type]}</p>
+      {load.type === "pressure" && <PressureFields load={load} set={set} />}
+      {(load.type === "force" || load.type === "gravity") && (
+        <ComponentsField
+          legend={load.type === "force" ? "Force (global axes)" : "Acceleration of gravity (global axes)"}
+          kind={load.type === "force" ? "force" : "acceleration"}
+          values={load as ForceLoad | GravityLoad}
+          onChange={(axis, value) => set({ [axis]: value } as Partial<Load>)}
+        />
+      )}
+      {load.type === "centrifugal" && <CentrifugalFields load={load} set={set} />}
+      {(load.type === "pressure" || load.type === "force") && (
+        <FacesField faces={load.faces} selection={selection} onChange={(faces) => set({ faces })} />
+      )}
+      <Remove what={title.toLowerCase()} onRemove={() => onChange(removeItem(spec, load.id))} />
     </section>
   );
 }

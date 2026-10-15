@@ -15,11 +15,13 @@
   "supports": [{ "id": "fixed-1", "type": "fixed", "name": "Clamped end", "faces": ["clamped-end"] }],
   "loads": [
     {
-      "id": "pressure-1",
-      "type": "pressure",
+      "id": "force-1",
+      "type": "force",
       "name": "End load",
       "faces": ["end-patch"],
-      "magnitude": { "value": 500, "unit": "psi" }
+      "x": { "value": 0, "unit": "kip" },
+      "y": { "value": -500, "unit": "lbf" },
+      "z": { "value": 0, "unit": "N" }
     }
   ],
   "mesh": { "size": { "value": 5, "unit": "mm" } }

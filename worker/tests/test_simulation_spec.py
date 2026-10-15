@@ -29,7 +29,8 @@ def test_fixture_parses_with_quantities_as_typed() -> None:
 
 def test_round_trip_keeps_wire_names() -> None:
     spec = SimulationSpec.model_validate(fixture())
-    assert json.loads(spec.model_dump_json(by_alias=True)) == fixture()
+    # exclude_unset: optional fields the fixture leaves out (density, M2.3) stay out.
+    assert json.loads(spec.model_dump_json(by_alias=True, exclude_unset=True)) == fixture()
 
 
 @pytest.mark.parametrize(

@@ -167,6 +167,8 @@ def build_spec(case: Case, tags: dict[str, int], geometry_id: str, tier: str) ->
     spec = copy.deepcopy(case.spec)
     spec["geometryId"] = geometry_id
     for item in spec["supports"] + spec["loads"]:
+        if "faces" not in item:  # gravity and centrifugal loads act on every body
+            continue
         unknown = [f for f in item["faces"] if f not in tags]
         if unknown:
             raise CaseError(
@@ -227,34 +229,135 @@ def balance(load: list[float], gross: float, reactions: list[list[float]]) -> tu
     return math.dist(total, [-c for c in load]), gross
 
 
+def _triangles(surface: Surface):  # type: ignore[no-untyped-def]
+    for patch in surface.patches:
+        for a, b, c in patch.triangles:
+            yield patch.tag, surface.positions[a], surface.positions[b], surface.positions[c]
+
+
+def _cross(u: Any, v: Any) -> list[float]:
+    return [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+
+
+def volume_and_moment(surface: Surface) -> tuple[float, list[float]]:
+    """Volume (m³) and first moment of volume (m⁴) enclosed by the run's surface.
+
+    The surface is closed and its triangles face outwards, so the volume is the sum of the
+    signed tetrahedra each triangle makes with the origin, and the first moment the sum of
+    each tetrahedron's volume times its centroid (divergence theorem).
+    """
+    volume, moment = 0.0, [0.0, 0.0, 0.0]
+    for _, a, b, c in _triangles(surface):
+        v = sum(a[i] * x for i, x in enumerate(_cross(b, c))) / 6
+        volume += v
+        for i in range(3):
+            moment[i] += v * (a[i] + b[i] + c[i]) / 4
+    return volume, moment
+
+
+def _axial_frame(point: list[float], axis: list[float]):  # type: ignore[no-untyped-def]
+    """Coordinates (s, t) at right angles to the unit ``axis`` through ``point``."""
+    helper = [1.0, 0.0, 0.0] if abs(axis[0]) < 0.9 else [0.0, 1.0, 0.0]
+    e1 = _cross(axis, helper)
+    n1 = math.sqrt(sum(x * x for x in e1))
+    e1 = [x / n1 for x in e1]
+    e2 = _cross(axis, e1)
+
+    def local(p: Any) -> tuple[float, float]:
+        d = [p[i] - point[i] for i in range(3)]
+        return sum(d[i] * e1[i] for i in range(3)), sum(d[i] * e2[i] for i in range(3))
+
+    return local
+
+
+def distance_integral(surface: Surface, point: list[float], axis: list[float]) -> float:
+    """The integral over the enclosed volume of the distance from the axis (m⁴).
+
+    With (s, t) at right angles to the axis and r = sqrt(s² + t²), the field (s r, t r, 0) / 3
+    has divergence r, so the integral is its flux through the surface, taken with the
+    three-point edge-midpoint rule on each triangle.
+    """
+    local = _axial_frame(point, axis)
+    total = 0.0
+    for _, a, b, c in _triangles(surface):
+        n2 = _cross([b[i] - a[i] for i in range(3)], [c[i] - a[i] for i in range(3)])
+        # The flux of (s r, t r) / 3 through a triangle: its normal in the (s, t) plane.
+        ns, nt = local([a[i] + n2[i] for i in range(3)])
+        ns0, nt0 = local(a)
+        ns, nt = ns - ns0, nt - nt0
+        for p, q in ((a, b), (b, c), (c, a)):
+            s_, t_ = local([(p[i] + q[i]) / 2 for i in range(3)])
+            r = math.hypot(s_, t_)
+            total += (s_ * r * ns + t_ * r * nt) / 3 / 2 / 3
+    return total
+
+
 def applied_load(spec: dict[str, Any], surface: Surface) -> tuple[list[float], float]:
-    """Total force of the spec's pressures on the run's surface, and the sum of their sizes.
+    """Total applied force of the spec on the run's surface, and the sum of the loads' sizes.
 
     A positive pressure pushes into the body (ADR-026), against the outward normal, which
-    surface.bin's triangles follow. Values in newtons.
+    surface.bin's triangles follow. A force adds its components. Gravity and a centrifugal
+    load act on the volume the surface encloses, with the density of the (single) material.
+    Values in newtons.
     """
-    magnitude = {}
-    for load in spec["loads"]:
-        value = to_si(load["magnitude"]["value"], load["magnitude"]["unit"], "pressure")
-        for tag in load["faces"]:
-            magnitude[tag] = magnitude.get(tag, 0.0) + value
+    magnitude: dict[int, float] = {}
     total, gross = [0.0, 0.0, 0.0], 0.0
-    for patch in surface.patches:
-        p = magnitude.get(patch.tag)
+    gravity = [0.0, 0.0, 0.0]
+    spins = []
+    for load in spec["loads"]:
+        if load["type"] == "pressure":
+            value = to_si(load["magnitude"]["value"], load["magnitude"]["unit"], "pressure")
+            for tag in load["faces"]:
+                magnitude[tag] = magnitude.get(tag, 0.0) + value
+        elif load["type"] == "force":
+            f = [to_si(load[a]["value"], load[a]["unit"], "force") for a in "xyz"]
+            for i in range(3):
+                total[i] += f[i]
+            gross += math.sqrt(sum(x * x for x in f))
+        elif load["type"] == "gravity":
+            g = [to_si(load[a]["value"], load[a]["unit"], "acceleration") for a in "xyz"]
+            for i in range(3):
+                gravity[i] += g[i]
+        else:
+            spins.append(load)
+    for tag, a, b, c in _triangles(surface):
+        p = magnitude.get(tag)
         if p is None:
             continue
-        for a, b, c in patch.triangles:
-            pa, pb, pc = surface.positions[a], surface.positions[b], surface.positions[c]
-            ab = [pb[i] - pa[i] for i in range(3)]
-            ac = [pc[i] - pa[i] for i in range(3)]
-            n2 = [  # twice the area times the outward normal
-                ab[1] * ac[2] - ab[2] * ac[1],
-                ab[2] * ac[0] - ab[0] * ac[2],
-                ab[0] * ac[1] - ab[1] * ac[0],
+        n2 = _cross([b[i] - a[i] for i in range(3)], [c[i] - a[i] for i in range(3)])
+        for i in range(3):
+            total[i] -= p * n2[i] / 2
+        gross += abs(p) * math.sqrt(sum(x * x for x in n2)) / 2
+    if any(gravity) or spins:
+        densities = {
+            json.dumps(m.get("density"), sort_keys=True)
+            for m in spec["materials"]
+            if any(b["material"] == m["id"] for b in spec["bodies"])
+        }
+        if len(densities) != 1:
+            raise CaseError("Body loads in the harness need every body made of one material.")
+        density = json.loads(densities.pop())
+        rho = to_si(density["value"], density["unit"], "density")
+        volume, moment = volume_and_moment(surface)
+        for i in range(3):
+            total[i] += rho * volume * gravity[i]
+        gross += rho * volume * math.sqrt(sum(x * x for x in gravity))
+        for load in spins:
+            w = load["angularVelocity"]
+            omega = to_si(w["value"], w["unit"], "angularVelocity")
+            point = [
+                to_si(load["axisPoint"][a]["value"], load["axisPoint"][a]["unit"], "length")
+                for a in "xyz"
             ]
+            d = [float(load["axisDirection"][a]) for a in "xyz"]
+            n = math.sqrt(sum(x * x for x in d))
+            axis = [x / n for x in d]
+            # rho w² times the integral of the distance vector from the axis.
+            arm = [moment[i] - volume * point[i] for i in range(3)]
+            along = sum(arm[i] * axis[i] for i in range(3))
             for i in range(3):
-                total[i] -= p * n2[i] / 2
-            gross += abs(p) * math.sqrt(sum(x * x for x in n2)) / 2
+                total[i] += rho * omega**2 * (arm[i] - along * axis[i])
+            gross += rho * omega**2 * distance_integral(surface, point, axis)
     return total, gross
 
 

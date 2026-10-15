@@ -2,9 +2,9 @@
 
 ## Model
 
-A square bar along x in inches: length L = 10 in, width and depth h = 1 in. The end x = 0 is fixed (all three displacements held over the whole face). The top face (y = 1 in) is split at x = 9 in, and a pressure p = 500 psi acts on the last inch of it, the 1 in × 1 in end patch, pushing down. Linear elastic, E = 29,000 ksi, ν = 0.3. The STEP file declares inches and the setup uses ksi, psi and a mesh size in mm on purpose (docs/VERIFICATION.md).
+A square bar along x in inches: length L = 10 in, width and depth h = 1 in. The end x = 0 is fixed (all three displacements held over the whole face). The top face (y = 1 in) is split at x = 9 in, and a force of 500 lbf downwards (−y) acts on the last inch of it, the 1 in × 1 in end patch. Linear elastic, E = 29,000 ksi, ν = 0.3. The STEP file declares inches and the setup uses ksi, lbf, kip, N and a mesh size in mm on purpose (docs/VERIFICATION.md).
 
-Since M1 has pressure as its only load (force on a face comes in M2.3), the end load is a pressure over a short patch: a line load w = p h = 500 lbf/in over the last a = 1 in, total P = w a = 500 lbf.
+A force on a face is spread over it as a uniform traction (ADR-040), so the end load is a line load w = P/a = 500 lbf/in over the last a = 1 in, total P = 500 lbf. Until M2.3 the case applied the same load as a pressure of 500 psi on the patch; the two give the same nodal loads on the flat patch, so the results did not change.
 
 ## Closed form
 
@@ -28,4 +28,4 @@ Timoshenko beam (Euler-Bernoulli bending plus shear deflection; Roark's *Formula
 
 ## Reaction balance
 
-The load patch is 9 in from the fixed face and shares no nodes with it, so the reaction total equals the applied 500 lbf = 2,224.11 N exactly.
+The load patch is 9 in from the fixed face and shares no nodes with it, so the clamp's reaction equals the applied 500 lbf = 2,224.11 N upwards (+y), checked to 0.1 percent.

@@ -49,15 +49,15 @@ Stress is checked away from supports and load application points unless the case
 | Id | Case | Reference | Added in |
 | --- | --- | --- | --- |
 | V-01 | Thick cylinder, internal pressure, one end fixed and one open | Lamé (open ends): von Mises stress and radial displacement at the bore and the outside | M1 |
-| V-02 | Cantilever, end load (in M1 a pressure on an end patch of the top face) | Timoshenko beam: tip deflection under the patch load, bending stress at mid-length | M1 |
+| V-02 | Cantilever, end load: a force on an end patch of the top face (a pressure until M2.3) | Timoshenko beam: tip deflection under the patch load, bending stress at mid-length; clamp reaction | M1 |
 | V-03 | Plate with central hole in tension | Kirsch factor 3 for a wide plate, with finite-width correction | M2 |
 | V-04 | Remote force and moment on a stub | Reactions equal the applied force and moment; bending stress at mid-length from beam theory | M2 |
 | V-05 | Tank wall, hydrostatic pressure | Total reaction equals ρg × depth-weighted area; pressure at depth | M2 |
-| V-06 | Thin rotating ring | Hoop stress ρω²r² | M2 |
+| V-06 | Thin rotating ring: a quarter on three symmetry planes | Plane stress rotating disc (hoop stress ρω²r² in the thin limit): hoop stress and radial growth on both faces; hoop force ρω²t(b³ − a³)/3 across each cut | M2 |
 | V-07 | Block on elastic support | Displacement F/(k·A) | M2 |
 | V-08 | Bar with ends restrained, uniform temperature rise | Axial stress −EαΔT | M2 |
 | V-09 | Symmetry model against full model: a quarter of V-01's tube on leaning symmetry planes and a frictionless base | Quarter model results equal the full tube's Lamé values; hoop force p·a·L on each cut plane | M2 |
-| V-10 | Column under self-weight | Base reaction equals weight; stress ρgh | M2 |
+| V-10 | Column under self-weight, standing on a fixed base | Base reaction equals weight; stress ρg(h − z); top shortening ρgh²/2E | M2 |
 | V-11 | Two bonded blocks against one block | Displacement and stress away from the interface match the single body | M4 |
 | V-12 | Bi-material bar in tension | Series stiffness; uniform stress | M4 |
 | V-13 | Plane wall conduction | Linear temperature profile; flux kΔT/L | M5 |
@@ -81,9 +81,9 @@ Every gate feature must appear in at least one case. Update this table in the sa
 
 | Feature | Cases |
 | --- | --- |
-| Fixed support | V-01, V-02, V-03 |
+| Fixed support | V-01, V-02, V-03, V-10 |
 | Prescribed displacement | V-24, V-12 |
-| Frictionless / symmetry support | V-09, V-24 |
+| Frictionless / symmetry support | V-09, V-24, V-06 |
 | Elastic support | V-07 |
 | Force | V-02, V-12 |
 | Pressure | V-01, V-23 |
@@ -102,7 +102,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Thermal stress | V-18 |
 | Temperature-dependent properties | V-19 |
 | Modal | V-20, V-21, V-22 |
-| Reaction balance check | V-04, V-05, V-10 |
+| Reaction balance check | V-04, V-05, V-06, V-10 |
 | Local mesh refinement | V-03 |
 | First-order elements | to be added in M2 |
 | Mixed input units | all |

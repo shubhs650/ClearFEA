@@ -207,6 +207,7 @@ describe("setup tree", () => {
         model: "isotropic_elastic",
         youngsModulus: { value: 200000, unit: "MPa" },
         poissonsRatio: 0.3,
+        density: null,
       },
     ]);
     expect(sent.at(-1)?.bodies).toEqual([{ tag: 1, material: "material-1" }]);
@@ -248,8 +249,8 @@ describe("setup tree", () => {
     fireEvent.click(settings().getByRole("button", { name: "Use the selected face" }));
     fireEvent.change(settings().getByLabelText("Magnitude"), { target: { value: "2.5" } });
     expect(tree().getByRole("button", { name: "Pressure 1, complete" })).toBeTruthy();
-    await waitFor(() => expect(sent.at(-1)?.loads[0]?.magnitude).toEqual({ value: 2.5, unit: "MPa" }));
-    expect(sent.at(-1)?.loads[0]?.faces).toEqual([7]);
+    await waitFor(() => expect(sent.at(-1)?.loads[0]).toMatchObject({ magnitude: { value: 2.5, unit: "MPa" } }));
+    expect(sent.at(-1)?.loads[0]).toMatchObject({ faces: [7] });
     expect(sent.at(-1)?.supports).toEqual([{ id: "fixed-1", type: "fixed", name: "Fixed support 1", faces: [3] }]);
 
     // Opening the support again selects its faces in the viewer.
@@ -298,6 +299,86 @@ describe("setup tree", () => {
         faces: [3],
       }),
     );
+  });
+
+  it("adds a force, gravity and a centrifugal load, and asks the material for a density (M2.3)", async () => {
+    const { sent, route } = saves();
+    const spec: SimulationSpec = {
+      ...emptySpec,
+      materials: [
+        {
+          id: "steel",
+          name: "Steel",
+          model: "isotropic_elastic",
+          youngsModulus: { value: 200, unit: "GPa" },
+          poissonsRatio: 0.3,
+        },
+      ],
+      bodies: [{ tag: 1, material: "steel" }],
+    };
+    serve(routes([simulation(spec)], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+    act(() => scene.events[0]?.onPick(3));
+    fireEvent.click(tree().getByRole("button", { name: "Loads, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add a force" }));
+    expect(settings().getByRole("heading", { name: "Force" })).toBeTruthy();
+    expect(settings().getByText("Enter the x component (0 for none).")).toBeTruthy();
+    for (const [axis, value] of [["x", "0"], ["y", "-2"], ["z", "0"]]) {
+      fireEvent.change(settings().getByLabelText(axis as string), { target: { value } });
+    }
+    expect(tree().getByRole("button", { name: "Force 1, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.loads).toEqual([
+        {
+          id: "force-1",
+          type: "force",
+          name: "Force 1",
+          faces: [3],
+          x: { value: 0, unit: "N" },
+          y: { value: -2, unit: "N" },
+          z: { value: 0, unit: "N" },
+        },
+      ]),
+    );
+
+    // Gravity has no faces, and makes the material ask for its density.
+    fireEvent.click(tree().getByRole("button", { name: "Loads, complete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add gravity" }));
+    expect(settings().getByRole("heading", { name: "Gravity" })).toBeTruthy();
+    expect(settings().queryByText("Faces")).toBeNull();
+    for (const [axis, value] of [["x", "0"], ["y", "0"], ["z", "-9.81"]]) {
+      fireEvent.change(settings().getByLabelText(axis as string), { target: { value } });
+    }
+    expect(tree().getByRole("button", { name: "Gravity 1, complete" })).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Steel, incomplete" })).toBeTruthy();
+    fireEvent.click(tree().getByRole("button", { name: "Steel, incomplete" }));
+    expect(settings().getByText("Enter the density; gravity and centrifugal loads need it.")).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Density"), { target: { value: "7850" } });
+    expect(tree().getByRole("button", { name: "Steel, complete" })).toBeTruthy();
+
+    fireEvent.click(tree().getByRole("button", { name: "Loads, complete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add a centrifugal load" }));
+    expect(tree().getByRole("button", { name: "Centrifugal load 1, incomplete" })).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Angular velocity"), { target: { value: "100" } });
+    const fields = settings().getAllByLabelText(/^[xyz]$/);
+    // Point x, y, z, then direction x, y, z.
+    for (const [k, value] of ["0", "0", "0", "0", "0", "1"].entries()) {
+      fireEvent.change(fields[k] as HTMLElement, { target: { value } });
+    }
+    expect(tree().getByRole("button", { name: "Centrifugal load 1, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.loads[2]).toEqual({
+        id: "centrifugal-1",
+        type: "centrifugal",
+        name: "Centrifugal load 1",
+        angularVelocity: { value: 100, unit: "rpm" },
+        axisPoint: { x: { value: 0, unit: "mm" }, y: { value: 0, unit: "mm" }, z: { value: 0, unit: "mm" } },
+        axisDirection: { x: 0, y: 0, z: 1 },
+      }),
+    );
+    expect(sent.at(-1)?.loads[1]).toMatchObject({ z: { value: -9.81, unit: "m/s²" } });
+    expect(sent.at(-1)?.materials[0]?.density).toEqual({ value: 7850, unit: "kg/m³" });
   });
 
   it("deletes an item and opens its group", async () => {

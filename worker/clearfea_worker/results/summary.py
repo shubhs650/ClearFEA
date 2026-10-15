@@ -9,7 +9,9 @@ from array import array
 from pathlib import Path
 
 from ..deck import REACTION_SET, only_fixed_supports, support_set_names
-from ..deck.constraints import support_reactions
+from ..deck.applied import applied_nodal_loads
+from ..deck.constraints import node_constraints, support_reactions
+from ..deck.loads import fixed_support_nodes
 from ..meshing.volume import VolumeMesh
 from ..spec.simulation_schema import SimulationSpec, SolveResult
 from .dat import DatError, read_node_forces, read_reaction_totals
@@ -71,17 +73,29 @@ def read_results(
 def read_reactions(
     spec: SimulationSpec, mesh: VolumeMesh, dat: Path
 ) -> list[tuple[float, float, float]]:
-    """The total reaction of each support, in spec order (ADR-030, ADR-039).
+    """The total reaction of each support, in spec order (ADR-030, ADR-039, ADR-040).
 
     With fixed supports only, CalculiX's total for each support's node set. Otherwise the
     force at each held node, shared between the supports holding it (deck.constraints), so a
-    node on the edge between a symmetry plane and an end face is not counted twice.
+    node on the edge between a symmetry plane and an end face is not counted twice. Either
+    way CalculiX's figure includes the force and body loads applied at the held nodes, which
+    are taken back out (deck.applied); a pressure on held nodes still counts (M3.2).
     """
     names = support_set_names(spec)
     if only_fixed_supports(spec):
         totals = read_reaction_totals(dat, names)
-        return [totals[name] for name in names]
+        out = []
+        for support, name in zip(spec.supports, names, strict=True):
+            nodes = fixed_support_nodes(mesh, support.faces)
+            loads = applied_nodal_loads(spec, mesh, nodes).values()
+            out.append(tuple(totals[name][i] - sum(f[i] for f in loads) for i in range(3)))
+        return [(r[0], r[1], r[2]) for r in out]
     forces = read_node_forces(dat, REACTION_SET)
+    applied = applied_nodal_loads(spec, mesh, node_constraints(spec, mesh))
+    for node, (lx, ly, lz) in applied.items():
+        if node in forces:
+            fx, fy, fz = forces[node]
+            forces[node] = (fx - lx, fy - ly, fz - lz)
     try:
         return support_reactions(spec, mesh, forces)
     except ValueError as error:

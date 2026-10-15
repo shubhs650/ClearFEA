@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from harness.binfiles import read_fields, read_surface
+from harness.binfiles import Patch, Surface, read_fields, read_surface
 from harness.cases import (
     Box,
     Case,
@@ -20,11 +20,13 @@ from harness.cases import (
     applied_load,
     balance,
     build_spec,
+    distance_integral,
     evaluate,
     load_case,
     name_faces,
     reaction,
     unexpected_warnings,
+    volume_and_moment,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -77,7 +79,12 @@ def small_case(**changes) -> Case:  # type: ignore[no-untyped-def]
         "spec": {
             "supports": [{"id": "fixed-1", "faces": ["plate"]}],
             "loads": [
-                {"id": "pressure-1", "faces": ["corner"], "magnitude": {"value": 2, "unit": "bar"}}
+                {
+                    "id": "pressure-1",
+                    "type": "pressure",
+                    "faces": ["corner"],
+                    "magnitude": {"value": 2, "unit": "bar"},
+                }
             ],
             "mesh": {"size": {"value": 1, "unit": "mm"}},
         },
@@ -177,6 +184,80 @@ def test_reports_warnings_the_case_does_not_expect() -> None:
     ]
 
 
+def box_surface(lo: tuple[float, ...], hi: tuple[float, ...]) -> Surface:
+    """A closed box as twelve outward-facing triangles, one patch per face (tags 1 to 6)."""
+    corners = [(x, y, z) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
+    # Corner k has x from bit 2, y from bit 1, z from bit 0; each face counter-clockwise from
+    # outside.
+    quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+    patches = [Patch(k + 1, 0, 8, [(a, b, c), (a, c, d)]) for k, (a, b, c, d) in enumerate(quads)]
+    return Surface(corners, patches)
+
+
+def body_spec(loads: list[dict]) -> dict:
+    return {
+        "bodies": [{"tag": 1, "material": "m"}],
+        "materials": [{"id": "m", "density": {"value": 2.7, "unit": "g/cm³"}}],
+        "loads": loads,
+    }
+
+
+def test_volume_and_moment_of_a_box() -> None:
+    volume, moment = volume_and_moment(box_surface((0.1, 0, 0), (0.3, 0.1, 0.05)))
+    assert volume == pytest.approx(0.2 * 0.1 * 0.05, rel=1e-12)
+    assert moment == pytest.approx([volume * 0.2, volume * 0.05, volume * 0.025], rel=1e-12)
+
+
+def test_applied_load_adds_forces_weight_and_spin() -> None:
+    surface = box_surface((0.1, 0, 0), (0.3, 0.1, 0.05))
+    volume = 0.2 * 0.1 * 0.05
+    mass = 2700 * volume
+    spec = body_spec(
+        [
+            {
+                "type": "force",
+                "x": {"value": 1, "unit": "kN"},
+                "y": {"value": 0, "unit": "N"},
+                "z": {"value": 0, "unit": "N"},
+            },
+            {
+                "type": "gravity",
+                "x": {"value": 0, "unit": "g"},
+                "y": {"value": 0, "unit": "g"},
+                "z": {"value": -1, "unit": "g"},
+            },
+            {
+                "type": "centrifugal",
+                "angularVelocity": {"value": 60, "unit": "rpm"},
+                "axisPoint": {
+                    "x": {"value": 0, "unit": "mm"},
+                    "y": {"value": 50, "unit": "mm"},
+                    "z": {"value": 0, "unit": "mm"},
+                },
+                "axisDirection": {"x": 0, "y": 0, "z": 2},
+            },
+        ]
+    )
+    total, gross = applied_load(spec, surface)
+    omega2 = (2 * math.pi) ** 2
+    # The centroid is 0.2 m from the axis, along x.
+    assert total == pytest.approx(
+        [1000 + mass * omega2 * 0.2, 0, -mass * 9.80665], rel=1e-9, abs=1e-9
+    )
+    assert gross == pytest.approx(1000 + mass * 9.80665 + mass * omega2 * 0.2, rel=2e-3)
+
+
+def test_distance_integral_about_an_axis_through_a_square_section() -> None:
+    # A 2 x 2 square about its own axis, height 1: (4/3)(sqrt 2 + ln(1 + sqrt 2)) for a = 1.
+    # The coarse box surface only gets near it with finer triangles, so check the far case
+    # exactly and the near case loosely.
+    surface = box_surface((-1, -1, 0), (1, 1, 1))
+    exact = 4 / 3 * (math.sqrt(2) + math.log(1 + math.sqrt(2)))
+    assert distance_integral(surface, [0, 0, 0], [0, 0, 1]) == pytest.approx(exact, rel=0.1)
+    far = distance_integral(surface, [100, 0, 0], [0, 0, 1])
+    assert far == pytest.approx(4 * 100, rel=1e-4)
+
+
 # --- The committed cases load, and their reference values follow from their formulas ---
 
 
@@ -186,7 +267,8 @@ def test_every_case_folder_is_complete(folder: Path) -> None:
         assert (folder / name).is_file(), f"{folder.name} has no {name}"
     case = load_case(folder)
     assert folder.name.startswith(case.id + "-")
-    faces = {f for item in case.spec["supports"] + case.spec["loads"] for f in item["faces"]}
+    items = case.spec["supports"] + case.spec["loads"]
+    faces = {f for item in items for f in item.get("faces", [])}
     assert faces <= set(case.faces)
 
 
@@ -217,8 +299,11 @@ def test_v02_references_are_timoshenko_beam_values() -> None:
     inch, psi = 0.0254, 6894.757293168362
     e, nu = 29000e3 * psi, case.spec["materials"][0]["poissonsRatio"]
     length, a, side = 10 * inch, 1 * inch, 1 * inch
-    w = 500 * psi * side  # line load on the last inch
-    load = w * a
+    lbf = 4.4482216152605
+    force = case.spec["loads"][0]
+    assert force["type"] == "force" and force["y"] == {"value": -500, "unit": "lbf"}
+    load = 500 * lbf  # spread over the last inch of the top: a line load w = P / a
+    w = load / a
     i = side**4 / 12
     b = length - a
     bending = w / (24 * e * i) * (3 * length**4 - 4 * b**3 * length + b**4)
@@ -230,6 +315,62 @@ def test_v02_references_are_timoshenko_beam_values() -> None:
     )
     for name in ("Bending stress on top at mid-length", "Bending stress underneath at mid-length"):
         assert checks[name].reference == pytest.approx(stress, rel=1e-6)
+    assert checks["Clamp carries the end load"].reference == pytest.approx(load, rel=1e-12)
+
+
+def test_v10_references_are_a_column_under_its_weight() -> None:
+    case = load_case(CASES / "V-10-self-weight")
+    inch, lbf = 0.0254, 4.4482216152605
+    density = case.spec["materials"][0]["density"]
+    assert density == {"value": 0.284, "unit": "lb/in³"}
+    rho = 0.284 * 0.45359237 / inch**3
+    g = 9.80665
+    e = 200e9
+    side, height = 4 * inch, 40 * inch
+    checks = by_name(case)
+    weight = rho * g * side * side * height
+    assert checks["Base carries the weight (ρ g A h)"].reference == pytest.approx(weight, rel=1e-12)
+    assert weight / lbf == pytest.approx(0.284 * 4 * 4 * 40, rel=1e-12)  # lb times g is lbf
+    assert checks["Axial stress at mid-height (ρ g h/2)"].reference == pytest.approx(
+        rho * g * height / 2, rel=1e-12
+    )
+    assert checks["Top shortens by ρ g h²/(2E)"].reference == pytest.approx(
+        -rho * g * height**2 / (2 * e), rel=1e-5
+    )
+
+
+def test_v06_references_are_a_spinning_plane_stress_ring() -> None:
+    case = load_case(CASES / "V-06-rotating-ring")
+    rho, nu, e = 7850.0, case.spec["materials"][0]["poissonsRatio"], 210e9
+    omega = 10000 * 2 * math.pi / 60
+    a, b, t = 0.09, 0.1, 0.005
+    k = rho * omega**2
+
+    # Plane stress rotating disc with a hole (Timoshenko and Goodier, rotating discs).
+    def hoop(r: float) -> float:
+        c = (3 + nu) / 8 * k
+        return c * (a * a + b * b + a * a * b * b / r**2 - (1 + 3 * nu) / (3 + nu) * r * r)
+
+    checks = by_name(case)
+    assert checks["Hoop stress outside, r = b"].reference == pytest.approx(hoop(b), rel=1e-5)
+    assert checks["Hoop stress inside, r = a"].reference == pytest.approx(hoop(a), rel=1e-5)
+    # The radial stress is zero on both faces, so u = r σθ / E there.
+    assert checks["Radial growth outside (b σθ/E)"].reference == pytest.approx(
+        b * hoop(b) / e, rel=1e-5
+    )
+    assert checks["Radial growth inside (a σθ/E)"].reference == pytest.approx(
+        a * hoop(a) / e, rel=1e-5
+    )
+    force = k * t * (b**3 - a**3) / 3
+    for axis in "xy":
+        assert checks[f"Hoop force across the cut {axis} = 0"].reference == pytest.approx(
+            -force, rel=1e-5
+        )
+    # The hoop force is also the hoop stress integrated over the cut: integral of σθ dr times t.
+    steps = 2000
+    dr = (b - a) / steps
+    integral = sum(hoop(a + (k_ + 0.5) * dr) for k_ in range(steps)) * dr * t
+    assert integral == pytest.approx(force, rel=1e-6)
 
 
 def test_v09_references_are_the_full_tubes_lame_values() -> None:
@@ -273,6 +414,22 @@ def test_spec_templates_use_mixed_units() -> None:
     for folder in CASES.iterdir():
         spec = json.loads((folder / "spec.json").read_text())
         units.add(spec["materials"][0]["youngsModulus"]["unit"])
-        units |= {load["magnitude"]["unit"] for load in spec["loads"]}
+        if "density" in spec["materials"][0]:
+            units.add(spec["materials"][0]["density"]["unit"])
+        for load in spec["loads"]:
+            units |= {v["unit"] for v in load.values() if isinstance(v, dict) and "unit" in v}
         units.add(load_case(folder).unit)
-    assert {"GPa", "bar", "mm", "ksi", "psi", "in"} <= units
+    assert {
+        "GPa",
+        "MPa",
+        "bar",
+        "mm",
+        "ksi",
+        "in",
+        "lbf",
+        "kip",
+        "g",
+        "rpm",
+        "lb/in³",
+        "t/mm³",
+    } <= units

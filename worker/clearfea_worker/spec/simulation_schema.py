@@ -27,6 +27,12 @@ class Quantity(BaseModel):
     unit: Annotated[str, Field(max_length=20, min_length=1)]
 
 
+type OptionalQuantity = Quantity | None
+"""
+A Quantity, or null until the user has entered it.
+"""
+
+
 type ItemId = Annotated[str, Field(pattern="^[A-Za-z0-9_-]{1,64}$")]
 """
 Identifier of a material, support or load, chosen by the client and unique within the spec.
@@ -95,6 +101,10 @@ class IsotropicMaterial(BaseModel):
     poissons_ratio: Annotated[PoissonsRatio | None, Field(alias="poissonsRatio")]
     """
     Poisson's ratio, dimensionless, between -1 and 0.5 exclusive; null until entered.
+    """
+    density: Quantity | None = None
+    """
+    Mass density, a density quantity greater than zero (M2.3). Needed only by gravity and centrifugal loads; absent or null until entered.
     """
 
 
@@ -174,6 +184,98 @@ class PressureLoad(BaseModel):
     """
 
 
+class ForceLoad(BaseModel):
+    """
+    A total force in the global x, y and z directions spread over the faces in proportion to area, as a uniform traction (consistent nodal loads in the deck). Each component is a force quantity, null until entered.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: ItemId
+    type: Literal["force"]
+    name: ItemName
+    faces: FaceTags
+    x: OptionalQuantity
+    y: OptionalQuantity
+    z: OptionalQuantity
+
+
+class GravityLoad(BaseModel):
+    """
+    The acceleration of gravity in the global x, y and z directions, acting on every body through its material's density: the weight points along it (z = -1 g for gravity downwards along z). Each component is an acceleration quantity, null until entered. Several gravity loads add up.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: ItemId
+    type: Literal["gravity"]
+    name: ItemName
+    x: OptionalQuantity
+    y: OptionalQuantity
+    z: OptionalQuantity
+
+
+class AxisPoint(BaseModel):
+    """
+    A point in global coordinates; each coordinate a length quantity, null until entered.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    x: OptionalQuantity
+    y: OptionalQuantity
+    z: OptionalQuantity
+
+
+class AxisDirection(BaseModel):
+    """
+    A direction in global axes, dimensionless and of any length other than zero; each component null until entered.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    x: float | None
+    y: float | None
+    z: float | None
+
+
+class CentrifugalLoad(BaseModel):
+    """
+    Every body spinning steadily about an axis: a body force density times angular velocity squared times the distance from the axis, pointing away from it. The sense of rotation does not matter. One per setup.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: ItemId
+    type: Literal["centrifugal"]
+    name: ItemName
+    angular_velocity: Annotated[OptionalQuantity, Field(alias="angularVelocity")]
+    """
+    An angular velocity quantity; null until entered.
+    """
+    axis_point: Annotated[AxisPoint, Field(alias="axisPoint")]
+    """
+    A point on the axis of rotation.
+    """
+    axis_direction: Annotated[AxisDirection, Field(alias="axisDirection")]
+    """
+    The direction of the axis of rotation.
+    """
+
+
+type Load = PressureLoad | ForceLoad | GravityLoad | CentrifugalLoad
+
+
 class MeshSettings(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -187,7 +289,7 @@ class MeshSettings(BaseModel):
 
 class SimulationSpec(BaseModel):
     """
-    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
     """
 
     model_config = ConfigDict(
@@ -203,7 +305,7 @@ class SimulationSpec(BaseModel):
     bodies: list[BodyAssignment]
     materials: list[IsotropicMaterial]
     supports: list[Support]
-    loads: list[PressureLoad]
+    loads: list[Load]
     mesh: MeshSettings
 
 

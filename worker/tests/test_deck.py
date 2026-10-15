@@ -110,6 +110,59 @@ def supports_spec() -> dict:
     return spec
 
 
+def loads_spec() -> dict:
+    """The loads of M2.3 beside a pressure: a force on two faces in kN, gravity in g and a
+    centrifugal load in rpm about a tilted axis, on a material with a density in lb/in³."""
+    spec = fixture_spec()
+    spec["materials"][0]["density"] = {"value": 0.284, "unit": "lb/in³"}
+    spec["loads"] += [
+        {
+            "id": "force-1",
+            "type": "force",
+            "name": "Bolt load",
+            "faces": [3, 4],
+            "x": {"value": 1.5, "unit": "kN"},
+            "y": {"value": 0, "unit": "kN"},
+            "z": {"value": -250, "unit": "lbf"},
+        },
+        {
+            "id": "gravity-1",
+            "type": "gravity",
+            "name": "Weight",
+            "x": {"value": 0, "unit": "g"},
+            "y": {"value": -1, "unit": "g"},
+            "z": {"value": 0, "unit": "g"},
+        },
+        {
+            "id": "gravity-2",
+            "type": "gravity",
+            "name": "Sideways",
+            "x": {"value": 2, "unit": "m/s²"},
+            "y": {"value": 0, "unit": "m/s²"},
+            "z": {"value": 0, "unit": "m/s²"},
+        },
+        {
+            "id": "spin-1",
+            "type": "centrifugal",
+            "name": "Spin",
+            "angularVelocity": {"value": 3000, "unit": "rpm"},
+            "axisPoint": {
+                "x": {"value": 5, "unit": "mm"},
+                "y": {"value": 0, "unit": "mm"},
+                "z": {"value": 0, "unit": "mm"},
+            },
+            "axisDirection": {"x": 0, "y": 3, "z": 4},
+        },
+    ]
+    return spec
+
+
+def two_body_loads_spec() -> dict:
+    return loads_spec() | {
+        "bodies": [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
+    }
+
+
 def turned(mesh: VolumeMesh, degrees: float = 30.0) -> VolumeMesh:
     """``mesh`` turned about the z axis, so faces 1 (x = 0) and 4 lean."""
     c, s = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
@@ -170,6 +223,8 @@ SNAPSHOT_CASES = {
     "two-bodies-c3d10": (two_body_spec, lambda: two_tets(order=2, bodies=2)),
     "supports-c3d10": (supports_spec, lambda: two_tets(order=2)),
     "supports-turned-c3d4": (supports_spec, lambda: turned(two_tets(order=1))),
+    "loads-c3d10": (loads_spec, lambda: two_tets(order=2)),
+    "loads-two-bodies-c3d4": (two_body_loads_spec, lambda: two_tets(order=1, bodies=2)),
 }
 
 
@@ -333,6 +388,75 @@ def test_refuses_a_spec_it_cannot_translate(change, message: str) -> None:  # ty
     with pytest.raises(DeckError, match=None) as error:
         deck(broken(change), two_tets(order=2))
     assert message in str(error.value)
+
+
+def body_load_spec(change) -> dict:  # type: ignore[no-untyped-def]
+    spec = loads_spec()
+    change(spec)
+    return spec
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda s: s["materials"][0].pop("density"), 'Material "Structural steel" has no density'),
+        (
+            lambda s: s["materials"][0].update(density={"value": 0, "unit": "kg/m³"}),
+            "density must be greater than zero",
+        ),
+        (lambda s: s["materials"][0].update(density={"value": 1, "unit": "g"}), "not a density"),
+        (lambda s: s["loads"].append(s["loads"][4] | {"id": "spin-2"}), "is a second one"),
+        (
+            lambda s: s["loads"][4].update(axisDirection={"x": 0, "y": 0, "z": 0}),
+            "the axis direction is zero",
+        ),
+        (
+            lambda s: s["loads"][4].update(axisDirection={"x": 0, "y": None, "z": 1}),
+            "the y component of the axis direction has no value",
+        ),
+        (lambda s: s["loads"][4].update(angularVelocity=None), "angular velocity has no value"),
+        (
+            lambda s: s["loads"][4]["axisPoint"].update(z={"value": 1, "unit": "rpm"}),
+            "not a length",
+        ),
+        (lambda s: s["loads"][2].update(z=None), 'Gravity "Weight": z component has no value'),
+        (
+            lambda s: s["loads"][2].update(z={"value": 1, "unit": "N"}),
+            "not an acceleration unit",
+        ),
+        (lambda s: s["loads"][1].update(faces=[]), "Bolt load has no faces"),
+        (lambda s: s["loads"][1].update(x=None), 'Force "Bolt load": x component has no value'),
+        (lambda s: s["loads"][1].update(y={"value": 1, "unit": "MPa"}), "not a force"),
+    ],
+)
+def test_refuses_body_loads_and_forces_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(DeckError) as error:
+        deck(body_load_spec(change), two_tets(order=2))
+    assert message in str(error.value)
+
+
+def test_gravity_loads_add_up_into_one_line_per_body() -> None:
+    text = deck(two_body_loads_spec(), two_tets(order=1, bodies=2))
+    grav = [line for line in text.splitlines() if ", GRAV, " in line]
+    assert [line.split(",")[0] for line in grav] == ["B1", "B2"]
+    size, *direction = (float(v) for v in grav[0].split(", ")[2:])
+    g = (2.0, -9.80665, 0.0)
+    assert size == pytest.approx(math.hypot(*g), rel=1e-15)
+    assert direction == pytest.approx([c / math.hypot(*g) for c in g], rel=1e-15)
+    (spin,) = [line for line in text.splitlines() if line.startswith("B1, CENTRIF")]
+    omega = 3000 * 2 * math.pi / 60
+    values = [float(v) for v in spin.split(", ")[2:]]
+    assert values == pytest.approx([omega**2, 0.005, 0, 0, 0, 0.6, 0.8], rel=1e-15)
+
+
+def test_force_cloads_add_up_to_the_entered_force() -> None:
+    text = deck(loads_spec(), two_tets(order=2))
+    lines = text.split("*CLOAD\n")[1].split("*")[0].strip().splitlines()
+    total = [0.0, 0.0, 0.0]
+    for line in lines:
+        _, dof, value = line.split(", ")
+        total[int(dof) - 1] += float(value)
+    assert total == pytest.approx([1500.0, 0.0, -250 * 4.4482216152605], rel=1e-12)
 
 
 def test_refuses_a_mesh_with_nodes_outside_every_element() -> None:

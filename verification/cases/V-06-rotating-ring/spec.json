@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 210000, "unit": "MPa" },
+      "poissonsRatio": 0.3,
+      "density": { "value": 7.85e-9, "unit": "t/mm³" }
+    }
+  ],
+  "supports": [
+    { "id": "cut-x", "type": "frictionless", "name": "Cut at x = 0", "faces": ["cut-x"] },
+    { "id": "cut-y", "type": "frictionless", "name": "Cut at y = 0", "faces": ["cut-y"] },
+    { "id": "mid-plane", "type": "frictionless", "name": "Mid-plane", "faces": ["mid-plane"] }
+  ],
+  "loads": [
+    {
+      "id": "spin",
+      "type": "centrifugal",
+      "name": "10,000 rpm about z",
+      "angularVelocity": { "value": 10000, "unit": "rpm" },
+      "axisPoint": { "x": { "value": 0, "unit": "mm" }, "y": { "value": 0, "unit": "mm" }, "z": { "value": 0, "unit": "cm" } },
+      "axisDirection": { "x": 0, "y": 0, "z": 1 }
+    }
+  ],
+  "mesh": { "size": { "value": 2.5, "unit": "mm" } }
+}

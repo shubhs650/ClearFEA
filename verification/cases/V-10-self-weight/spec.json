@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200, "unit": "GPa" },
+      "poissonsRatio": 0,
+      "density": { "value": 0.284, "unit": "lb/in³" }
+    }
+  ],
+  "supports": [{ "id": "base", "type": "fixed", "name": "Base", "faces": ["base"] }],
+  "loads": [
+    {
+      "id": "gravity",
+      "type": "gravity",
+      "name": "Own weight",
+      "x": { "value": 0, "unit": "g" },
+      "y": { "value": 0, "unit": "g" },
+      "z": { "value": -1, "unit": "g" }
+    }
+  ],
+  "mesh": { "size": { "value": 1, "unit": "in" } }
+}

@@ -1,0 +1,67 @@
+** ClearFEA solver input, deck format 1. Generated from the simulation's
+** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
+** Geometry 00000000-0000-4000-8000-000000000001
+*HEADING
+ClearFEA linear static analysis
+** 5 nodes, 2 C3D4 elements
+*NODE, NSET=NALL
+1, 0.0, 0.0, 0.0
+2, 0.01, 0.0, 0.0
+3, 0.0, 0.01, 0.0
+4, 0.0, 0.0, 0.01
+5, 0.01, 0.01, 0.01
+** Body 1
+*ELEMENT, TYPE=C3D4, ELSET=B1
+1, 1, 2, 3, 4
+** Body 2
+*ELEMENT, TYPE=C3D4, ELSET=B2
+2, 2, 3, 4, 5
+** Fixed support fixed-1 "Fixed support 1", faces 1
+*NSET, NSET=S1
+1, 3, 4
+** Material steel "Structural steel"
+*MATERIAL, NAME=M1
+*ELASTIC
+200000000000.0, 0.3
+** Density 0.284 lb/in³
+*DENSITY
+7861.092937697686
+*SOLID SECTION, ELSET=B1, MATERIAL=M1
+*SOLID SECTION, ELSET=B2, MATERIAL=M1
+** Pressure pressure-1 "Pressure 1", faces 2, 3: 10.0 bar = 1000000.0 Pa
+** Force force-1 "Bolt load", faces 3, 4: (1.5 kN, 0.0 kN, -250.0 lbf) = (1500.0, 0.0, -1112.055403815125) N, spread over the faces by area
+** Gravity gravity-1 "Weight": (0.0 g, -1.0 g, 0.0 g) = (0.0, -9.80665, 0.0) m/s^2
+** Gravity gravity-2 "Sideways": (2.0 m/s², 0.0 m/s², 0.0 m/s²) = (2.0, 0.0, 0.0) m/s^2
+** Centrifugal load spin-1 "Spin": 3000.0 rpm = 314.1592653589793 rad/s about the axis through
+** (0.005, 0.0, 0.0) m along (0.0, 0.6, 0.8)
+*STEP
+*STATIC
+*BOUNDARY
+S1, 1, 3
+*DLOAD
+1, P1, 1000000.0
+2, P2, 1000000.0
+2, P4, 1000000.0
+*CLOAD
+1, 1, 80.69523889820444
+1, 3, -59.8250509859338
+2, 1, 360.2317462994014
+2, 3, -267.06510673200563
+3, 1, 279.5365074011969
+3, 3, -207.2400557460718
+4, 1, 360.2317462994015
+4, 3, -267.0651067320057
+5, 1, 419.30476110179586
+5, 3, -310.8600836191081
+*DLOAD
+B1, GRAV, 10.008515585365293, 0.19982983319968559, -0.9798306168738482, 0.0
+B2, GRAV, 10.008515585365293, 0.19982983319968559, -0.9798306168738482, 0.0
+B1, CENTRIF, 98696.04401089359, 0.005, 0.0, 0.0, 0.0, 0.6, 0.8
+B2, CENTRIF, 98696.04401089359, 0.005, 0.0, 0.0, 0.0, 0.6, 0.8
+*NODE FILE
+U
+*EL FILE
+S
+*NODE PRINT, NSET=S1, TOTALS=ONLY
+RF
+*END STEP

@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-06: a quarter of a thin ring spinning about its axis, on three symmetry planes, in mm.
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-06
+title: Thin rotating ring
+analysis: linear_static
+features: [centrifugal load, frictionless support, reaction balance, mixed input units]
+geometry:
+  unit: mm
+faces:
+  outside: { min: [0, 0, 0], max: [100, 100, 5] }
+  inside: { min: [0, 0, 0], max: [90, 90, 5] }
+  cut-x: { min: [0, 90, 0], max: [0, 100, 5] }
+  cut-y: { min: [90, 0, 0], max: [100, 0, 5] }
+  mid-plane: { min: [0, 0, 0], max: [100, 100, 0] }
+mesh:
+  coarse: { value: 2.5, unit: mm } # four elements across the ring
+  full: { value: 1.25, unit: mm }
+checks:
+  - name: Hoop stress outside, r = b
+    quantity: vonMises
+    face: outside
+    reference: { value: 72.5911, unit: MPa }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Hoop stress inside, r = a
+    quantity: vonMises
+    face: inside
+    reference: { value: 83.2226, unit: MPa }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Radial growth outside (b σθ/E)
+    quantity: displacement.radial
+    face: outside
+    reference: { value: 0.0345672, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Radial growth inside (a σθ/E)
+    quantity: displacement.radial
+    face: inside
+    reference: { value: 0.0356668, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Hoop force across the cut x = 0
+    quantity: reaction.x
+    support: cut-x
+    reference: { value: -3.88817, unit: kN }
+    tolerance: { coarse: 0.002, full: 0.001 }
+  - name: Hoop force across the cut y = 0
+    quantity: reaction.y
+    support: cut-y
+    reference: { value: -3.88817, unit: kN }
+    tolerance: { coarse: 0.002, full: 0.001 }
