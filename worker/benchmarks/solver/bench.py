@@ -18,6 +18,7 @@ and recorded as such, and that solver is not tried on larger meshes.
 """
 
 import argparse
+import gc
 import json
 import math
 import os
@@ -32,7 +33,7 @@ from pathlib import Path
 
 from clearfea_worker.deck import generate_deck
 from clearfea_worker.geometry.importer import import_geometry
-from clearfea_worker.meshing.mesher import ELEMENTS_PER_SIZE_CUBED, mesh_geometry
+from clearfea_worker.meshing.mesher import ELEMENTS_PER_SIZE_CUBED, MAX_ELEMENTS, mesh_geometry
 from clearfea_worker.meshing.volume import read_volume_mesh
 from clearfea_worker.spec.geometry_schema import Topology
 from clearfea_worker.spec.simulation_schema import SimulationSpec
@@ -291,6 +292,9 @@ def main() -> int:
     stopped: set[str] = set()
     for target in sorted(args.targets):
         size = (FILL * ELEMENTS_PER_SIZE_CUBED * volume / target) ** (1 / 3)
+        # The mesher refuses a size whose estimate passes MAX_ELEMENTS, so the 2 million target
+        # is the finest mesh ClearFEA makes of this block, with somewhat fewer elements.
+        size = max(size, (ELEMENTS_PER_SIZE_CUBED * volume / MAX_ELEMENTS) ** (1 / 3) * 1.0001)
         mesh_dir = root / f"mesh-{target}"
         mesh_seconds = None
         if not (mesh_dir / "mesh.bin").exists():
@@ -301,17 +305,26 @@ def main() -> int:
         elements, nodes = mesh.element_count, mesh.node_count
         print(f"target {target:,}: {elements:,} elements, {nodes:,} nodes", flush=True)
         reference = None
+        solvers = [solver for solver in args.solvers if solver not in stopped]
+        works = {
+            solver: root
+            / f"{target}-{args.build}-t{args.threads}-{solver.replace(' ', '_').lower()}"
+            for solver in solvers
+        }
+        for solver, work in works.items():
+            work.mkdir(exist_ok=True)
+            (work / "job.inp").write_text(
+                generate_deck(spec(fixed, loaded, size * 1000), mesh, solver=solver)
+            )
+        # The mesh is not needed while CalculiX runs, and the memory is (this script and ccx
+        # share the control group's limit).
+        del mesh
+        gc.collect()
         for solver in args.solvers:
             if solver in stopped:
                 print(f"  {solver}: skipped (stopped on a smaller mesh)", flush=True)
                 continue
-            work = (
-                root / f"{target}-{args.build}-t{args.threads}-{solver.replace(' ', '_').lower()}"
-            )
-            work.mkdir(exist_ok=True)
-            s = spec(fixed, loaded, size * 1000)
-            (work / "job.inp").write_text(generate_deck(s, mesh, solver=solver))
-            del s
+            work = works[solver]
             result = run_ccx(args.ccx, work, args.threads, limit, args.time_limit_s)
             found = extremes(work / "job.frd") if result["status"] == "ok" else None
             u, mises = found if found else (None, None)
