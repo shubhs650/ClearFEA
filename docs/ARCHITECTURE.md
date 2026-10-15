@@ -198,7 +198,7 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 | Remote force and moment | The force and moment at the reference point carried to the faces as the statically equivalent linear traction F/A + α × (x − c), J α = M + (P − c) × F (a distributing connection with weights by area), written as consistent nodal loads (`*CLOAD`) that add up to F with the moment M about P; no reference node (ADR-041) |
 | Hydrostatic pressure | p = ρ g · (x − s) below the free surface through s, zero above it, pushing into the body; written as consistent nodal loads (`*CLOAD`), with element faces the surface crosses split until the kink is followed closely (ADR-042) |
 | Gravity, centrifugal | `*DLOAD` `GRAV` and `CENTRIF` on each body's element set, with `*DENSITY` per material; gravity loads added into one vector, one centrifugal load per setup (ADR-040) |
-| Uniform temperature change | Initial and final temperature fields |
+| Uniform temperature change | Initial and final temperature fields: every node at 0 in `*INITIAL CONDITIONS, TYPE=TEMPERATURE` and at the change in the step's `*TEMPERATURE`, with `*EXPANSION` per material; the change counts from the stress-free state and applies no nodal load (ADR-044) |
 | Bonded interface | `*TIE` between the two surfaces |
 | Fixed temperature | `*BOUNDARY` on the temperature degree of freedom |
 | Heat flux, internal heat generation | `*DFLUX` |
