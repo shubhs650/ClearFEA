@@ -151,7 +151,7 @@ The worker records wall-clock start and end of the billable phase, CPU seconds a
 
 As built in M1.11 (ADR-033): the billable phase is the job's handler (downloads, work, uploads), sent as `metering.billableMs` with every completion; mesh and solve jobs are billed per started second at the rate their machine size had when they were queued; money is whole micro-credits; the charge is written to the append-only ledger in the same batch that completes the job, and only when the user pays (a success or a user fault). CPU seconds and peak memory are added with the benchmark and estimator (M2.11, M2.12).
 
-On localhost there is one physical machine, so a machine size is simulated: it sets the solver thread count and a memory limit on the solver process. That is enough to test estimates, out-of-memory handling and billing.
+On localhost there is one physical machine, so a machine size is simulated: it sets the solver thread count and a memory limit on the solver process. That is enough to test estimates, out-of-memory handling and billing. Machine sizes are rows of `machine_sizes` (name, cores, memory, rate). M2.12 sets the list (small, medium, large, xlarge: 2 to 16 cores, 8 to 64 GiB, placeholder rates in proportion to memory); the thread count and memory limit that simulate a size come with M8.5.
 
 ### Failure classification
 
@@ -170,6 +170,8 @@ The worker returns a cause code; the API maps it to who pays.
 ### Estimator
 
 A function from mesh statistics (nodes, elements, order, analysis type, number of modes) to predicted memory, run time and cost per machine size, and a recommended size. It starts as a fitted formula with coefficients in a versioned JSON file, calibrated from benchmark runs, and is re-fitted as measured runs accumulate. Recommendations are deliberately conservative on memory, because the platform pays when its recommendation is too small.
+
+As built in M2.12 (ADR-049): `packages/spec/estimator.json` holds, per analysis type, two fitted laws in the mesh's node count, `constant + coefficient × nodes^exponent`: the solver's peak memory and the solve job's time. `worker/benchmarks/solver/fit.py` writes it from the job-step benchmark (`steps.py`, `steps.json`), and a test fails if the file and the data disagree. `packages/spec/src/estimator.ts` evaluates the laws; `apps/api/src/billing/estimate.ts` prices the time on every machine size with the cost arithmetic of metering and recommends the cheapest size whose usable memory (85 percent) holds the peak times a margin of 1.25. `GET /api/simulations/{id}/estimate` returns it for the current ready mesh; the Run panel shows it with a machine-size choice; a run is queued on the chosen size (else the recommended one) and keeps the estimate in its record. The solver runs on one thread on every size (ADR-048), so the time is the same on each and only memory and rate differ. Element count, order and modes are not inputs yet: per node, first- and second-order meshes measured about the same, and modal runs come with M6.3.
 
 ## 7. Worker internals
 
