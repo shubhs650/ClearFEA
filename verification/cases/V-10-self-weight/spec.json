@@ -9,7 +9,7 @@
       "name": "Steel (case value)",
       "model": "isotropic_elastic",
       "youngsModulus": { "value": 200, "unit": "GPa" },
-      "poissonsRatio": 0.3,
+      "poissonsRatio": 0,
       "density": { "value": 0.284, "unit": "lb/in³" }
     }
   ],

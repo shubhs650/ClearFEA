@@ -2,7 +2,7 @@
 
 ## Model
 
-A square steel column in inches: section 4 in × 4 in, height h = 40 in along z, standing on its base (z = 0), which is a fixed support. Its only load is its own weight: gravity of −1 g along z on a density of 0.284 lb/in³. E = 200 GPa, ν = 0.3. The STEP file declares inches and the setup uses GPa, lb/in³ and g on purpose (docs/VERIFICATION.md); the full tier's mesh size is entered in mm.
+A square steel column in inches: section 4 in × 4 in, height h = 40 in along z, standing on its base (z = 0), which is a fixed support. Its only load is its own weight: gravity of −1 g along z on a density of 0.284 lb/in³. E = 200 GPa, ν = 0. Poisson's ratio is zero on purpose: with any other value the fixed base stops the base from contracting sideways, which the one-dimensional closed form does not assume, and the column's true shortening differs from it (by about 0.6 percent at ν = 0.3, measured on both tiers in M2.3, the same on both meshes, so it is not discretization error). With ν = 0 there is no sideways contraction, and the closed form below is the exact elasticity solution with a fixed base: u = v = 0, w = −ρ g (h z − z²/2) / E. The STEP file declares inches and the setup uses GPa, lb/in³ and g on purpose (docs/VERIFICATION.md); the full tier's mesh size is entered in mm.
 
 A pound of mass under standard gravity (1 g = 9.80665 m/s², exact) weighs exactly one pound-force, so ρ g = 0.284 lbf/in³.
 
@@ -17,11 +17,11 @@ The column is in uniaxial compression that grows linearly from the top (Timoshen
 ## Where the results are read
 
 - Base reaction: the support's total reaction along z from the run's result. CalculiX's reaction output at a held node includes the weight applied at that node; the reader takes it out (ADR-040), so the reaction is the weight to the solver's printed digits.
-- Axial stress: the mean von Mises stress over the side face x = 4 in between z = 19 and 21 in. The stress is linear in z, which ten-node tetrahedra reproduce, so the mean is the mid-height value; mid-height is five widths from the base, where the fixed base's restraint of the Poisson contraction has died out (Saint-Venant).
+- Axial stress: the mean von Mises stress over the side face x = 4 in between z = 19 and 21 in. The stress is linear in z, which ten-node tetrahedra reproduce, so the mean is the mid-height value.
 - Shortening: the mean z displacement over the top face.
 
 ## Tolerances
 
 - Base reaction: 0.1 percent at both tiers, as the automatic balance check: it follows from equilibrium and is exact for this straight-sided mesh.
 - Stress: 1 percent coarse, 0.5 percent full.
-- Shortening: 1 percent coarse, 0.5 percent full. The fixed base stops the base from contracting sideways, which the closed form does not assume; that stiffens the bottom inch or so a little.
+- Shortening: 1 percent coarse, 0.5 percent full. The displacement is quadratic in z, which ten-node tetrahedra reproduce.
