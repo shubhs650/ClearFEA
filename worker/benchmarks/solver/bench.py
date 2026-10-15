@@ -12,9 +12,9 @@ is not mistaken for a good one.
         [--solvers SPOOLES "ITERATIVE CHOLESKY" ...] [--ccx PATH --build NAME]
         [--results benchmarks/solver/results.json]
 
-Rows are added to the results file (one per mesh, solver and build), replacing a row with the
-same key. A solve that passes the memory limit or the time limit is stopped and recorded as
-such, and that solver is not tried on larger meshes.
+Rows are added to the results file (one per mesh, solver, build and thread count), replacing
+a row with the same key. A solve that passes the memory limit or the time limit is stopped
+and recorded as such, and that solver is not tried on larger meshes.
 """
 
 import argparse
@@ -41,6 +41,9 @@ from clearfea_worker.spec.simulation_schema import SimulationSpec
 #: it can for its size. A slender part of the same element count is easier for a direct solver.
 BLOCK = (100.0, 100.0, 50.0)
 DEFAULT_TARGETS = (100_000, 250_000, 500_000, 1_000_000, 2_000_000)
+#: Elements Gmsh makes on the block per element of the mesher's estimate (which is on the high
+#: side, ADR-028), measured at 20,000 and 100,000; sizes are chosen so meshes land near target.
+FILL = 0.82
 DEFAULT_SOLVERS = ("SPOOLES", "ITERATIVE CHOLESKY", "ITERATIVE SCALING")
 HERE = Path(__file__).resolve().parent
 
@@ -64,9 +67,7 @@ def end_faces(topology: Topology) -> tuple[int, int]:
     """The x = 0 face (held) and the x = L face (pressed)."""
     fixed = next(f.tag for f in topology.faces if math.isclose(f.centroid[0], 0.0, abs_tol=1e-9))
     loaded = next(
-        f.tag
-        for f in topology.faces
-        if math.isclose(f.centroid[0], BLOCK[0] / 1000, abs_tol=1e-9)
+        f.tag for f in topology.faces if math.isclose(f.centroid[0], BLOCK[0] / 1000, abs_tol=1e-9)
     )
     return fixed, loaded
 
@@ -114,7 +115,30 @@ def machine() -> dict[str, object]:
         "ramBytes": total_kb * 1024,
         "cpu": model.group(1).strip() if model else platform.processor(),
         "kernel": platform.release(),
+        "memoryLimitBytes": cgroup_memory_limit(),
     }
+
+
+def cgroup_memory_limit() -> int | None:
+    """The memory limit of this process's control group (v1 or v2), if it has one."""
+    for path in ("/sys/fs/cgroup/memory.max",):
+        try:
+            text = Path(path).read_text().strip()
+        except OSError:
+            continue
+        if text.isdigit():
+            return int(text)
+    try:
+        groups = Path("/proc/self/cgroup").read_text().splitlines()
+    except OSError:
+        return None
+    for line in groups:
+        _, controllers, group = line.split(":", 2)
+        if "memory" in controllers.split(","):
+            limit = Path(f"/sys/fs/cgroup/memory{group}/memory.limit_in_bytes")
+            if limit.exists() and int(limit.read_text()) < 2**62:
+                return int(limit.read_text())
+    return None
 
 
 def ccx_version(ccx: str) -> str:
@@ -160,7 +184,11 @@ def run_ccx(
     log.close()
     text = (work / "solver.log").read_text(errors="replace")
     code = os.waitstatus_to_exitcode(wait_status)
-    if status == "ok" and (code != 0 or "*ERROR" in text):
+    if status == "ok" and code == -signal.SIGKILL:
+        # Killed by someone else: the kernel's out-of-memory killer, as nothing else here
+        # sends SIGKILL.
+        status = "out_of_memory"
+    elif status == "ok" and (code != 0 or "*ERROR" in text):
         status = "failed"
     reported = re.search(r"Total CalculiX Time:\s*(\S+)", text)
     return {
@@ -174,21 +202,40 @@ def run_ccx(
     }
 
 
-def largest_displacement(frd: Path) -> float | None:
-    """Largest displacement magnitude in the .frd file, in metres."""
+def extremes(frd: Path) -> tuple[float, float] | None:
+    """Largest displacement magnitude (m) and largest nodal von Mises stress (Pa) in the .frd
+    file, as CalculiX averages them at the nodes."""
     if not frd.exists():
         return None
-    largest, inside = 0.0, False
+    largest = {"DISP": 0.0, "STRESS": 0.0}
+    block = None
     with frd.open() as f:
         for line in f:
-            if line.startswith(" -4  DISP"):
-                inside = True
-            elif inside and line.startswith(" -3"):
-                break
-            elif inside and line.startswith(" -1"):
-                u = [float(line[13 + 12 * k : 25 + 12 * k]) for k in range(3)]
-                largest = max(largest, math.sqrt(u[0] ** 2 + u[1] ** 2 + u[2] ** 2))
-    return largest if inside else None
+            if line.startswith(" -4  "):
+                block = line[5:13].strip()
+            elif line.startswith(" -3"):
+                block = None
+            elif block in largest and line.startswith(" -1"):
+                v = [
+                    float(line[13 + 12 * k : 25 + 12 * k])
+                    for k in range(6 if block == "STRESS" else 3)
+                ]
+                if block == "DISP":
+                    value = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+                else:
+                    sxx, syy, szz, sxy, syz, szx = v
+                    value = math.sqrt(
+                        0.5 * ((sxx - syy) ** 2 + (syy - szz) ** 2 + (szz - sxx) ** 2)
+                        + 3 * (sxy**2 + syz**2 + szx**2)
+                    )
+                largest[block] = max(largest[block], value)
+    return largest["DISP"], largest["STRESS"]
+
+
+def difference(value: float | None, reference: float | None) -> float | None:
+    if value is None or not reference:
+        return None
+    return abs(value - reference) / reference
 
 
 def load_results(path: Path) -> dict[str, object]:
@@ -199,14 +246,15 @@ def load_results(path: Path) -> dict[str, object]:
 
 def save_row(path: Path, row: dict[str, object]) -> None:
     data = load_results(path)
-    key = (row["targetElements"], row["solver"], row["build"])
+    fields = ("targetElements", "solver", "build", "threads")
+    key = tuple(row[f] for f in fields)
     runs = [
         r
         for r in data["runs"]  # type: ignore[union-attr]
-        if (r["targetElements"], r["solver"], r["build"]) != key
+        if tuple(r[f] for f in fields) != key
     ]
     runs.append(row)
-    runs.sort(key=lambda r: (r["build"], r["solver"], r["targetElements"]))
+    runs.sort(key=lambda r: (r["build"], r["threads"], r["solver"], r["targetElements"]))
     data["runs"] = runs
     path.write_text(json.dumps(data, indent=2) + "\n")
 
@@ -225,10 +273,10 @@ def main() -> int:
     parser.add_argument("--keep", action="store_true", help="keep .frd/.dat files")
     args = parser.parse_args()
     host = machine()
-    # Leave room for this script, the page cache and the system.
-    limit = int(
-        args.memory_limit_gb * 2**30 if args.memory_limit_gb else 0.85 * int(host["ramBytes"])
-    )
+    # Leave room for this script, the page cache and the system: 85 percent of the RAM or of
+    # the control group's limit, whichever is lower.
+    available = min(int(host["ramBytes"]), host["memoryLimitBytes"] or int(host["ramBytes"]))
+    limit = int(args.memory_limit_gb * 2**30 if args.memory_limit_gb else 0.85 * available)
     version = ccx_version(args.ccx)
     root = args.out
     root.mkdir(parents=True, exist_ok=True)
@@ -242,7 +290,7 @@ def main() -> int:
     volume = math.prod(BLOCK) * 1e-9
     stopped: set[str] = set()
     for target in sorted(args.targets):
-        size = (ELEMENTS_PER_SIZE_CUBED * volume / target) ** (1 / 3)
+        size = (FILL * ELEMENTS_PER_SIZE_CUBED * volume / target) ** (1 / 3)
         mesh_dir = root / f"mesh-{target}"
         mesh_seconds = None
         if not (mesh_dir / "mesh.bin").exists():
@@ -257,15 +305,18 @@ def main() -> int:
             if solver in stopped:
                 print(f"  {solver}: skipped (stopped on a smaller mesh)", flush=True)
                 continue
-            work = root / f"{target}-{args.build}-{solver.replace(' ', '_').lower()}"
+            work = (
+                root / f"{target}-{args.build}-t{args.threads}-{solver.replace(' ', '_').lower()}"
+            )
             work.mkdir(exist_ok=True)
             s = spec(fixed, loaded, size * 1000)
             (work / "job.inp").write_text(generate_deck(s, mesh, solver=solver))
             del s
             result = run_ccx(args.ccx, work, args.threads, limit, args.time_limit_s)
-            u = largest_displacement(work / "job.frd") if result["status"] == "ok" else None
-            if solver == "SPOOLES" and u is not None:
-                reference = u
+            found = extremes(work / "job.frd") if result["status"] == "ok" else None
+            u, mises = found if found else (None, None)
+            if solver == "SPOOLES" and found:
+                reference = found
             row = {
                 "targetElements": target,
                 "elements": elements,
@@ -281,16 +332,16 @@ def main() -> int:
                 "memoryLimitBytes": limit,
                 **result,
                 "largestDisplacementMetres": u,
-                "relativeDifferenceToSpooles": (
-                    abs(u - reference) / reference if u is not None and reference else None
-                ),
+                "largestVonMisesPascals": mises,
+                "displacementDifferenceToSpooles": difference(u, reference and reference[0]),
+                "vonMisesDifferenceToSpooles": difference(mises, reference and reference[1]),
                 "machine": host,
                 "date": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
             save_row(args.results, row)
             print(
                 f"  {solver}: {result['status']}, {result['wallSeconds']} s, "
-                f"{int(result['peakMemoryBytes']) / 2**30:.2f} GiB, u_max {u}",
+                f"{int(result['peakMemoryBytes']) / 2**30:.2f} GiB, u_max {u}, vm_max {mises}",
                 flush=True,
             )
             if result["status"] != "ok":

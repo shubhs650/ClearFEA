@@ -920,3 +920,30 @@ def thermal_load_spec(change) -> dict:  # type: ignore[no-untyped-def]
 def test_refuses_temperature_changes_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
     with pytest.raises(DeckError, match=re.escape(message)):
         deck(thermal_load_spec(change), two_tets(order=2, bodies=2))
+
+
+# --- Equation solver name (M2.11, ADR-048) ---
+
+
+def test_without_a_solver_name_the_static_line_leaves_the_choice_to_the_build() -> None:
+    lines = deck(fixture_spec(), two_tets(order=2)).splitlines()
+    assert "*STATIC" in lines
+    assert not any("SOLVER=" in line for line in lines)
+
+
+@pytest.mark.parametrize("solver", ["SPOOLES", "PASTIX", "ITERATIVE SCALING", "ITERATIVE CHOLESKY"])
+def test_a_solver_name_goes_on_the_static_line_and_nothing_else_changes(solver: str) -> None:
+    spec, mesh = SimulationSpec.model_validate(fixture_spec()), two_tets(order=2)
+    named = generate_deck(spec, mesh, solver=solver).splitlines()
+    plain = generate_deck(spec, mesh).splitlines()
+    assert [k for k, (a, b) in enumerate(zip(named, plain, strict=True)) if a != b] == [
+        plain.index("*STATIC")
+    ]
+    assert f"*STATIC, SOLVER={solver}" in named
+
+
+def test_refuses_an_unknown_solver_name() -> None:
+    with pytest.raises(DeckError, match="Unknown equation solver 'PARDISO'"):
+        generate_deck(
+            SimulationSpec.model_validate(fixture_spec()), two_tets(order=2), solver="PARDISO"
+        )

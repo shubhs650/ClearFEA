@@ -1,12 +1,18 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Solver supervision, with small scripts standing in for CalculiX."""
 
+import os
 import sys
 import threading
 import time
 from pathlib import Path
 
-from clearfea_worker.solver import run_calculix
+from clearfea_worker.solver import (
+    ITERATIVE_ABOVE_NODES,
+    equation_solver,
+    run_calculix,
+    solver_environment,
+)
 
 
 def fake_solver(tmp_path: Path, body: str) -> str:
@@ -67,3 +73,16 @@ def test_a_cancel_stops_the_solver(tmp_path: Path) -> None:
     run = run_calculix(deck(tmp_path), output, cancelled, executable=ccx)
     assert run.cancelled
     assert time.monotonic() - started < 10
+
+
+def test_ccx_gets_every_core_unless_told_otherwise(tmp_path: Path) -> None:
+    ccx = fake_solver(tmp_path, 'import os\nprint(os.environ.get("OMP_NUM_THREADS"), flush=True)')
+    lines: list[str] = []
+    run_calculix(deck(tmp_path), lines.append, threading.Event(), executable=ccx)
+    assert lines == [f"{len(os.sched_getaffinity(0))}\n"]
+    assert solver_environment({"OMP_NUM_THREADS": "2"})["OMP_NUM_THREADS"] == "2"
+
+
+def test_large_meshes_name_the_iterative_solver_and_small_ones_leave_spooles() -> None:
+    assert equation_solver(ITERATIVE_ABOVE_NODES) is None
+    assert equation_solver(ITERATIVE_ABOVE_NODES + 1) == "ITERATIVE CHOLESKY"

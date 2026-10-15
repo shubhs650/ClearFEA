@@ -6,6 +6,7 @@ written, so the API can stream it, and the whole log is kept in ``solver.log`` b
 deck. A crash of the solver ends only the child process, never the worker.
 """
 
+import os
 import shutil
 import subprocess
 import threading
@@ -17,6 +18,30 @@ from pathlib import Path
 POLL_SECONDS = 0.5
 #: How long a cancelled solver may take to stop before it is killed.
 TERMINATE_SECONDS = 5.0
+
+
+#: Above this many nodes a static deck names CalculiX's iterative solver (ITERATIVE CHOLESKY):
+#: SPOOLES needed 9.8 GiB at 140,000 nodes and ran out of 13.4 GiB at 331,000 in the M2.11
+#: benchmark, while the iterative solver solved 2.8 million nodes (ADR-048). At or below it the
+#: build's default, SPOOLES, solves it, as every verification case does.
+ITERATIVE_ABOVE_NODES = 150_000
+
+
+def equation_solver(node_count: int) -> str | None:
+    """The equation solver a static deck names for a mesh of ``node_count`` nodes; None leaves
+    the choice to the build (SPOOLES)."""
+    return "ITERATIVE CHOLESKY" if node_count > ITERATIVE_ABOVE_NODES else None
+
+
+def solver_environment(base: dict[str, str] | None = None) -> dict[str, str]:
+    """CalculiX's environment with every core this process may use given to it (ADR-048).
+
+    Without OMP_NUM_THREADS ccx sets up the matrix, factorises with SPOOLES and computes
+    stresses on one core. A value already set (by whoever runs the worker) is kept.
+    """
+    env = dict(os.environ if base is None else base)
+    env.setdefault("OMP_NUM_THREADS", str(len(os.sched_getaffinity(0))))
+    return env
 
 
 @dataclass(frozen=True)
@@ -57,6 +82,7 @@ def run_calculix(
             solver_command(deck, executable),
             cwd=deck.parent,
             stdin=subprocess.DEVNULL,
+            env=solver_environment(),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
