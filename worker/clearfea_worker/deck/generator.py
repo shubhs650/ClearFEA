@@ -220,11 +220,20 @@ def _constraint_groups(held: dict[int, Hold], skip: set[int]) -> list[_Group]:
     return list(groups.values())
 
 
-def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
+#: Equation solvers a deck may name (M2.11, ADR-048). None leaves the choice to the CalculiX
+#: build's default, which is what every run uses.
+SOLVERS = ("SPOOLES", "PASTIX", "ITERATIVE SCALING", "ITERATIVE CHOLESKY")
+
+
+def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None = None) -> str:
     """CalculiX input for a linear static analysis of ``spec`` on ``mesh``.
 
-    Raises DeckError when the spec is incomplete or does not fit the mesh.
+    ``solver`` names the equation solver on the ``*STATIC`` line; None writes no name, so the
+    build's default solves it. Raises DeckError when the spec is incomplete or does not fit
+    the mesh.
     """
+    if solver is not None and solver not in SOLVERS:
+        raise DeckError(f"Unknown equation solver '{solver}'.")
     if spec.analysis != "linear_static":
         raise DeckError(f"Analysis type '{spec.analysis}' is not supported.")
     if not spec.supports:
@@ -472,7 +481,7 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
         out.append("NALL, 0.0")
 
     out.append("*STEP")
-    out.append("*STATIC")
+    out.append("*STATIC" if solver is None else f"*STATIC, SOLVER={solver}")
     out.append("*BOUNDARY")
     for support, name in zip(spec.supports, support_sets, strict=True):
         if isinstance(support, FixedSupport):
