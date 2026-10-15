@@ -2,7 +2,8 @@
 """V-25 geometry: V-09's quarter tube, between half-planes at 30 and 120 degrees about z,
 written as a STEP file in millimetres.
 
-    uv run --directory worker python ../verification/cases/V-25-tube-in-elastic-sleeve/geometry.py OUT.step
+    cd worker
+    uv run python ../verification/cases/V-25-tube-in-elastic-sleeve/geometry.py OUT.step
 
 Inner radius 40 mm, outer radius 60 mm, length 100 mm from z = 0 to z = 100. The cut faces
 lean against the x and y axes on purpose, so the symmetry planes need the deck's local axes.
