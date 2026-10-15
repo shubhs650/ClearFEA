@@ -707,3 +707,8 @@ fieldset.field {
 .material-chooser .pane-subtitle {
   margin-bottom: 0;
 }
+
+/* The Mesh panel's note that its mesh was reused (M2.10). */
+.mesh-reused {
+  margin: 0 0 8px;
+}

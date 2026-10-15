@@ -67,7 +67,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M2.7 Uniform temperature change
 - [x] M2.8 Local mesh sizes on faces, edges and bodies; element order choice; quality summary
 - [x] M2.9 Material library (generic values with sources), custom materials saved per user
-- [ ] M2.10 Mesh reuse across runs by settings hash
+- [x] M2.10 Mesh reuse across runs by settings hash
 - [ ] M2.11 Benchmark: solver build
 - [ ] M2.12 Estimator v1 fitted from the benchmark data; estimate shown before run; machine size recommendation
 
@@ -167,6 +167,8 @@ Written by the last session for the next one. Replace, do not append.
 
 > M2.9 (2026-10-15): material library and saved materials (ADR-046, accepted under Shubham's standing M2 instruction, pending his review). Library: `packages/spec/library/materials.json`, 24 metals from public-domain MIL-HDBK-5G (1994), each value copied as printed in its table's units (ksi, lb/in³, µin/(in·°F)) with the table and page in `source`; thermal expansion only where the table prints a number (5086, 7050), otherwise empty. It is checked on import (`checkMaterialLibrary` in `packages/spec`) and by a range test after SI conversion. Spec: materials gain an optional `source` text, dropped by the web app when a value changes; still version 1, deck untouched. API: migration 0011 `materials` (owner, name unique per owner), `GET/POST /api/materials`, `DELETE /api/materials/:id`. Web: Materials panel lists your materials then the library with values in the project's units and the source, "Add this material" copies it; a material's panel has "Save to my materials". Checked through the UI with a 6061 block solved end to end: the deck reads E = 68258097202 Pa and ρ = 2712.63 kg/m³ from 9900 ksi and 0.098 lb/in³. Open: no non-metals (need another public-domain source); temperature-dependent properties (M5.5) and yield strength (M3.5) will extend the library entries; the source PDFs are scans, so a value check means opening the cited page. Screenshots in the project's `m2.9/` folder.
 
+> M2.10 (2026-10-15): mesh reuse by settings hash (ADR-047, accepted under Shubham's standing M2 instruction, pending his review). `meshSettingsText` in `packages/spec` writes the geometry id, its scaling and the global size, order and complete local sizes (as entered, tags sorted) with `MESH_SETTINGS_VERSION` in a fixed order; the API stores its SHA-256 in `meshes.settings_hash` (migration 0012). `POST /api/simulations/:id/mesh` reuses the user's newest ready (else still-meshing) mesh with that hash across all their simulations of the geometry: 200 with `reused: true`, no job, no charge; a new mesh is 201 with `reused: false`. Failed meshes and meshes made before M2.10 (no hash) are never reused. Runs are unchanged: they use the simulation's current mesh. Web: the Mesh panel says "Reused the mesh made earlier with these settings. Nothing was meshed or charged again." Checked with `make dev` and headless Chromium on the E-01 block: 5 mm, 3 mm, back to 5 mm answered in about 0.1 s with the first mesh and two charges in the ledger, not three. Deck, result reader and billing untouched. Also made a racy web test (`Setup.test.tsx`, stale mesh message) wait for the text. If Gmsh or OpenCASCADE is bumped and meshes change, bump `MESH_SETTINGS_VERSION` in the same pull request. Screenshots in the project's `m2.10/` folder.
+
 > Still to watch from the ADR review: browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -182,6 +184,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-15
 
+- M2.10: meshes are reused by a SHA-256 hash of geometry, scaling and mesh settings across a user's simulations of a geometry; a reused mesh queues no job and is not charged, and the Mesh panel says so (ADR-047 accepted under the standing M2 instruction).
 - M2.9: material library of 24 generic metals with values as printed in MIL-HDBK-5G and the table cited for each, custom materials saved per user and reusable across projects, both copied into a simulation with their source (ADR-046 accepted under the standing M2 instruction).
 - M2.8: local mesh sizes on faces, edges and bodies as graded Gmsh fields, first or second order elements, a mesh quality summary with a shape histogram, edge picking in the viewer; new V-03 plate with a hole and V-26 first-order bar pass both tiers (ADR-045 accepted under the standing M2 instruction).
 - M2.6: elastic support as normal-only grounded springs (SPRING1 along each node's share of the face normal, stiffness k times its share of the area), its reaction from the nodes' displacements; new V-07 block and V-25 tube in an elastic sleeve pass both tiers and the support check's foundation case is exact at every node (ADR-043 accepted under the standing M2 instruction).

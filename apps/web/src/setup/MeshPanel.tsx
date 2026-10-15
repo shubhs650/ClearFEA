@@ -153,7 +153,7 @@ export function MeshPanel({
       {mesh !== null && mesh.status !== "failed" && (
         <div className="mesh-summary" role="status" aria-label="Latest mesh">
           {reused && (
-            <p className="field-hint">
+            <p className="field-hint mesh-reused">
               {mesh.status === "meshing"
                 ? "A mesh with these settings is already being made, so this simulation will use it. It is not made or charged twice."
                 : "Reused the mesh made earlier with these settings. Nothing was meshed or charged again."}
