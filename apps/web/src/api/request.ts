@@ -65,3 +65,20 @@ async function send<T>(
   }
   return { kind: "ok", value: checked.value };
 }
+
+/** Fetches a binary file, such as a display mesh. Errors come back as the API's JSON text. */
+export async function apiBinary(path: string): Promise<ApiResult<ArrayBuffer>> {
+  let response: Response;
+  try {
+    response = await fetch(path, { credentials: "same-origin" });
+  } catch {
+    return { kind: "error", problem: unreachable };
+  }
+  if (!response.ok) {
+    const json: unknown = await response.json().catch(() => undefined);
+    const error = validateErrorResponse(json);
+    const problem = error.ok ? error.value.error : `${unreachable} (HTTP ${response.status})`;
+    return response.status === 401 ? { kind: "signedOut", problem } : { kind: "error", problem };
+  }
+  return { kind: "ok", value: await response.arrayBuffer() };
+}

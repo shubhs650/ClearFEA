@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { SessionUser } from "@clearfea/spec";
+import type { GeometryView, SessionUser } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
 import { fetchSession, signOut } from "./api/session";
 import { GeometryPanel } from "./geometry/GeometryPanel";
@@ -21,6 +21,15 @@ type SessionState =
  */
 export function App() {
   const [session, setSession] = useState<SessionState>({ kind: "checking" });
+  const [geometry, setGeometry] = useState<GeometryView | null>(null);
+  const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
+
+  // Face tags belong to one geometry, so a different geometry starts with no selection.
+  const geometryId = geometry?.id;
+  useEffect(() => {
+    void geometryId;
+    setSelection(new Set());
+  }, [geometryId]);
 
   useEffect(() => {
     let current = true;
@@ -35,7 +44,10 @@ export function App() {
     };
   }, []);
 
-  const signedOut = useCallback((notice?: string) => setSession({ kind: "signedOut", notice }), []);
+  const signedOut = useCallback((notice?: string) => {
+    setSession({ kind: "signedOut", notice });
+    setGeometry(null);
+  }, []);
 
   async function leave() {
     await signOut();
@@ -59,9 +71,14 @@ export function App() {
   return (
     <div className="shell">
       <SimulationTree />
-      <Viewer />
+      <Viewer
+        geometry={geometry}
+        selection={selection}
+        onSelectionChange={setSelection}
+        onSignedOut={signedOut}
+      />
       <SettingsPanel>
-        <GeometryPanel onSignedOut={signedOut} />
+        <GeometryPanel onSignedOut={signedOut} onGeometryChange={setGeometry} />
         <TestJobs onSignedOut={signedOut} />
       </SettingsPanel>
       <StatusBar user={session.user} onSignOut={leave} />

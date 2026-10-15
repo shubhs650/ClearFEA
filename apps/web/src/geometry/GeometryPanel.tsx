@@ -47,7 +47,14 @@ function sizeInFile(geometry: GeometryView): string | null {
     .join(" × ");
 }
 
-export function GeometryPanel({ onSignedOut }: { onSignedOut: (problem: string) => void }) {
+export function GeometryPanel({
+  onSignedOut,
+  onGeometryChange,
+}: {
+  onSignedOut: (problem: string) => void;
+  /** Called with each new state of the shown geometry, so the viewer can follow it. */
+  onGeometryChange?: (geometry: GeometryView) => void;
+}) {
   const [geometry, setGeometry] = useState<GeometryView | null>(null);
   const [unit, setUnit] = useState("");
   const [problem, setProblem] = useState<string>();
@@ -66,10 +73,14 @@ export function GeometryPanel({ onSignedOut }: { onSignedOut: (problem: string) 
     [onSignedOut],
   );
 
-  const show = useCallback((next: GeometryView) => {
-    setGeometry(next);
-    setUnit(next.confirmedUnit ?? next.detectedUnit ?? "");
-  }, []);
+  const show = useCallback(
+    (next: GeometryView) => {
+      setGeometry(next);
+      setUnit(next.confirmedUnit ?? next.detectedUnit ?? "");
+      onGeometryChange?.(next);
+    },
+    [onGeometryChange],
+  );
 
   useEffect(() => {
     void listGeometries().then((result) => {
