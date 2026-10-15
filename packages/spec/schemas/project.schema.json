@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Project",
+  "description": "Wire shapes of the project routes (docs/ARCHITECTURE.md section 4, ADR-038). In Phase 0 each user has one project, created when first asked for. Each message is a definition under $defs.",
+  "$defs": {
+    "ProjectView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "unitSystem"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "unitSystem": {
+          "type": "string",
+          "description": "Id of a unit system in packages/spec/units.json: the unit every quantity field offers first and the unit results are shown in."
+        }
+      }
+    },
+    "ProjectResponse": {
+      "description": "Answer to GET /api/project and PATCH /api/project.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project"],
+      "properties": { "project": { "$ref": "#/$defs/ProjectView" } }
+    },
+    "ProjectUpdate": {
+      "description": "Body of PATCH /api/project. The unit system must be one units.json lists.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unitSystem"],
+      "properties": { "unitSystem": { "type": "string", "minLength": 1, "maxLength": 50 } }
+    }
+  }
+}

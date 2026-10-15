@@ -3,7 +3,8 @@
 // and the three groups. Each edit produces a whole new spec, which the caller saves.
 
 import type { FixedSupport, IsotropicMaterial, PressureLoad, SimulationSpec } from "@clearfea/spec";
-import { FacesField, NumberField, QuantityField, TextField } from "./fields";
+import { QuantityInput } from "../units/QuantityInput";
+import { FacesField, NumberField, TextField } from "./fields";
 import {
   assignMaterial,
   type Group,
@@ -13,13 +14,6 @@ import {
   updateMaterial,
   updateSupport,
 } from "./spec";
-
-/**
- * Units offered while no value is entered. A fixed choice until M2.1 brings the project's
- * default unit system; any unit of the kind can be picked.
- */
-export const DEFAULT_MODULUS_UNIT = "GPa";
-export const DEFAULT_PRESSURE_UNIT = "MPa";
 
 const groupTitles: Record<Group, string> = {
   materials: "Materials",
@@ -93,12 +87,11 @@ export function MaterialPanel({
       <Notes status={status} />
       <TextField label="Name" value={material.name} onChange={(name) => set({ name })} />
       <p className="field-hint">Linear elastic, isotropic.</p>
-      <QuantityField
+      <QuantityInput
         label="Young's modulus"
         positive
         kind="pressure"
         value={material.youngsModulus}
-        defaultUnit={DEFAULT_MODULUS_UNIT}
         onChange={(youngsModulus) => set({ youngsModulus })}
       />
       <NumberField
@@ -178,11 +171,10 @@ export function PressurePanel({
       <h2 className="pane-title">Pressure</h2>
       <Notes status={status} />
       <TextField label="Name" value={load.name} onChange={(name) => set({ name })} />
-      <QuantityField
+      <QuantityInput
         label="Magnitude"
         kind="pressure"
         value={load.magnitude}
-        defaultUnit={DEFAULT_PRESSURE_UNIT}
         hint="Uniform and normal to each face. Positive pushes on the face towards the body; negative pulls (suction)."
         onChange={(magnitude) => set({ magnitude })}
       />

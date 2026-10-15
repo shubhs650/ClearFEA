@@ -13,6 +13,7 @@ import { fetchDisplayMesh, fetchTopology } from "../api/geometries";
 import { fetchMeshDisplay } from "../api/meshes";
 import { fetchRunFields, fetchRunSurface } from "../api/runs";
 import { fromSi } from "../units/convert";
+import { useSystemUnit } from "../units/system";
 import { type DisplayMesh, DisplayMeshError, parseDisplayMesh } from "../viewer/displayMesh";
 import { ModelView } from "../viewer/ModelView";
 import {
@@ -39,8 +40,8 @@ export type ResultDisplay = {
   run: RunView;
   quantity: Quantity;
   deformation: Deformation;
-  /** Display unit of each quantity kind (length, pressure). */
-  units: Record<string, string>;
+  /** Display unit of each quantity kind (length, pressure): the project system's. */
+  units: Readonly<Record<string, string>>;
 };
 
 /** Statuses in which the API serves the display mesh (apps/api/src/routes/geometries.ts). */
@@ -186,6 +187,7 @@ export function Viewer({
   const [webgl, setWebgl] = useState(true);
   const [load, setLoad] = useState<Load>({ kind: "none" });
   const [hovered, setHovered] = useState<number | null>(null);
+  const areaUnit = useSystemUnit("area");
 
   // The pick handler must see the latest selection without recreating the scene.
   const latest = useRef({ selection, onSelectionChange });
@@ -296,8 +298,10 @@ export function Viewer({
   }, [clear]);
 
   const describe = (tag: number) => {
-    const type = model?.faces.get(tag)?.type;
-    return type ? `Face ${tag}, ${faceTypes[type]}` : `Face ${tag}`;
+    const face = model?.faces.get(tag);
+    if (face === undefined) return `Face ${tag}`;
+    const area = Number(fromSi(face.area, areaUnit, "area").toPrecision(4));
+    return `Face ${tag}, ${faceTypes[face.type]}, ${area} ${areaUnit}`;
   };
 
   let message: string | null = null;

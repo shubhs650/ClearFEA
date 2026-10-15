@@ -8,5 +8,5 @@ export {
   simulationSpecProblems,
   type TopologyTags,
 } from "./simulation";
-export { unitsTable } from "./units";
+export { checkUnitsTable, isUnitSystem, systemUnit, unitsTable } from "./units";
 export { type Validation, validator } from "./validate";

@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Input fields for the setup panels. A number field keeps what the user types and reports a
 // value only when the text is a number (or empty, which is null), so a half-typed "1e" never
-// reaches the spec. The quantity field is a stand-in for M2.1's shared quantity input:
-// a number and a unit of the field's kind, stored as typed ({ value, unit }), never converted.
+// reaches the spec. Physical values use the shared QuantityInput in ../units/ (M2.1).
 
-import { type Quantity, unitsTable } from "@clearfea/spec";
 import { useId, useState } from "react";
 
 function parse(text: string): number | null | undefined {
@@ -69,77 +67,6 @@ export function NumberField({
           if ("value" in next) onChange(next.value);
         }}
       />
-      {(hint || problem) && (
-        <span id={hintId} className={problem ? "field-problem" : "field-hint"}>
-          {problem ?? hint}
-        </span>
-      )}
-    </div>
-  );
-}
-
-export function QuantityField({
-  label,
-  kind,
-  value,
-  defaultUnit,
-  onChange,
-  hint,
-  positive = false,
-}: {
-  label: string;
-  kind: "length" | "pressure";
-  value: Quantity | null;
-  /** The unit offered while no value is entered. */
-  defaultUnit: string;
-  onChange: (value: Quantity | null) => void;
-  hint?: string;
-  /** Only values greater than zero are reported. */
-  positive?: boolean;
-}) {
-  const units = Object.keys(unitsTable.kinds[kind]?.units ?? {});
-  const [text, setText] = useState(show(value?.value ?? null));
-  const [unit, setUnit] = useState(value?.unit ?? defaultUnit);
-  const range = positive ? { above: 0, below: Number.POSITIVE_INFINITY } : undefined;
-  const checked = check(text, range);
-  const problem = "problem" in checked ? checked.problem : undefined;
-  const hintId = useId();
-  const commit = (nextText: string, nextUnit: string) => {
-    const next = check(nextText, range);
-    if ("value" in next) onChange(next.value === null ? null : { value: next.value, unit: nextUnit });
-  };
-  return (
-    <div className="field">
-      <label htmlFor={`${hintId}-value`}>{label}</label>
-      <div className="quantity">
-        <input
-          id={`${hintId}-value`}
-          inputMode="decimal"
-          value={text}
-          aria-invalid={problem !== undefined}
-          aria-describedby={hint || problem ? hintId : undefined}
-          onChange={(event) => {
-            setText(event.target.value);
-            commit(event.target.value, unit);
-          }}
-        />
-        <select
-          aria-label={`${label} unit`}
-          value={unit}
-          onChange={(event) => {
-            setUnit(event.target.value);
-            commit(text, event.target.value);
-          }}
-        >
-          {/* A stored unit the table no longer lists stays visible, so the error mark can name it. */}
-          {!units.includes(unit) && <option value={unit}>{unit}</option>}
-          {units.map((u) => (
-            <option key={u} value={u}>
-              {u}
-            </option>
-          ))}
-        </select>
-      </div>
       {(hint || problem) && (
         <span id={hintId} className={problem ? "field-problem" : "field-hint"}>
           {problem ?? hint}

@@ -1,5 +1,5 @@
 {
-  "description": "Known conversions to SI, worked out by hand from the unit definitions, not from units.json. The TypeScript and Python unit modules must both reproduce every case in both directions. Errors are lookups that must be refused.",
+  "description": "Known conversions to SI, worked out by hand from the unit definitions, not from units.json. The TypeScript and Python unit modules must both reproduce every case in both directions. Errors are lookups that must be refused. Temperatures convert with an offset, temperature differences without one.",
   "relativeTolerance": 1e-12,
   "conversions": [
     { "kind": "length", "value": 1, "unit": "m", "si": 1 },
@@ -18,11 +18,49 @@
     { "kind": "pressure", "value": 1, "unit": "MPa", "si": 1000000 },
     { "kind": "pressure", "value": 210, "unit": "GPa", "si": 210000000000 },
     { "kind": "pressure", "value": 1, "unit": "psi", "si": 6894.757293168362 },
-    { "kind": "pressure", "value": 30, "unit": "ksi", "si": 206842718.79505083 }
+    { "kind": "pressure", "value": 30, "unit": "ksi", "si": 206842718.79505083 },
+    { "kind": "area", "value": 100, "unit": "mm²", "si": 0.0001 },
+    { "kind": "area", "value": 1, "unit": "in²", "si": 0.00064516 },
+    { "kind": "area", "value": 2, "unit": "ft²", "si": 0.18580608 },
+    { "kind": "moment", "value": 1, "unit": "kN·m", "si": 1000 },
+    { "kind": "moment", "value": 500, "unit": "N·mm", "si": 0.5 },
+    { "kind": "moment", "value": 1, "unit": "lbf·in", "si": 0.1129848290276167 },
+    { "kind": "moment", "value": 1, "unit": "lbf·ft", "si": 1.3558179483314004 },
+    { "kind": "density", "value": 7850, "unit": "kg/m³", "si": 7850 },
+    { "kind": "density", "value": 7.85, "unit": "g/cm³", "si": 7850 },
+    { "kind": "density", "value": 7.85e-9, "unit": "t/mm³", "si": 7850 },
+    { "kind": "density", "value": 0.284, "unit": "lb/in³", "si": 7861.092937697686 },
+    { "kind": "density", "value": 1, "unit": "lb/ft³", "si": 16.01846337396014 },
+    { "kind": "acceleration", "value": 1, "unit": "g", "si": 9.80665 },
+    { "kind": "acceleration", "value": 9810, "unit": "mm/s²", "si": 9.81 },
+    { "kind": "acceleration", "value": 386.088, "unit": "in/s²", "si": 9.8066352 },
+    { "kind": "acceleration", "value": 32.174, "unit": "ft/s²", "si": 9.8066352 },
+    { "kind": "angularVelocity", "value": 3000, "unit": "rpm", "si": 314.1592653589793 },
+    { "kind": "angularVelocity", "value": 180, "unit": "°/s", "si": 3.141592653589793 },
+    { "kind": "foundationStiffness", "value": 1, "unit": "N/mm³", "si": 1000000000 },
+    { "kind": "foundationStiffness", "value": 50, "unit": "MN/m³", "si": 50000000 },
+    { "kind": "foundationStiffness", "value": 100, "unit": "lbf/in³", "si": 27144713.752631344 },
+    { "kind": "temperature", "value": 300, "unit": "K", "si": 300 },
+    { "kind": "temperature", "value": 0, "unit": "°C", "si": 273.15 },
+    { "kind": "temperature", "value": 20, "unit": "°C", "si": 293.15 },
+    { "kind": "temperature", "value": -40, "unit": "°C", "si": 233.15 },
+    { "kind": "temperature", "value": -40, "unit": "°F", "si": 233.15 },
+    { "kind": "temperature", "value": 32, "unit": "°F", "si": 273.15 },
+    { "kind": "temperature", "value": 212, "unit": "°F", "si": 373.15 },
+    { "kind": "temperatureDifference", "value": 10, "unit": "K", "si": 10 },
+    { "kind": "temperatureDifference", "value": 50, "unit": "°C", "si": 50 },
+    { "kind": "temperatureDifference", "value": 90, "unit": "°F", "si": 50 },
+    { "kind": "thermalExpansion", "value": 1.2e-5, "unit": "1/°C", "si": 1.2e-5 },
+    { "kind": "thermalExpansion", "value": 6.5e-6, "unit": "1/°F", "si": 1.17e-5 },
+    { "kind": "thermalExpansion", "value": 12, "unit": "µm/(m·K)", "si": 1.2e-5 },
+    { "kind": "thermalExpansion", "value": 6.5, "unit": "µin/(in·°F)", "si": 1.17e-5 }
   ],
   "errors": [
     { "kind": "pressure", "unit": "mm", "reason": "a length unit is not a pressure unit" },
     { "kind": "length", "unit": "MM", "reason": "unit symbols are case-sensitive" },
-    { "kind": "stress", "unit": "Pa", "reason": "no such quantity kind" }
+    { "kind": "stress", "unit": "Pa", "reason": "no such quantity kind" },
+    { "kind": "length", "unit": "°C", "reason": "a temperature unit is not a length unit" },
+    { "kind": "area", "unit": "mm2", "reason": "area symbols are written with superscripts, mm²" },
+    { "kind": "temperatureDifference", "unit": "°R", "reason": "the table has no Rankine unit" }
   ]
 }

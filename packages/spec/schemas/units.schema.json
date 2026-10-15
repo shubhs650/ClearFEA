@@ -1,24 +1,51 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "UnitsTable",
-  "description": "Shape of packages/spec/units.json, the single table of quantity kinds and allowed units. A value in unit u converts to SI as value * factor + offset.",
+  "description": "Shape of packages/spec/units.json, the single table of quantity kinds, allowed units and unit systems. A value in unit u converts to SI as value * factor + offset.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "kinds"],
+  "required": [
+    "version",
+    "kinds",
+    "systems",
+    "defaultSystem"
+  ],
   "properties": {
-    "version": { "type": "integer", "minimum": 1 },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
     "kinds": {
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/QuantityKind" }
+      "additionalProperties": {
+        "$ref": "#/$defs/QuantityKind"
+      }
+    },
+    "systems": {
+      "type": "object",
+      "minProperties": 1,
+      "description": "Named unit systems, keyed by id. A system names one unit for every kind; it is the unit a quantity field offers first and the unit results are shown in. Values are still stored as typed.",
+      "additionalProperties": {
+        "$ref": "#/$defs/UnitSystem"
+      }
+    },
+    "defaultSystem": {
+      "type": "string",
+      "description": "Id of the system a project uses until its owner chooses another."
     }
   },
   "$defs": {
     "QuantityKind": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["si", "units"],
+      "required": [
+        "si",
+        "units"
+      ],
       "properties": {
-        "description": { "type": "string" },
+        "description": {
+          "type": "string"
+        },
         "si": {
           "type": "string",
           "description": "The SI unit stored and solved in. It must appear in units with factor 1 and offset 0."
@@ -26,20 +53,51 @@
         "units": {
           "type": "object",
           "minProperties": 1,
-          "additionalProperties": { "$ref": "#/$defs/UnitDefinition" }
+          "additionalProperties": {
+            "$ref": "#/$defs/UnitDefinition"
+          }
         }
       }
     },
     "UnitDefinition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["factor", "definition"],
+      "required": [
+        "factor",
+        "definition"
+      ],
       "properties": {
-        "factor": { "type": "number", "exclusiveMinimum": 0 },
-        "offset": { "type": "number" },
+        "factor": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "offset": {
+          "type": "number"
+        },
         "definition": {
           "type": "string",
           "description": "Where the factor comes from, so a reviewer can check it."
+        }
+      }
+    },
+    "UnitSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "units"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Shown in the unit system choice."
+        },
+        "units": {
+          "type": "object",
+          "description": "Quantity kind to unit symbol. Every kind of the table must appear, with a unit listed under that kind.",
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     }

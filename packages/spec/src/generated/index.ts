@@ -5,6 +5,7 @@
 export * from "./geometry";
 export * from "./health";
 export * from "./jobs";
+export * from "./project";
 export * from "./session";
 export * from "./simulation";
 export * from "./units";

@@ -156,13 +156,14 @@ describe("viewer", () => {
     expect(view?.meshes[0]?.faces.map((f) => f.tag)).toEqual([3, 7]);
   });
 
-  it("shows the face under the pointer with its surface type", async () => {
+  it("shows the face under the pointer with its surface type and area", async () => {
     serve(shown);
     render(<Harness view={geometry()} />);
     await screen.findByText(/Click a face/);
     const view = scene.instances[0];
     act(() => view?.events.onHover(7));
-    expect(screen.getByText("Face 7, cylinder")).toBeTruthy();
+    // The area, 0.005 m², in the default system's area unit.
+    expect(screen.getByText("Face 7, cylinder, 5000 mm²")).toBeTruthy();
     act(() => view?.events.onHover(null));
     expect(screen.queryByText(/^Face 7/)).toBeNull();
   });

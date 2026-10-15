@@ -1,40 +1,138 @@
 {
-  "version": 1,
+  "version": 2,
   "kinds": {
     "length": {
       "description": "Lengths and coordinates.",
       "si": "m",
       "units": {
-        "m": { "factor": 1, "definition": "SI base unit" },
-        "cm": { "factor": 0.01, "definition": "1 cm = 1e-2 m exactly" },
-        "mm": { "factor": 0.001, "definition": "1 mm = 1e-3 m exactly" },
-        "in": { "factor": 0.0254, "definition": "international inch, 1 in = 0.0254 m exactly" },
-        "ft": { "factor": 0.3048, "definition": "international foot, 1 ft = 12 in = 0.3048 m exactly" }
+        "m": {
+          "factor": 1,
+          "definition": "SI base unit"
+        },
+        "cm": {
+          "factor": 0.01,
+          "definition": "1 cm = 1e-2 m exactly"
+        },
+        "mm": {
+          "factor": 0.001,
+          "definition": "1 mm = 1e-3 m exactly"
+        },
+        "in": {
+          "factor": 0.0254,
+          "definition": "international inch, 1 in = 0.0254 m exactly"
+        },
+        "ft": {
+          "factor": 0.3048,
+          "definition": "international foot, 1 ft = 12 in = 0.3048 m exactly"
+        }
+      }
+    },
+    "area": {
+      "description": "Areas.",
+      "si": "m²",
+      "units": {
+        "m²": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "cm²": {
+          "factor": 0.0001,
+          "definition": "1 cm² = 1e-4 m² exactly"
+        },
+        "mm²": {
+          "factor": 1e-06,
+          "definition": "1 mm² = 1e-6 m² exactly"
+        },
+        "in²": {
+          "factor": 0.00064516,
+          "definition": "1 in² = 0.0254² m² = 0.00064516 m² exactly"
+        },
+        "ft²": {
+          "factor": 0.09290304,
+          "definition": "1 ft² = 0.3048² m² = 0.09290304 m² exactly"
+        }
       }
     },
     "force": {
       "description": "Forces.",
       "si": "N",
       "units": {
-        "N": { "factor": 1, "definition": "SI derived unit, kg m s^-2" },
-        "kN": { "factor": 1000, "definition": "1 kN = 1e3 N exactly" },
-        "MN": { "factor": 1000000, "definition": "1 MN = 1e6 N exactly" },
+        "N": {
+          "factor": 1,
+          "definition": "SI derived unit, kg m s^-2"
+        },
+        "kN": {
+          "factor": 1000,
+          "definition": "1 kN = 1e3 N exactly"
+        },
+        "MN": {
+          "factor": 1000000,
+          "definition": "1 MN = 1e6 N exactly"
+        },
         "lbf": {
           "factor": 4.4482216152605,
           "definition": "pound-force, 0.45359237 kg x 9.80665 m/s^2 = 4.4482216152605 N exactly"
         },
-        "kip": { "factor": 4448.2216152605, "definition": "1 kip = 1000 lbf exactly" }
+        "kip": {
+          "factor": 4448.2216152605,
+          "definition": "1 kip = 1000 lbf exactly"
+        }
+      }
+    },
+    "moment": {
+      "description": "Moments and torques.",
+      "si": "N·m",
+      "units": {
+        "N·m": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "N·mm": {
+          "factor": 0.001,
+          "definition": "1 N·mm = 1e-3 N·m exactly"
+        },
+        "kN·m": {
+          "factor": 1000,
+          "definition": "1 kN·m = 1e3 N·m exactly"
+        },
+        "lbf·in": {
+          "factor": 0.1129848290276167,
+          "definition": "4.4482216152605 N x 0.0254 m = 0.1129848290276167 N·m exactly"
+        },
+        "lbf·ft": {
+          "factor": 1.3558179483314003,
+          "definition": "4.4482216152605 N x 0.3048 m = 1.3558179483314004 N·m exactly; stored as the nearest double"
+        },
+        "kip·in": {
+          "factor": 112.9848290276167,
+          "definition": "1000 lbf·in = 112.9848290276167 N·m exactly"
+        }
       }
     },
     "pressure": {
       "description": "Pressures and stresses.",
       "si": "Pa",
       "units": {
-        "Pa": { "factor": 1, "definition": "SI derived unit, N m^-2" },
-        "kPa": { "factor": 1000, "definition": "1 kPa = 1e3 Pa exactly" },
-        "MPa": { "factor": 1000000, "definition": "1 MPa = 1e6 Pa = 1 N/mm^2 exactly" },
-        "GPa": { "factor": 1000000000, "definition": "1 GPa = 1e9 Pa exactly" },
-        "bar": { "factor": 100000, "definition": "1 bar = 1e5 Pa exactly" },
+        "Pa": {
+          "factor": 1,
+          "definition": "SI derived unit, N m^-2"
+        },
+        "kPa": {
+          "factor": 1000,
+          "definition": "1 kPa = 1e3 Pa exactly"
+        },
+        "MPa": {
+          "factor": 1000000,
+          "definition": "1 MPa = 1e6 Pa = 1 N/mm^2 exactly"
+        },
+        "GPa": {
+          "factor": 1000000000,
+          "definition": "1 GPa = 1e9 Pa exactly"
+        },
+        "bar": {
+          "factor": 100000,
+          "definition": "1 bar = 1e5 Pa exactly"
+        },
         "psi": {
           "factor": 6894.757293168362,
           "definition": "1 lbf/in^2 = 4.4482216152605 N / 0.00064516 m^2 = 6894.7572931683613... Pa (nearest double)"
@@ -44,6 +142,216 @@
           "definition": "1 ksi = 1000 psi = 6894757.2931683613... Pa (nearest double)"
         }
       }
+    },
+    "density": {
+      "description": "Mass densities.",
+      "si": "kg/m³",
+      "units": {
+        "kg/m³": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "g/cm³": {
+          "factor": 1000,
+          "definition": "1 g/cm³ = 1e-3 kg / 1e-6 m³ = 1e3 kg/m³ exactly"
+        },
+        "t/mm³": {
+          "factor": 1000000000000,
+          "definition": "1 t/mm³ = 1e3 kg / 1e-9 m³ = 1e12 kg/m³ exactly (the mm-N-s consistent mass unit)"
+        },
+        "lb/in³": {
+          "factor": 27679.90471020312,
+          "definition": "0.45359237 kg / 0.0254³ m³ = 27679.904710203121... kg/m³ (nearest double)"
+        },
+        "lb/ft³": {
+          "factor": 16.018463373960138,
+          "definition": "0.45359237 kg / 0.3048³ m³ = 16.018463373960140... kg/m³ (nearest double)"
+        }
+      }
+    },
+    "acceleration": {
+      "description": "Linear accelerations, such as gravity.",
+      "si": "m/s²",
+      "units": {
+        "m/s²": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "mm/s²": {
+          "factor": 0.001,
+          "definition": "1 mm/s² = 1e-3 m/s² exactly"
+        },
+        "g": {
+          "factor": 9.80665,
+          "definition": "standard acceleration of gravity, 9.80665 m/s² exactly (CGPM 1901)"
+        },
+        "in/s²": {
+          "factor": 0.0254,
+          "definition": "1 in/s² = 0.0254 m/s² exactly"
+        },
+        "ft/s²": {
+          "factor": 0.3048,
+          "definition": "1 ft/s² = 0.3048 m/s² exactly"
+        }
+      }
+    },
+    "angularVelocity": {
+      "description": "Rotational speeds.",
+      "si": "rad/s",
+      "units": {
+        "rad/s": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "rpm": {
+          "factor": 0.10471975511965977,
+          "definition": "1 rev/min = 2π rad / 60 s = 0.10471975511965977... rad/s (nearest double)"
+        },
+        "°/s": {
+          "factor": 0.017453292519943295,
+          "definition": "1 degree/s = π/180 rad/s = 0.017453292519943295... rad/s (nearest double)"
+        }
+      }
+    },
+    "foundationStiffness": {
+      "description": "Stiffness per unit area of an elastic support: pressure per unit of displacement.",
+      "si": "N/m³",
+      "units": {
+        "N/m³": {
+          "factor": 1,
+          "definition": "SI derived unit, Pa/m"
+        },
+        "MN/m³": {
+          "factor": 1000000,
+          "definition": "1 MN/m³ = 1e6 N/m³ exactly"
+        },
+        "N/mm³": {
+          "factor": 1000000000,
+          "definition": "1 N/mm³ = 1 MPa/mm = 1e9 N/m³ exactly"
+        },
+        "lbf/in³": {
+          "factor": 271447.1375263134,
+          "definition": "4.4482216152605 N / 0.0254³ m³ = 271447.13752631344... N/m³ (nearest double)"
+        }
+      }
+    },
+    "temperature": {
+      "description": "Absolute temperatures. Not for differences: use temperatureDifference, which has no offset.",
+      "si": "K",
+      "units": {
+        "K": {
+          "factor": 1,
+          "definition": "SI base unit"
+        },
+        "°C": {
+          "factor": 1,
+          "offset": 273.15,
+          "definition": "T(K) = T(°C) + 273.15 exactly"
+        },
+        "°F": {
+          "factor": 0.5555555555555556,
+          "offset": 255.37222222222223,
+          "definition": "T(K) = (T(°F) + 459.67) x 5/9; factor 5/9 and offset 459.67 x 5/9 = 255.37222... (nearest doubles)"
+        }
+      }
+    },
+    "temperatureDifference": {
+      "description": "Temperature changes and differences, converted without an offset.",
+      "si": "K",
+      "units": {
+        "K": {
+          "factor": 1,
+          "definition": "SI base unit"
+        },
+        "°C": {
+          "factor": 1,
+          "definition": "a difference of 1 °C is 1 K exactly"
+        },
+        "°F": {
+          "factor": 0.5555555555555556,
+          "definition": "a difference of 1 °F is 5/9 K = 0.5555... K (nearest double)"
+        }
+      }
+    },
+    "thermalExpansion": {
+      "description": "Coefficients of linear thermal expansion: strain per unit of temperature difference.",
+      "si": "1/K",
+      "units": {
+        "1/K": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "1/°C": {
+          "factor": 1,
+          "definition": "1/°C = 1/K exactly"
+        },
+        "1/°F": {
+          "factor": 1.8,
+          "definition": "1/°F = 9/5 per K = 1.8/K exactly"
+        },
+        "µm/(m·K)": {
+          "factor": 1e-06,
+          "definition": "1 µm/(m·K) = 1e-6/K exactly"
+        },
+        "µin/(in·°F)": {
+          "factor": 1.8e-06,
+          "definition": "1 µin/(in·°F) = 1e-6 x 1.8/K = 1.8e-6/K exactly"
+        }
+      }
     }
-  }
+  },
+  "systems": {
+    "metric-mm": {
+      "name": "Metric, millimetres (mm, N, MPa)",
+      "units": {
+        "length": "mm",
+        "area": "mm²",
+        "force": "N",
+        "moment": "N·mm",
+        "pressure": "MPa",
+        "density": "kg/m³",
+        "acceleration": "m/s²",
+        "angularVelocity": "rpm",
+        "foundationStiffness": "N/mm³",
+        "temperature": "°C",
+        "temperatureDifference": "°C",
+        "thermalExpansion": "1/°C"
+      }
+    },
+    "si": {
+      "name": "SI (m, N, Pa)",
+      "units": {
+        "length": "m",
+        "area": "m²",
+        "force": "N",
+        "moment": "N·m",
+        "pressure": "Pa",
+        "density": "kg/m³",
+        "acceleration": "m/s²",
+        "angularVelocity": "rad/s",
+        "foundationStiffness": "N/m³",
+        "temperature": "K",
+        "temperatureDifference": "K",
+        "thermalExpansion": "1/K"
+      }
+    },
+    "us-in": {
+      "name": "US customary, inches (in, lbf, psi)",
+      "units": {
+        "length": "in",
+        "area": "in²",
+        "force": "lbf",
+        "moment": "lbf·in",
+        "pressure": "psi",
+        "density": "lb/in³",
+        "acceleration": "in/s²",
+        "angularVelocity": "rpm",
+        "foundationStiffness": "lbf/in³",
+        "temperature": "°F",
+        "temperatureDifference": "°F",
+        "thermalExpansion": "1/°F"
+      }
+    }
+  },
+  "defaultSystem": "metric-mm"
 }
