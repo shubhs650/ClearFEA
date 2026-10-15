@@ -296,7 +296,8 @@ def applied_load(spec: dict[str, Any], surface: Surface) -> tuple[list[float], f
     """Total applied force of the spec on the run's surface, and the sum of the loads' sizes.
 
     A positive pressure pushes into the body (ADR-026), against the outward normal, which
-    surface.bin's triangles follow. A force adds its components. Gravity and a centrifugal
+    surface.bin's triangles follow. A force adds its components, and so does a remote load's
+    force (its moment adds no force). Gravity and a centrifugal
     load act on the volume the surface encloses, with the density of the (single) material.
     Values in newtons.
     """
@@ -309,8 +310,9 @@ def applied_load(spec: dict[str, Any], surface: Surface) -> tuple[list[float], f
             value = to_si(load["magnitude"]["value"], load["magnitude"]["unit"], "pressure")
             for tag in load["faces"]:
                 magnitude[tag] = magnitude.get(tag, 0.0) + value
-        elif load["type"] == "force":
-            f = [to_si(load[a]["value"], load[a]["unit"], "force") for a in "xyz"]
+        elif load["type"] in ("force", "remote"):
+            given = load if load["type"] == "force" else load["force"]
+            f = [to_si(given[a]["value"], given[a]["unit"], "force") for a in "xyz"]
             for i in range(3):
                 total[i] += f[i]
             gross += math.sqrt(sum(x * x for x in f))

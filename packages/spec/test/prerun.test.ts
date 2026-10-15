@@ -174,6 +174,36 @@ describe("pre-run validation", () => {
     ]);
   });
 
+  it("asks a remote load for faces, a reference point, a force and a moment (M2.4)", () => {
+    const s = spec();
+    const mm = (value: number) => ({ value, unit: "mm" });
+    const remote = {
+      id: "remote-1",
+      type: "remote",
+      name: "Pipe",
+      faces: [],
+      point: { x: mm(0), y: null, z: mm(0) },
+      force: { x: null, y: null, z: null },
+      moment: { x: null, y: { value: 0, unit: "N·m" }, z: null },
+    } as SimulationSpec["loads"][0];
+    expect(preRunProblems({ ...s, loads: [remote] }, topology)).toEqual([
+      { item: "remote-1", message: 'Load "Pipe" has no faces. Select the faces it acts on and add them to it.' },
+      { item: "remote-1", message: 'Load "Pipe" has no complete reference point. Enter x, y and z.' },
+      { item: "remote-1", message: 'Load "Pipe" has no complete force. Enter x, y and z (0 for none).' },
+      { item: "remote-1", message: 'Load "Pipe" has no complete moment. Enter x, y and z (0 for none).' },
+    ]);
+    const n = (value: number) => ({ value, unit: "N" });
+    const nm = (value: number) => ({ value, unit: "N·m" });
+    const complete = {
+      ...remote,
+      faces: [2],
+      point: { x: mm(0), y: mm(5), z: mm(0) },
+      force: { x: n(1), y: n(0), z: n(0) },
+      moment: { x: nm(0), y: nm(0), z: nm(2) },
+    } as SimulationSpec["loads"][0];
+    expect(preRunProblems({ ...s, loads: [complete] }, topology)).toEqual([]);
+  });
+
   it("runs gravity alone once the material has a density", () => {
     const s = spec();
     s.materials[0] = { ...s.materials[0], density: { value: 0.284, unit: "lb/in³" } } as SimulationSpec["materials"][0];

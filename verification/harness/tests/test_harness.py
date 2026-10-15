@@ -247,6 +247,27 @@ def test_applied_load_adds_forces_weight_and_spin() -> None:
     assert gross == pytest.approx(1000 + mass * 9.80665 + mass * omega2 * 0.2, rel=2e-3)
 
 
+def test_applied_load_adds_a_remote_loads_force_but_not_its_moment() -> None:
+    surface = box_surface((0, 0, 0), (0.1, 0.1, 0.1))
+
+    def xyz(x: float, y: float, z: float, unit: str) -> dict:
+        return {a: {"value": v, "unit": unit} for a, v in zip("xyz", (x, y, z), strict=True)}
+
+    spec = body_spec(
+        [
+            {
+                "type": "remote",
+                "point": xyz(1, 2, 3, "m"),
+                "force": xyz(3, 0, -4, "kN"),
+                "moment": xyz(100, 200, 300, "N·m"),
+            }
+        ]
+    )
+    total, gross = applied_load(spec, surface)
+    assert total == pytest.approx([3000, 0, -4000], rel=1e-12)
+    assert gross == pytest.approx(5000, rel=1e-12)
+
+
 def test_distance_integral_about_an_axis_through_a_square_section() -> None:
     # A 2 x 2 square about its own axis, height 1: (4/3)(sqrt 2 + ln(1 + sqrt 2)) for a = 1.
     # The coarse box surface only gets near it with finer triangles, so check the far case

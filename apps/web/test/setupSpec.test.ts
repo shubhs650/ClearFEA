@@ -38,7 +38,7 @@ function complete(): SimulationSpec {
   return updateLoad(spec, { ...load, magnitude: { value: 1, unit: "MPa" } });
 }
 
-/** M2.3: a force, gravity and a centrifugal load, each incomplete and complete. */
+/** M2.3: a force, gravity and a centrifugal load; M2.4: a remote load; each incomplete and complete. */
 function loadCases(full: SimulationSpec): SimulationSpec[] {
   const n = (value: number) => ({ value, unit: "N" });
   const g = (value: number) => ({ value, unit: "g" });
@@ -49,6 +49,8 @@ function loadCases(full: SimulationSpec): SimulationSpec[] {
   const force = addLoad(full, "force", [2]).spec;
   const gravity = addLoad(full, "gravity", [2]).spec;
   const spin = addLoad(dense, "centrifugal", []).spec;
+  const remote = addLoad(full, "remote", [2]).spec;
+  const nm = (value: number) => ({ value, unit: "N·m" });
   const last = (spec: SimulationSpec) => spec.loads.at(-1) as Load;
   const set = (spec: SimulationSpec, changes: object) => updateLoad(spec, { ...last(spec), ...changes } as Load);
   return [
@@ -64,6 +66,19 @@ function loadCases(full: SimulationSpec): SimulationSpec[] {
       angularVelocity: { value: 10, unit: "rpm" },
       axisPoint: { x: mm(0), y: mm(0), z: mm(0) },
       axisDirection: { x: 0, y: 0, z: 1 },
+    }),
+    remote,
+    set(remote, { point: { x: mm(0), y: mm(0), z: mm(50) }, force: { x: n(1), y: n(0), z: n(0) } }),
+    set(remote, {
+      point: { x: mm(0), y: mm(0), z: mm(50) },
+      force: { x: n(1), y: n(0), z: n(0) },
+      moment: { x: nm(0), y: nm(0), z: nm(3) },
+    }),
+    set(remote, {
+      point: { x: mm(0), y: mm(0), z: mm(50) },
+      force: { x: n(1), y: n(0), z: n(0) },
+      moment: { x: nm(0), y: nm(0), z: nm(3) },
+      faces: [],
     }),
   ];
 }

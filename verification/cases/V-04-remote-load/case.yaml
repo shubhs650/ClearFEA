@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-04: a round stub clamped at x = 0, loaded on its free end through a point beyond it.
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-04
+title: Remote force and moment on a stub
+analysis: linear_static
+features: [remote force and moment, fixed support, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  fixed-end: { min: [0, -15, -15], max: [0, 15, 15] }
+  loaded-end: { min: [200, -15, -15], max: [200, 15, 15] }
+  surface: { min: [0, -15, -15], max: [200, 15, 15] }
+mesh:
+  coarse: { value: 3, unit: mm }
+  full: { value: 2, unit: mm }
+# Read along the middle 60 mm, at least two diameters from both ends. Each line of the
+# surface is a strip within about 3.6 degrees of it (reference.md).
+checks:
+  - name: Clamp carries the axial force
+    quantity: reaction.x
+    support: clamp
+    reference: { value: -6, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Bending, torsion and tension on top (y = +R)
+    quantity: vonMises
+    face: surface
+    box: { min: [70, 14.97, -1], max: [130, 15, 1] }
+    reference: { value: 55.8112, unit: MPa }
+    tolerance: { coarse: 0.02, full: 0.01 }
+  - name: Bending, torsion and tension underneath (y = -R)
+    quantity: vonMises
+    face: surface
+    box: { min: [70, -15, -1], max: [130, -14.97, 1] }
+    reference: { value: 68.9330, unit: MPa }
+    tolerance: { coarse: 0.02, full: 0.01 }
+  - name: Torsion and tension on the side (z = +R, no bending)
+    quantity: vonMises
+    face: surface
+    box: { min: [70, -1, 14.97], max: [130, 1, 15] }
+    reference: { value: 40.1140, unit: MPa }
+    tolerance: { coarse: 0.02, full: 0.01 }
