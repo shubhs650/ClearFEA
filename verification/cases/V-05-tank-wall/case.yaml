@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-05: a strip of tank wall clamped at its base, water against one side up to 400 mm.
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-05
+title: Tank wall, hydrostatic pressure
+analysis: linear_static
+features: [hydrostatic pressure, fixed support, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  base: { min: [0, 0, 0], max: [100, 20, 0] }
+  top: { min: [0, 0, 500], max: [100, 20, 500] }
+  wet: { min: [0, 0, 0], max: [100, 0, 500] }
+  dry: { min: [0, 20, 0], max: [100, 20, 500] }
+mesh:
+  coarse: { value: 10, unit: mm } # about 5,800 elements, two through the thickness
+  full: { value: 5, unit: mm } # about 39,000 elements
+checks:
+  - name: Base carries the water's push (ρ g b H²/2)
+    quantity: reaction.y
+    support: base
+    reference: { value: -78.4532, unit: N }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Bending stress on the dry side at z = 100 mm
+    quantity: vonMises
+    face: dry
+    box: { min: [0, 20, 95], max: [100, 20, 105] }
+    reference: { value: 661.949, unit: kPa }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Bending stress on the dry side at z = 200 mm
+    quantity: vonMises
+    face: dry
+    box: { min: [0, 20, 195], max: [100, 20, 205] }
+    reference: { value: 196.133, unit: kPa }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Top of the wall moves away from the water
+    quantity: displacement.y
+    face: top
+    reference: { value: 0.0943232, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }

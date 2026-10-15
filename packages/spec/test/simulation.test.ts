@@ -230,6 +230,40 @@ describe("checkSimulationSpec", () => {
     ]);
   });
 
+  it("accepts a hydrostatic pressure and checks its units, faces and gravity (M2.5)", () => {
+    const s = spec();
+    s.loads.push({
+      id: "hydrostatic-1",
+      type: "hydrostatic",
+      name: "Water",
+      faces: [2],
+      fluidDensity: { value: 62.4, unit: "lb/ft³" },
+      gravity: { x: { value: 0, unit: "g" }, y: null, z: { value: -32.2, unit: "ft/s²" } },
+      freeSurface: { x: { value: 1, unit: "in" }, y: null, z: { value: 0, unit: "mm" } },
+    });
+    expect(validateSimulationSpec(s).ok).toBe(true);
+    expect(checkSimulationSpec(s, topology)).toEqual([]);
+    const { freeSurface: _, ...noSurface } = s.loads[1] as Extract<SimulationSpec["loads"][0], { type: "hydrostatic" }>;
+    expect(validateSimulationSpec({ ...s, loads: [noSurface] }).ok).toBe(false);
+
+    s.loads[1] = {
+      id: "hydrostatic-1",
+      type: "hydrostatic",
+      name: "Water",
+      faces: [2, 99],
+      fluidDensity: { value: 0, unit: "kg/m³" },
+      gravity: { x: { value: 0, unit: "m" }, y: { value: 0, unit: "g" }, z: { value: 0, unit: "g" } },
+      freeSurface: { x: { value: 1, unit: "N" }, y: null, z: null },
+    };
+    expect(checkSimulationSpec(s, topology)).toEqual([
+      'The fluid density of load "Water" must be greater than zero; it is 0 kg/m³.',
+      expect.stringMatching(/^The x component of the gravity of load "Water" is given in "m", which is not an acceleration unit/),
+      expect.stringMatching(/^The x coordinate of the free-surface point of load "Water" is given in "N", which is not a length unit/),
+      'The gravity of load "Water" is zero, so the fluid has no depth. Enter it, for example z = -1 g.',
+      'Load "Water" uses face 99, which the geometry does not have.',
+    ]);
+  });
+
   it("refuses a zero axis, a second centrifugal load and a density of zero", () => {
     const s = spec();
     s.materials[0] = { ...first(s.materials), density: { value: 0, unit: "kg/m³" } };

@@ -417,6 +417,42 @@ describe("setup tree", () => {
     );
   });
 
+  it("adds a hydrostatic pressure on the selected faces (M2.5)", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation(emptySpec)], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+    act(() => scene.events[0]?.onPick(3));
+    fireEvent.click(tree().getByRole("button", { name: "Loads, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add a hydrostatic pressure" }));
+    expect(settings().getByRole("heading", { name: "Hydrostatic pressure" })).toBeTruthy();
+    expect(settings().getByText("Enter the fluid density.")).toBeTruthy();
+    expect(settings().getByText("Enter the gravity (0 for none).")).toBeTruthy();
+    expect(settings().getByText("Enter a point on the free surface.")).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Fluid density"), { target: { value: "1000" } });
+    const fields = settings().getAllByLabelText(/^[xyz]$/);
+    // Gravity x, y, z, then the free-surface point x, y, z.
+    for (const [k, value] of ["0", "0", "-9.81", "0", "0", "800"].entries()) {
+      fireEvent.change(fields[k] as HTMLElement, { target: { value } });
+    }
+    expect(tree().getByRole("button", { name: "Hydrostatic pressure 1, complete" })).toBeTruthy();
+    const mm = (value: number) => ({ value, unit: "mm" });
+    const ms2 = (value: number) => ({ value, unit: "m/s²" });
+    await waitFor(() =>
+      expect(sent.at(-1)?.loads).toEqual([
+        {
+          id: "hydrostatic-1",
+          type: "hydrostatic",
+          name: "Hydrostatic pressure 1",
+          faces: [3],
+          fluidDensity: { value: 1000, unit: "kg/m³" },
+          gravity: { x: ms2(0), y: ms2(0), z: ms2(-9.81) },
+          freeSurface: { x: mm(0), y: mm(0), z: mm(800) },
+        },
+      ]),
+    );
+  });
+
   it("deletes an item and opens its group", async () => {
     const { sent, route } = saves();
     const spec: SimulationSpec = {

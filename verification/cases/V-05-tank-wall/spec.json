@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "aluminium" }],
+  "materials": [
+    {
+      "id": "aluminium",
+      "name": "Aluminium (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 70, "unit": "GPa" },
+      "poissonsRatio": 0
+    }
+  ],
+  "supports": [{ "id": "base", "type": "fixed", "name": "Base", "faces": ["base"] }],
+  "loads": [
+    {
+      "id": "water",
+      "type": "hydrostatic",
+      "name": "Water",
+      "faces": ["wet"],
+      "fluidDensity": { "value": 1, "unit": "g/cm³" },
+      "gravity": {
+        "x": { "value": 0, "unit": "g" },
+        "y": { "value": 0, "unit": "m/s²" },
+        "z": { "value": -32.17404855643044, "unit": "ft/s²" }
+      },
+      "freeSurface": {
+        "x": { "value": 2, "unit": "in" },
+        "y": { "value": -1, "unit": "m" },
+        "z": { "value": 40, "unit": "cm" }
+      }
+    }
+  ],
+  "mesh": { "size": { "value": 10, "unit": "mm" } }
+}

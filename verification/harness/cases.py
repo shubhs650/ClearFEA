@@ -292,16 +292,46 @@ def distance_integral(surface: Surface, point: list[float], axis: list[float]) -
     return total
 
 
+def _wet_integral(a: Any, b: Any, c: Any, head: Any) -> tuple[float, float]:
+    """Integral over the flat triangle a b c of max(0, head(x)) for a linear ``head``, and the
+    area of its part where the head is positive: the triangle is clipped by the plane head = 0
+    and the rest, a triangle or a quadrilateral, integrated exactly (head at the centroid of
+    each piece times its area)."""
+    corners = [list(a), list(b), list(c)]
+    heads = [head(p) for p in corners]
+    wet: list[list[float]] = []
+    for k in range(3):
+        p, q = corners[k], corners[(k + 1) % 3]
+        hp, hq = heads[k], heads[(k + 1) % 3]
+        if hp >= 0.0:
+            wet.append(p)
+        if (hp > 0.0 > hq) or (hq > 0.0 > hp):
+            t = hp / (hp - hq)
+            wet.append([p[i] + t * (q[i] - p[i]) for i in range(3)])
+    integral, area = 0.0, 0.0
+    for k in range(1, len(wet) - 1):
+        u = [wet[k][i] - wet[0][i] for i in range(3)]
+        v = [wet[k + 1][i] - wet[0][i] for i in range(3)]
+        piece = math.sqrt(sum(x * x for x in _cross(u, v))) / 2
+        centroid = [(wet[0][i] + wet[k][i] + wet[k + 1][i]) / 3 for i in range(3)]
+        integral += piece * max(0.0, head(centroid))
+        area += piece
+    return integral, area
+
+
 def applied_load(spec: dict[str, Any], surface: Surface) -> tuple[list[float], float]:
     """Total applied force of the spec on the run's surface, and the sum of the loads' sizes.
 
     A positive pressure pushes into the body (ADR-026), against the outward normal, which
     surface.bin's triangles follow. A force adds its components, and so does a remote load's
-    force (its moment adds no force). Gravity and a centrifugal
-    load act on the volume the surface encloses, with the density of the (single) material.
+    force (its moment adds no force). A hydrostatic pressure, rho g . (x - s) below the free
+    surface through s and nothing above it, also pushes into the body; it is integrated
+    exactly over each triangle's wet part. Gravity and a centrifugal load act on the volume the
+    surface encloses, with the density of the (single) material.
     Values in newtons.
     """
     magnitude: dict[int, float] = {}
+    fluids: list[tuple[set[int], float, list[float], list[float]]] = []
     total, gross = [0.0, 0.0, 0.0], 0.0
     gravity = [0.0, 0.0, 0.0]
     spins = []
@@ -316,6 +346,17 @@ def applied_load(spec: dict[str, Any], surface: Surface) -> tuple[list[float], f
             for i in range(3):
                 total[i] += f[i]
             gross += math.sqrt(sum(x * x for x in f))
+        elif load["type"] == "hydrostatic":
+            rho = to_si(load["fluidDensity"]["value"], load["fluidDensity"]["unit"], "density")
+            g = [
+                to_si(load["gravity"][a]["value"], load["gravity"][a]["unit"], "acceleration")
+                for a in "xyz"
+            ]
+            s = [
+                to_si(load["freeSurface"][a]["value"], load["freeSurface"][a]["unit"], "length")
+                for a in "xyz"
+            ]
+            fluids.append((set(load["faces"]), rho, g, s))
         elif load["type"] == "gravity":
             g = [to_si(load[a]["value"], load[a]["unit"], "acceleration") for a in "xyz"]
             for i in range(3):
@@ -330,6 +371,20 @@ def applied_load(spec: dict[str, Any], surface: Surface) -> tuple[list[float], f
         for i in range(3):
             total[i] -= p * n2[i] / 2
         gross += abs(p) * math.sqrt(sum(x * x for x in n2)) / 2
+    for faces, rho, g, s in fluids:
+        for tag, a, b, c in _triangles(surface):
+            if tag not in faces:
+                continue
+            n2 = _cross([b[i] - a[i] for i in range(3)], [c[i] - a[i] for i in range(3)])
+            size = math.sqrt(sum(x * x for x in n2))
+
+            def head(x: Any, g: list[float] = g, s: list[float] = s) -> float:
+                return sum(g[i] * (x[i] - s[i]) for i in range(3))
+
+            integral, _ = _wet_integral(a, b, c, head)
+            for i in range(3):
+                total[i] -= rho * integral * n2[i] / size
+            gross += rho * integral
     if any(gravity) or spins:
         densities = {
             json.dumps(m.get("density"), sort_keys=True)

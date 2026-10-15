@@ -25,7 +25,10 @@ import {
 /** The types of support the setup offers (M1.5 fixed; M2.2 prescribed displacement, frictionless). */
 export type SupportType = Support["type"];
 
-/** The types of load the setup offers (M1.5 pressure; M2.3 force, gravity, centrifugal; M2.4 remote). */
+/**
+ * The types of load the setup offers (M1.5 pressure; M2.3 force, gravity, centrifugal; M2.4 remote;
+ * M2.5 hydrostatic).
+ */
 export type LoadType = Load["type"];
 
 export type Mark = "complete" | "incomplete" | "error";
@@ -117,10 +120,20 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
 }
 
 /** What a load still needs before a run, as the tree item's notes. */
+/** How a load is named in "Pick the faces the … acts on." */
+const loadNoun: Record<LoadType, string> = {
+  pressure: "pressure",
+  force: "force",
+  remote: "remote load",
+  hydrostatic: "hydrostatic pressure",
+  gravity: "gravity",
+  centrifugal: "centrifugal load",
+};
+
 function loadMissing(load: Load): string[] {
   const missing: string[] = [];
   if (loadHasFaces(load) && load.faces.length === 0) {
-    missing.push(`Pick the faces the ${load.type === "remote" ? "remote load" : load.type} acts on.`);
+    missing.push(`Pick the faces the ${loadNoun[load.type]} acts on.`);
   }
   if (load.type === "pressure") {
     if (load.magnitude === null) missing.push("Enter the pressure.");
@@ -132,6 +145,10 @@ function loadMissing(load: Load): string[] {
     if (displacementAxes.some((axis) => load.point[axis] === null)) missing.push("Enter the reference point.");
     if (displacementAxes.some((axis) => load.force[axis] === null)) missing.push("Enter the force (0 for none).");
     if (displacementAxes.some((axis) => load.moment[axis] === null)) missing.push("Enter the moment (0 for none).");
+  } else if (load.type === "hydrostatic") {
+    if (load.fluidDensity === null) missing.push("Enter the fluid density.");
+    if (displacementAxes.some((axis) => load.gravity[axis] === null)) missing.push("Enter the gravity (0 for none).");
+    if (displacementAxes.some((axis) => load.freeSurface[axis] === null)) missing.push("Enter a point on the free surface.");
   } else {
     if (load.angularVelocity === null) missing.push("Enter the angular velocity.");
     if (displacementAxes.some((axis) => load.axisPoint[axis] === null)) missing.push("Enter a point on the axis.");
@@ -220,8 +237,9 @@ export function addFixedSupport(spec: SimulationSpec, faces: readonly number[]):
 }
 
 /**
- * Adds a load of the given type, with every value still to enter. A pressure, force or remote
- * load takes the given faces; gravity and a centrifugal load act on every body and have none.
+ * Adds a load of the given type, with every value still to enter. A pressure, force, remote load
+ * or hydrostatic pressure takes the given faces; gravity and a centrifugal load act on every body
+ * and have none.
  */
 export function addLoad(
   spec: SimulationSpec,
@@ -238,7 +256,16 @@ export function addLoad(
         ? { ...base, type, faces: [...faces], ...empty }
         : type === "remote"
           ? { ...base, type, faces: [...faces], point: { ...empty }, force: { ...empty }, moment: { ...empty } }
-          : type === "gravity"
+          : type === "hydrostatic"
+            ? {
+                ...base,
+                type,
+                faces: [...faces],
+                fluidDensity: null,
+                gravity: { ...empty },
+                freeSurface: { ...empty },
+              }
+            : type === "gravity"
           ? { ...base, type, ...empty }
           : { ...base, type, angularVelocity: null, axisPoint: { ...empty }, axisDirection: { ...empty } };
   return { id: load.id, spec: { ...spec, loads: [...spec.loads, load] } };

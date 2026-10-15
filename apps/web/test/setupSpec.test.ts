@@ -38,7 +38,10 @@ function complete(): SimulationSpec {
   return updateLoad(spec, { ...load, magnitude: { value: 1, unit: "MPa" } });
 }
 
-/** M2.3: a force, gravity and a centrifugal load; M2.4: a remote load; each incomplete and complete. */
+/**
+ * M2.3: a force, gravity and a centrifugal load; M2.4: a remote load; M2.5: a hydrostatic pressure;
+ * each incomplete and complete.
+ */
 function loadCases(full: SimulationSpec): SimulationSpec[] {
   const n = (value: number) => ({ value, unit: "N" });
   const g = (value: number) => ({ value, unit: "g" });
@@ -51,6 +54,12 @@ function loadCases(full: SimulationSpec): SimulationSpec[] {
   const spin = addLoad(dense, "centrifugal", []).spec;
   const remote = addLoad(full, "remote", [2]).spec;
   const nm = (value: number) => ({ value, unit: "N·m" });
+  const water = addLoad(full, "hydrostatic", [2]).spec;
+  const fluid = {
+    fluidDensity: { value: 1, unit: "g/cm³" },
+    gravity: { x: g(0), y: g(0), z: g(-1) },
+    freeSurface: { x: mm(0), y: mm(0), z: mm(80) },
+  };
   const last = (spec: SimulationSpec) => spec.loads.at(-1) as Load;
   const set = (spec: SimulationSpec, changes: object) => updateLoad(spec, { ...last(spec), ...changes } as Load);
   return [
@@ -80,6 +89,11 @@ function loadCases(full: SimulationSpec): SimulationSpec[] {
       moment: { x: nm(0), y: nm(0), z: nm(3) },
       faces: [],
     }),
+    water,
+    set(water, { ...fluid, fluidDensity: null }),
+    set(water, fluid),
+    set(water, { ...fluid, gravity: { x: g(0), y: g(0), z: g(0) } }),
+    set(water, { ...fluid, faces: [] }),
   ];
 }
 
