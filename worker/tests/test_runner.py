@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 import json
+import shutil
 import threading
 import urllib.error
 import urllib.request
@@ -9,16 +10,27 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from clearfea_worker import solver, versions
 from clearfea_worker.api import ApiClient, ApiError, ClaimedJob
 from clearfea_worker.config import Settings
 from clearfea_worker.geometry.importer import import_geometry
-from clearfea_worker.jobs import HANDLERS, JobContext
+from clearfea_worker.jobs import (
+    HANDLERS,
+    LOG_CHUNK_CHARS,
+    LOG_CUT_NOTE,
+    LOG_STREAM_CHARS,
+    JobContext,
+)
+from clearfea_worker.meshing.volume import write_volume_mesh
 from clearfea_worker.runner import run_forever, run_once
+from clearfea_worker.solver import SolverRun
 from clearfea_worker.spec.geometry_schema import ImportResult
-from clearfea_worker.spec.simulation_schema import MeshResult
+from clearfea_worker.spec.simulation_schema import MeshResult, SolveResult
 
+from .deck_meshes import two_tets
 from .fake_api import FakeApi
 from .step_models import block_with_hole
+from .test_deck import SNAPSHOTS, fixture_spec
 
 
 def settings_for(api: FakeApi, token: str = "t") -> Settings:
@@ -47,7 +59,10 @@ def test_completes_a_noop_job() -> None:
         assert paths[0] == "/internal/jobs/claim"
         assert "/internal/jobs/j1/heartbeat" in paths
         assert paths[-1] == "/internal/jobs/j1/complete"
-        assert api.calls[0][1] == {"workerId": "w1", "jobTypes": ["import", "mesh", "noop"]}
+        assert api.calls[0][1] == {
+            "workerId": "w1",
+            "jobTypes": ["import", "mesh", "noop", "solve"],
+        }
 
 
 def test_returns_false_when_nothing_is_queued() -> None:
@@ -249,3 +264,125 @@ def test_a_mesh_size_in_an_unknown_unit_is_a_platform_fault(tmp_path: Path) -> N
             "platform_fault",
             "bad_params",
         )
+
+
+SOLVE = Path(__file__).resolve().parent / "fixtures" / "solve"
+
+
+def solve_job(api: FakeApi, tmp_path: Path, spec: dict[str, Any]) -> None:
+    mesh_path = tmp_path / "mesh.bin"
+    write_volume_mesh(mesh_path, two_tets(order=2))
+    api.enqueue(
+        "j1",
+        "solve",
+        params={"meshId": "m1", "spec": spec},
+        downloads={"mesh.bin": mesh_path.read_bytes()},
+        uploads=("deck.inp", "solver.log", "results.frd", "results.dat"),
+    )
+
+
+def fake_calculix(returncode: int = 0, lines: tuple[str, ...] = ("Job finished\n",)) -> Any:
+    """Stands in for run_calculix: writes the fixture's output beside the deck."""
+
+    def run(deck: Path, on_output: Any, cancelled: threading.Event) -> SolverRun:
+        log = deck.with_name("solver.log")
+        log.write_text("".join(lines))
+        for line in lines:
+            on_output(line)
+        for suffix in (".frd", ".dat"):
+            shutil.copy(SOLVE / f"job{suffix}", deck.with_suffix(suffix))
+        return SolverRun(returncode, log)
+
+    return run
+
+
+@pytest.fixture
+def no_calculix(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    """The fast tier has no CalculiX: report a version and replace the solver run."""
+    monkeypatch.setattr(versions, "calculix_version", lambda: "2.21")
+    monkeypatch.setattr(solver, "run_calculix", fake_calculix())
+    return monkeypatch
+
+
+def test_runs_a_solve_job_and_streams_the_solver_log(tmp_path: Path, no_calculix: Any) -> None:
+    lines = tuple(f"line {k}\n" for k in range(5))
+    no_calculix.setattr(solver, "run_calculix", fake_calculix(lines=lines))
+    with FakeApi() as api:
+        solve_job(api, tmp_path, fixture_spec())
+        settings = settings_for(api)
+        assert run_once(client_for(settings), settings, HANDLERS) is True
+        job = api.jobs["j1"]
+        assert job["status"] == "succeeded", job.get("outcome")
+        result = SolveResult.model_validate(job["outcome"]["result"])
+        assert result.nodes == 14
+        assert result.displacement.max.node == 4
+        assert [r.support_id for r in result.reactions] == ["fixed-1"]
+        assert job["log"] == "".join(lines)
+        deck = api.uploads[("j1", "deck.inp")].decode()
+        assert deck == (SNAPSHOTS / "fixture-c3d10.inp").read_text()
+        assert api.uploads[("j1", "solver.log")].decode() == "".join(lines)
+        assert api.uploads[("j1", "results.frd")] == (SOLVE / "job.frd").read_bytes()
+        assert api.uploads[("j1", "results.dat")] == (SOLVE / "job.dat").read_bytes()
+
+
+def test_a_setup_the_deck_cannot_use_is_the_users_fault(tmp_path: Path, no_calculix: Any) -> None:
+    spec = fixture_spec()
+    spec["supports"] = []
+    with FakeApi() as api:
+        solve_job(api, tmp_path, spec)
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert (outcome["failureCategory"], outcome["failureCause"]) == (
+            "user_fault",
+            "setup_invalid",
+        )
+        assert "Add a support" in outcome["failureMessage"]
+        assert api.uploads == {}
+
+
+def test_a_solver_error_is_a_platform_fault_and_keeps_deck_and_log(
+    tmp_path: Path, no_calculix: Any
+) -> None:
+    lines = (" *ERROR reading *BOUNDARY: node set S9\n",)
+    no_calculix.setattr(solver, "run_calculix", fake_calculix(returncode=201, lines=lines))
+    with FakeApi() as api:
+        solve_job(api, tmp_path, fixture_spec())
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert (outcome["failureCategory"], outcome["failureCause"]) == (
+            "platform_fault",
+            "solver_error",
+        )
+        assert "node set S9" in outcome["failureMessage"]
+        assert set(api.uploads) == {("j1", "deck.inp"), ("j1", "solver.log")}
+
+
+def test_a_missing_solver_is_a_platform_fault(tmp_path: Path, no_calculix: Any) -> None:
+    no_calculix.setattr(versions, "calculix_version", lambda: None)
+    with FakeApi() as api:
+        solve_job(api, tmp_path, fixture_spec())
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert outcome["failureCause"] == "solver_missing"
+
+
+def test_log_text_is_sent_in_chunks_the_schema_allows() -> None:
+    context = JobContext()
+    context.log("x" * (LOG_CHUNK_CHARS + 10))
+    assert len(context.take_log()) == LOG_CHUNK_CHARS
+    assert context.take_log() == "x" * 10
+    assert not context.has_log()
+
+
+def test_log_text_past_the_stream_limit_is_cut_with_one_note() -> None:
+    context = JobContext()
+    context.log("x" * (LOG_STREAM_CHARS - 1))
+    context.log("yy")
+    context.log("zz")
+    text = ""
+    while context.has_log():
+        text += context.take_log()
+    assert text == "x" * (LOG_STREAM_CHARS - 1) + "y" + LOG_CUT_NOTE

@@ -27,15 +27,24 @@ class _Heartbeat:
         self._done = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True)
 
+    #: Most heartbeats one beat sends to catch up on queued log text.
+    MAX_LOG_POSTS = 16
+
     def beat(self) -> None:
-        try:
-            action = self._client.heartbeat(self._job.id, self._context.stage)
-        except ApiError as error:
-            log.warning("Heartbeat for job %s failed: %s", self._job.id, error)
-            return
-        if action != "continue":
-            log.info("API asked to %s job %s", action, self._job.id)
-            self._context.cancelled.set()
+        for _ in range(self.MAX_LOG_POSTS):
+            text = self._context.take_log()
+            try:
+                action = self._client.heartbeat(self._job.id, self._context.stage, text)
+            except ApiError as error:
+                self._context.unread_log(text)
+                log.warning("Heartbeat for job %s failed: %s", self._job.id, error)
+                return
+            if action != "continue":
+                log.info("API asked to %s job %s", action, self._job.id)
+                self._context.cancelled.set()
+                return
+            if not self._context.has_log():
+                return
 
     def _loop(self) -> None:
         while not self._done.wait(self._interval):
@@ -49,6 +58,8 @@ class _Heartbeat:
     def __exit__(self, *exc: object) -> None:
         self._done.set()
         self._thread.join()
+        if self._context.has_log():
+            self.beat()  # the last log lines, before the job is completed
 
 
 def run_job(

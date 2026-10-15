@@ -89,6 +89,11 @@ def _materials(spec: SimulationSpec, mesh: VolumeMesh) -> list[tuple[int, int, s
     return rows
 
 
+def support_set_names(spec: SimulationSpec) -> list[str]:
+    """The node set of each support in the deck, in spec order; the .dat reactions use them."""
+    return [f"S{k + 1}" for k in range(len(spec.supports))]
+
+
 def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
     """CalculiX input for a linear static analysis of ``spec`` on ``mesh``.
 
@@ -134,10 +139,8 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
             # The element id and ten nodes fit on one line of at most 16 entries.
             out.append(f"{e + 1}, " + ", ".join(str(nodes[k] + 1) for k in order))
 
-    support_sets = []
-    for k, support in enumerate(spec.supports):
-        name = f"S{k + 1}"
-        support_sets.append(name)
+    support_sets = support_set_names(spec)
+    for support, name in zip(spec.supports, support_sets, strict=True):
         out.append(
             f'** Fixed support {support.id} "{_label(support.name)}", faces '
             + ", ".join(str(f) for f in support.faces)

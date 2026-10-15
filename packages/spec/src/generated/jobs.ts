@@ -102,6 +102,10 @@ export interface ClaimResponse {
 export interface HeartbeatRequest {
   workerId: WorkerId;
   stage?: string | null;
+  /**
+   * Log text the job wrote since the previous heartbeat, appended to the job's log as one chunk (ADR-030).
+   */
+  log?: string;
 }
 /**
  * This interface was referenced by `Jobs`'s JSON-Schema

@@ -342,3 +342,189 @@ class SimulationMeshResponse(BaseModel):
         populate_by_name=True,
     )
     mesh: MeshView | None
+
+
+class SolveParams(BaseModel):
+    """
+    Parameters of a solve job (ADR-030): the run's frozen spec and the mesh it is solved on. The worker writes the deck from these two alone.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    mesh_id: Annotated[str, Field(alias="meshId")]
+    """
+    The mesh whose mesh.bin the job reads.
+    """
+    spec: SimulationSpec
+
+
+type Vector3 = Annotated[list[float], Field(max_length=3, min_length=3)]
+
+
+class NodeValue(BaseModel):
+    """
+    A nodal result value and where it occurs. SI units; position in metres.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    value: float
+    node: Annotated[int, Field(ge=0)]
+    """
+    Index of the node in mesh.bin, from 0.
+    """
+    position: Vector3
+
+
+class SupportReaction(BaseModel):
+    """
+    Total reaction force of one support, in newtons, as CalculiX reports it for the support's node set.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    support_id: Annotated[ItemId, Field(alias="supportId")]
+    force: Vector3
+
+
+class Displacement(BaseModel):
+    """
+    Largest displacement magnitude.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    max: NodeValue
+
+
+class VonMises(BaseModel):
+    """
+    Smallest and largest von Mises stress of CalculiX's nodal stresses.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    min: NodeValue
+    max: NodeValue
+
+
+class Software2(BaseModel):
+    """
+    Versions that solved the run.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    calculix: str
+
+
+class SolveResult(BaseModel):
+    """
+    Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    nodes: Annotated[int, Field(ge=4)]
+    """
+    Nodes with results; every node of the mesh.
+    """
+    displacement: Displacement
+    """
+    Largest displacement magnitude.
+    """
+    von_mises: Annotated[VonMises, Field(alias="vonMises")]
+    """
+    Smallest and largest von Mises stress of CalculiX's nodal stresses.
+    """
+    reactions: list[SupportReaction]
+    """
+    One entry per support, in spec order.
+    """
+    software: Annotated[Software2, Field(title="SolveSoftware")]
+    """
+    Versions that solved the run.
+    """
+
+
+type RunStatus = Literal["solving", "succeeded", "failed"]
+"""
+solving while the solve job is queued or running; succeeded or failed once it ends.
+"""
+
+
+class RunView(BaseModel):
+    """
+    A run as its owner sees it. The spec it was solved with is frozen in the run and not shown here yet (M1.10).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: str
+    simulation_id: Annotated[str, Field(alias="simulationId")]
+    mesh_id: Annotated[str, Field(alias="meshId")]
+    status: RunStatus
+    stage: str | None
+    """
+    What the solve job is doing: queued, then the worker's stage.
+    """
+    problem: str | None
+    """
+    Why the run failed, in plain language.
+    """
+    result: SolveResult | None
+    created_at: Annotated[str, Field(alias="createdAt")]
+    finished_at: Annotated[str | None, Field(alias="finishedAt")]
+
+
+class RunResponse(BaseModel):
+    """
+    Answer to POST /api/simulations/{id}/runs (HTTP 201) and GET /api/runs/{id}.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    run: RunView
+
+
+class RunListResponse(BaseModel):
+    """
+    Answer to GET /api/simulations/{id}/runs: the simulation's runs, newest first.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    runs: list[RunView]
+
+
+class RunLogResponse(BaseModel):
+    """
+    Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    text: str
+    next: Annotated[int, Field(ge=0)]

@@ -127,9 +127,12 @@ class ApiClient:
             return None
         return self._parse(ClaimResponse, "/jobs/claim", body).job
 
-    def heartbeat(self, job_id: str, stage: str | None) -> HeartbeatAction:
+    def heartbeat(self, job_id: str, stage: str | None, log: str = "") -> HeartbeatAction:
+        """Reports the job alive at ``stage``, with any log text written since the last one."""
         path = f"/jobs/{job_id}/heartbeat"
-        _, body = self._post(path, HeartbeatRequest(worker_id=self._worker_id, stage=stage))
+        extra = {"log": log} if log else {}
+        request = HeartbeatRequest(worker_id=self._worker_id, stage=stage, **extra)
+        _, body = self._post(path, request)
         return self._parse(HeartbeatResponse, path, body).action
 
     def succeed(self, job_id: str, result: dict[str, Any]) -> None:
