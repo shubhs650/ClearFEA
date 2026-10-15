@@ -6,6 +6,7 @@ import {
   type CreateSimulationRequest,
   checkSimulationSpec,
   type MeshResponse,
+  preRunProblems,
   type RunListResponse,
   type RunResponse,
   type SimulationMeshResponse,
@@ -193,12 +194,22 @@ simulations.get("/:id/runs", async (c) => {
 
 /**
  * Solves the simulation's saved spec on its current mesh (M1.8, ADR-030). The run keeps a copy
- * of the spec as it is now; later edits to the simulation never change it. Whether the setup
- * is complete is the worker's deck generator's call until pre-run validation (M1.12).
+ * of the spec as it is now; later edits to the simulation never change it. A setup that pre-run
+ * validation (M1.12, ADR-034) finds incomplete is refused here, so no job is queued or charged;
+ * the deck generator still refuses anything that slips past.
  */
 simulations.post("/:id/runs", async (c) => {
   const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
   if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  const geometry = await getGeometry(c.env.DB, c.var.userId, simulation.geometryId);
+  if (geometry === null) throw new Error("A simulation's geometry disappeared.");
+  const read = await topologyOf(c.env, c.var.userId, geometry);
+  if ("error" in read) return c.json({ error: read.error }, 500);
+  const problems = preRunProblems(simulation.spec, read.topology);
+  if (problems.length > 0) {
+    const list = problems.map((p) => p.message).join(" ");
+    return c.json({ error: `The setup is not ready to run. ${list}` }, 409);
+  }
   const mesh = await simulationMesh(c.env.DB, c.var.userId, simulation.id);
   const size = simulation.spec.mesh.size;
   if (mesh === null || mesh.status === "failed") {

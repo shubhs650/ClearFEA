@@ -2,7 +2,7 @@
 // Checks on a SimulationSpec that its JSON Schema cannot express (ADR-026): units of the right
 // kind, positive sizes, unique ids, references between items, and tags that exist in the
 // geometry. A spec that passes may still be incomplete; what is missing for a run is
-// pre-run validation's job (M1.12).
+// pre-run validation's job (preRunProblems in prerun.ts, M1.12).
 
 import type { Quantity, SimulationSpec } from "./generated/simulation";
 import { unitsTable } from "./units";

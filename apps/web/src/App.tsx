@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { GeometryView, SessionUser, SimulationSpec } from "@clearfea/spec";
+import { type GeometryView, preRunProblems, type SessionUser, type SimulationSpec } from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchSession, signOut } from "./api/session";
 import { GeometryPanel } from "./geometry/GeometryPanel";
@@ -11,7 +11,7 @@ import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { GroupPanel, MaterialPanel, PressurePanel, SupportPanel } from "./setup/ItemPanels";
 import { MeshPanel } from "./setup/MeshPanel";
-import { type ResultChoice, RunPanel, STRESS_UNIT } from "./setup/RunPanel";
+import { type ResultChoice, type RunBlocker, RunPanel, STRESS_UNIT } from "./setup/RunPanel";
 import {
   addFixedSupport,
   addMaterial,
@@ -101,14 +101,28 @@ export function App() {
     return result;
   }, [setup, mesh, run]);
 
-  /** Why the setup cannot be run now, or null when it can (the full pre-run list is M1.12). */
-  function runBlocked(): string | null {
-    if (spec === null) return "Start the setup first.";
-    if (simulation.save.kind !== "saved") return "Wait until all changes are saved.";
-    if (mesh === null || mesh.status === "failed") return "Generate the mesh first.";
-    if (mesh.status === "meshing") return "Wait for the mesh to finish.";
-    if (!meshIsCurrent(spec, mesh)) return "The mesh size changed. Generate the mesh again.";
-    return null;
+  /**
+   * What stops the setup from being run now, in plain language (M1.12, ADR-034): the pre-run
+   * problems of the saved spec, which the API checks too, then the save and the mesh.
+   */
+  function runBlockers(): RunBlocker[] {
+    if (setup.kind !== "open") return [{ message: "Start the setup first.", item: null }];
+    const blockers: RunBlocker[] = preRunProblems(setup.spec, setup.topology).map((problem) => ({
+      message: problem.message,
+      item: problem.item === "bodies" ? "materials" : problem.item,
+    }));
+    if (simulation.save.kind !== "saved") blockers.push({ message: "Wait until all changes are saved.", item: null });
+    // Without a mesh size the pre-run list already asks for one.
+    if (setup.spec.mesh.size !== null) {
+      if (mesh === null || mesh.status === "failed") {
+        blockers.push({ message: "There is no mesh. Generate it under Mesh.", item: "mesh" });
+      } else if (!meshIsCurrent(setup.spec, mesh)) {
+        blockers.push({ message: "The mesh size changed after the mesh was made. Generate the mesh again.", item: "mesh" });
+      } else if (mesh.status === "meshing") {
+        blockers.push({ message: "The mesh is still being made. Wait for it to finish.", item: "mesh" });
+      }
+    }
+    return blockers;
   }
 
   async function leave() {
@@ -175,7 +189,8 @@ export function App() {
           run={run}
           currentSpec={spec}
           log={runs.log}
-          blocked={runBlocked()}
+          blockers={runBlockers()}
+          onOpen={select}
           lengthUnit={lengthUnit}
           supportNames={new Map(spec.supports.map((s) => [s.id, s.name]))}
           requesting={runs.requesting}

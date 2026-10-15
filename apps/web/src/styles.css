@@ -469,6 +469,19 @@ button:disabled {
   color: var(--error);
 }
 
+.run-blockers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.run-blockers .link-button {
+  color: inherit;
+  text-align: left;
+  /* A wrapped line keeps its bullet on its first line. */
+  vertical-align: top;
+}
+
 .field-hint {
   color: var(--muted);
   margin: 0;
