@@ -14,7 +14,7 @@ Current state of the project. Update this file at the end of every working sessi
 | # | Milestone | Status | Closed on |
 | --- | --- | --- | --- |
 | M0 | Bootstrap | In progress | |
-| M1 | Thin slice | Verifying (all tasks merged; exit check is the maintainer's) | |
+| M1 | Thin slice | Done (phase-end run on main green, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); maintainer waived the hand exit check) | 2026-10-15 |
 | M2 | Structural setup | In progress | |
 | M3 | Results tools | Not started | |
 | M4 | Assemblies | Not started | |
@@ -89,7 +89,7 @@ Things only the maintainer can do.
 | Nightly coarse | 2026-10-15 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-01 and V-02, 15 of 15 checks (M1.13) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01 and V-02, 15 of 15 checks (M1.13) |
 | Browser end-to-end | 2026-10-15 (`make e2e`, run locally) | Green, E-01 (M1.14) |
-| Phase end (CI) | 2026-10-15 (`phase-end.yml` on PR #25, before the `m1-complete` tag) | Green: full tier V-01 and V-02, 15 of 15 checks; E-01 |
+| Phase end (CI) | 2026-10-15 (`phase-end.yml` by hand on main 4e42c8d, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); closed M1) | Green: full tier V-01 and V-02, 15 of 15 checks; E-01 |
 
 ## Handoff notes
 
