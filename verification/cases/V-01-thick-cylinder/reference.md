@@ -31,7 +31,7 @@ The fixed end holds the tube's radial growth and disturbs the stress near it. Th
 - Stress: 3 percent coarse (two quadratic elements through the wall, stress extrapolated from the integration points to the nodes), 1 percent full.
 - Displacement: 1 percent coarse, 0.5 percent full.
 
-Measured while the case was written (2026-10-15, CalculiX 2.21, Gmsh 4.15.2): coarse, bore −1.15 % and outside −0.53 % in von Mises, −0.04 % and −0.02 % in radial displacement.
+Measured while the case was written (2026-10-15, CalculiX 2.21, Gmsh 4.15.2): coarse, bore −1.15 % and outside −0.53 % in von Mises, −0.04 % and −0.02 % in radial displacement; full, −0.39 % and −0.16 % in von Mises, below 0.01 % in radial displacement.
 
 ## Reaction balance
 

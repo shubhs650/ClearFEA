@@ -88,6 +88,8 @@ make install     pnpm and uv dependencies (frozen lockfiles)
 make dev         API (wrangler dev, :8787), web (Vite, :5173, proxies /api) and the worker
                  container together; Ctrl-C stops all three (infra/dev.sh)
 make test        fast tier: generated-code drift check, Biome lint, tsc, Vitest, ruff, pytest
+make verify      verification cases (verification/cases) through a fresh API on :8788 and a worker
+                 container; prints the result table (VERIFY_TIER=full, CASES="V-01 V-02")
 make lint        lint only (Biome for TypeScript, ruff for Python)
 make format      format Python code with ruff
 make spec        regenerate TypeScript types and Pydantic models from packages/spec/schemas
@@ -95,11 +97,11 @@ make worker-image  build the worker image on its own
 ```
 
 - `make dev` needs a running Docker daemon. In the Claude Code cloud environment start it first with `nohup dockerd > /tmp/dockerd.log 2>&1 &` and run `make dev BUILD_CA=/root/.ccr/ca-bundle.crt` so the image build trusts the proxy (ADR-012). It creates `apps/api/.dev.vars` from the example if missing and passes its `WORKER_TOKEN` to the worker.
-- CI (`.github/workflows/fast.yml`) runs `make install` and `make test` on every pull request; the DCO GitHub App checks sign-offs. The nightly workflow is a placeholder until `make verify` exists.
+- CI (`.github/workflows/fast.yml`) runs `make install` and `make test` on every pull request; the DCO GitHub App checks sign-offs. The nightly workflow is still a placeholder: running `make verify` there needs Docker in CI, which is the maintainer's call (ADR-035).
 - `make dev` seeds two local test users (`alice` / `alice-local`, `bob` / `bob-local`, ADR-022). Sign in at http://localhost:5173 and use "Queue a no-op job" to see a job go from queued to succeeded. `pnpm --filter @clearfea/api db:seed` re-seeds them.
-- Until `make verify` exists, check the deck generator against CalculiX with `cd worker && uv run python spikes/deck_check/check.py` (needs `ccx` and Gmsh's system libraries; ADR-029). Deck snapshots live in `worker/tests/snapshots/deck/`; a missing one is written only with `CLEARFEA_WRITE_SNAPSHOTS=1`.
-- Check the result reader against CalculiX the same way with `cd worker && uv run python spikes/solve_check/check.py` (ADR-030).
-- Planned, not yet present: `make verify` (physics suite, M1.13) and `make e2e` (browser tests, M1.14).
+- `make verify` needs the same running Docker daemon and `BUILD_CA` as `make dev`; it leaves `make dev`'s data alone and can run beside it. Logs and `results.md`/`results.json` go to a temporary folder it names (or `VERIFY_OUT`). A case is a folder in `verification/cases/` (layout in `verification/README.md`).
+- After changing the deck generator or the result reader, also run the exact checks that the platform path cannot see: `cd worker && uv run python spikes/deck_check/check.py` (ADR-029) and `spikes/solve_check/check.py` (ADR-030); they need `ccx` and Gmsh's system libraries on the host. Deck snapshots live in `worker/tests/snapshots/deck/`; a missing one is written only with `CLEARFEA_WRITE_SNAPSHOTS=1`.
+- Planned, not yet present: `make e2e` (browser tests, M1.14).
 
 ## When unsure
 

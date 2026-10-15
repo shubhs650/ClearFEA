@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 
 from clearfea_worker.deck import DeckError, generate_deck
-from clearfea_worker.deck.generator import FIELD_WIDTH
 from clearfea_worker.deck.elements import (
     CCX_EDGES,
     CCX_FACE_NUMBER,
@@ -22,6 +21,7 @@ from clearfea_worker.deck.elements import (
     CCX_NODE_ORDER,
     FACE_NODES,
 )
+from clearfea_worker.deck.generator import FIELD_WIDTH
 from clearfea_worker.meshing.volume import NODES_PER_ELEMENT, TET_FACES, VolumeMesh
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 

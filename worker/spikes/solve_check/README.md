@@ -1,6 +1,6 @@
 # M1.8 solve check
 
-Script only, not part of the worker package or its tests. It runs the solve job's own steps (deck generator, `run_calculix`, the result reader in `clearfea_worker/results/`) on a meshed bar and compares the figures the reader produces with closed-form answers, so that what only the reader decides (which values of the `.frd` and `.dat` files become displacement, stress and reaction, their order and sign, the von Mises formula and where extremes are reported) is shown right by a solver. It stands in until V-01, V-02 and `make verify` arrive in M1.13 (ADR-030).
+Script only, not part of the worker package or its tests. It runs the solve job's own steps (deck generator, `run_calculix`, the result reader in `clearfea_worker/results/`) on a meshed bar and compares the figures the reader produces with closed-form answers, so that what only the reader decides (which values of the `.frd` and `.dat` files become displacement, stress and reaction, their order and sign, the von Mises formula and where extremes are reported) is shown right by a solver. It checks nodal values and reactions exactly, which the verification cases cannot see through the API, so it stays beside `make verify` and is run by hand after changes to the result reader (ADR-030, ADR-035).
 
 ```
 cd worker
