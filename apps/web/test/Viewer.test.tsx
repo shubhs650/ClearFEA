@@ -249,6 +249,8 @@ const succeeded: RunView = {
   mesh: { size: { value: 5, unit: "mm" }, order: 2, nodeCount: 7108, elementCount: 4000 },
   software: { clearfea: "0.0.0+d9d394b", deckFormat: 1, calculix: "2.21", gmsh: "4.15.2", occt: "7.9.0" },
   files: [],
+  machine: { size: "local", ratePerHour: 1_000_000 },
+  cost: null,
   status: "succeeded",
   stage: null,
   problem: null,

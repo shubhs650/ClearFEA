@@ -95,23 +95,34 @@
       "required": ["action"],
       "properties": { "action": { "$ref": "#/$defs/HeartbeatAction" } }
     },
+    "Metering": {
+      "description": "What the worker measured of a job (ADR-033): billableMs is the wall-clock time from the start to the end of the job's handler on the machine, in whole milliseconds. Queue time and the worker's start-up are outside it. Sent for every job; the API charges only metered job types.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["billableMs"],
+      "properties": {
+        "billableMs": { "type": "integer", "minimum": 0, "maximum": 2592000000 }
+      }
+    },
     "CompleteSucceeded": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["workerId", "status"],
+      "required": ["workerId", "status", "metering"],
       "properties": {
         "workerId": { "$ref": "#/$defs/WorkerId" },
         "status": { "const": "succeeded" },
+        "metering": { "$ref": "#/$defs/Metering" },
         "result": { "type": "object", "description": "Job-type specific summary, stored as given." }
       }
     },
     "CompleteFailed": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["workerId", "status", "failureCategory", "failureCause"],
+      "required": ["workerId", "status", "failureCategory", "failureCause", "metering"],
       "properties": {
         "workerId": { "$ref": "#/$defs/WorkerId" },
         "status": { "const": "failed" },
+        "metering": { "$ref": "#/$defs/Metering" },
         "failureCategory": { "$ref": "#/$defs/FailureCategory" },
         "failureCause": { "type": "string", "minLength": 1 },
         "failureMessage": {

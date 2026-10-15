@@ -25,6 +25,7 @@ from .spec.jobs_schema import (
     HeartbeatRequest,
     HeartbeatResponse,
     JobType,
+    Metering,
     WorkerSoftware,
 )
 
@@ -146,19 +147,33 @@ class ApiClient:
         _, body = self._post(path, request)
         return self._parse(HeartbeatResponse, path, body).action
 
-    def succeed(self, job_id: str, result: dict[str, Any]) -> None:
-        request = CompleteSucceeded(worker_id=self._worker_id, status="succeeded", result=result)
+    def succeed(self, job_id: str, result: dict[str, Any], billable_ms: int) -> None:
+        """Reports success with the job's measured time on the machine (ADR-033)."""
+        request = CompleteSucceeded(
+            worker_id=self._worker_id,
+            status="succeeded",
+            metering=Metering(billable_ms=billable_ms),
+            result=result,
+        )
         self._post(f"/jobs/{job_id}/complete", request)
 
     def fail(
-        self, job_id: str, category: FailureCategory, cause: str, message: str | None = None
+        self,
+        job_id: str,
+        category: FailureCategory,
+        cause: str,
+        message: str | None = None,
+        *,
+        billable_ms: int,
     ) -> None:
+        """Reports failure with the job's measured time; the API decides who pays (ADR-033)."""
         extra = {} if message is None else {"failure_message": message}
         request = CompleteFailed(
             worker_id=self._worker_id,
             status="failed",
             failure_category=category,
             failure_cause=cause,
+            metering=Metering(billable_ms=billable_ms),
             **extra,
         )
         self._post(f"/jobs/{job_id}/complete", request)

@@ -82,6 +82,7 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM simulations"),
     env.DB.prepare("DELETE FROM meshes"),
     env.DB.prepare("DELETE FROM geometries"),
+    env.DB.prepare("DELETE FROM ledger_entries"),
     env.DB.prepare("DELETE FROM jobs"),
   ]);
 });

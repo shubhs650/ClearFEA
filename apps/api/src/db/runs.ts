@@ -2,11 +2,14 @@
 // Runs (docs/ARCHITECTURE.md section 4, ADR-030). Functions used on behalf of a user take the
 // user id and filter on owner_id. recordRunOutcome is called for a job the worker holds, and
 // touches only that job's own run. A run's spec and mesh are written once, at creation; its
-// versions and file list are completed once, when its job ends (ADR-032).
+// versions and file list are completed once, when its job ends (ADR-032). Its machine size and
+// cost are its solve job's, fixed when the job is queued and when it ends (ADR-033).
 
 import type {
   ElementOrder,
   JobStatus,
+  RunCost,
+  RunMachine,
   Quantity,
   RunFileName,
   RunMesh,
@@ -27,6 +30,9 @@ export interface Run {
   mesh: RunMesh;
   software: RunSoftware;
   files: RunFileName[];
+  /** From the solve job: its machine size and rate, and once it has ended, its cost (ADR-033). */
+  machine: RunMachine | null;
+  cost: RunCost | null;
   status: RunStatus;
   problem: string | null;
   result: SolveResult | null;
@@ -52,6 +58,11 @@ interface RunRow {
   job_id: string;
   job_status: JobStatus;
   job_stage: string | null;
+  job_machine_size: string | null;
+  job_rate_per_hour: number | null;
+  job_billed_seconds: number | null;
+  job_cost: number | null;
+  job_charged: number;
   mesh_size: string;
   mesh_order: ElementOrder;
   mesh_nodes: number | null;
@@ -75,6 +86,14 @@ function toRun(row: RunRow): Run {
     },
     software: { ...UNKNOWN_SOFTWARE, ...(row.software === null ? {} : JSON.parse(row.software)) },
     files: row.files === null ? [] : JSON.parse(row.files),
+    machine:
+      row.job_machine_size === null || row.job_rate_per_hour === null
+        ? null
+        : { size: row.job_machine_size, ratePerHour: row.job_rate_per_hour },
+    cost:
+      row.job_billed_seconds === null || row.job_cost === null
+        ? null
+        : { billedSeconds: row.job_billed_seconds, amount: row.job_cost, charged: row.job_charged === 1 },
     status: row.status,
     problem: row.problem,
     result: row.result === null ? null : JSON.parse(row.result),
@@ -89,6 +108,9 @@ function toRun(row: RunRow): Run {
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
 const SELECT = `SELECT runs.*, jobs.status AS job_status, jobs.stage AS job_stage,
+                       jobs.machine_size AS job_machine_size, jobs.rate_per_hour AS job_rate_per_hour,
+                       jobs.billed_seconds AS job_billed_seconds, jobs.cost AS job_cost,
+                       EXISTS (SELECT 1 FROM ledger_entries l WHERE l.job_id = jobs.id) AS job_charged,
                        meshes.size AS mesh_size, meshes.element_order AS mesh_order,
                        meshes.node_count AS mesh_nodes, meshes.element_count AS mesh_elements
                   FROM runs JOIN jobs ON jobs.id = runs.job_id JOIN meshes ON meshes.id = runs.mesh_id`;

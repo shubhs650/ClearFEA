@@ -85,6 +85,7 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM simulations"),
     env.DB.prepare("DELETE FROM meshes"),
     env.DB.prepare("DELETE FROM geometries"),
+    env.DB.prepare("DELETE FROM ledger_entries"),
     env.DB.prepare("DELETE FROM jobs"),
   ]);
 });
@@ -156,7 +157,7 @@ function transferPath(job: ClaimResponse["job"], name: string, direction: string
 
 async function complete(jobId: string, body: Record<string, unknown>): Promise<void> {
   const done = await call("POST", `/internal/jobs/${jobId}/complete`, {
-    json: { workerId: "w1", ...body },
+    json: { workerId: "w1", metering: { billableMs: 2500 }, ...body },
     token: TOKEN,
   });
   expect(done.status).toBe(200);

@@ -334,13 +334,34 @@
       "description": "A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}.",
       "enum": ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin"]
     },
+    "RunMachine": {
+      "description": "The machine size a run was billed on and its rate, fixed when the run started (ADR-033). Money is in whole micro-credits: 1,000,000 is one credit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size", "ratePerHour"],
+      "properties": {
+        "size": { "type": "string", "minLength": 1 },
+        "ratePerHour": { "description": "Micro-credits per hour of billable time.", "type": "integer", "minimum": 0 }
+      }
+    },
+    "RunCost": {
+      "description": "What a finished run's solve job cost (ADR-033). billedSeconds is the measured time rounded up to whole seconds; amount is billedSeconds times the hourly rate over 3600, in micro-credits rounded to the nearest one. charged is false when the job failed through a fault in ClearFEA, which the user does not pay for; amount is then 0.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["billedSeconds", "amount", "charged"],
+      "properties": {
+        "billedSeconds": { "type": "integer", "minimum": 0 },
+        "amount": { "type": "integer", "minimum": 0 },
+        "charged": { "type": "boolean" }
+      }
+    },
     "RunView": {
-      "description": "A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032).",
+      "description": "A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032, ADR-033).",
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "id", "simulationId", "meshId", "spec", "mesh", "software", "files", "status", "stage", "problem",
-        "result", "createdAt", "finishedAt"
+        "id", "simulationId", "meshId", "spec", "mesh", "software", "files", "machine", "cost", "status", "stage",
+        "problem", "result", "createdAt", "finishedAt"
       ],
       "properties": {
         "id": { "type": "string" },
@@ -353,6 +374,14 @@
           "description": "The files stored for the run, known once it has finished; empty while it solves.",
           "type": "array",
           "items": { "$ref": "#/$defs/RunFileName" }
+        },
+        "machine": {
+          "description": "Null for runs made before M1.11, which were not metered.",
+          "oneOf": [{ "$ref": "#/$defs/RunMachine" }, { "type": "null" }]
+        },
+        "cost": {
+          "description": "Known once the run has finished; null while it solves and for runs that were not metered.",
+          "oneOf": [{ "$ref": "#/$defs/RunCost" }, { "type": "null" }]
         },
         "status": { "$ref": "#/$defs/RunStatus" },
         "stage": { "description": "What the solve job is doing: queued, then the worker's stage.", "type": ["string", "null"] },

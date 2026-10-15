@@ -23,7 +23,7 @@ from clearfea_worker.jobs import (
 )
 from clearfea_worker.meshing.volume import write_volume_mesh
 from clearfea_worker.results import read_fields, write_viewer_files
-from clearfea_worker.runner import run_forever, run_once
+from clearfea_worker.runner import run_forever, run_job, run_once
 from clearfea_worker.solver import SolverRun
 from clearfea_worker.spec.geometry_schema import ImportResult
 from clearfea_worker.spec.simulation_schema import MeshResult, SolveResult
@@ -159,7 +159,56 @@ def test_fake_api_refuses_bodies_outside_the_schema() -> None:
 def test_client_refuses_to_send_an_empty_failure_cause() -> None:
     client = ApiClient("http://127.0.0.1:9", "t", "w1")
     with pytest.raises(ValidationError):
-        client.fail("job", "platform_fault", "")
+        client.fail("job", "platform_fault", "", billable_ms=0)
+
+
+def _clock(*readings_ns: int) -> Any:
+    """A monotonic clock that returns the given readings in turn."""
+    readings = iter(readings_ns)
+    return lambda: next(readings)
+
+
+def _claimed(api: FakeApi, client: ApiClient) -> ClaimedJob:
+    api.enqueue("j1")
+    job = client.claim(["noop"])
+    assert job is not None
+    return job
+
+
+def test_reports_the_handlers_time_as_billable_milliseconds_rounded_up() -> None:
+    with FakeApi() as api:
+        client = client_for(settings_for(api))
+        job = _claimed(api, client)
+        clock = _clock(1_000_000_000, 3_500_000_001)
+        assert run_job(client, job, HANDLERS, 0.01, clock=clock) == "succeeded"
+        assert api.jobs["j1"]["outcome"]["metering"] == {"billableMs": 2501}
+
+
+def test_reports_the_time_of_a_failed_job_too() -> None:
+    def refused(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
+        from clearfea_worker.jobs import JobFailure
+
+        raise JobFailure("user_fault", "setup_invalid", "Add a support.")
+
+    with FakeApi() as api:
+        client = client_for(settings_for(api))
+        job = _claimed(api, client)
+        assert run_job(client, job, {"noop": refused}, 0.01, clock=_clock(0, 7_000_000)) == "failed"
+        outcome = api.jobs["j1"]["outcome"]
+        assert outcome["failureCategory"] == "user_fault"
+        assert outcome["metering"] == {"billableMs": 7}
+
+
+def test_measures_real_time_by_default() -> None:
+    def busy(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
+        threading.Event().wait(0.05)
+        return {}
+
+    with FakeApi() as api:
+        client = client_for(settings_for(api))
+        job = _claimed(api, client)
+        run_job(client, job, {"noop": busy}, 0.01)
+        assert 50 <= api.jobs["j1"]["outcome"]["metering"]["billableMs"] < 5000
 
 
 def test_runs_an_import_job_through_its_transfer_urls(tmp_path: Path) -> None:

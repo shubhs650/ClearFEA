@@ -44,6 +44,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await env.DB.prepare("DELETE FROM ledger_entries").run();
   await env.DB.prepare("DELETE FROM jobs").run();
 });
 
@@ -157,7 +158,7 @@ describe("/api/jobs", () => {
     expect((await call("POST", "/internal/jobs/claim", { token, body })).status).toBe(200);
     await call("POST", `/internal/jobs/${job.id}/complete`, {
       token,
-      body: { workerId: "w1", status: "succeeded" },
+      body: { workerId: "w1", metering: { billableMs: 2500 }, status: "succeeded" },
     });
 
     const read = await call("GET", `/api/jobs/${job.id}`, { cookie });
