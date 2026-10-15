@@ -239,6 +239,23 @@ def difference(value: float | None, reference: float | None) -> float | None:
     return abs(value - reference) / reference
 
 
+def spooles_reference(path: Path, target: int, elements: int) -> tuple[float, float] | None:
+    """The single-threaded SPOOLES answer already recorded for this mesh, if any.
+
+    Lets a later run of another build (PaStiX) be compared without solving SPOOLES again.
+    """
+    for r in load_results(path)["runs"]:  # type: ignore[union-attr]
+        if (
+            r["solver"] == "SPOOLES"
+            and r["threads"] == 1
+            and r["targetElements"] == target
+            and r["elements"] == elements
+            and r["status"] == "ok"
+        ):
+            return r["largestDisplacementMetres"], r["largestVonMisesPascals"]
+    return None
+
+
 def load_results(path: Path) -> dict[str, object]:
     if path.exists():
         return json.loads(path.read_text())
@@ -304,7 +321,7 @@ def main() -> int:
         mesh = read_volume_mesh(mesh_dir / "mesh.bin")
         elements, nodes = mesh.element_count, mesh.node_count
         print(f"target {target:,}: {elements:,} elements, {nodes:,} nodes", flush=True)
-        reference = None
+        reference = spooles_reference(args.results, target, elements)
         solvers = [solver for solver in args.solvers if solver not in stopped]
         works = {
             solver: root

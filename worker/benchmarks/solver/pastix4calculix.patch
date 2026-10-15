@@ -1,0 +1,117 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b6629a7..e1fa21c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -47,7 +47,7 @@ include(CheckSystem)
+ # --------------------
+ SET(CMAKE_EXE_LINKER_FLAGS " -lstdc++ -fopenmp -D_GNU_SOURCE ")
+ SET(CMAKE_C_FLAGS $ENV{SCRIPT_OUT})
+-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 -march=native -fopenmp -I/yaprod/cae-opensource/SLE12/packages/cuda-10.1.105/include -D_GNU_SOURCE ")
++SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c11 -fopenmp -I/yaprod/cae-opensource/SLE12/packages/cuda-10.1.105/include -D_GNU_SOURCE ")
+ SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I/yaprod/cae-opensource/SLE12/packages/cuda-10.1.105/targets/x86_64-linux/include -D_GNU_SOURCE ")
+ SET(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} ")
+ 
+@@ -280,7 +280,7 @@ if( PASTIX_WITH_CUDA )
+         endif()
+         set(CMAKE_REQUIRED_INCLUDES  "${saved_include}")
+         set(CMAKE_REQUIRED_LIBRARIES "${saved_libs}")
+-        list(APPEND CUDA_NVCC_FLAGS -O3 -arch=sm_35 -lcusparse -w )
++        list(APPEND CUDA_NVCC_FLAGS -O3 -arch=sm_52 -lcusparse -w )
+         
+ 		set(CUDA_SEPARABLE_COMPILATION ON)
+ 
+diff --git a/cmake_modules/morse_cmake/modules/find/LibrariesAbsolutePath.cmake b/cmake_modules/morse_cmake/modules/find/LibrariesAbsolutePath.cmake
+index eb59c11..c9e929e 100644
+--- a/cmake_modules/morse_cmake/modules/find/LibrariesAbsolutePath.cmake
++++ b/cmake_modules/morse_cmake/modules/find/LibrariesAbsolutePath.cmake
+@@ -38,7 +38,9 @@ macro(LIBRARIES_ABSOLUTE_PATH lib_list hints_paths)
+   # reset the lib list to populate
+   set(${lib_list} "")
+   foreach(_library ${${lib_list}_COPY})
+-    if(EXISTS "${_library}")
++    if(TARGET "${_library}")
++      list(APPEND ${lib_list} ${_library})
++    elseif(EXISTS "${_library}")
+       # if already an absolute path, nothing special to do
+       list(APPEND ${lib_list} ${_library})
+     else()
+diff --git a/cmake_modules/morse_cmake/modules/precision_generator/Conversion.py b/cmake_modules/morse_cmake/modules/precision_generator/Conversion.py
+index 5921fe1..40cbebe 100644
+--- a/cmake_modules/morse_cmake/modules/precision_generator/Conversion.py
++++ b/cmake_modules/morse_cmake/modules/precision_generator/Conversion.py
+@@ -247,7 +247,7 @@ class Conversion:
+           replace = replace.replace('\)',')');
+         data = re.sub(search, replace, data);
+       except:
+-        print('Bad replacement pair ',i,'in',sub_type);
++        print('Bad replacement pair ', i, 'in', sub_type, file=sys.stderr);
+         continue;
+     return data;
+ 
+diff --git a/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py b/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
+index 4e6cccf..e220221 100755
+--- a/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
++++ b/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
+@@ -118,7 +118,7 @@ class GenConversion:
+           replace = replace.replace('\)',')');
+         data = re.sub(search, replace, data);
+       except:
+-        print('Bad replacement pair ', i, 'in', sub_type);
++        print('Bad replacement pair ', i, 'in', sub_type, file=sys.stderr);
+         continue;
+     return data;
+ 
+diff --git a/kernels/gpus/CMakeLists.txt b/kernels/gpus/CMakeLists.txt
+index 5ebf2c2..7cdb4b0 100644
+--- a/kernels/gpus/CMakeLists.txt
++++ b/kernels/gpus/CMakeLists.txt
+@@ -65,7 +65,7 @@ set_source_files_properties(
+ # # For Maxwell
+ # set(CUDA_NVCC_FLAGS_50 -arch sm_50 -DCUDA_SM_VERSION=50)
+ # set(CUDA_NVCC_FLAGS_52 -arch sm_52 -DCUDA_SM_VERSION=52)
+- set(CUDA_NVCC_FLAGS_70 -arch sm_70 -DCUDA_SM_VERSION=70)
++ set(CUDA_NVCC_FLAGS_70 -arch sm_52 -DCUDA_SM_VERSION=52)
+ #
+ # set(CUDA_SM_TARGETS 20 30 32 35 CACHE STRING "Specify GPU architectures to build binaries for, BIN(PTX) format is supported")
+ #
+diff --git a/spm/cmake_modules/morse_cmake/modules/find/LibrariesAbsolutePath.cmake b/spm/cmake_modules/morse_cmake/modules/find/LibrariesAbsolutePath.cmake
+index eb59c11..c9e929e 100644
+--- a/spm/cmake_modules/morse_cmake/modules/find/LibrariesAbsolutePath.cmake
++++ b/spm/cmake_modules/morse_cmake/modules/find/LibrariesAbsolutePath.cmake
+@@ -38,7 +38,9 @@ macro(LIBRARIES_ABSOLUTE_PATH lib_list hints_paths)
+   # reset the lib list to populate
+   set(${lib_list} "")
+   foreach(_library ${${lib_list}_COPY})
+-    if(EXISTS "${_library}")
++    if(TARGET "${_library}")
++      list(APPEND ${lib_list} ${_library})
++    elseif(EXISTS "${_library}")
+       # if already an absolute path, nothing special to do
+       list(APPEND ${lib_list} ${_library})
+     else()
+diff --git a/spm/cmake_modules/morse_cmake/modules/precision_generator/Conversion.py b/spm/cmake_modules/morse_cmake/modules/precision_generator/Conversion.py
+index 5921fe1..40cbebe 100644
+--- a/spm/cmake_modules/morse_cmake/modules/precision_generator/Conversion.py
++++ b/spm/cmake_modules/morse_cmake/modules/precision_generator/Conversion.py
+@@ -247,7 +247,7 @@ class Conversion:
+           replace = replace.replace('\)',')');
+         data = re.sub(search, replace, data);
+       except:
+-        print('Bad replacement pair ',i,'in',sub_type);
++        print('Bad replacement pair ', i, 'in', sub_type, file=sys.stderr);
+         continue;
+     return data;
+ 
+diff --git a/spm/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py b/spm/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
+index 4e6cccf..e220221 100755
+--- a/spm/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
++++ b/spm/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
+@@ -118,7 +118,7 @@ class GenConversion:
+           replace = replace.replace('\)',')');
+         data = re.sub(search, replace, data);
+       except:
+-        print('Bad replacement pair ', i, 'in', sub_type);
++        print('Bad replacement pair ', i, 'in', sub_type, file=sys.stderr);
+         continue;
+     return data;
+ 

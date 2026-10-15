@@ -39,9 +39,36 @@ Rows from before the stress check was added (250k to 1M elements, iterative) hav
 
 ## What was not measured, and why
 
-- **PaStiX.** CalculiX 2.21's PaStiX interface needs the CalculiX fork of PaStiX (`IPARM_REUSE_LU` and friends), published only at github.com/Dhondtguido/PaStiX4CalculiX. The Claude Code sandbox's network policy refuses that host, and upstream PaStiX (gitlab.inria.fr) would need CalculiX's interface patched. To add it: build `ccx_2.21_i8` with the fork as its `Makefile_i8` describes, then run this script with `--ccx` pointing at it and `--build ccx-2.21-pastix`.
+- **PaStiX above 207,000 nodes.** The PaStiX build crashed (SIGSEGV) at 331,000 nodes; see PaStiX below.
 - **SPOOLES above 207,000 nodes.** On one thread it solved 145,471 elements (207,025 nodes) in 8.8 GiB and was not tried higher. On 4 threads, at 331,000 nodes (235,000 elements) it passed the script's limit of 11.4 GiB (85 percent of the sandbox's 13.4 GiB control group) after 275 s and was stopped; an earlier attempt without that limit was killed by the kernel at 13.4 GiB. It was not tried on larger meshes.
 - **Iterative scaling at the finest mesh.** It took 3,479 s at 945,000 elements, about 3.5 times iterative Cholesky, and would pass the 2-hour limit; it was not run.
+
+## PaStiX
+
+Rows with `build` `ccx-2.21-pastix4calculix` (PaStiX's default mixed precision: single-precision factorisation refined to double accuracy by GMRES) and `ccx-2.21-pastix4calculix-double` (`PASTIX_MIXED_PRECISION=0`). Its largest displacement and von Mises stress equal SPOOLES's on every mesh both solved.
+
+| Elements | SPOOLES, 1 thread | PaStiX, 4 threads | PaStiX double, 4 threads |
+| --- | --- | --- | --- |
+| 24,989 | 42 s, 0.87 GiB | 21 s, 1.35 GiB | |
+| 50,229 | 156 s, 2.16 GiB | 53 s, 3.06 GiB | 89 s, 5.24 GiB |
+| 97,439 | 574 s, 5.32 GiB | 133 s, 6.73 GiB (1 thread: 111 s, 6.67 GiB) | over 11.4 GiB, stopped |
+| 145,471 | 1,273 s, 8.84 GiB | 218 s, 11.05 GiB | |
+| 235,197 | | crashed after 51 s at 4.6 GiB | |
+
+So PaStiX is 4 to 6 times faster than single-threaded SPOOLES for about 1.25 times the memory; it does not solve larger meshes on the same memory. One thread was faster than four at 97,439 elements on this 4-core machine. The crash at 235,197 elements (331,105 nodes, 81.6 million matrix entries) is most likely 32-bit integer overflow: this build uses 32-bit integers, and CalculiX's own recipe for PaStiX (`Makefile_i8`) builds everything with 64-bit integers. That was not tried here (it needs 64-bit-integer SPOOLES, ARPACK, Scotch and BLAS too).
+
+`make verify` (coarse tier) with this ccx as the worker image's `ccx` passed all 13 cases, 116 of 116 checks; the build's default solver is then PaStiX, run on one thread because the worker sets `CCX_NPROC_EQUATION_SOLVER=1`. Twenty repeat solves of the support-check decks on 4 threads matched single-threaded SPOOLES to about 1e-12, so PaStiX does not share threaded SPOOLES's wrong answers.
+
+### How the PaStiX build was made
+
+Done by hand in the Claude Code sandbox (Ubuntu 24.04, gcc 13); not a script, and not in the worker image.
+
+1. Packages: `gfortran libopenblas-dev liblapacke-dev libhwloc-dev libscotch-dev libspooles-dev libarpack2-dev pkg-config nvidia-cuda-toolkit g++-12`. The fork includes CUDA and PaRSEC headers unconditionally, so CUDA is needed to compile and link even without a GPU.
+2. PaRSEC: `git clone https://bitbucket.org/mfaverge/parsec.git`, tag `pastix-6.0.2` (`b580d208`); `cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DPARSEC_DIST_WITH_MPI=OFF -DPARSEC_GPU_WITH_CUDA=ON -DPARSEC_GPU_WITH_OPENCL=OFF -DPARSEC_WITH_DEVEL_HEADERS=ON -DSUPPORT_FORTRAN=OFF -DCMAKE_C_FLAGS=-fcommon`.
+3. PaStiX4CalculiX: `git clone https://github.com/Dhondtguido/PaStiX4CalculiX` at `d6b493b`, then `git apply pastix4calculix.patch` (beside this file: drops `-march=native`, targets `sm_52` because CUDA 12 has no `sm_35`, accepts CMake's `Threads::Threads` target, and sends the code generator's warnings to stderr, where they no longer corrupt the generated Makefiles). Configure with `SCRIPT_OUT="-fcommon -O2" cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DPASTIX_INT64=OFF -DPASTIX_WITH_PARSEC=ON -DPARSEC_DIR=<parsec> -DPASTIX_WITH_CUDA=ON -DCUDA_HOST_COMPILER=/usr/bin/gcc-12 -DPASTIX_WITH_MPI=OFF -DPASTIX_ORDERING_SCOTCH=ON -DPASTIX_WITH_FORTRAN=OFF -DBLA_VENDOR=OpenBLAS -DPYTHON_EXECUTABLE=/usr/bin/python3.11` (its generator uses Python's `imp`, gone in 3.12).
+4. CalculiX 2.21 from `http://www.dhondt.de/ccx_2.21.src.tar.bz2`, built with CalculiX's `Makefile` plus `-fcommon -DPASTIX` and the PaStiX and PaRSEC include paths, `-fallow-argument-mismatch` for gfortran, and linked against the PaStiX static libraries, `-lparsec -lscotch -lscotcherrexit -lhwloc -llapacke -lopenblas -lcublas -lcudart -lcusparse -lstdc++`.
+
+Then `bench.py --ccx <that ccx> --build ccx-2.21-pastix4calculix --solvers PASTIX --threads 4`; the SPOOLES comparison is taken from the single-threaded SPOOLES rows already in `results.json`.
 
 ## Accuracy of the iterative solvers
 
