@@ -44,6 +44,8 @@ export function jobFiles(job: Job): JobFile[] {
       { name: "solver.log", direction: "upload", key: run("solver.log") },
       { name: "results.frd", direction: "upload", key: run("results.frd") },
       { name: "results.dat", direction: "upload", key: run("results.dat") },
+      { name: "surface.bin", direction: "upload", key: run("surface.bin") },
+      { name: "fields.bin", direction: "upload", key: run("fields.bin") },
     ];
   }
   return [];

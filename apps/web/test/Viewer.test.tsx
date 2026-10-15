@@ -1,18 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { GeometryView } from "@clearfea/spec";
+import type { GeometryView, RunView } from "@clearfea/spec";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { toggleFace, Viewer } from "../src/layout/Viewer";
+import { type Deformation, toggleFace, Viewer } from "../src/layout/Viewer";
 import type { DisplayMesh } from "../src/viewer/displayMesh";
 import type { ModelViewEvents } from "../src/viewer/ModelView";
 import { readFixture } from "./fixtures";
+import { twoFacesFields } from "./resultFiles";
 
 // jsdom has no WebGL, so the three.js scene is replaced by a stand-in that records what the
 // viewer asks of it and lets a test play the part of the mouse.
 type Recorded = {
   events: ModelViewEvents;
   meshes: DisplayMesh[];
+  bands: (Float32Array | undefined)[];
   selections: number[][];
   disposed: boolean;
 };
@@ -24,11 +26,12 @@ vi.mock("../src/viewer/ModelView", () => ({
     record: Recorded;
     constructor(_host: HTMLElement, events: ModelViewEvents) {
       if (scene.failToStart) throw new Error("no WebGL");
-      this.record = { events, meshes: [], selections: [], disposed: false };
+      this.record = { events, meshes: [], bands: [], selections: [], disposed: false };
       scene.instances.push(this.record);
     }
-    setMesh(mesh: DisplayMesh) {
+    setMesh(mesh: DisplayMesh, _edges?: string, _keep?: boolean, bands?: Float32Array) {
       this.record.meshes.push(mesh);
+      this.record.bands.push(bands);
     }
     setSelection(tags: ReadonlySet<number>) {
       this.record.selections.push([...tags]);
@@ -237,3 +240,88 @@ describe("toggleFace", () => {
     expect([...start]).toEqual([1]);
   });
 });
+
+const succeeded: RunView = {
+  id: "r1",
+  simulationId: "s1",
+  meshId: "m1",
+  status: "succeeded",
+  stage: null,
+  problem: null,
+  result: null,
+  createdAt: "2026-10-15T12:00:00.000Z",
+  finishedAt: "2026-10-15T12:01:00.000Z",
+};
+
+const results = {
+  "/api/runs/r1/surface": { status: 200, bytes: display },
+  "/api/runs/r1/fields": { status: 200, bytes: twoFacesFields() },
+  "/api/geometries/g1/topology": { status: 200, json: topology },
+};
+
+const UNITS = { length: "mm", pressure: "MPa" };
+
+function ResultHarness({ quantity, deformation }: { quantity: "displacement" | "vonMises"; deformation: Deformation }) {
+  const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
+  return (
+    <Viewer
+      geometry={geometry()}
+      result={{ run: succeeded, quantity, deformation, units: UNITS }}
+      selection={selection}
+      onSelectionChange={setSelection}
+      onSignedOut={() => {}}
+    />
+  );
+}
+
+describe("result view", () => {
+  it("colours the run's surface in bands of von Mises stress with a legend in MPa", async () => {
+    serve(results);
+    render(<ResultHarness quantity="vonMises" deformation="undeformed" />);
+    const legend = await screen.findByLabelText("Legend");
+    expect(legend.textContent).toContain("Von Mises stress (MPa)");
+    // Nine bands of 10 MPa from 0 to 90, largest first.
+    const rows = [...legend.querySelectorAll("li")].map((li) => li.textContent);
+    expect(rows[0]).toBe("80 to 90");
+    expect(rows[8]).toBe("0 to 10");
+    expect(legend.textContent).toContain("Undeformed shape");
+    expect(legend.textContent).not.toMatch(/pass|fail|complian/i);
+    const view = scene.instances[0];
+    await vi.waitFor(() => expect(view?.bands.at(-1)).toBeDefined());
+    // Vertex v carries v * 15 MPa, so its band coordinate is v / 6.
+    const coordinates = [...(view?.bands.at(-1) ?? [])];
+    expect(coordinates).toEqual([0, 1, 2, 3, 4, 5, 6].map((v) => Math.fround(v / 6)));
+    // Undeformed: positions as in the surface file.
+    expect(view?.meshes.at(-1)?.positions).toEqual(new Float32Array(readPositions()));
+    // While results show, the face selection bar gives way to the legend.
+    expect(screen.queryByLabelText("Selected faces")).toBeNull();
+  });
+
+  it("draws displacement on the shape deformed at true scale or exaggerated", async () => {
+    serve(results);
+    const { rerender } = render(<ResultHarness quantity="displacement" deformation="true" />);
+    const legend = await screen.findByLabelText("Legend");
+    expect(legend.textContent).toContain("Displacement magnitude (mm)");
+    expect([...legend.querySelectorAll("li")][0]?.textContent).toBe("0.5333 to 0.6");
+    expect(legend.textContent).toContain("Deformed shape, true scale");
+    const view = scene.instances[0];
+    const base = readPositions();
+    await vi.waitFor(() => expect(view?.meshes.at(-1)?.positions[3]).toBeCloseTo((base[3] ?? 0) + 1e-4, 6));
+    // The model is about 0.11 m across and moves at most 0.6 mm: 5 percent is about 9, so x5.
+    rerender(<ResultHarness quantity="displacement" deformation="auto" />);
+    await screen.findByText("Deformed shape, scale ×5");
+    await vi.waitFor(() => expect(view?.meshes.at(-1)?.positions[3]).toBeCloseTo((base[3] ?? 0) + 5e-4, 6));
+  });
+
+  it("says the run's files do not match when their vertex counts differ", async () => {
+    serve({ ...results, "/api/runs/r1/fields": { status: 200, bytes: readFixture("result-fields-three-vertices.bin") } });
+    render(<ResultHarness quantity="vonMises" deformation="auto" />);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/do not belong together/);
+  });
+});
+
+function readPositions(): number[] {
+  const view = new DataView(display);
+  const vertices = view.getUint32(8, true);
+  return Array.from({ length: vertices * 3 }, (_, i) => view.getFloat32(20 + i * 4, true));
+}

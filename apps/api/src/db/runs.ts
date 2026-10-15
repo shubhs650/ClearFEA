@@ -63,7 +63,13 @@ const SELECT = `SELECT runs.*, jobs.status AS job_status, jobs.stage AS job_stag
                   FROM runs JOIN jobs ON jobs.id = runs.job_id`;
 
 /** The files of a run in R2. */
-export type RunFile = "deck.inp" | "solver.log" | "results.frd" | "results.dat";
+export type RunFile =
+  | "deck.inp"
+  | "solver.log"
+  | "results.frd"
+  | "results.dat"
+  | "surface.bin"
+  | "fields.bin";
 
 export function runKey(ownerId: string, runId: string, file: RunFile): string {
   return `owners/${ownerId}/runs/${runId}/${file}`;

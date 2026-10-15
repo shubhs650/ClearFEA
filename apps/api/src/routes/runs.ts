@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The signed-in user's runs and their solver logs (M1.8, ADR-030). Runs are started through
-// POST /api/simulations/:id/runs. Shapes: simulation.schema.json.
+// The signed-in user's runs, their solver logs (M1.8, ADR-030) and the viewer's result files
+// (M1.9, ADR-031). Runs are started through POST /api/simulations/:id/runs. Shapes:
+// simulation.schema.json.
 
 import type { RunLogResponse, RunResponse, RunView } from "@clearfea/spec";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { readJobLog } from "../db/jobs";
-import { getRun, type Run } from "../db/runs";
+import { getRun, type Run, type RunFile, runKey } from "../db/runs";
 import { requireUser, type SessionEnv } from "../session";
 
 export const runs = new Hono<SessionEnv>();
@@ -47,3 +48,33 @@ runs.get("/:id/log", async (c) => {
   const log = await readJobLog(c.env.DB, c.var.userId, run.jobId, after);
   return c.json(log satisfies RunLogResponse);
 });
+
+/** Serves one of a finished run's viewer files; a run that has not succeeded has none. */
+async function viewerFile(c: Context<SessionEnv>, file: RunFile): Promise<Response> {
+  const run = await getRun(c.env.DB, c.var.userId, c.req.param("id") ?? "");
+  if (run === null) return c.json({ error: NOT_FOUND }, 404);
+  if (run.status !== "succeeded") {
+    const why =
+      run.status === "solving"
+        ? "The run is still solving. Results appear when it has finished."
+        : "The run failed, so it has no results to show. Fix what its message says and run again.";
+    return c.json({ error: why }, 409);
+  }
+  const object = await c.env.FILES.get(runKey(c.var.userId, run.id, file));
+  if (object === null) {
+    return c.json(
+      { error: `The result file ${file} of this run is missing from storage. Run the simulation again.` },
+      500,
+    );
+  }
+  return c.body(object.body, 200, {
+    "Content-Type": "application/octet-stream",
+    "Content-Length": String(object.size),
+  });
+}
+
+/** The mesh's outer surface, in the display mesh format (packages/spec/display-mesh.md). */
+runs.get("/:id/surface", (c) => viewerFile(c, "surface.bin"));
+
+/** Result values at each surface vertex (packages/spec/result-fields.md). */
+runs.get("/:id/fields", (c) => viewerFile(c, "fields.bin"));
