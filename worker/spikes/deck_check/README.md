@@ -1,6 +1,6 @@
 # M1.7 deck check
 
-Script only, not part of the worker package or its tests. It solves decks written by the deck generator (`clearfea_worker/deck/`) with CalculiX and compares them with closed-form answers, so that the choices only the generator makes (CalculiX node order, face numbers, the sign of a pressure, unit conversion) are shown right by a solver, not just by snapshots. It stands in until the verification cases V-01 and V-02 and `make verify` arrive in M1.13 (ADR-029).
+Script only, not part of the worker package or its tests. It solves decks written by the deck generator (`clearfea_worker/deck/`) with CalculiX and compares them with closed-form answers, so that the choices only the generator makes (CalculiX node order, face numbers, the sign of a pressure, unit conversion) are shown right by a solver, not just by snapshots. It checks every face and sign exactly, which the verification cases cannot see through the API, so it stays beside `make verify` and is run by hand after changes to the deck generator (ADR-029, ADR-035).
 
 ```
 cd worker

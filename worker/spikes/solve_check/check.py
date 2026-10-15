@@ -5,7 +5,7 @@ figures with closed-form answers. M1.9 adds checks of the viewer's result files.
 Script only, not part of the worker package or its tests (the fast tier runs no solver). It
 checks what the result reader alone decides: which numbers of the .frd and .dat files become
 displacement, stress and reaction, their components and signs, the von Mises formula, and
-where the extremes are reported. It stands in until V-01, V-02 and `make verify` (M1.13).
+where the extremes are reported. It is kept beside `make verify`, run by hand (ADR-035).
 
     cd worker && uv run python spikes/solve_check/check.py [--out DIR]
 

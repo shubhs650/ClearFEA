@@ -53,6 +53,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M1.10 Run record frozen with spec, mesh, deck, versions; deck and log viewable and downloadable
 - [x] M1.11 Metering: billable seconds recorded and a ledger entry written at a configured rate
 - [x] M1.12 Pre-run validation with a plain-language list beside the Run button
+- [x] M1.13 First verification cases and the `make verify` harness
 
 ## Maintainer to-do
 
@@ -69,8 +70,8 @@ Things only the maintainer can do.
 | Tier | Last run | Result |
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
-| Nightly coarse | never | |
-| Full | never | |
+| Nightly coarse | 2026-10-15 (`make verify`, run locally; not yet scheduled) | Green, V-01 and V-02, 15 of 15 checks (M1.13) |
+| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01 and V-02, 15 of 15 checks (M1.13) |
 
 ## Handoff notes
 
@@ -124,6 +125,8 @@ Written by the last session for the next one. Replace, do not append.
 
 > M1.12 (2026-10-15): pre-run validation (ADR-034, accepted under Shubham's standing M1 instruction, pending his review). `preRunProblems(spec, topology)` in `packages/spec/src/prerun.ts` returns every reason a saved setup cannot run, each tied to its tree item: first the `simulationSpecProblems` errors, then no material, bodies without one, a material missing E or ν, no support, a support without faces, no load, a load without faces or value, no mesh size. `POST /api/simulations/:id/runs` runs it against `topology.json` before its mesh checks and answers 409 "The setup is not ready to run. …", so no job is queued or charged. The Run panel shows the same list under the disabled Run button ("Before the simulation can run:"), followed by the save and mesh lines from `App.runBlockers`; each line with an item opens it. A web test checks that every setup mark is complete exactly when the list is empty. Checked with `make dev` and headless Chromium on the M1.1 bracket: partial setup refused by the API with the list, list shown and a line opening the material, then only the mesh line, then Run enabled (screenshots in the project's `m1.12/` folder). A setup with no load is refused (ADR-034 item 3); narrow that when M2 brings a load-free case such as prescribed displacement. Not done, on purpose: per-body restraint for assemblies (M4.4), rigid-body checks beyond "has a fixed support with faces", the heartbeat-timeout sweep (still missing: a dead worker leaves a run `solving`).
 
+> M1.13 (2026-10-15): `make verify` and the first cases (ADR-035, accepted under Shubham's standing M1 instruction, pending his review). `infra/verify.sh` starts a fresh API on :8788 with an empty temporary database and a worker container (Compose project `clearfea-verify`), runs the harness (`verification/harness`, Python, with the worker's uv environment) and stops both; it can run beside `make dev`. The harness uploads each case's STEP file, confirms the unit, creates the simulation from `spec.json` (faces named by bounding box in `case.yaml`), meshes, runs, and reads the run's `surface.bin` and `fields.bin` with its own readers; checks are means over a face's surface vertices inside a box. Automatic checks: unit detected, reaction balance within 0.1 percent, no unexpected solver warnings, billed seconds and one ledger entry (read from the local D1 with `wrangler d1 execute`). V-01 (tube, one end fixed and one open, bar/GPa/mm/cm) and V-02 (cantilever in inches pressed on an imprinted end patch, psi/ksi/mm) pass both tiers: coarse in about 30 s, full in about 4 minutes; tables in PR. Found and fixed on the way: CalculiX reads only 20 characters of a number and silently drops the rest (a node at 1.234567890123456e-16 m was read at 0.1234 m), so the deck generator now rounds longer numbers to fit (physics-critical; snapshots unchanged; deck and solve spikes still 28 of 28 and 13 of 13). The spikes stay as hand-run exact checks. For M1.14: `verify.sh` shows how to start an isolated stack; `harness/client.py` is a minimal API client. Open: wiring `make verify` into `nightly.yml` needs Docker and the worker image in CI, a CI change for Shubham to decide; the coverage matrix still lists V-01 under symmetry support and V-02 under force, which arrive in M2.2 and M2.3 (V-02 can then switch to a face force). Not done, on purpose: a published results page (M9), more cases (M2 onward). The heartbeat-timeout sweep is still missing (a dead worker leaves a run `solving`; the harness times out after 15 minutes coarse, 2 hours full).
+
 > Still to watch from the ADR review: browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -138,6 +141,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-15
 
+- M1.13: `make verify` runs V-01 (thick cylinder, Lamé) and V-02 (cantilever, Timoshenko beam) through a fresh API and worker, reading results from the run's viewer files, with the automatic balance, warning and metering checks; both pass the coarse and full tiers. V-01 exposed CalculiX's 20-character number fields, now respected by the deck generator (ADR-035 accepted under the standing M1 instruction).
 - M1.12: pre-run validation as one pure function in `packages/spec`, enforced by the API before any job is queued and shown as a plain-language list under the Run button, each line opening the item it is about (ADR-034 accepted under the standing M1 instruction).
 - M1.11: the worker measures each job's handler time and reports it on completion; mesh and solve jobs are billed per started second at the rate of the default machine size fixed when queued, in whole micro-credits, and charged to an append-only ledger with a running balance in the same batch that completes the job (platform faults not charged); the run record shows the machine, rate and cost (ADR-033 accepted under the standing M1 instruction).
 - M1.10: workers report their versions with each claim; a run records its mesh's and solver's versions, the files its job stored and its frozen spec; the Run panel shows the run record, says when the setup has changed since, and links to view or download the deck and solver log (ADR-032 accepted under the standing M1 instruction).

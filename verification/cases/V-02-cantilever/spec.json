@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 29000, "unit": "ksi" },
+      "poissonsRatio": 0.3
+    }
+  ],
+  "supports": [{ "id": "fixed-1", "type": "fixed", "name": "Clamped end", "faces": ["clamped-end"] }],
+  "loads": [
+    {
+      "id": "pressure-1",
+      "type": "pressure",
+      "name": "End load",
+      "faces": ["end-patch"],
+      "magnitude": { "value": 500, "unit": "psi" }
+    }
+  ],
+  "mesh": { "size": { "value": 5, "unit": "mm" } }
+}

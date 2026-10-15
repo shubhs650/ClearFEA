@@ -21,6 +21,7 @@ from clearfea_worker.deck.elements import (
     CCX_NODE_ORDER,
     FACE_NODES,
 )
+from clearfea_worker.deck.generator import FIELD_WIDTH
 from clearfea_worker.meshing.volume import NODES_PER_ELEMENT, TET_FACES, VolumeMesh
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
@@ -159,6 +160,31 @@ def test_deck_converts_entered_values_to_si() -> None:
     # Face 2 carries 150 psi; face 3 carries 150 psi and -0.5 MPa added together.
     assert ", P1, 1034213.5939752542\n" in text
     assert f", P{CCX_FACE_NUMBER[1]}, {1034213.5939752542 - 500000.0!r}\n" in text
+
+
+@pytest.mark.parametrize(
+    "value",
+    [-1.2587888216013468e-16, 1.234567890123456e-16, 1.2345678901234567e-06, -0.012345678901234567],
+)
+def test_long_numbers_are_shortened_to_what_calculix_reads(value: float) -> None:
+    # CalculiX reads 20 characters of a number and drops the rest without a word, so
+    # 1.234567890123456e-16 would become 0.1234... (V-01 hit this on a node at x = 1e-16).
+    mesh = two_tets(order=2)
+    mesh.positions[0] = value
+    text = deck(fixture_spec(), mesh)
+    first = next(line for line in text.splitlines() if line.startswith("1, "))
+    written = first.split(", ")[1]
+    assert len(written) <= FIELD_WIDTH
+    assert abs(float(written) - value) <= 1e-12 * abs(value)
+
+
+def test_every_number_in_a_deck_fits_calculix_fields() -> None:
+    text = deck(two_body_spec(), two_tets(order=2, bodies=2))
+    for line in text.splitlines():
+        if line.startswith("*") or not line[:1].isdigit():
+            continue
+        for field in line.split(","):
+            assert len(field.strip()) <= FIELD_WIDTH, line
 
 
 def test_deck_is_the_same_every_time() -> None:

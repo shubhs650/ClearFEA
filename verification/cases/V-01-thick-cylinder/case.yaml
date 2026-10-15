@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-01: thick-walled tube under internal pressure, one end fixed, the other open.
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-01
+title: Thick cylinder, internal pressure
+analysis: linear_static
+features: [fixed support, pressure, mixed input units]
+geometry:
+  unit: mm # declared in the STEP file and confirmed after upload
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  fixed-end: { min: [-60, -60, 0], max: [60, 60, 0] }
+  bore: { min: [-40, -40, 0], max: [40, 40, 300] }
+  outside: { min: [-60, -60, 0], max: [60, 60, 300] }
+mesh:
+  coarse: { value: 1, unit: cm } # about 11,000 elements, two through the wall
+  full: { value: 5, unit: mm } # about 72,000 elements
+# Results are the mean over the surface vertices of a face inside a box, at z = 225 mm:
+# 225 mm (9 decay lengths of the end disturbance, reference.md) from the fixed end; the open
+# end causes no disturbance in the Lamé solution.
+checks:
+  - name: Hoop-dominated von Mises stress at the bore
+    quantity: vonMises
+    face: bore
+    box: { min: [-41, -41, 215], max: [41, 41, 235] }
+    reference: { value: 32.1870, unit: MPa }
+    # Coarse: two quadratic elements through the wall; stresses are extrapolated to the nodes.
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: von Mises stress at the outside
+    quantity: vonMises
+    face: outside
+    box: { min: [-61, -61, 215], max: [61, 61, 235] }
+    reference: { value: 16.0, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Radial displacement of the bore
+    quantity: displacement.radial
+    face: bore
+    box: { min: [-41, -41, 215], max: [41, 41, 235] }
+    reference: { value: 0.0058, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Radial displacement of the outside
+    quantity: displacement.radial
+    face: outside
+    box: { min: [-61, -61, 215], max: [61, 61, 235] }
+    reference: { value: 0.0048, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }

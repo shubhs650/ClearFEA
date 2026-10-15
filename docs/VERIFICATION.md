@@ -32,13 +32,13 @@ Each case runs through the full platform path: the harness uploads a STEP file t
 
 ```
 verification/cases/V-01-thick-cylinder/
-  case.yaml        id, title, analysis type, features covered, checks, tolerances per tier
+  case.yaml        id, title, analysis type, features covered, named faces, mesh size per tier, checks, tolerances per tier
   geometry.py      script that builds the STEP file (no binary files in the repository)
-  spec.json        SimulationSpec, with values in deliberately mixed units
+  spec.json        SimulationSpec, faces by name, with values in deliberately mixed units
   reference.md     derivation of the reference values with source
 ```
 
-Each check in `case.yaml` names a quantity, where it is evaluated, the reference value and the tolerance for the coarse and full tiers. Specs use mixed input units on purpose (for example pressure in bar, length in mm, force in kN) so that unit conversion is exercised in every case.
+Each check in `case.yaml` names a quantity, where it is evaluated (a face and a box on it), the reference value and the tolerance for the coarse and full tiers. Faces are named by their bounding box, never by tag. The full format is in `verification/README.md`; the harness is ADR-035. Specs use mixed input units on purpose (for example pressure in bar, length in mm, force in kN) so that unit conversion is exercised in every case.
 
 Stress is checked away from supports and load application points unless the case is specifically about a concentration.
 
@@ -46,8 +46,8 @@ Stress is checked away from supports and load application points unless the case
 
 | Id | Case | Reference | Added in |
 | --- | --- | --- | --- |
-| V-01 | Thick cylinder, internal pressure | Lamé: hoop and radial stress through the wall | M1 |
-| V-02 | Cantilever, end load | Beam theory: tip deflection PL³/3EI with shear correction, root bending stress | M1 |
+| V-01 | Thick cylinder, internal pressure, one end fixed and one open | Lamé (open ends): von Mises stress and radial displacement at the bore and the outside | M1 |
+| V-02 | Cantilever, end load (in M1 a pressure on an end patch of the top face) | Timoshenko beam: tip deflection under the patch load, bending stress at mid-length | M1 |
 | V-03 | Plate with central hole in tension | Kirsch factor 3 for a wide plate, with finite-width correction | M2 |
 | V-04 | Remote force and moment on a stub | Reactions equal the applied force and moment; bending stress at mid-length from beam theory | M2 |
 | V-05 | Tank wall, hydrostatic pressure | Total reaction equals ρg × depth-weighted area; pressure at depth | M2 |

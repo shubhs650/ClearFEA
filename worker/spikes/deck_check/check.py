@@ -2,9 +2,9 @@
 """M1.7 deck check: solve generated decks with CalculiX and compare with closed-form answers.
 
 Script only, not part of the worker package or its tests (the fast tier runs no solver).
-It stands in for verification cases until the `make verify` harness lands in M1.13, and
-checks what the deck generator alone decides: the CalculiX node order, the face numbers a
-pressure is written to, the pressure's sign, and the unit conversion of entered values.
+It is kept beside `make verify` (ADR-035) and checks what the deck generator alone decides:
+the CalculiX node order, the face numbers a pressure is written to, the pressure's sign, and
+the unit conversion of entered values.
 
     cd worker && uv run python spikes/deck_check/check.py [--out DIR]
 
