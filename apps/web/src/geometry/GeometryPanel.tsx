@@ -3,7 +3,7 @@
 // geometry; projects, and so a choice of geometry, come later in M1.
 
 import { type GeometryStatus, type GeometryView, unitsTable } from "@clearfea/spec";
-import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from "react";
+import { type ChangeEvent, type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { confirmUnit, getGeometry, listGeometries, uploadGeometry } from "../api/geometries";
 import type { ApiResult } from "../api/request";
 import { fromSi } from "../units/convert";
@@ -50,10 +50,13 @@ function sizeInFile(geometry: GeometryView): string | null {
 export function GeometryPanel({
   onSignedOut,
   onGeometryChange,
+  refresh = 0,
 }: {
   onSignedOut: (problem: string) => void;
   /** Called with each new state of the shown geometry, so the viewer can follow it. */
   onGeometryChange?: (geometry: GeometryView) => void;
+  /** Changing this number reloads the shown geometry, for example once a simulation locks its unit. */
+  refresh?: number;
 }) {
   const [geometry, setGeometry] = useState<GeometryView | null>(null);
   const [unit, setUnit] = useState("");
@@ -100,6 +103,22 @@ export function GeometryPanel({
     }, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [importing, id, handle, show]);
+
+  // Only a new refresh number reloads; the geometry id is read as it is then.
+  const shownId = useRef(id);
+  shownId.current = id;
+  useEffect(() => {
+    const target = shownId.current;
+    if (refresh === 0 || target === undefined) return;
+    let current = true;
+    void getGeometry(target).then((result) => {
+      const next = current ? handle(result) : undefined;
+      if (next) show(next);
+    });
+    return () => {
+      current = false;
+    };
+  }, [refresh, handle, show]);
 
   async function upload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];

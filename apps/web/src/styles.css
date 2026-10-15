@@ -248,7 +248,7 @@ button:disabled {
 
 /* Geometry: upload and unit confirmation in the settings pane. */
 .geometry {
-  margin-top: 16px;
+  margin-top: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -370,4 +370,152 @@ button:disabled {
 
 .viewer-hint {
   color: var(--muted);
+}
+
+/* Simulation tree (M1.5): one row per item with its status mark. */
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+}
+
+.tree-row:hover {
+  background: var(--bg);
+}
+
+.tree-row[aria-current="true"] {
+  background: var(--viewer);
+  font-weight: 600;
+}
+
+.tree-depth-1 {
+  padding-left: 26px;
+}
+
+.tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mark {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.mark-complete {
+  background: var(--ok);
+}
+
+.mark-incomplete {
+  border: 2px solid var(--warn);
+}
+
+.mark-error {
+  background: var(--error);
+}
+
+.tree-note {
+  margin: 12px 6px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Settings panels for setup items. */
+.setup-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.setup-panel > button {
+  align-self: flex-start;
+}
+
+.setup-notes {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.setup-notes-incomplete {
+  color: var(--warn);
+}
+
+.setup-notes-error {
+  color: var(--error);
+}
+
+.field-hint {
+  color: var(--muted);
+  margin: 0;
+}
+
+.field-problem {
+  color: var(--error);
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
+.quantity {
+  display: flex;
+  gap: 6px;
+}
+
+.quantity input {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.setup-bodies {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 0;
+  padding: 6px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.setup-remove {
+  color: var(--error);
 }
