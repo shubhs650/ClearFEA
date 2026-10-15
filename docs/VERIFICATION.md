@@ -9,12 +9,14 @@ CalculiX is well tested. ClearFEA adds layers where errors can enter: unit conve
 | Tier | Runs | Contains | Target time |
 | --- | --- | --- | --- |
 | Fast | Every pull request, and locally with `make test` | Unit tests, deck snapshot tests, units fixture tests, type checks, lint | Under 5 minutes |
-| Nightly | Every night on `main`, and locally with `make verify` and `make e2e` | All verification cases on coarse meshes, all browser end-to-end tests | Under 45 minutes |
-| Full | Before a milestone closes, and after any Gmsh or CalculiX version change (`VERIFY_TIER=full`) | All verification cases on fine meshes with tight tolerances, large-model benchmarks | As long as it takes |
+| Nightly | Locally with `make verify` and `make e2e`; not scheduled in CI (ADR-037) | All verification cases on coarse meshes, all browser end-to-end tests | Under 45 minutes |
+| Phase end | In CI when a milestone tag such as `m1-complete` is pushed, by hand from the Actions tab, and on pull requests that change the workflow or its scripts (`.github/workflows/phase-end.yml`, ADR-037) | All verification cases on the full tier and all browser end-to-end tests | Under an hour |
+| Full | Before a milestone closes (the phase-end run), and after any Gmsh or CalculiX version change (`VERIFY_TIER=full`) | All verification cases on fine meshes with tight tolerances, large-model benchmarks | As long as it takes |
 
 Rules:
 
-- A red nightly run is fixed before new feature work.
+- A milestone closes by tagging `main` with `m<N>-complete` once its tasks have merged. It counts as closed only when the phase-end run on that tag is green; a red run is fixed before the next milestone starts, and the tag moves to the fixing commit.
+- A red phase-end or local verification run is fixed before new feature work.
 - Before opening a pull request that touches a physics-critical module, run the affected cases locally and paste the result table into the description.
 - Tolerances are never loosened to make a case pass without a written reason in the case file.
 

@@ -44,9 +44,9 @@ These modules decide whether results are right. Keep them small, pure (no I/O wh
 ## Testing rules
 
 - Pull requests run **unit tests, deck snapshot tests, type checks and lint only**. Keep this tier under five minutes.
-- Physics verification and browser end-to-end tests run **nightly** and before each milestone is closed. See `docs/VERIFICATION.md`.
+- Physics verification and browser end-to-end tests run **at the end of each milestone** in CI (phase-end workflow) and locally with `make verify` and `make e2e`. See `docs/VERIFICATION.md`.
 - Run the relevant physics cases **locally in the session** before opening a pull request that touches a physics-critical module. Paste the result table in the pull request description.
-- A red nightly run is fixed before new feature work.
+- A red phase-end or verification run is fixed before new feature work.
 - **Snapshot updates need a reason.** If a deck snapshot changes, explain in the pull request why the new deck is correct. Never regenerate snapshots just to make a test pass.
 - Every new load, support or analysis type lands together with at least one verification case and a row in the coverage matrix in `docs/VERIFICATION.md`.
 - Do not weaken a tolerance or delete a failing test to get green. Report the failure.
@@ -99,7 +99,7 @@ make worker-image  build the worker image on its own
 ```
 
 - `make dev` needs a running Docker daemon. In the Claude Code cloud environment start it first with `nohup dockerd > /tmp/dockerd.log 2>&1 &` and run `make dev BUILD_CA=/root/.ccr/ca-bundle.crt` so the image build trusts the proxy (ADR-012). It creates `apps/api/.dev.vars` from the example if missing and passes its `WORKER_TOKEN` to the worker.
-- CI (`.github/workflows/fast.yml`) runs `make install` and `make test` on every pull request; the DCO GitHub App checks sign-offs. The nightly workflow is still a placeholder: running `make verify` there needs Docker in CI, which is the maintainer's call (ADR-035).
+- CI (`.github/workflows/fast.yml`) runs `make install` and `make test` on every pull request; the DCO GitHub App checks sign-offs. `.github/workflows/phase-end.yml` runs `make verify` (full tier) and `make e2e` when a milestone tag such as `m1-complete` is pushed, by hand from the Actions tab, and on pull requests that change it or `infra/stack.sh`, `verify.sh` or `e2e.sh` (ADR-037). A milestone closes by tagging `main` with `m<N>-complete`; it counts only when that run is green. The nightly workflow stays a placeholder.
 - `make dev` seeds two local test users (`alice` / `alice-local`, `bob` / `bob-local`, ADR-022). Sign in at http://localhost:5173 and use "Queue a no-op job" to see a job go from queued to succeeded. `pnpm --filter @clearfea/api db:seed` re-seeds them.
 - `make verify` needs the same running Docker daemon and `BUILD_CA` as `make dev`; it leaves `make dev`'s data alone and can run beside it. Logs and `results.md`/`results.json` go to a temporary folder it names (or `VERIFY_OUT`). A case is a folder in `verification/cases/` (layout in `verification/README.md`).
 - After changing the deck generator or the result reader, also run the exact checks that the platform path cannot see: `cd worker && uv run python spikes/deck_check/check.py` (ADR-029) and `spikes/solve_check/check.py` (ADR-030); they need `ccx` and Gmsh's system libraries on the host. Deck snapshots live in `worker/tests/snapshots/deck/`; a missing one is written only with `CLEARFEA_WRITE_SNAPSHOTS=1`.

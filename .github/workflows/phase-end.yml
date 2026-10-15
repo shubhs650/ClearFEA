@@ -34,6 +34,9 @@ concurrency:
 env:
   # The tier `make verify` runs; a milestone closes on the full tier.
   VERIFY_TIER: ${{ inputs.tier || 'full' }}
+  # Compose builds through `buildx bake`, which on the runner refuses to read the empty default
+  # CA secret (/dev/null, infra/docker-compose.yml) without a filesystem entitlement.
+  BUILDX_BAKE_ENTITLEMENTS_FS: "0"
 
 jobs:
   verify:
