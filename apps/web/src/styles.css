@@ -478,6 +478,8 @@ button:disabled {
 .run-blockers .link-button {
   color: inherit;
   text-align: left;
+  /* A wrapped line keeps its bullet on its first line. */
+  vertical-align: top;
 }
 
 .field-hint {

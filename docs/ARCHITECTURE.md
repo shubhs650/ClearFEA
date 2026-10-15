@@ -230,7 +230,7 @@ Hono on Cloudflare Workers, TypeScript.
 - **Public routes** (`/api/...`): session login, projects, geometries, simulations, meshes, runs, materials, wallet, share links. JSON in and out, validated against the shared schemas.
 - **Internal routes** (`/internal/...`): job claim, heartbeat, completion, file transfer. Authenticated by worker token, never by user session.
 - **Data-access layer:** every function takes the acting user id and applies `owner_id` filtering. Route handlers do not write SQL.
-- **Pre-run validation:** a pure function over the spec and topology that returns a list of problems in plain language. The UI shows the same list beside the disabled Run button.
+- **Pre-run validation:** a pure function over the spec and topology that returns a list of problems in plain language (`preRunProblems` in `packages/spec`, ADR-034). The API refuses a run with it before any job is queued, and the UI shows the same list beside the disabled Run button.
 - **Billing module:** rate lookup, cost calculation, ledger writes, stop-limit checks on each heartbeat. Physics-critical in the sense that it must be exactly right.
 - **Live updates:** the browser polls job status and log every couple of seconds while a job is active. No websockets at the gate.
 - **Constraints to respect:** Workers have short CPU limits and request-size limits and cannot run native binaries. Large files therefore move directly between the worker container (or browser) and R2 in the cloud, never through a Worker request body.
