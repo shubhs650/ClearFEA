@@ -180,10 +180,11 @@ def run_mesh(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
 
 
 def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
-    """Solves a run: deck from the frozen spec and the mesh, CalculiX, results (M1.8)."""
+    """Solves a run: deck from the frozen spec and the mesh, CalculiX, results (M1.8), and the
+    viewer's surface and field files (M1.9)."""
     from .deck import DeckError, generate_deck
     from .meshing.volume import read_volume_mesh
-    from .results import DatError, FrdError, read_results
+    from .results import DatError, FrdError, read_results, write_viewer_files
     from .solver import run_calculix
     from .spec.simulation_schema import SolveParams
     from .versions import calculix_version
@@ -226,12 +227,16 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     context.set_stage("reading results")
     frd, dat = work / "job.frd", work / "job.dat"
     try:
-        _, result = read_results(params.spec, mesh, frd, dat, calculix)
+        fields, result = read_results(params.spec, mesh, frd, dat, calculix)
     except (OSError, FrdError, DatError) as error:
         raise JobFailure("platform_fault", "results_unreadable", str(error)) from None
+    context.set_stage("writing result files")
+    viewer = write_viewer_files(mesh, fields, work)
     context.set_stage("uploading")
     files.upload("results.frd", frd)
     files.upload("results.dat", dat)
+    files.upload("surface.bin", viewer.surface_path)
+    files.upload("fields.bin", viewer.fields_path)
     return result.model_dump(mode="json", by_alias=True)
 
 

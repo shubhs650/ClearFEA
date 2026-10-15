@@ -22,6 +22,7 @@ from clearfea_worker.jobs import (
     JobContext,
 )
 from clearfea_worker.meshing.volume import write_volume_mesh
+from clearfea_worker.results import read_fields, write_viewer_files
 from clearfea_worker.runner import run_forever, run_once
 from clearfea_worker.solver import SolverRun
 from clearfea_worker.spec.geometry_schema import ImportResult
@@ -277,7 +278,14 @@ def solve_job(api: FakeApi, tmp_path: Path, spec: dict[str, Any]) -> None:
         "solve",
         params={"meshId": "m1", "spec": spec},
         downloads={"mesh.bin": mesh_path.read_bytes()},
-        uploads=("deck.inp", "solver.log", "results.frd", "results.dat"),
+        uploads=(
+            "deck.inp",
+            "solver.log",
+            "results.frd",
+            "results.dat",
+            "surface.bin",
+            "fields.bin",
+        ),
     )
 
 
@@ -323,6 +331,12 @@ def test_runs_a_solve_job_and_streams_the_solver_log(tmp_path: Path, no_calculix
         assert api.uploads[("j1", "solver.log")].decode() == "".join(lines)
         assert api.uploads[("j1", "results.frd")] == (SOLVE / "job.frd").read_bytes()
         assert api.uploads[("j1", "results.dat")] == (SOLVE / "job.dat").read_bytes()
+        expected = tmp_path / "expected"
+        expected.mkdir()
+        nodal = read_fields(SOLVE / "job.frd", 14)
+        files = write_viewer_files(two_tets(order=2), nodal, expected)
+        assert api.uploads[("j1", "surface.bin")] == files.surface_path.read_bytes()
+        assert api.uploads[("j1", "fields.bin")] == files.fields_path.read_bytes()
 
 
 def test_a_setup_the_deck_cannot_use_is_the_users_fault(tmp_path: Path, no_calculix: Any) -> None:
