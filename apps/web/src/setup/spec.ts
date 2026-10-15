@@ -6,7 +6,9 @@
 import {
   type FixedSupport,
   type IsotropicMaterial,
+  type MeshView,
   type PressureLoad,
+  type Quantity,
   type SimulationSpec,
   simulationSpecProblems,
   type TopologyTags,
@@ -85,7 +87,34 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
     return item;
   });
   result.set("loads", worst([status([], spec.loads.length === 0 ? ["Add a load."] : []), ...loads]));
+
+  result.set("mesh", status(errorsOf("mesh"), spec.mesh.size === null ? ["Enter a global mesh size."] : []));
   return result;
+}
+
+/** True when two quantities are the same value in the same unit, as the user entered them. */
+export function sameQuantity(a: Quantity | null, b: Quantity | null): boolean {
+  return a !== null && b !== null && a.value === b.value && a.unit === b.unit;
+}
+
+/** True when the mesh was made with the spec's current mesh settings. */
+export function meshIsCurrent(spec: SimulationSpec, mesh: MeshView | null): boolean {
+  return mesh !== null && sameQuantity(mesh.size, spec.mesh.size);
+}
+
+/**
+ * The Mesh item's mark once the simulation's mesh is known: its settings' mark from
+ * setupStatus, then whether a mesh exists for those settings.
+ */
+export function meshStatus(settings: ItemStatus, spec: SimulationSpec, mesh: MeshView | null): ItemStatus {
+  if (settings.mark !== "complete") return settings;
+  if (mesh === null) return { mark: "incomplete", notes: ["Generate the mesh."] };
+  if (!meshIsCurrent(spec, mesh)) {
+    return { mark: "incomplete", notes: ["The mesh size changed after the mesh was made. Generate the mesh again."] };
+  }
+  if (mesh.status === "meshing") return { mark: "incomplete", notes: ["The mesh is being made."] };
+  if (mesh.status === "failed") return { mark: "error", notes: [mesh.problem ?? "Meshing failed."] };
+  return settings;
 }
 
 /** The smallest n for which `${prefix}-${n}` is not an id in the spec. */

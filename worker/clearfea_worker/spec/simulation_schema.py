@@ -218,3 +218,127 @@ class SimulationListResponse(BaseModel):
         populate_by_name=True,
     )
     simulations: list[SimulationView]
+
+
+type ElementOrder = Literal[1, 2]
+"""
+1: four-node tetrahedra. 2: ten-node tetrahedra with curved edges on curved faces. Phase 0 meshes always use 2 until M2.8 offers the choice (ADR-028).
+"""
+
+
+class MeshParams(BaseModel):
+    """
+    Parameters of a mesh job (ADR-028). The worker re-imports the geometry's STEP file with scaling, checks it against topology.json, and meshes it with tetrahedra no larger than size.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    geometry_id: Annotated[str, Field(alias="geometryId")]
+    """
+    The geometry whose model.step and topology.json the job reads.
+    """
+    scaling: Annotated[float, Field(gt=0.0)]
+    """
+    Geometry.OCCScaling of the geometry's topology.json; the re-import must use the same.
+    """
+    size: Quantity
+    """
+    Global element size as the user entered it (a length quantity); the worker converts it to metres.
+    """
+    order: ElementOrder
+
+
+class Software(BaseModel):
+    """
+    Versions that made the mesh.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    gmsh: str
+    occt: str
+
+
+class MeshResult(BaseModel):
+    """
+    Result summary of a succeeded mesh job.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    order: ElementOrder
+    nodes: Annotated[int, Field(ge=4)]
+    elements: Annotated[int, Field(ge=1)]
+    """
+    Tetrahedra in the volume mesh.
+    """
+    surface_triangles: Annotated[int, Field(alias="surfaceTriangles", ge=1)]
+    """
+    Triangles in the mesh display file.
+    """
+    software: Software
+    """
+    Versions that made the mesh.
+    """
+
+
+type MeshStatus = Literal["meshing", "ready", "failed"]
+"""
+meshing: the mesh job is queued or running. ready: the mesh and its display file exist. failed: problem says why.
+"""
+
+
+class MeshView(BaseModel):
+    """
+    A mesh as its owner sees it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: str
+    geometry_id: Annotated[str, Field(alias="geometryId")]
+    size: Quantity
+    """
+    The global size the mesh was made with, as entered.
+    """
+    order: ElementOrder
+    status: MeshStatus
+    problem: str | None
+    """
+    Why meshing failed, in plain language.
+    """
+    node_count: Annotated[int | None, Field(alias="nodeCount")]
+    element_count: Annotated[int | None, Field(alias="elementCount")]
+    created_at: Annotated[str, Field(alias="createdAt")]
+
+
+class MeshResponse(BaseModel):
+    """
+    Answer to POST /api/simulations/{id}/mesh (HTTP 201) and GET /api/meshes/{id}.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    mesh: MeshView
+
+
+class SimulationMeshResponse(BaseModel):
+    """
+    Answer to GET /api/simulations/{id}/mesh: the simulation's latest mesh, or null before the first one is requested.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    mesh: MeshView | None

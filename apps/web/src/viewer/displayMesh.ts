@@ -142,3 +142,31 @@ export function faceOutlines(mesh: DisplayMesh): Float32Array {
   }
   return new Float32Array(segments);
 }
+
+/**
+ * Every triangle edge of every face, once per face: the element edges of an analysis mesh's
+ * surface. Returned as line segments, like faceOutlines.
+ */
+export function triangleEdges(mesh: DisplayMesh): Float32Array {
+  const { positions, indices } = mesh;
+  const segments: number[] = [];
+  for (const face of mesh.faces) {
+    const seen = new Set<number>();
+    const span = face.vertexCount;
+    for (let t = face.firstTriangle; t < face.firstTriangle + face.triangleCount; t++) {
+      for (let e = 0; e < 3; e++) {
+        const a = indices[t * 3 + e] ?? 0;
+        const b = indices[t * 3 + ((e + 1) % 3)] ?? 0;
+        const la = a - face.firstVertex;
+        const lb = b - face.firstVertex;
+        const k = la < lb ? la * span + lb : lb * span + la;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        for (const v of [a * 3, b * 3]) {
+          segments.push(positions[v] ?? 0, positions[v + 1] ?? 0, positions[v + 2] ?? 0);
+        }
+      }
+    }
+  }
+  return new Float32Array(segments);
+}

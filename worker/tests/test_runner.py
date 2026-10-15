@@ -11,9 +11,11 @@ from pydantic import ValidationError
 
 from clearfea_worker.api import ApiClient, ApiError, ClaimedJob
 from clearfea_worker.config import Settings
+from clearfea_worker.geometry.importer import import_geometry
 from clearfea_worker.jobs import HANDLERS, JobContext
 from clearfea_worker.runner import run_forever, run_once
 from clearfea_worker.spec.geometry_schema import ImportResult
+from clearfea_worker.spec.simulation_schema import MeshResult
 
 from .fake_api import FakeApi
 from .step_models import block_with_hole
@@ -45,7 +47,7 @@ def test_completes_a_noop_job() -> None:
         assert paths[0] == "/internal/jobs/claim"
         assert "/internal/jobs/j1/heartbeat" in paths
         assert paths[-1] == "/internal/jobs/j1/complete"
-        assert api.calls[0][1] == {"workerId": "w1", "jobTypes": ["import", "noop"]}
+        assert api.calls[0][1] == {"workerId": "w1", "jobTypes": ["import", "mesh", "noop"]}
 
 
 def test_returns_false_when_nothing_is_queued() -> None:
@@ -182,4 +184,68 @@ def test_a_missing_download_is_a_platform_fault() -> None:
         assert (outcome["failureCategory"], outcome["failureCause"]) == (
             "platform_fault",
             "transfer_missing",
+        )
+
+
+def imported_block(tmp_path: Path) -> tuple[bytes, bytes]:
+    step = block_with_hole(tmp_path / "block.step")
+    import_geometry(step, tmp_path / "import", None)
+    return step.read_bytes(), (tmp_path / "import" / "topology.json").read_bytes()
+
+
+def mesh_params(size: dict[str, Any]) -> dict[str, Any]:
+    return {"geometryId": "g1", "scaling": 1.0, "size": size, "order": 2}
+
+
+def test_runs_a_mesh_job_through_its_transfer_urls(tmp_path: Path) -> None:
+    step, topology = imported_block(tmp_path)
+    with FakeApi() as api:
+        api.enqueue(
+            "j1",
+            "mesh",
+            params=mesh_params({"value": 8, "unit": "mm"}),
+            downloads={"model.step": step, "topology.json": topology},
+            uploads=("mesh.bin", "display.bin"),
+        )
+        settings = settings_for(api)
+        assert run_once(client_for(settings), settings, HANDLERS) is True
+        job = api.jobs["j1"]
+        assert job["status"] == "succeeded", job.get("outcome")
+        result = MeshResult.model_validate(job["outcome"]["result"])
+        assert result.order == 2
+        assert result.elements > 100
+        assert api.uploads[("j1", "mesh.bin")][:4] == b"CFVM"
+        assert api.uploads[("j1", "display.bin")][:4] == b"CFDM"
+
+
+def test_a_mesh_size_that_is_far_too_small_is_the_users_fault(tmp_path: Path) -> None:
+    step, topology = imported_block(tmp_path)
+    with FakeApi() as api:
+        api.enqueue(
+            "j1",
+            "mesh",
+            params=mesh_params({"value": 0.01, "unit": "mm"}),
+            downloads={"model.step": step, "topology.json": topology},
+            uploads=("mesh.bin", "display.bin"),
+        )
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert (outcome["failureCategory"], outcome["failureCause"]) == (
+            "user_fault",
+            "mesh_too_large",
+        )
+        assert "Enter a mesh size of at least" in outcome["failureMessage"]
+        assert api.uploads == {}
+
+
+def test_a_mesh_size_in_an_unknown_unit_is_a_platform_fault(tmp_path: Path) -> None:
+    with FakeApi() as api:
+        api.enqueue("j1", "mesh", params=mesh_params({"value": 1, "unit": "MPa"}))
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert (outcome["failureCategory"], outcome["failureCause"]) == (
+            "platform_fault",
+            "bad_params",
         )

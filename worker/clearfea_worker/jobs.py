@@ -100,7 +100,46 @@ def run_import(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     return output.result.model_dump(mode="json", by_alias=True)
 
 
+def run_mesh(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
+    """Meshes a geometry with a global size: mesh.bin and the mesh's display.bin (M1.6)."""
+    from .meshing.mesher import MeshFailure, mesh_geometry
+    from .spec.geometry_schema import Topology
+    from .spec.simulation_schema import MeshParams
+    from .units import UnitError, to_si
+
+    try:
+        params = MeshParams.model_validate(job.params or {})
+        size = to_si(params.size.value, params.size.unit, "length")
+    except (ValidationError, UnitError) as error:
+        raise JobFailure("platform_fault", "bad_params", f"Mesh parameters: {error}") from None
+    files = context.require_files()
+    context.set_stage("downloading")
+    step = files.download("model.step")
+    try:
+        reference = Topology.model_validate_json(files.download("topology.json").read_bytes())
+    except ValidationError as error:
+        raise JobFailure("platform_fault", "bad_topology", f"topology.json: {error}") from None
+    context.set_stage("meshing")
+    try:
+        output = mesh_geometry(
+            step,
+            reference,
+            files.workdir / "out",
+            scaling=params.scaling,
+            size=size,
+            unit=params.size.unit,
+            order=params.order,
+        )
+    except MeshFailure as failure:
+        raise JobFailure(failure.category, failure.cause, failure.message) from None
+    context.set_stage("uploading")
+    files.upload("mesh.bin", output.mesh_path)
+    files.upload("display.bin", output.display_path)
+    return output.result.model_dump(mode="json", by_alias=True)
+
+
 HANDLERS: dict[str, Handler] = {
     "noop": run_noop,
     "import": run_import,
+    "mesh": run_mesh,
 }

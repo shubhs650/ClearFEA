@@ -33,7 +33,7 @@ const addLabels: Record<Group, string> = {
   loads: "Add a pressure",
 };
 
-function Notes({ status }: { status: ItemStatus | undefined }) {
+export function Notes({ status }: { status: ItemStatus | undefined }) {
   if (status === undefined || status.notes.length === 0) return null;
   return (
     <ul className={`setup-notes setup-notes-${status.mark}`} aria-label="What this item needs">

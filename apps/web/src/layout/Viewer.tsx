@@ -2,10 +2,13 @@
 // The 3D viewer (M1.3): loads the geometry's display mesh and topology, draws them with
 // ModelView, shows the face under the pointer and keeps the face selection. Left-drag
 // orbits, right-drag pans, the wheel zooms, a click adds or removes a face, Escape clears.
+// Given a ready analysis mesh (M1.6), it draws that mesh's surface with its element edges
+// instead, with the element and node counts; faces stay pickable.
 
-import type { GeometryStatus, GeometryView, TopologyFace } from "@clearfea/spec";
+import type { GeometryStatus, GeometryView, MeshView, TopologyFace } from "@clearfea/spec";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchDisplayMesh, fetchTopology } from "../api/geometries";
+import { fetchMeshDisplay } from "../api/meshes";
 import { type DisplayMesh, DisplayMeshError, parseDisplayMesh } from "../viewer/displayMesh";
 import { ModelView } from "../viewer/ModelView";
 
@@ -21,7 +24,7 @@ const faceTypes: Record<TopologyFace["type"], string> = {
   other: "curved",
 };
 
-type Model = { mesh: DisplayMesh; faces: Map<number, TopologyFace> };
+type Model = { mesh: DisplayMesh; faces: Map<number, TopologyFace>; analysis: MeshView | null };
 
 type Load =
   | { kind: "none" }
@@ -37,13 +40,18 @@ export function toggleFace(selection: ReadonlySet<number>, tag: number): Set<num
   return next;
 }
 
+const count = (n: number | null) => (n ?? 0).toLocaleString("en-US");
+
 export function Viewer({
   geometry,
+  mesh = null,
   selection,
   onSelectionChange,
   onSignedOut,
 }: {
   geometry: GeometryView | null;
+  /** A ready analysis mesh of the geometry to draw instead of the geometry itself. */
+  mesh?: MeshView | null;
   selection: ReadonlySet<number>;
   onSelectionChange: (next: Set<number>) => void;
   onSignedOut: (problem: string) => void;
@@ -83,16 +91,22 @@ export function Viewer({
 
   // A re-import at another unit changes the scaling, and so the display mesh.
   const viewable = geometry !== null && VIEWABLE.includes(geometry.status);
-  const key = viewable ? `${geometry.id}:${geometry.scaling}` : null;
+  const analysis = viewable && mesh !== null && mesh.status === "ready" && mesh.geometryId === geometry.id ? mesh : null;
+  const key = viewable ? `${geometry.id}:${geometry.scaling}:${analysis?.id ?? "geometry"}` : null;
   const id = geometry?.id;
+  // The analysis mesh as of the key; read through a ref so its object identity does not reload.
+  const analysisNow = useRef(analysis);
+  analysisNow.current = analysis;
   useEffect(() => {
     if (key === null || id === undefined) {
       setLoad({ kind: "none" });
       return;
     }
     let current = true;
+    const shownMesh = analysisNow.current;
     setLoad((was) => (was.kind === "shown" && was.key === key ? was : { kind: "loading" }));
-    void Promise.all([fetchDisplayMesh(id), fetchTopology(id)]).then(([display, topology]) => {
+    const surface = shownMesh === null ? fetchDisplayMesh(id) : fetchMeshDisplay(shownMesh.id);
+    void Promise.all([surface, fetchTopology(id)]).then(([display, topology]) => {
       if (!current) return;
       for (const result of [display, topology]) {
         if (result.kind === "signedOut") return onSignedOut(result.problem);
@@ -100,9 +114,9 @@ export function Viewer({
       }
       if (display.kind !== "ok" || topology.kind !== "ok") return;
       try {
-        const mesh = parseDisplayMesh(display.value);
+        const parsed = parseDisplayMesh(display.value);
         const faces = new Map(topology.value.faces.map((face) => [face.tag, face]));
-        setLoad({ kind: "shown", key, model: { mesh, faces } });
+        setLoad({ kind: "shown", key, model: { mesh: parsed, faces, analysis: shownMesh } });
       } catch (error) {
         if (!(error instanceof DisplayMeshError)) throw error;
         setLoad({ kind: "failed", problem: error.message });
@@ -114,9 +128,13 @@ export function Viewer({
   }, [key, id, onSignedOut]);
 
   const model = load.kind === "shown" ? load.model : null;
+  // Switching between a geometry and its mesh keeps the camera where the user put it.
+  const framed = useRef<string | null>(null);
   useEffect(() => {
-    if (model) view.current?.setMesh(model.mesh);
-  }, [model]);
+    if (!model || id === undefined) return;
+    view.current?.setMesh(model.mesh, model.analysis === null ? "outlines" : "elements", framed.current === id);
+    framed.current = id;
+  }, [model, id]);
 
   useEffect(() => {
     view.current?.setSelection(selection);
@@ -141,7 +159,7 @@ export function Viewer({
   else if (geometry === null) message = "Upload a STEP file to see the model here.";
   else if (geometry.status === "importing") message = "Importing the file. The model appears here when it is done.";
   else if (geometry.status === "failed") message = "The import failed, so there is no model to show.";
-  else if (load.kind === "loading") message = "Loading the model…";
+  else if (load.kind === "loading") message = analysis === null ? "Loading the model…" : "Loading the mesh…";
   else if (load.kind === "failed") message = load.problem;
 
   const shown = webgl && model !== null && message === null;
@@ -160,6 +178,11 @@ export function Viewer({
           <div className="viewer-hover" aria-live="polite">
             {hovered !== null ? describe(hovered) : ""}
           </div>
+          {model?.analysis && (
+            <div className="viewer-mesh">
+              Mesh: {count(model.analysis.elementCount)} elements, {count(model.analysis.nodeCount)} nodes
+            </div>
+          )}
           <div className="viewer-toolbar">
             <button type="button" onClick={() => view.current?.resetView()}>
               Reset view

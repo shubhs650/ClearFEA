@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { emptySimulationSpec, type SimulationSpec } from "@clearfea/spec";
+import { emptySimulationSpec, type MeshView, type SimulationSpec } from "@clearfea/spec";
 import { describe, expect, it } from "vitest";
 import {
   addFixedSupport,
@@ -7,6 +7,7 @@ import {
   addPressure,
   assignMaterial,
   facesOf,
+  meshStatus,
   removeItem,
   setupStatus,
   updateLoad,
@@ -109,5 +110,47 @@ describe("setup edits", () => {
     const spec = removeItem(complete(), "material-1");
     expect(spec.materials).toEqual([]);
     expect(spec.bodies).toEqual([{ tag: 1, material: null }]);
+  });
+});
+
+describe("mesh mark", () => {
+  const mesh = (overrides: Partial<MeshView> = {}): MeshView => ({
+    id: "m1",
+    geometryId: "g1",
+    size: { value: 5, unit: "mm" },
+    order: 2,
+    status: "ready",
+    problem: null,
+    nodeCount: 10,
+    elementCount: 4,
+    createdAt: "2026-10-15T12:00:00.000Z",
+    ...overrides,
+  });
+
+  it("needs a size, then a mesh made with that size", () => {
+    const spec = empty();
+    const settings = setupStatus(spec).get("mesh");
+    expect(settings).toEqual({ mark: "incomplete", notes: ["Enter a global mesh size."] });
+    if (!settings) throw new Error("no mark");
+    expect(meshStatus(settings, spec, mesh())).toBe(settings);
+
+    const sized: SimulationSpec = { ...spec, mesh: { size: { value: 5, unit: "mm" } } };
+    const ok = setupStatus(sized).get("mesh");
+    if (!ok) throw new Error("no mark");
+    expect(ok.mark).toBe("complete");
+    expect(meshStatus(ok, sized, null).notes).toEqual(["Generate the mesh."]);
+    expect(meshStatus(ok, sized, mesh({ status: "meshing" })).notes).toEqual(["The mesh is being made."]);
+    expect(meshStatus(ok, sized, mesh({ status: "failed", problem: "Too fine." }))).toEqual({
+      mark: "error",
+      notes: ["Too fine."],
+    });
+    expect(meshStatus(ok, sized, mesh())).toEqual({ mark: "complete", notes: [] });
+    // The same length in another unit is still a different setting from what was meshed.
+    expect(meshStatus(ok, sized, mesh({ size: { value: 0.5, unit: "cm" } })).mark).toBe("incomplete");
+  });
+
+  it("marks a mesh size in the wrong unit kind as an error", () => {
+    const spec: SimulationSpec = { ...empty(), mesh: { size: { value: 5, unit: "MPa" } } };
+    expect(setupStatus(spec).get("mesh")?.mark).toBe("error");
   });
 });

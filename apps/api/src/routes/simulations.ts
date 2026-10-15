@@ -5,6 +5,8 @@
 import {
   type CreateSimulationRequest,
   checkSimulationSpec,
+  type MeshResponse,
+  type SimulationMeshResponse,
   emptySimulationSpec,
   type SimulationListResponse,
   type SimulationResponse,
@@ -18,6 +20,7 @@ import {
 import { Hono } from "hono";
 import { readBody } from "../body";
 import { type Geometry, geometryKey, getGeometry } from "../db/geometries";
+import { createMesh, MESH_ORDER, simulationMesh } from "../db/meshes";
 import {
   createSimulation,
   getSimulation,
@@ -27,6 +30,7 @@ import {
 } from "../db/simulations";
 import type { Env } from "../env";
 import { requireUser, type SessionEnv } from "../session";
+import { meshView } from "./meshes";
 
 export const simulations = new Hono<SessionEnv>();
 
@@ -140,4 +144,38 @@ simulations.put("/:id/spec", async (c) => {
   const saved = await saveSpec(c.env.DB, c.var.userId, simulation.id, spec);
   if (saved === null) return c.json({ error: NOT_FOUND }, 404);
   return c.json({ simulation: view(saved) } satisfies SimulationResponse);
+});
+
+simulations.get("/:id/mesh", async (c) => {
+  const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
+  if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  const mesh = await simulationMesh(c.env.DB, c.var.userId, simulation.id);
+  return c.json({ mesh: mesh === null ? null : meshView(mesh) } satisfies SimulationMeshResponse);
+});
+
+/** Meshes the simulation's geometry with the global size of its saved spec (M1.6, ADR-028). */
+simulations.post("/:id/mesh", async (c) => {
+  const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
+  if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  const size = simulation.spec.mesh.size;
+  if (size === null) {
+    return c.json({ error: "Enter a global mesh size in the Mesh settings, then generate the mesh." }, 409);
+  }
+  const current = await simulationMesh(c.env.DB, c.var.userId, simulation.id);
+  if (current?.status === "meshing") {
+    return c.json({ error: "The mesh is already being made. Wait for it to finish, then try again." }, 409);
+  }
+  const geometry = await getGeometry(c.env.DB, c.var.userId, simulation.geometryId);
+  if (geometry === null) throw new Error("A simulation's geometry disappeared.");
+  if (geometry.status !== "ready" || geometry.scaling === null) {
+    return c.json({ error: "Confirm the geometry's length unit before meshing it." }, 409);
+  }
+  const { mesh } = await createMesh(c.env.DB, c.var.userId, {
+    simulationId: simulation.id,
+    geometryId: geometry.id,
+    scaling: geometry.scaling,
+    size,
+    order: MESH_ORDER,
+  });
+  return c.json({ mesh: meshView(mesh) } satisfies MeshResponse, 201);
 });

@@ -20,6 +20,9 @@ def _write(path: Path, build: str) -> Path:
     gmsh.initialize(readConfigFiles=False, interruptible=False)
     try:
         gmsh.option.setNumber("General.Terminal", 0)
+        # OpenCASCADE keeps the unit of an earlier import in the same process; without this a
+        # model written after an import is declared in metres with millimetre coordinates.
+        gmsh.option.setString("Geometry.OCCTargetUnit", "MM")
         gmsh.model.add(path.stem)
         occ = gmsh.model.occ
         if build == "block_with_hole":

@@ -5,6 +5,7 @@ import {
   faceAtTriangle,
   faceOutlines,
   parseDisplayMesh,
+  triangleEdges,
 } from "../src/viewer/displayMesh";
 import { readFixture } from "./fixtures";
 
@@ -47,6 +48,11 @@ describe("display mesh reader", () => {
     const outline = faceOutlines(parseDisplayMesh(fixture()));
     // Three edges for the triangle and four for the square; the square's diagonal is shared.
     expect(outline.length).toBe((3 + 4) * 2 * 3);
+  });
+
+  it("lists every element edge once per face, the shared diagonal included", () => {
+    const edges = triangleEdges(parseDisplayMesh(fixture()));
+    expect(edges.length).toBe((3 + 5) * 2 * 3);
   });
 
   it("refuses a file that is not a display mesh", () => {
