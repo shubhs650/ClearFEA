@@ -2,15 +2,18 @@
 // Settings panel for the run (M1.8): a button that solves the saved setup on the current mesh,
 // the latest run's stage and solver log while it solves, and its result figures when done.
 // From M1.9 it also chooses what the viewer draws of a succeeded run: the quantity and shape.
+// From M1.10 it shows the run record: when it ran, the mesh and versions it was solved with,
+// whether the setup has changed since, and links to view or download the deck and log.
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
-import type { RunView } from "@clearfea/spec";
+import type { RunFileName, RunView, SimulationSpec } from "@clearfea/spec";
 import { Fragment } from "react";
+import { runFileUrl } from "../api/runs";
 import type { Deformation } from "../layout/Viewer";
 import { fromSi } from "../units/convert";
 import { QUANTITIES, type Quantity } from "../viewer/resultFields";
 import { Notes } from "./ItemPanels";
-import type { ItemStatus } from "./spec";
+import { type ItemStatus, sameSpec } from "./spec";
 
 /** Units the result figures are shown in until M2.1 brings display-unit choice. */
 export const STRESS_UNIT = "MPa";
@@ -33,9 +36,89 @@ function at(position: number[], unit: string): string {
   return `at (${position.map((p) => Number(fromSi(p, unit, "length").toPrecision(4))).join(", ")}) ${unit}`;
 }
 
+/** An API timestamp as a fixed, unambiguous UTC time. */
+function utc(timestamp: string): string {
+  return `${timestamp.slice(0, 19).replace("T", " ")} UTC`;
+}
+
+function version(value: string | number | null): string {
+  return value === null ? "not recorded" : String(value);
+}
+
+const ORDERS = { 1: "linear tetrahedra (4 nodes)", 2: "quadratic tetrahedra (10 nodes)" } as const;
+
+const FILE_LABELS: Partial<Record<RunFileName, string>> = { "deck.inp": "Solver input", "solver.log": "Solver log" };
+
+/** The record frozen with a run: when, on what mesh, by which versions, and its deck and log. */
+function RunRecord({ run, currentSpec }: { run: RunView; currentSpec: SimulationSpec }) {
+  const { mesh, software } = run;
+  const finished = run.status !== "solving";
+  const count = (n: number | null) => (n === null ? "?" : n.toLocaleString("en-US"));
+  return (
+    <section aria-label="Run record">
+      <h3 className="pane-subtitle">Run record</h3>
+      {!sameSpec(run.spec, currentSpec) && (
+        <p className="field-hint">
+          The setup has changed since this run. Its record and results are for the setup as it was when it started; run
+          again for the current setup.
+        </p>
+      )}
+      <dl className="geometry-facts">
+        <dt>Started</dt>
+        <dd>{utc(run.createdAt)}</dd>
+        {run.finishedAt !== null && (
+          <>
+            <dt>Finished</dt>
+            <dd>{utc(run.finishedAt)}</dd>
+          </>
+        )}
+        <dt>Mesh</dt>
+        <dd>
+          {mesh.size.value} {mesh.size.unit}, {ORDERS[mesh.order]}; {count(mesh.elementCount)} elements,{" "}
+          {count(mesh.nodeCount)} nodes
+        </dd>
+        <dt>ClearFEA</dt>
+        <dd>{version(software.clearfea)}</dd>
+        <dt>CalculiX</dt>
+        <dd>{version(software.calculix)}</dd>
+        <dt>Gmsh</dt>
+        <dd>
+          {version(software.gmsh)}
+          {software.occt !== null && <span className="field-hint"> with OpenCASCADE {software.occt}</span>}
+        </dd>
+        <dt>Deck format</dt>
+        <dd>{version(software.deckFormat)}</dd>
+        {(["deck.inp", "solver.log"] as const).map((name) => (
+          <Fragment key={name}>
+            <dt>{FILE_LABELS[name]}</dt>
+            <dd>
+              {run.files.includes(name) ? (
+                <>
+                  <a href={runFileUrl(run.id, name)} target="_blank" rel="noopener noreferrer">
+                    View {name}
+                  </a>{" "}
+                  ·{" "}
+                  <a href={runFileUrl(run.id, name, true)} download>
+                    Download
+                  </a>
+                </>
+              ) : finished ? (
+                <span className="field-hint">None: the run stopped before the solver started.</span>
+              ) : (
+                <span className="field-hint">Stored when the run has finished.</span>
+              )}
+            </dd>
+          </Fragment>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
 export function RunPanel({
   status,
   run,
+  currentSpec,
   log,
   blocked,
   lengthUnit,
@@ -48,6 +131,8 @@ export function RunPanel({
 }: {
   status: ItemStatus | undefined;
   run: RunView | null;
+  /** The simulation's setup as saved now, to tell whether the run's frozen setup differs. */
+  currentSpec: SimulationSpec;
   log: string;
   /** Why the simulation cannot be run now, or null when it can. */
   blocked: string | null;
@@ -135,12 +220,9 @@ export function RunPanel({
               </dd>
             </Fragment>
           ))}
-          <dt>Nodes</dt>
-          <dd>{result.nodes.toLocaleString("en-US")}</dd>
-          <dt>Solver</dt>
-          <dd>CalculiX {result.software.calculix}</dd>
         </dl>
       )}
+      {run !== null && <RunRecord run={run} currentSpec={currentSpec} />}
       {run !== null && (
         <details className="run-log" open={solving}>
           <summary>Solver log</summary>

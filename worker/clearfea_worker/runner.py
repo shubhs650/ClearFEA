@@ -10,6 +10,7 @@ from pathlib import Path
 from .api import ApiClient, ApiError, ClaimedJob
 from .config import Settings
 from .jobs import HANDLERS, Files, Handler, JobContext, JobFailure
+from .versions import worker_software
 
 log = logging.getLogger(__name__)
 
@@ -131,4 +132,6 @@ def run_forever(
 
 
 def _default_client(settings: Settings) -> ApiClient:
-    return ApiClient(settings.api_url, settings.worker_token, settings.worker_id)
+    software = worker_software()
+    log.info("Worker software: %s", software.model_dump_json(by_alias=True))
+    return ApiClient(settings.api_url, settings.worker_token, settings.worker_id, software=software)

@@ -66,6 +66,27 @@ class ClaimedJob(BaseModel):
     transfers: list[Transfer]
 
 
+class WorkerSoftware(BaseModel):
+    """
+    Versions of the worker that claims a job (ADR-032), recorded on the job so a run can state what produced it. Null where the worker lacks the program.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    clearfea: Annotated[str, Field(max_length=100, min_length=1)]
+    """
+    The worker package's version, with the source commit it was built from after a + when known, for example 0.0.0+d9d394b.
+    """
+    deck_format: Annotated[int, Field(alias="deckFormat", ge=1)]
+    """
+    The deck generator's DECK_FORMAT.
+    """
+    calculix: Annotated[str | None, Field(max_length=100)]
+    gmsh: Annotated[str | None, Field(max_length=100)]
+
+
 class ClaimRequest(BaseModel):
     """
     Body of POST /internal/jobs/claim.
@@ -77,6 +98,7 @@ class ClaimRequest(BaseModel):
     )
     worker_id: Annotated[WorkerId, Field(alias="workerId")]
     job_types: Annotated[list[JobType], Field(alias="jobTypes")]
+    software: WorkerSoftware | None = None
 
 
 class ClaimResponse(BaseModel):

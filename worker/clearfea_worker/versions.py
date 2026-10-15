@@ -1,10 +1,19 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Versions of the external solvers, recorded so runs can state what produced them."""
+"""Versions of the worker and its solvers, recorded so runs can state what produced them."""
 
+import os
 import re
 import shutil
 import subprocess
+from collections.abc import Mapping
 from importlib import metadata
+
+from . import __version__
+from .deck.generator import DECK_FORMAT
+from .spec.jobs_schema import WorkerSoftware
+
+#: The source commit the worker image was built from, set by its Docker build (ADR-032).
+COMMIT_VARIABLE = "CLEARFEA_COMMIT"
 
 
 def calculix_version(executable: str = "ccx") -> str | None:
@@ -38,3 +47,20 @@ def gmsh_loads() -> tuple[bool, str]:
         return True, f"Gmsh {gmsh.option.getString('General.Version')} initialised"
     finally:
         gmsh.finalize()
+
+
+def clearfea_version(env: Mapping[str, str] | None = None) -> str:
+    """The package version, with the source commit after a + when the build recorded one."""
+    env = os.environ if env is None else env
+    commit = env.get(COMMIT_VARIABLE, "").strip()[:40]
+    return f"{__version__}+{commit}" if commit else __version__
+
+
+def worker_software(env: Mapping[str, str] | None = None) -> WorkerSoftware:
+    """The versions the worker reports when it claims a job."""
+    return WorkerSoftware(
+        clearfea=clearfea_version(env),
+        deck_format=DECK_FORMAT,
+        calculix=calculix_version(),
+        gmsh=gmsh_version(),
+    )

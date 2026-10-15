@@ -15,6 +15,9 @@ services:
       # The units table, packages/spec/units.json (see worker/Dockerfile).
       additional_contexts:
         spec: ../packages/spec
+      # The source commit, recorded with every run (ADR-032); infra/dev.sh sets it.
+      args:
+        CLEARFEA_COMMIT: ${CLEARFEA_COMMIT:-}
       # Optional CA bundle for builds behind a TLS-intercepting proxy (ADR-012).
       # Point CLEARFEA_BUILD_CA at it; the default is an empty file, which the build ignores.
       secrets:

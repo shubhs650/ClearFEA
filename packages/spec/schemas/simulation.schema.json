@@ -305,15 +305,55 @@
       "description": "solving while the solve job is queued or running; succeeded or failed once it ends.",
       "enum": ["solving", "succeeded", "failed"]
     },
-    "RunView": {
-      "description": "A run as its owner sees it. The spec it was solved with is frozen in the run and not shown here yet (M1.10).",
+    "RunSoftware": {
+      "description": "Versions that produced a run (ADR-032): gmsh and occt made its mesh; clearfea, deckFormat and calculix are the worker's that solved it. Null when not known, for example before the worker has reported or for runs made before M1.10.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "simulationId", "meshId", "status", "stage", "problem", "result", "createdAt", "finishedAt"],
+      "required": ["clearfea", "deckFormat", "calculix", "gmsh", "occt"],
+      "properties": {
+        "clearfea": { "type": ["string", "null"] },
+        "deckFormat": { "type": ["integer", "null"] },
+        "calculix": { "type": ["string", "null"] },
+        "gmsh": { "type": ["string", "null"] },
+        "occt": { "type": ["string", "null"] }
+      }
+    },
+    "RunMesh": {
+      "description": "The mesh a run was solved on, as it was made. Meshes do not change once ready.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size", "order", "nodeCount", "elementCount"],
+      "properties": {
+        "size": { "$ref": "#/$defs/Quantity" },
+        "order": { "$ref": "#/$defs/ElementOrder" },
+        "nodeCount": { "type": ["integer", "null"] },
+        "elementCount": { "type": ["integer", "null"] }
+      }
+    },
+    "RunFileName": {
+      "description": "A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}.",
+      "enum": ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin"]
+    },
+    "RunView": {
+      "description": "A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "simulationId", "meshId", "spec", "mesh", "software", "files", "status", "stage", "problem",
+        "result", "createdAt", "finishedAt"
+      ],
       "properties": {
         "id": { "type": "string" },
         "simulationId": { "type": "string" },
         "meshId": { "type": "string" },
+        "spec": { "description": "The setup as it was saved when the run started.", "$ref": "#/$defs/SimulationSpec" },
+        "mesh": { "$ref": "#/$defs/RunMesh" },
+        "software": { "$ref": "#/$defs/RunSoftware" },
+        "files": {
+          "description": "The files stored for the run, known once it has finished; empty while it solves.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/RunFileName" }
+        },
         "status": { "$ref": "#/$defs/RunStatus" },
         "stage": { "description": "What the solve job is doing: queued, then the worker's stage.", "type": ["string", "null"] },
         "problem": { "description": "Why the run failed, in plain language.", "type": ["string", "null"] },

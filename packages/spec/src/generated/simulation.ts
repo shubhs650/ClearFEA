@@ -64,6 +64,13 @@ export type XYZ = [number, number, number];
  * via the `definition` "RunStatus".
  */
 export type RunStatus = "solving" | "succeeded" | "failed";
+/**
+ * A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunFileName".
+ */
+export type RunFileName = "deck.inp" | "solver.log" | "results.frd" | "results.dat" | "surface.bin" | "fields.bin";
 
 /**
  * The SimulationSpec, the one document that describes a simulation's setup (docs/ARCHITECTURE.md section 4, ADR-006, ADR-026), and the wire shapes of /api/simulations. Physical quantities are stored as the user typed them, { value, unit }, and converted to SI only by the deck generator. A spec may be incomplete (null values, items without faces) so the setup can be saved as it is built; pre-run validation (M1.12) lists what is missing. Each message is a definition under $defs.
@@ -385,7 +392,32 @@ export interface SolveSoftware {
   calculix: string;
 }
 /**
- * A run as its owner sees it. The spec it was solved with is frozen in the run and not shown here yet (M1.10).
+ * Versions that produced a run (ADR-032): gmsh and occt made its mesh; clearfea, deckFormat and calculix are the worker's that solved it. Null when not known, for example before the worker has reported or for runs made before M1.10.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunSoftware".
+ */
+export interface RunSoftware {
+  clearfea: string | null;
+  deckFormat: number | null;
+  calculix: string | null;
+  gmsh: string | null;
+  occt: string | null;
+}
+/**
+ * The mesh a run was solved on, as it was made. Meshes do not change once ready.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunMesh".
+ */
+export interface RunMesh {
+  size: Quantity;
+  order: ElementOrder;
+  nodeCount: number | null;
+  elementCount: number | null;
+}
+/**
+ * A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "RunView".
@@ -394,6 +426,13 @@ export interface RunView {
   id: string;
   simulationId: string;
   meshId: string;
+  spec: SimulationSpec1;
+  mesh: RunMesh;
+  software: RunSoftware;
+  /**
+   * The files stored for the run, known once it has finished; empty while it solves.
+   */
+  files: RunFileName[];
   status: RunStatus;
   /**
    * What the solve job is doing: queued, then the worker's stage.
@@ -406,6 +445,22 @@ export interface RunView {
   result: SolveResult | null;
   createdAt: string;
   finishedAt: string | null;
+}
+/**
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, pressures and a global mesh size. version changes whenever the shape does; older stored specs are upgraded by code, never reinterpreted.
+ */
+export interface SimulationSpec1 {
+  version: 1;
+  analysis: AnalysisType;
+  /**
+   * The geometry whose face and body tags the spec uses.
+   */
+  geometryId: string;
+  bodies: BodyAssignment[];
+  materials: IsotropicMaterial[];
+  supports: FixedSupport[];
+  loads: PressureLoad[];
+  mesh: MeshSettings;
 }
 /**
  * Answer to POST /api/simulations/{id}/runs (HTTP 201) and GET /api/runs/{id}.
@@ -468,6 +523,10 @@ export const validateSupportReaction = validator<SupportReaction>(schema, "Suppo
 export const validateSolveResult = validator<SolveResult>(schema, "SolveResult");
 export const RunStatusValues = ["solving", "succeeded", "failed"] as const satisfies readonly RunStatus[];
 export const validateRunStatus = validator<RunStatus>(schema, "RunStatus");
+export const validateRunSoftware = validator<RunSoftware>(schema, "RunSoftware");
+export const validateRunMesh = validator<RunMesh>(schema, "RunMesh");
+export const RunFileNameValues = ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin"] as const satisfies readonly RunFileName[];
+export const validateRunFileName = validator<RunFileName>(schema, "RunFileName");
 export const validateRunView = validator<RunView>(schema, "RunView");
 export const validateRunResponse = validator<RunResponse>(schema, "RunResponse");
 export const validateRunListResponse = validator<RunListResponse>(schema, "RunListResponse");

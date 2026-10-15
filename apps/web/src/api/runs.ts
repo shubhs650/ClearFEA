@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Client for a simulation's runs and /api/runs (M1.8), and a run's result files (M1.9).
-// Shapes: simulation.schema.json.
+// Client for a simulation's runs and /api/runs (M1.8), a run's result files (M1.9) and its
+// solver input and log (M1.10). Shapes: simulation.schema.json.
 
 import {
+  type RunFileName,
   type RunLogResponse,
   type RunView,
   validateRunListResponse,
@@ -43,4 +44,13 @@ export function fetchRunSurface(runId: string): Promise<ApiResult<ArrayBuffer>> 
 /** The run's result values per surface vertex (packages/spec/result-fields.md), unparsed. */
 export function fetchRunFields(runId: string): Promise<ApiResult<ArrayBuffer>> {
   return apiBinary(`/api/runs/${encodeURIComponent(runId)}/fields`);
+}
+
+/**
+ * Where the browser shows one of a run's text files (deck.inp, solver.log), or with `download`
+ * saves it. Plain links, so the browser streams large files itself.
+ */
+export function runFileUrl(runId: string, name: RunFileName, download = false): string {
+  const path = `/api/runs/${encodeURIComponent(runId)}/files/${encodeURIComponent(name)}`;
+  return download ? `${path}?download=1` : path;
 }

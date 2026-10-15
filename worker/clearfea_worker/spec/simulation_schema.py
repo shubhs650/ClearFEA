@@ -470,9 +470,48 @@ solving while the solve job is queued or running; succeeded or failed once it en
 """
 
 
+class RunSoftware(BaseModel):
+    """
+    Versions that produced a run (ADR-032): gmsh and occt made its mesh; clearfea, deckFormat and calculix are the worker's that solved it. Null when not known, for example before the worker has reported or for runs made before M1.10.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    clearfea: str | None
+    deck_format: Annotated[int | None, Field(alias="deckFormat")]
+    calculix: str | None
+    gmsh: str | None
+    occt: str | None
+
+
+class RunMesh(BaseModel):
+    """
+    The mesh a run was solved on, as it was made. Meshes do not change once ready.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    size: Quantity
+    order: ElementOrder
+    node_count: Annotated[int | None, Field(alias="nodeCount")]
+    element_count: Annotated[int | None, Field(alias="elementCount")]
+
+
+type RunFileName = Literal[
+    "deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin"
+]
+"""
+A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}.
+"""
+
+
 class RunView(BaseModel):
     """
-    A run as its owner sees it. The spec it was solved with is frozen in the run and not shown here yet (M1.10).
+    A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032).
     """
 
     model_config = ConfigDict(
@@ -482,6 +521,16 @@ class RunView(BaseModel):
     id: str
     simulation_id: Annotated[str, Field(alias="simulationId")]
     mesh_id: Annotated[str, Field(alias="meshId")]
+    spec: SimulationSpec
+    """
+    The setup as it was saved when the run started.
+    """
+    mesh: RunMesh
+    software: RunSoftware
+    files: list[RunFileName]
+    """
+    The files stored for the run, known once it has finished; empty while it solves.
+    """
     status: RunStatus
     stage: str | None
     """

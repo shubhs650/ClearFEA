@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The signed-in user's runs, their solver logs (M1.8, ADR-030) and the viewer's result files
-// (M1.9, ADR-031). Runs are started through POST /api/simulations/:id/runs. Shapes:
-// simulation.schema.json.
+// The signed-in user's runs, their solver logs (M1.8, ADR-030), the viewer's result files
+// (M1.9, ADR-031) and the solver input and log to view or download (M1.10, ADR-032). Runs are
+// started through POST /api/simulations/:id/runs. Shapes: simulation.schema.json.
 
 import type { RunLogResponse, RunResponse, RunView } from "@clearfea/spec";
 import { type Context, Hono } from "hono";
@@ -20,6 +20,10 @@ export function runView(run: Run): RunView {
     id: run.id,
     simulationId: run.simulationId,
     meshId: run.meshId,
+    spec: run.spec,
+    mesh: run.mesh,
+    software: run.software,
+    files: run.files,
     status: run.status,
     stage: run.status !== "solving" ? null : run.jobStatus === "queued" ? "queued" : run.jobStage,
     problem: run.problem,
@@ -78,3 +82,42 @@ runs.get("/:id/surface", (c) => viewerFile(c, "surface.bin"));
 
 /** Result values at each surface vertex (packages/spec/result-fields.md). */
 runs.get("/:id/fields", (c) => viewerFile(c, "fields.bin"));
+
+/** The run's files the owner may read as text. */
+const TEXT_FILES: readonly string[] = ["deck.inp", "solver.log"] satisfies RunFile[];
+
+/**
+ * The run's solver input or solver log as plain text, shown in the browser, or with ?download=1
+ * saved as a file. Both exist for a failed run too once the solver has started.
+ */
+runs.get("/:id/files/:name", async (c) => {
+  const name = c.req.param("name") as RunFile;
+  if (!TEXT_FILES.includes(name)) {
+    return c.json({ error: "Only deck.inp and solver.log of a run can be viewed or downloaded." }, 404);
+  }
+  const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
+  if (run === null) return c.json({ error: NOT_FOUND }, 404);
+  if (run.status === "solving") {
+    return c.json({ error: "The run is still solving. Its input and log are stored when it has finished." }, 409);
+  }
+  if (!run.files.includes(name)) {
+    return c.json(
+      { error: `This run has no ${name}: it stopped before the solver started. Its message says what to fix.` },
+      404,
+    );
+  }
+  const object = await c.env.FILES.get(runKey(c.var.userId, run.id, name));
+  if (object === null) {
+    return c.json({ error: `The file ${name} of this run is missing from storage. Run the simulation again.` }, 500);
+  }
+  const filename = `clearfea-run-${run.id.slice(0, 8)}-${name}`;
+  const disposition = c.req.query("download") === "1" ? "attachment" : "inline";
+  return c.body(object.body, 200, {
+    // Plain text that is never sniffed as HTML: the deck carries names the user typed.
+    "Content-Type": "text/plain; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "sandbox",
+    "Content-Disposition": `${disposition}; filename="${filename}"`,
+    "Content-Length": String(object.size),
+  });
+});

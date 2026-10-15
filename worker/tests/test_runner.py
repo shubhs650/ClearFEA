@@ -48,6 +48,18 @@ def client_for(settings: Settings) -> ApiClient:
     return ApiClient(settings.api_url, settings.worker_token, settings.worker_id)
 
 
+def test_claims_carry_the_worker_software() -> None:
+    software = versions.worker_software({"CLEARFEA_COMMIT": "d9d394b"})
+    with FakeApi() as api:
+        settings = settings_for(api)
+        client = ApiClient(api.url, "t", "w1", software=software)
+        assert run_once(client, settings, HANDLERS) is False
+        assert api.calls[0][1]["software"] == software.model_dump(mode="json", by_alias=True)
+        # Without software the claim leaves the field out rather than sending null.
+        client_for(settings).claim(["noop"])
+        assert "software" not in api.calls[1][1]
+
+
 def test_completes_a_noop_job() -> None:
     with FakeApi() as api:
         api.enqueue("j1")
