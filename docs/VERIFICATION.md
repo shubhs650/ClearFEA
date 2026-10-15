@@ -119,11 +119,11 @@ From M9, the nightly run writes a results page (case, quantity, reference, compu
 
 ## Browser end-to-end tests
 
-Playwright drives the real UI against the local system on tiny models.
+Playwright drives the real UI against the local system on tiny models. `make e2e` runs them through a fresh API, worker and web dev server of their own (`infra/e2e.sh`, ADR-036); the tests live in `apps/web/e2e`. Faces are picked by moving the pointer over the viewer until it names the wanted face, chosen by its bounding box, so a test does not depend on face numbering or camera framing.
 
 | Test | Covers | Added in |
 | --- | --- | --- |
-| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour | M1 |
+| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
 | E-02 | Unit entry in mixed units and display-unit switch | M2 |
 | E-03 | Multi-body upload, review bonds, run | M4 |
 | E-04 | Thermal stress setup and result | M5 |
