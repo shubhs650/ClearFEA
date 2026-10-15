@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Phase-end tier: the verification cases (`make verify`, full tier) and the browser end-to-end
+# tests (`make e2e`) through a fresh API and worker container, as run locally (ADR-037).
+# Runs when a milestone tag such as `m1-complete` is pushed to main, by hand from the Actions tab,
+# and on pull requests that change this file or the scripts it runs. A milestone closes only when
+# this run is green on its tag (docs/VERIFICATION.md).
+name: Phase end
+
+on:
+  push:
+    tags:
+      - "m[0-9]*-complete"
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: Verification tier
+        type: choice
+        options: [full, coarse]
+        default: full
+  pull_request:
+    paths:
+      - .github/workflows/phase-end.yml
+      - infra/stack.sh
+      - infra/verify.sh
+      - infra/e2e.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-end-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # The tier `make verify` runs; a milestone closes on the full tier.
+  VERIFY_TIER: ${{ inputs.tier || 'full' }}
+
+jobs:
+  verify:
+    name: make verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # pnpm version comes from packageManager in package.json.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.32"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: worker/uv.lock
+      # The cases' geometry scripts run Gmsh on the host; same libraries as fast.yml.
+      - name: Gmsh system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1 libglu1-mesa libgomp1 libxrender1 libxcursor1 libxft2 libxinerama1
+      - run: make install
+      # The runner has Docker and no TLS-intercepting proxy, so no BUILD_CA.
+      - name: make verify
+        run: make verify
+        env:
+          VERIFY_OUT: ${{ runner.temp }}/verify
+      - name: Result table
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/verify/results.md" ]; then
+            { echo "## make verify ($VERIFY_TIER tier)"; echo; cat "$RUNNER_TEMP/verify/results.md"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Logs
+        if: failure()
+        run: |
+          for f in "$RUNNER_TEMP"/verify/*.log; do
+            [ -f "$f" ] && { echo "::group::$f"; tail -n 200 "$f"; echo "::endgroup::"; }
+          done
+          true
+
+  e2e:
+    name: make e2e
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: pnpm
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.32"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: worker/uv.lock
+      # The test model is written with Gmsh on the host; same libraries as fast.yml.
+      - name: Gmsh system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1 libglu1-mesa libgomp1 libxrender1 libxcursor1 libxft2 libxinerama1
+      - run: make install
+      # Chromium of the pinned Playwright version and its system libraries.
+      - name: Playwright Chromium
+        run: pnpm --filter @clearfea/web exec playwright install --with-deps chromium
+      - name: make e2e
+        run: make e2e
+        env:
+          E2E_OUT: ${{ runner.temp }}/e2e
+      - name: Logs
+        if: failure()
+        run: |
+          for f in "$RUNNER_TEMP"/e2e/*.log; do
+            [ -f "$f" ] && { echo "::group::$f"; tail -n 200 "$f"; echo "::endgroup::"; }
+          done
+          true
