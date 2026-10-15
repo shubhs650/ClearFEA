@@ -417,7 +417,31 @@ export interface RunMesh {
   elementCount: number | null;
 }
 /**
- * A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032).
+ * The machine size a run was billed on and its rate, fixed when the run started (ADR-033). Money is in whole micro-credits: 1,000,000 is one credit.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunMachine".
+ */
+export interface RunMachine {
+  size: string;
+  /**
+   * Micro-credits per hour of billable time.
+   */
+  ratePerHour: number;
+}
+/**
+ * What a finished run's solve job cost (ADR-033). billedSeconds is the measured time rounded up to whole seconds; amount is billedSeconds times the hourly rate over 3600, in micro-credits rounded to the nearest one. charged is false when the job failed through a fault in ClearFEA, which the user does not pay for; amount is then 0.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunCost".
+ */
+export interface RunCost {
+  billedSeconds: number;
+  amount: number;
+  charged: boolean;
+}
+/**
+ * A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032, ADR-033).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "RunView".
@@ -433,6 +457,14 @@ export interface RunView {
    * The files stored for the run, known once it has finished; empty while it solves.
    */
   files: RunFileName[];
+  /**
+   * Null for runs made before M1.11, which were not metered.
+   */
+  machine: RunMachine | null;
+  /**
+   * Known once the run has finished; null while it solves and for runs that were not metered.
+   */
+  cost: RunCost | null;
   status: RunStatus;
   /**
    * What the solve job is doing: queued, then the worker's stage.
@@ -527,6 +559,8 @@ export const validateRunSoftware = validator<RunSoftware>(schema, "RunSoftware")
 export const validateRunMesh = validator<RunMesh>(schema, "RunMesh");
 export const RunFileNameValues = ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin"] as const satisfies readonly RunFileName[];
 export const validateRunFileName = validator<RunFileName>(schema, "RunFileName");
+export const validateRunMachine = validator<RunMachine>(schema, "RunMachine");
+export const validateRunCost = validator<RunCost>(schema, "RunCost");
 export const validateRunView = validator<RunView>(schema, "RunView");
 export const validateRunResponse = validator<RunResponse>(schema, "RunResponse");
 export const validateRunListResponse = validator<RunListResponse>(schema, "RunListResponse");

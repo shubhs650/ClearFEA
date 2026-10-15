@@ -509,9 +509,39 @@ A file a solve job stores for its run. deck.inp and solver.log can be viewed and
 """
 
 
+class RunMachine(BaseModel):
+    """
+    The machine size a run was billed on and its rate, fixed when the run started (ADR-033). Money is in whole micro-credits: 1,000,000 is one credit.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    size: Annotated[str, Field(min_length=1)]
+    rate_per_hour: Annotated[int, Field(alias="ratePerHour", ge=0)]
+    """
+    Micro-credits per hour of billable time.
+    """
+
+
+class RunCost(BaseModel):
+    """
+    What a finished run's solve job cost (ADR-033). billedSeconds is the measured time rounded up to whole seconds; amount is billedSeconds times the hourly rate over 3600, in micro-credits rounded to the nearest one. charged is false when the job failed through a fault in ClearFEA, which the user does not pay for; amount is then 0.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    billed_seconds: Annotated[int, Field(alias="billedSeconds", ge=0)]
+    amount: Annotated[int, Field(ge=0)]
+    charged: bool
+
+
 class RunView(BaseModel):
     """
-    A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032).
+    A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032, ADR-033).
     """
 
     model_config = ConfigDict(
@@ -530,6 +560,14 @@ class RunView(BaseModel):
     files: list[RunFileName]
     """
     The files stored for the run, known once it has finished; empty while it solves.
+    """
+    machine: RunMachine | None
+    """
+    Null for runs made before M1.11, which were not metered.
+    """
+    cost: RunCost | None
+    """
+    Known once the run has finished; null while it solves and for runs that were not metered.
     """
     status: RunStatus
     stage: str | None

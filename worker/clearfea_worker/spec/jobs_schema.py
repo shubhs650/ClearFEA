@@ -138,6 +138,18 @@ class HeartbeatResponse(BaseModel):
     action: HeartbeatAction
 
 
+class Metering(BaseModel):
+    """
+    What the worker measured of a job (ADR-033): billableMs is the wall-clock time from the start to the end of the job's handler on the machine, in whole milliseconds. Queue time and the worker's start-up are outside it. Sent for every job; the API charges only metered job types.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    billable_ms: Annotated[int, Field(alias="billableMs", ge=0, le=2592000000)]
+
+
 class CompleteSucceeded(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -145,6 +157,7 @@ class CompleteSucceeded(BaseModel):
     )
     worker_id: Annotated[WorkerId, Field(alias="workerId")]
     status: Literal["succeeded"]
+    metering: Metering
     result: dict[str, Any] | None = None
     """
     Job-type specific summary, stored as given.
@@ -158,6 +171,7 @@ class CompleteFailed(BaseModel):
     )
     worker_id: Annotated[WorkerId, Field(alias="workerId")]
     status: Literal["failed"]
+    metering: Metering
     failure_category: Annotated[FailureCategory, Field(alias="failureCategory")]
     failure_cause: Annotated[str, Field(alias="failureCause", min_length=1)]
     failure_message: Annotated[str | None, Field(alias="failureMessage", min_length=1)] = None

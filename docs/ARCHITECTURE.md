@@ -146,6 +146,8 @@ queued -> claimed -> running -> succeeded
 
 The worker records wall-clock start and end of the billable phase, CPU seconds and peak memory of the Gmsh or CalculiX process. The API computes cost as billable seconds × the hourly rate of the run's machine size ÷ 3600, and writes one ledger entry. Machine start-up and queue time are outside the billable phase.
 
+As built in M1.11 (ADR-033): the billable phase is the job's handler (downloads, work, uploads), sent as `metering.billableMs` with every completion; mesh and solve jobs are billed per started second at the rate their machine size had when they were queued; money is whole micro-credits; the charge is written to the append-only ledger in the same batch that completes the job, and only when the user pays (a success or a user fault). CPU seconds and peak memory are added with the benchmark and estimator (M2.11, M2.12).
+
 On localhost there is one physical machine, so a machine size is simulated: it sets the solver thread count and a memory limit on the solver process. That is enough to test estimates, out-of-memory handling and billing.
 
 ### Failure classification

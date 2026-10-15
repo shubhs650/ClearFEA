@@ -379,6 +379,8 @@ function run(overrides: Partial<RunView> = {}): RunView {
     mesh: { size: { value: 5, unit: "mm" }, order: 2, nodeCount: 7108, elementCount: 4000 },
     software: { clearfea: "0.0.0+d9d394b", deckFormat: 1, calculix: "2.21", gmsh: "4.15.2", occt: "7.9.0" },
     files: [],
+    machine: { size: "local", ratePerHour: 1_000_000 },
+    cost: null,
     status: "solving",
     stage: "queued",
     problem: null,
@@ -418,6 +420,7 @@ describe("run", () => {
     fireEvent.click(button);
     expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
     expect(await settings().findByText("CalculiX Version 2.21")).toBeTruthy();
+    expect(within(settings().getByLabelText("Run record")).getByText("Counted when the run has finished.")).toBeTruthy();
     expect(settings().getByRole("button", { name: "Run again" })).toHaveProperty("disabled", true);
     expect(tree().getByRole("button", { name: "Run, incomplete" }).getAttribute("title")).toBe(
       "The simulation is being solved.",
@@ -441,7 +444,17 @@ describe("run", () => {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
         "GET /api/simulations/s1/runs": {
           status: 200,
-          json: { runs: [run({ status: "succeeded", stage: null, result, finishedAt: "2026-10-15T12:01:00.000Z" })] },
+          json: {
+            runs: [
+              run({
+                status: "succeeded",
+                stage: null,
+                result,
+                cost: { billedSeconds: 13, amount: 3611, charged: true },
+                finishedAt: "2026-10-15T12:01:00.000Z",
+              }),
+            ],
+          },
         },
         "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
         "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
@@ -466,6 +479,7 @@ describe("run", () => {
     expect(figures.getByText("0.0015 MPa")).toBeTruthy();
     expect(figures.getByText("Reaction, Base")).toBeTruthy();
     expect(figures.getByText("(0, 0, -400) N")).toBeTruthy();
+    expect(within(settings().getByLabelText("Run record")).getByText("0.003611 credits for 13 s")).toBeTruthy();
     expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
     expect(settings().getByRole("button", { name: "Run again" })).toHaveProperty("disabled", false);
   });
@@ -486,6 +500,7 @@ describe("run", () => {
                 stage: null,
                 problem: "CalculiX stopped on the deck.",
                 files: ["deck.inp", "solver.log"],
+                cost: { billedSeconds: 3, amount: 0, charged: false },
                 finishedAt: "2026-10-15T12:01:00.000Z",
               }),
             ],
@@ -504,6 +519,8 @@ describe("run", () => {
     expect(record.getByText("0.0.0+d9d394b")).toBeTruthy();
     expect(record.getByText("2.21")).toBeTruthy();
     expect(record.getByText("with OpenCASCADE 7.9.0")).toBeTruthy();
+    expect(record.getByText("local, 1 credit per hour")).toBeTruthy();
+    expect(record.getByText("Not charged: the run stopped because of a fault in ClearFEA (3 s).")).toBeTruthy();
     expect(record.getByRole("link", { name: "View deck.inp" }).getAttribute("href")).toBe("/api/runs/r1/files/deck.inp");
     expect(record.getByRole("link", { name: "View solver.log" }).getAttribute("href")).toBe(
       "/api/runs/r1/files/solver.log",
@@ -527,6 +544,7 @@ describe("run", () => {
                 stage: null,
                 problem: "Add a support.",
                 software: { clearfea: null, deckFormat: null, calculix: null, gmsh: null, occt: null },
+                machine: null,
                 finishedAt: "2026-10-15T12:01:00.000Z",
               }),
             ],
@@ -541,6 +559,8 @@ describe("run", () => {
     expect(record.queryByText(/The setup has changed/)).toBeNull();
     expect(record.getAllByText("None: the run stopped before the solver started.")).toHaveLength(2);
     expect(record.getAllByText("not recorded")).toHaveLength(4);
+    expect(record.getByText("Not metered: the run was made before metering.")).toBeTruthy();
+    expect(record.queryByText("Machine")).toBeNull();
     expect(record.queryByRole("link")).toBeNull();
   });
 

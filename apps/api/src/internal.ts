@@ -17,6 +17,7 @@ import {
   validateSolveResult,
 } from "@clearfea/spec";
 import { Hono } from "hono";
+import { chargeFor, type JobCharge } from "./billing/cost";
 import { readBody } from "./body";
 import { recordImportOutcome } from "./db/geometries";
 import {
@@ -238,7 +239,11 @@ internal.post("/jobs/:id/complete", async (c) => {
   const held = await getClaimedJob(c.env.DB, request.workerId, c.req.param("id"));
   if (held === null) return c.json({ error: gone }, 409);
   const completion = await checkedCompletion(c.env, held, request);
-  const job = await completeJob(c.env.DB, request.workerId, held.id, completion);
+  const { billableMs } = request.metering;
+  // A metered job costs its measured time at the rate it was queued with (ADR-033).
+  const charge: JobCharge | null =
+    held.ratePerHour === null ? null : chargeFor(billableMs, held.ratePerHour, completion);
+  const job = await completeJob(c.env.DB, request.workerId, held.id, completion, billableMs, charge);
   if (job === null) return c.json({ error: gone }, 409);
   if (job.type === "import") {
     await recordImportOutcome(

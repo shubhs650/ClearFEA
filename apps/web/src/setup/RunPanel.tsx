@@ -3,12 +3,14 @@
 // the latest run's stage and solver log while it solves, and its result figures when done.
 // From M1.9 it also chooses what the viewer draws of a succeeded run: the quantity and shape.
 // From M1.10 it shows the run record: when it ran, the mesh and versions it was solved with,
-// whether the setup has changed since, and links to view or download the deck and log.
+// whether the setup has changed since, and links to view or download the deck and log. From
+// M1.11 the record also shows the machine size, its rate and what the run cost (ADR-033).
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import type { RunFileName, RunView, SimulationSpec } from "@clearfea/spec";
 import { Fragment } from "react";
 import { runFileUrl } from "../api/runs";
+import { credits } from "../billing/credits";
 import type { Deformation } from "../layout/Viewer";
 import { fromSi } from "../units/convert";
 import { QUANTITIES, type Quantity } from "../viewer/resultFields";
@@ -46,6 +48,15 @@ function version(value: string | number | null): string {
 }
 
 const ORDERS = { 1: "linear tetrahedra (4 nodes)", 2: "quadratic tetrahedra (10 nodes)" } as const;
+
+/** What the run cost, or why there is no cost to show. */
+function costText(run: RunView): string {
+  if (run.machine === null) return "Not metered: the run was made before metering.";
+  if (run.cost === null) return "Counted when the run has finished.";
+  const time = `${run.cost.billedSeconds.toLocaleString("en-US")} s`;
+  if (!run.cost.charged) return `Not charged: the run stopped because of a fault in ClearFEA (${time}).`;
+  return `${credits(run.cost.amount)} for ${time}`;
+}
 
 const FILE_LABELS: Partial<Record<RunFileName, string>> = { "deck.inp": "Solver input", "solver.log": "Solver log" };
 
@@ -88,6 +99,16 @@ function RunRecord({ run, currentSpec }: { run: RunView; currentSpec: Simulation
         </dd>
         <dt>Deck format</dt>
         <dd>{version(software.deckFormat)}</dd>
+        {run.machine !== null && (
+          <>
+            <dt>Machine</dt>
+            <dd>
+              {run.machine.size}, {credits(run.machine.ratePerHour)} per hour
+            </dd>
+          </>
+        )}
+        <dt>Cost</dt>
+        <dd>{costText(run)}</dd>
         {(["deck.inp", "solver.log"] as const).map((name) => (
           <Fragment key={name}>
             <dt>{FILE_LABELS[name]}</dt>

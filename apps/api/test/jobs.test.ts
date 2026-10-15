@@ -23,6 +23,7 @@ async function claim(workerId = "w1", jobTypes = ["noop"]) {
 beforeEach(async () => {
   // Storage persists across tests within a file, so start each test from a known state.
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM ledger_entries"),
     env.DB.prepare("DELETE FROM jobs"),
     env.DB.prepare(
       "INSERT OR IGNORE INTO users (id, login, name) VALUES ('alice', 'alice', 'Alice'), ('bob', 'bob', 'Bob')",
@@ -61,6 +62,7 @@ describe("internal job routes", () => {
 
     const done = await post(`/jobs/${created.id}/complete`, {
       workerId: "w1",
+      metering: { billableMs: 2500 },
       status: "succeeded",
       result: { message: "nothing to do" },
     });
@@ -94,7 +96,7 @@ describe("internal job routes", () => {
     const job = await createJob(env.DB, "alice", "noop");
     await claim("w1");
     expect((await post(`/jobs/${job.id}/heartbeat`, { workerId: "w2" })).status).toBe(404);
-    const done = await post(`/jobs/${job.id}/complete`, { workerId: "w2", status: "succeeded" });
+    const done = await post(`/jobs/${job.id}/complete`, { workerId: "w2", metering: { billableMs: 2500 }, status: "succeeded" });
     expect(done.status).toBe(409);
     expect((await getJob(env.DB, "alice", job.id))?.status).toBe("claimed");
   });
@@ -104,6 +106,7 @@ describe("internal job routes", () => {
     await claim("w1");
     const done = await post(`/jobs/${job.id}/complete`, {
       workerId: "w1",
+      metering: { billableMs: 2500 },
       status: "failed",
       failureCategory: "platform_fault",
       failureCause: "internal_error",
@@ -113,6 +116,18 @@ describe("internal job routes", () => {
     expect(stored?.status).toBe("failed");
     expect(stored?.failureCategory).toBe("platform_fault");
     expect(stored?.failureCause).toBe("internal_error");
+  });
+
+  it("records the measured time of every job but charges only metered ones", async () => {
+    const job = await createJob(env.DB, "alice", "noop");
+    expect(job).toMatchObject({ machineSize: null, ratePerHour: null });
+    await claim("w1");
+    await post(`/jobs/${job.id}/complete`, { workerId: "w1", status: "succeeded", metering: { billableMs: 1234 } });
+    expect(await getJob(env.DB, "alice", job.id)).toMatchObject({ billableMs: 1234, billedSeconds: null, cost: null });
+    const solve = await createJob(env.DB, "alice", "solve");
+    expect(solve).toMatchObject({ machineSize: "local", ratePerHour: 1_000_000 });
+    const entries = await env.DB.prepare("SELECT COUNT(*) AS n FROM ledger_entries").first<{ n: number }>();
+    expect(entries?.n).toBe(0);
   });
 
   it("tells the worker to give up on a cancelled job", async () => {

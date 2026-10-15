@@ -53,6 +53,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM geometries"),
+    env.DB.prepare("DELETE FROM ledger_entries"),
     env.DB.prepare("DELETE FROM jobs"),
   ]);
 });
@@ -127,7 +128,7 @@ async function runImport(importResult: ImportResult = result(), workerId = "w1")
     expect(put.status).toBe(200);
   }
   const done = await call("POST", `/internal/jobs/${job.id}/complete`, {
-    json: { workerId, status: "succeeded", result: importResult },
+    json: { workerId, metering: { billableMs: 2500 }, status: "succeeded", result: importResult },
     token: TOKEN,
   });
   expect(done.status).toBe(200);
@@ -227,6 +228,7 @@ describe("the import job", () => {
     await call("POST", `/internal/jobs/${job.id}/complete`, {
       json: {
         workerId: "w1",
+        metering: { billableMs: 2500 },
         status: "failed",
         failureCategory: "user_fault",
         failureCause: "no_solids",
@@ -248,7 +250,7 @@ describe("the import job", () => {
     const created = await uploaded();
     const job = await claim();
     await call("POST", `/internal/jobs/${job.id}/complete`, {
-      json: { workerId: "w1", status: "succeeded", result: result() },
+      json: { workerId: "w1", metering: { billableMs: 2500 }, status: "succeeded", result: result() },
       token: TOKEN,
     });
     const stored = await getJob(env.DB, aliceId, job.id);
@@ -262,7 +264,7 @@ describe("the import job", () => {
     await uploaded();
     const job = await claim();
     await call("POST", `/internal/jobs/${job.id}/complete`, {
-      json: { workerId: "w1", status: "succeeded", result: { faces: "seven" } },
+      json: { workerId: "w1", metering: { billableMs: 2500 }, status: "succeeded", result: { faces: "seven" } },
       token: TOKEN,
     });
     expect((await getJob(env.DB, aliceId, job.id))?.failureCause).toBe("invalid_result");
@@ -311,6 +313,7 @@ describe("confirming the unit", () => {
     await call("POST", `/internal/jobs/${first.id}/complete`, {
       json: {
         workerId: "w1",
+        metering: { billableMs: 2500 },
         status: "failed",
         failureCategory: "platform_fault",
         failureCause: "internal_error",

@@ -134,12 +134,22 @@ export interface HeartbeatResponse {
   action: HeartbeatAction;
 }
 /**
+ * What the worker measured of a job (ADR-033): billableMs is the wall-clock time from the start to the end of the job's handler on the machine, in whole milliseconds. Queue time and the worker's start-up are outside it. Sent for every job; the API charges only metered job types.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "Metering".
+ */
+export interface Metering {
+  billableMs: number;
+}
+/**
  * This interface was referenced by `Jobs`'s JSON-Schema
  * via the `definition` "CompleteSucceeded".
  */
 export interface CompleteSucceeded {
   workerId: WorkerId;
   status: "succeeded";
+  metering: Metering;
   /**
    * Job-type specific summary, stored as given.
    */
@@ -152,6 +162,7 @@ export interface CompleteSucceeded {
 export interface CompleteFailed {
   workerId: WorkerId;
   status: "failed";
+  metering: Metering;
   failureCategory: FailureCategory;
   failureCause: string;
   /**
@@ -248,6 +259,7 @@ export const validateClaimRequest = validator<ClaimRequest>(schema, "ClaimReques
 export const validateClaimResponse = validator<ClaimResponse>(schema, "ClaimResponse");
 export const validateHeartbeatRequest = validator<HeartbeatRequest>(schema, "HeartbeatRequest");
 export const validateHeartbeatResponse = validator<HeartbeatResponse>(schema, "HeartbeatResponse");
+export const validateMetering = validator<Metering>(schema, "Metering");
 export const validateCompleteSucceeded = validator<CompleteSucceeded>(schema, "CompleteSucceeded");
 export const validateCompleteFailed = validator<CompleteFailed>(schema, "CompleteFailed");
 export const validateCompleteRequest = validator<CompleteRequest>(schema, "CompleteRequest");

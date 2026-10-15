@@ -4,6 +4,7 @@
 import logging
 import tempfile
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -63,40 +64,74 @@ class _Heartbeat:
             self.beat()  # the last log lines, before the job is completed
 
 
+class _Meter:
+    """Measures the billable phase (ADR-033): wall-clock time from the start to the end of the
+    job's handler, which covers its downloads, the work and its uploads. Claiming, queue time and
+    the worker's start-up are outside it."""
+
+    def __init__(self, clock: Callable[[], int] = time.monotonic_ns) -> None:
+        self._clock = clock
+        self._start = clock()
+        self._end: int | None = None
+
+    def stop(self) -> None:
+        if self._end is None:
+            self._end = self._clock()
+
+    @property
+    def billable_ms(self) -> int:
+        """Whole milliseconds, rounded up, so a started millisecond counts."""
+        end = self._end if self._end is not None else self._clock()
+        return -(-(end - self._start) // 1_000_000)
+
+
 def run_job(
     client: ApiClient,
     job: ClaimedJob,
     handlers: dict[str, Handler],
     heartbeat_seconds: float,
+    clock: Callable[[], int] = time.monotonic_ns,
 ) -> str:
-    """Runs one claimed job and reports its outcome. Returns the final status."""
+    """Runs one claimed job and reports its outcome with its measured time. Returns the final
+    status."""
     handler = handlers.get(job.type)
     if handler is None:
-        client.fail(job.id, "platform_fault", "unsupported_job_type")
+        client.fail(job.id, "platform_fault", "unsupported_job_type", billable_ms=0)
         return "failed"
     with (
         tempfile.TemporaryDirectory(prefix=f"job-{job.id}-") as workdir,
         _Heartbeat(client, job, context := JobContext(), heartbeat_seconds),
     ):
         context.files = Files(job, client, Path(workdir))
+        meter = _Meter(clock)
         try:
             result = handler(job, context)
         except JobFailure as failure:
+            meter.stop()
             log.info("Job %s (%s) failed: %s", job.id, job.type, failure.message)
-            client.fail(job.id, failure.category, failure.cause, failure.message)
+            client.fail(
+                job.id,
+                failure.category,
+                failure.cause,
+                failure.message,
+                billable_ms=meter.billable_ms,
+            )
             return "failed"
         except ApiError as error:
+            meter.stop()
             log.warning("Job %s (%s): %s", job.id, job.type, error)
-            client.fail(job.id, "platform_fault", "transfer_failed")
+            client.fail(job.id, "platform_fault", "transfer_failed", billable_ms=meter.billable_ms)
             return "failed"
         except Exception:
+            meter.stop()
             log.exception("Job %s (%s) raised an error", job.id, job.type)
-            client.fail(job.id, "platform_fault", "internal_error")
+            client.fail(job.id, "platform_fault", "internal_error", billable_ms=meter.billable_ms)
             return "failed"
+        meter.stop()
     if context.cancelled.is_set():
         log.info("Job %s was cancelled or stopped by the API; not reporting a result", job.id)
         return "cancelled"
-    client.succeed(job.id, result)
+    client.succeed(job.id, result, meter.billable_ms)
     return "succeeded"
 
 

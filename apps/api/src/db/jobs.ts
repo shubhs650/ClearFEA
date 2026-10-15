@@ -5,6 +5,8 @@
 // has claimed, never a user's other records.
 
 import type { FailureCategory, HeartbeatAction, JobStatus, JobType, WorkerSoftware } from "@clearfea/spec";
+import { chargeStatement } from "../billing/ledger";
+import { isMetered, type JobCharge } from "../billing/cost";
 
 export interface Job {
   id: string;
@@ -22,6 +24,13 @@ export interface Job {
   result: unknown;
   /** Versions the claiming worker reported, or null before a claim or when it sent none. */
   software: WorkerSoftware | null;
+  /** The machine size and its micro-credit rate per hour, fixed when a metered job is queued. */
+  machineSize: string | null;
+  ratePerHour: number | null;
+  /** What the worker measured and what the job cost, once a metered job has ended (ADR-033). */
+  billableMs: number | null;
+  billedSeconds: number | null;
+  cost: number | null;
   createdAt: string;
   claimedAt: string | null;
   finishedAt: string | null;
@@ -42,6 +51,11 @@ interface JobRow {
   params: string | null;
   result: string | null;
   software: string | null;
+  machine_size: string | null;
+  rate_per_hour: number | null;
+  billable_ms: number | null;
+  billed_seconds: number | null;
+  cost: number | null;
   created_at: string;
   claimed_at: string | null;
   finished_at: string | null;
@@ -63,6 +77,11 @@ function toJob(row: JobRow): Job {
     params: row.params === null ? null : JSON.parse(row.params),
     result: row.result === null ? null : JSON.parse(row.result),
     software: row.software === null ? null : JSON.parse(row.software),
+    machineSize: row.machine_size,
+    ratePerHour: row.rate_per_hour,
+    billableMs: row.billable_ms,
+    billedSeconds: row.billed_seconds,
+    cost: row.cost,
     createdAt: row.created_at,
     claimedAt: row.claimed_at,
     finishedAt: row.finished_at,
@@ -81,7 +100,8 @@ export interface NewJob {
 
 /**
  * The statement that queues a job, for callers that must create it in one batch with the
- * record it works on. Run it, then read the job back with getJob.
+ * record it works on. Run it, then read the job back with getJob. A metered job takes the
+ * default machine size and keeps that size's current rate (ADR-033).
  */
 export function newJob(
   db: D1Database,
@@ -91,9 +111,15 @@ export function newJob(
   params: Record<string, unknown> | null = null,
 ): NewJob {
   const id = crypto.randomUUID();
-  const statement = db
-    .prepare("INSERT INTO jobs (id, owner_id, type, target_id, params) VALUES (?, ?, ?, ?, ?)")
-    .bind(id, userId, type, targetId, params === null ? null : JSON.stringify(params));
+  const values = [id, userId, type, targetId, params === null ? null : JSON.stringify(params)];
+  const statement = isMetered(type)
+    ? db
+        .prepare(
+          `INSERT INTO jobs (id, owner_id, type, target_id, params, machine_size, rate_per_hour)
+           SELECT ?, ?, ?, ?, ?, name, rate_per_hour FROM machine_sizes WHERE is_default = 1`,
+        )
+        .bind(...values)
+    : db.prepare("INSERT INTO jobs (id, owner_id, type, target_id, params) VALUES (?, ?, ?, ?, ?)").bind(...values);
   return { id, statement };
 }
 
@@ -105,7 +131,8 @@ export async function createJob(
   params: Record<string, unknown> | null = null,
 ): Promise<Job> {
   const { id, statement } = newJob(db, userId, type, targetId, params);
-  await statement.run();
+  const inserted = await statement.run();
+  if (inserted.meta.changes !== 1) throw new Error("No default machine size is configured (machine_sizes).");
   const job = await getJob(db, userId, id);
   if (job === null) throw new Error("Inserting the job returned no row.");
   return job;
@@ -212,19 +239,27 @@ export async function getClaimedJob(
   return row === null ? null : toJob(row);
 }
 
-/** Records the final outcome. Returns the job, or null if this worker does not hold it. */
+/**
+ * Records the final outcome and what the worker measured. For a metered job, `charge` is its
+ * cost at the job's own rate; a charged job gets its ledger entry in the same batch, so a job
+ * is completed and charged together or not at all. Returns the job, or null if this worker
+ * does not hold it.
+ */
 export async function completeJob(
   db: D1Database,
   workerId: string,
   jobId: string,
   completion: Completion,
+  billableMs: number,
+  charge: JobCharge | null,
 ): Promise<Job | null> {
   const succeeded = completion.status === "succeeded";
-  const row = await db
+  const complete = db
     .prepare(
       `UPDATE jobs
           SET status = ?, result = ?, failure_category = ?, failure_cause = ?,
-              failure_message = ?, finished_at = ${NOW}, heartbeat_at = ${NOW}
+              failure_message = ?, finished_at = ${NOW}, heartbeat_at = ${NOW},
+              billable_ms = ?, billed_seconds = ?, cost = ?
         WHERE id = ? AND claimed_by = ? AND status IN ${ACTIVE}
         RETURNING *`,
     )
@@ -234,11 +269,16 @@ export async function completeJob(
       succeeded ? null : completion.failureCategory,
       succeeded ? null : completion.failureCause,
       succeeded ? null : completion.failureMessage,
+      billableMs,
+      charge?.billedSeconds ?? null,
+      charge?.cost ?? null,
       jobId,
       workerId,
-    )
-    .first<JobRow>();
-  return row === null ? null : toJob(row);
+    );
+  const statements = charge?.charged ? [chargeStatement(db, workerId, jobId, charge.cost, ACTIVE), complete] : [complete];
+  const results = await db.batch<JobRow>(statements);
+  const row = results[results.length - 1]?.results[0];
+  return row === undefined ? null : toJob(row);
 }
 
 /**

@@ -16,6 +16,7 @@ import {
 import fixture from "@clearfea/spec/fixtures/simulation-v1.json";
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { listLedger } from "../src/billing/ledger";
 import { getJob } from "../src/db/jobs";
 
 const TOKEN = "test-worker-token";
@@ -90,6 +91,7 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM simulations"),
     env.DB.prepare("DELETE FROM meshes"),
     env.DB.prepare("DELETE FROM geometries"),
+    env.DB.prepare("DELETE FROM ledger_entries"),
     env.DB.prepare("DELETE FROM jobs"),
   ]);
 });
@@ -150,7 +152,7 @@ function transferPath(job: ClaimResponse["job"], name: string, direction: string
 
 async function complete(jobId: string, body: Record<string, unknown>): Promise<void> {
   const done = await call("POST", `/internal/jobs/${jobId}/complete`, {
-    json: { workerId: "w1", ...body },
+    json: { workerId: "w1", metering: { billableMs: 2500 }, ...body },
     token: TOKEN,
   });
   expect(done.status).toBe(200);
@@ -551,3 +553,139 @@ describe("a run's solver input and log", () => {
     expect(((await response.json()) as { error: string }).error).toContain("stopped before the solver started");
   });
 });
+
+describe("metering (ADR-033)", () => {
+  /** 2.5 s (the complete helper's billableMs) bills 3 s; at 1 credit an hour that is 833 micro-credits. */
+  const THREE_SECONDS = 833;
+
+  async function finish(body: Record<string, unknown>): Promise<RunView> {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await upload(job, RUN_FILES);
+    await complete(job.id, body);
+    return readRun(run.id);
+  }
+
+  it("bills a run on the default machine size from the moment it starts", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    expect(run).toMatchObject({ machine: { size: "local", ratePerHour: 1_000_000 }, cost: null });
+  });
+
+  it("charges a succeeded run its billed seconds at the rate, with one ledger entry", async () => {
+    const run = await finish({ status: "succeeded", result: SOLVED });
+    expect(run.cost).toEqual({ billedSeconds: 3, amount: THREE_SECONDS, charged: true });
+    const ledger = await listLedger(env.DB, aliceId);
+    // The mesh job and the solve job, each charged once.
+    expect(ledger.map((e) => [e.reason, e.amount, e.balance])).toEqual([
+      ["mesh", -THREE_SECONDS, -THREE_SECONDS],
+      ["solve", -THREE_SECONDS, -2 * THREE_SECONDS],
+    ]);
+    const job = await getJob(env.DB, aliceId, ledger[1]?.jobId ?? "");
+    expect(job).toMatchObject({ type: "solve", billableMs: 2500, billedSeconds: 3, cost: THREE_SECONDS });
+  });
+
+  it("charges a run that failed through the user's setup", async () => {
+    const run = await finish({
+      status: "failed",
+      failureCategory: "user_fault",
+      failureCause: "setup_invalid",
+      failureMessage: "Add a support.",
+    });
+    expect(run.cost).toEqual({ billedSeconds: 3, amount: THREE_SECONDS, charged: true });
+    expect((await listLedger(env.DB, aliceId)).map((e) => e.reason)).toEqual(["mesh", "solve"]);
+  });
+
+  it("does not charge a run that failed through a fault in ClearFEA, but records its time", async () => {
+    const run = await finish({ status: "failed", failureCategory: "platform_fault", failureCause: "solver_error" });
+    expect(run.cost).toEqual({ billedSeconds: 3, amount: 0, charged: false });
+    expect((await listLedger(env.DB, aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+  });
+
+  it("does not charge a success that turned into a platform fault", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await upload(job, ["deck.inp", "solver.log"]);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    expect((await readRun(run.id)).cost).toMatchObject({ charged: false, amount: 0 });
+    expect((await listLedger(env.DB, aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+  });
+
+  it("rounds the measured time up to whole seconds", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED, metering: { billableMs: 3_600_001 } });
+    // 3601 s at 1,000,000 an hour: 1,000,277.78 rounds to 1,000,278.
+    expect((await readRun(run.id)).cost).toEqual({ billedSeconds: 3601, amount: 1_000_278, charged: true });
+  });
+
+  it("keeps the rate a job was queued at when the configured rate changes", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    await env.DB.prepare("UPDATE machine_sizes SET rate_per_hour = 7200000 WHERE name = 'local'").run();
+    try {
+      const job = await claim("solve");
+      await upload(job, RUN_FILES);
+      await complete(job.id, { status: "succeeded", result: SOLVED });
+      expect((await readRun(run.id)).cost).toMatchObject({ amount: THREE_SECONDS });
+      const next = await runOf(await startRun(id));
+      expect(next.machine).toEqual({ size: "local", ratePerHour: 7_200_000 });
+    } finally {
+      await env.DB.prepare("UPDATE machine_sizes SET rate_per_hour = 1000000 WHERE name = 'local'").run();
+    }
+  });
+
+  it("charges a job once however often the worker reports it", async () => {
+    const id = await meshed();
+    await runOf(await startRun(id));
+    const job = await claim("solve");
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    const again = await call("POST", `/internal/jobs/${job.id}/complete`, {
+      json: { workerId: "w1", status: "succeeded", result: SOLVED, metering: { billableMs: 9000 } },
+      token: TOKEN,
+    });
+    expect(again.status).toBe(409);
+    expect(await listLedger(env.DB, aliceId)).toHaveLength(2);
+  });
+
+  it("refuses a completion without metering", async () => {
+    const id = await meshed();
+    await runOf(await startRun(id));
+    const job = await claim("solve");
+    const response = await call("POST", `/internal/jobs/${job.id}/complete`, {
+      json: { workerId: "w1", status: "succeeded", result: SOLVED },
+      token: TOKEN,
+    });
+    expect(response.status).toBe(400);
+    expect(await listLedger(env.DB, aliceId)).toHaveLength(1);
+  });
+
+  it("keeps a running balance that reconciles with the sum of the entries", async () => {
+    const id = await meshed();
+    for (const billableMs of [1, 999, 1000, 1001, 45_250]) {
+      await runOf(await startRun(id));
+      const job = await claim("solve");
+      await upload(job, RUN_FILES);
+      await complete(job.id, { status: "succeeded", result: SOLVED, metering: { billableMs } });
+    }
+    const ledger = await listLedger(env.DB, aliceId);
+    // Mesh 3 s, then 1, 1, 1, 2 and 46 s: 833 + 278 + 278 + 278 + 556 + 12,778.
+    expect(ledger.map((e) => -e.amount)).toEqual([833, 278, 278, 278, 556, 12_778]);
+    let sum = 0;
+    for (const entry of ledger) {
+      sum += entry.amount;
+      expect(entry.balance).toBe(sum);
+    }
+    expect(await listLedger(env.DB, (await signedInId("bob")) ?? "")).toEqual([]);
+  });
+});
+
+async function signedInId(login: string): Promise<string | undefined> {
+  const row = await env.DB.prepare("SELECT id FROM users WHERE login = ?").bind(login).first<{ id: string }>();
+  return row?.id;
+}
