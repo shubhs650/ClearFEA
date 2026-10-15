@@ -75,6 +75,24 @@ export interface ClaimedJob {
   transfers: Transfer[];
 }
 /**
+ * Versions of the worker that claims a job (ADR-032), recorded on the job so a run can state what produced it. Null where the worker lacks the program.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "WorkerSoftware".
+ */
+export interface WorkerSoftware {
+  /**
+   * The worker package's version, with the source commit it was built from after a + when known, for example 0.0.0+d9d394b.
+   */
+  clearfea: string;
+  /**
+   * The deck generator's DECK_FORMAT.
+   */
+  deckFormat: number;
+  calculix: string | null;
+  gmsh: string | null;
+}
+/**
  * Body of POST /internal/jobs/claim.
  *
  * This interface was referenced by `Jobs`'s JSON-Schema
@@ -83,6 +101,7 @@ export interface ClaimedJob {
 export interface ClaimRequest {
   workerId: WorkerId;
   jobTypes: JobType[];
+  software?: WorkerSoftware;
 }
 /**
  * Answer to a claim when a job was claimed (HTTP 200). No job to claim is HTTP 204 with no body.
@@ -224,6 +243,7 @@ export const validateHeartbeatAction = validator<HeartbeatAction>(schema, "Heart
 export const validateWorkerId = validator<WorkerId>(schema, "WorkerId");
 export const validateTransfer = validator<Transfer>(schema, "Transfer");
 export const validateClaimedJob = validator<ClaimedJob>(schema, "ClaimedJob");
+export const validateWorkerSoftware = validator<WorkerSoftware>(schema, "WorkerSoftware");
 export const validateClaimRequest = validator<ClaimRequest>(schema, "ClaimRequest");
 export const validateClaimResponse = validator<ClaimResponse>(schema, "ClaimResponse");
 export const validateHeartbeatRequest = validator<HeartbeatRequest>(schema, "HeartbeatRequest");

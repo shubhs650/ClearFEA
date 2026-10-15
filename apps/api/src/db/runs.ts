@@ -1,9 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Runs (docs/ARCHITECTURE.md section 4, ADR-030). Functions used on behalf of a user take the
 // user id and filter on owner_id. recordRunOutcome is called for a job the worker holds, and
-// touches only that job's own run. A run's spec and mesh are written once, at creation.
+// touches only that job's own run. A run's spec and mesh are written once, at creation; its
+// versions and file list are completed once, when its job ends (ADR-032).
 
-import type { JobStatus, RunStatus, SimulationSpec, SolveResult } from "@clearfea/spec";
+import type {
+  ElementOrder,
+  JobStatus,
+  Quantity,
+  RunFileName,
+  RunMesh,
+  RunSoftware,
+  RunStatus,
+  SimulationSpec,
+  SolveResult,
+} from "@clearfea/spec";
 import { getJob, type Job, newJob } from "./jobs";
 
 export interface Run {
@@ -12,6 +23,10 @@ export interface Run {
   simulationId: string;
   meshId: string;
   spec: SimulationSpec;
+  /** The mesh as it was made; meshes do not change once ready. */
+  mesh: RunMesh;
+  software: RunSoftware;
+  files: RunFileName[];
   status: RunStatus;
   problem: string | null;
   result: SolveResult | null;
@@ -29,12 +44,18 @@ interface RunRow {
   simulation_id: string;
   mesh_id: string;
   spec: string;
+  software: string | null;
+  files: string | null;
   status: RunStatus;
   problem: string | null;
   result: string | null;
   job_id: string;
   job_status: JobStatus;
   job_stage: string | null;
+  mesh_size: string;
+  mesh_order: ElementOrder;
+  mesh_nodes: number | null;
+  mesh_elements: number | null;
   created_at: string;
   finished_at: string | null;
 }
@@ -46,6 +67,14 @@ function toRun(row: RunRow): Run {
     simulationId: row.simulation_id,
     meshId: row.mesh_id,
     spec: JSON.parse(row.spec),
+    mesh: {
+      size: JSON.parse(row.mesh_size) as Quantity,
+      order: row.mesh_order,
+      nodeCount: row.mesh_nodes,
+      elementCount: row.mesh_elements,
+    },
+    software: { ...UNKNOWN_SOFTWARE, ...(row.software === null ? {} : JSON.parse(row.software)) },
+    files: row.files === null ? [] : JSON.parse(row.files),
     status: row.status,
     problem: row.problem,
     result: row.result === null ? null : JSON.parse(row.result),
@@ -59,17 +88,16 @@ function toRun(row: RunRow): Run {
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
-const SELECT = `SELECT runs.*, jobs.status AS job_status, jobs.stage AS job_stage
-                  FROM runs JOIN jobs ON jobs.id = runs.job_id`;
+const SELECT = `SELECT runs.*, jobs.status AS job_status, jobs.stage AS job_stage,
+                       meshes.size AS mesh_size, meshes.element_order AS mesh_order,
+                       meshes.node_count AS mesh_nodes, meshes.element_count AS mesh_elements
+                  FROM runs JOIN jobs ON jobs.id = runs.job_id JOIN meshes ON meshes.id = runs.mesh_id`;
+
+/** Versions not known: runs from before M1.10, or before the solving worker has reported. */
+const UNKNOWN_SOFTWARE: RunSoftware = { clearfea: null, deckFormat: null, calculix: null, gmsh: null, occt: null };
 
 /** The files of a run in R2. */
-export type RunFile =
-  | "deck.inp"
-  | "solver.log"
-  | "results.frd"
-  | "results.dat"
-  | "surface.bin"
-  | "fields.bin";
+export type RunFile = RunFileName;
 
 export function runKey(ownerId: string, runId: string, file: RunFile): string {
   return `owners/${ownerId}/runs/${runId}/${file}`;
@@ -92,8 +120,13 @@ export async function createRun(
     job.statement,
     db
       .prepare(
-        `INSERT INTO runs (id, owner_id, simulation_id, mesh_id, spec, job_id)
-         SELECT ?, ?, ?, id, ?, ? FROM meshes WHERE id = ? AND owner_id = ? AND status = 'ready'`,
+        // The mesh's versions come from its own job's MeshResult.
+        `INSERT INTO runs (id, owner_id, simulation_id, mesh_id, spec, job_id, software)
+         SELECT ?, ?, ?, meshes.id, ?, ?,
+                json_object('gmsh', json_extract(jobs.result, '$.software.gmsh'),
+                            'occt', json_extract(jobs.result, '$.software.occt'))
+           FROM meshes LEFT JOIN jobs ON jobs.id = meshes.job_id
+          WHERE meshes.id = ? AND meshes.owner_id = ? AND meshes.status = 'ready'`,
       )
       .bind(id, userId, request.simulationId, JSON.stringify(request.spec), job.id, request.meshId, userId),
   ]);
@@ -129,19 +162,34 @@ export async function listRuns(db: D1Database, userId: string, simulationId: str
 
 export type RunOutcome = { status: "succeeded"; result: SolveResult } | { status: "failed"; problem: string };
 
-/** Applies a finished solve job to its run. Only the run's own job may change it. */
-export async function recordRunOutcome(db: D1Database, job: Job, outcome: RunOutcome): Promise<void> {
+/**
+ * Applies a finished solve job to its run: the outcome, the files the job stored and the
+ * versions of the worker that claimed it. Only the run's own job may change it.
+ */
+export async function recordRunOutcome(
+  db: D1Database,
+  job: Job,
+  outcome: RunOutcome,
+  files: readonly RunFileName[],
+): Promise<void> {
   if (job.targetId === null) return;
   const succeeded = outcome.status === "succeeded";
+  const worker = job.software;
   await db
     .prepare(
-      `UPDATE runs SET status = ?, problem = ?, result = ?, finished_at = ${NOW}
+      `UPDATE runs SET status = ?, problem = ?, result = ?, files = ?, finished_at = ${NOW},
+              software = json_set(COALESCE(software, '{}'),
+                                  '$.clearfea', ?, '$.deckFormat', ?, '$.calculix', ?)
         WHERE id = ? AND owner_id = ? AND job_id = ? AND status = 'solving'`,
     )
     .bind(
       outcome.status,
       succeeded ? null : outcome.problem,
       succeeded ? JSON.stringify(outcome.result) : null,
+      JSON.stringify(files),
+      worker?.clearfea ?? null,
+      worker?.deckFormat ?? null,
+      worker?.calculix ?? null,
       job.targetId,
       job.ownerId,
       job.id,

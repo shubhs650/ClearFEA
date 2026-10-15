@@ -54,5 +54,9 @@ RUN useradd --create-home --uid 10001 worker
 USER worker
 WORKDIR /home/worker
 ENV PATH=/opt/venv/bin:$PATH PYTHONPATH=/opt/worker PYTHONUNBUFFERED=1
+# The source commit the image was built from, reported with every claim (ADR-032). Last, so a
+# new commit rebuilds only this layer.
+ARG CLEARFEA_COMMIT=
+ENV CLEARFEA_COMMIT=${CLEARFEA_COMMIT}
 ENTRYPOINT ["python", "-m", "clearfea_worker"]
 CMD ["run"]

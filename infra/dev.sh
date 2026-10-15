@@ -39,6 +39,9 @@ fi
 worker_token=$(sed -n 's/^WORKER_TOKEN=//p' apps/api/.dev.vars | tail -n 1)
 [ -n "$worker_token" ] || die "apps/api/.dev.vars has no WORKER_TOKEN line. Copy it from apps/api/.dev.vars.example."
 export CLEARFEA_WORKER_TOKEN="$worker_token"
+# The source commit the worker image is built from, which runs record (ADR-032).
+CLEARFEA_COMMIT=$(git describe --always --dirty 2>/dev/null || true)
+export CLEARFEA_COMMIT
 
 # Docker Desktop forwards host.docker.internal to services on the host's loopback;
 # Docker Engine on Linux does not, so there the worker shares the host network (ADR-016).

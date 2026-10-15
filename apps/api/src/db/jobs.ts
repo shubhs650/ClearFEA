@@ -4,7 +4,7 @@
 // worker id instead: the worker serves every owner, so its scope is the jobs it
 // has claimed, never a user's other records.
 
-import type { FailureCategory, HeartbeatAction, JobStatus, JobType } from "@clearfea/spec";
+import type { FailureCategory, HeartbeatAction, JobStatus, JobType, WorkerSoftware } from "@clearfea/spec";
 
 export interface Job {
   id: string;
@@ -20,6 +20,8 @@ export interface Job {
   failureMessage: string | null;
   params: Record<string, unknown> | null;
   result: unknown;
+  /** Versions the claiming worker reported, or null before a claim or when it sent none. */
+  software: WorkerSoftware | null;
   createdAt: string;
   claimedAt: string | null;
   finishedAt: string | null;
@@ -39,6 +41,7 @@ interface JobRow {
   failure_message: string | null;
   params: string | null;
   result: string | null;
+  software: string | null;
   created_at: string;
   claimed_at: string | null;
   finished_at: string | null;
@@ -59,6 +62,7 @@ function toJob(row: JobRow): Job {
     failureMessage: row.failure_message,
     params: row.params === null ? null : JSON.parse(row.params),
     result: row.result === null ? null : JSON.parse(row.result),
+    software: row.software === null ? null : JSON.parse(row.software),
     createdAt: row.created_at,
     claimedAt: row.claimed_at,
     finishedAt: row.finished_at,
@@ -133,13 +137,15 @@ export async function claimJob(
   db: D1Database,
   workerId: string,
   types: readonly JobType[],
+  software: WorkerSoftware | null = null,
 ): Promise<Job | null> {
   if (types.length === 0) return null;
   const placeholders = types.map(() => "?").join(", ");
   const row = await db
     .prepare(
       `UPDATE jobs
-         SET status = 'claimed', claimed_by = ?, claimed_at = ${NOW}, heartbeat_at = ${NOW}
+         SET status = 'claimed', claimed_by = ?, claimed_at = ${NOW}, heartbeat_at = ${NOW},
+             software = ?
        WHERE id = (
          SELECT id FROM jobs
           WHERE status = 'queued' AND type IN (${placeholders})
@@ -148,7 +154,7 @@ export async function claimJob(
        )
        RETURNING *`,
     )
-    .bind(workerId, ...types)
+    .bind(workerId, software === null ? null : JSON.stringify(software), ...types)
     .first<JobRow>();
   return row === null ? null : toJob(row);
 }

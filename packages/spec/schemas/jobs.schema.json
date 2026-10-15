@@ -39,6 +39,23 @@
         "transfers": { "type": "array", "items": { "$ref": "#/$defs/Transfer" } }
       }
     },
+    "WorkerSoftware": {
+      "description": "Versions of the worker that claims a job (ADR-032), recorded on the job so a run can state what produced it. Null where the worker lacks the program.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clearfea", "deckFormat", "calculix", "gmsh"],
+      "properties": {
+        "clearfea": {
+          "description": "The worker package's version, with the source commit it was built from after a + when known, for example 0.0.0+d9d394b.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "deckFormat": { "description": "The deck generator's DECK_FORMAT.", "type": "integer", "minimum": 1 },
+        "calculix": { "type": ["string", "null"], "maxLength": 100 },
+        "gmsh": { "type": ["string", "null"], "maxLength": 100 }
+      }
+    },
     "ClaimRequest": {
       "description": "Body of POST /internal/jobs/claim.",
       "type": "object",
@@ -46,7 +63,8 @@
       "required": ["workerId", "jobTypes"],
       "properties": {
         "workerId": { "$ref": "#/$defs/WorkerId" },
-        "jobTypes": { "type": "array", "items": { "$ref": "#/$defs/JobType" } }
+        "jobTypes": { "type": "array", "items": { "$ref": "#/$defs/JobType" } },
+        "software": { "$ref": "#/$defs/WorkerSoftware" }
       }
     },
     "ClaimResponse": {

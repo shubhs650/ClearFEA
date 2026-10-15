@@ -25,6 +25,7 @@ from .spec.jobs_schema import (
     HeartbeatRequest,
     HeartbeatResponse,
     JobType,
+    WorkerSoftware,
 )
 
 __all__ = ["ApiClient", "ApiError", "ClaimedJob", "HeartbeatAction"]
@@ -35,11 +36,20 @@ class ApiError(Exception):
 
 
 class ApiClient:
-    def __init__(self, base_url: str, token: str, worker_id: str, timeout: float = 30.0) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        token: str,
+        worker_id: str,
+        timeout: float = 30.0,
+        software: WorkerSoftware | None = None,
+    ) -> None:
+        """``software`` is sent with every claim, so the API records what ran each job."""
         self._base_url = base_url.rstrip("/")
         self._token = token
         self._worker_id = worker_id
         self._timeout = timeout
+        self._software = software
 
     def _headers(self, url: str) -> dict[str, str]:
         """The worker token goes only to the API's own internal routes, never elsewhere."""
@@ -121,7 +131,8 @@ class ApiClient:
             ) from None
 
     def claim(self, job_types: list[JobType]) -> ClaimedJob | None:
-        request = ClaimRequest(worker_id=self._worker_id, job_types=job_types)
+        extra = {} if self._software is None else {"software": self._software}
+        request = ClaimRequest(worker_id=self._worker_id, job_types=job_types, **extra)
         status, body = self._post("/jobs/claim", request)
         if status == 204 or body is None:
             return None

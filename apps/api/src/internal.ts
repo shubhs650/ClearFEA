@@ -8,6 +8,7 @@ import {
   type CompleteRequest,
   type CompleteResponse,
   type HeartbeatResponse,
+  type RunFileName,
   validateClaimRequest,
   validateCompleteRequest,
   validateHeartbeatRequest,
@@ -75,7 +76,7 @@ internal.post("/jobs/claim", async (c) => {
   const body = await readBody(c.req.raw, validateClaimRequest, "ClaimRequest", SCHEMA);
   if ("error" in body) return c.json({ error: body.error }, 400);
   const { workerId } = body.value;
-  const job = await claimJob(c.env.DB, workerId, body.value.jobTypes);
+  const job = await claimJob(c.env.DB, workerId, body.value.jobTypes, body.value.software ?? null);
   if (job === null) return c.body(null, 204);
   const origin = new URL(c.req.url).origin;
   return c.json({
@@ -196,6 +197,13 @@ function validatedSolveResult(result: unknown) {
   return checked.value;
 }
 
+/** The run files a solve job stored, whether it succeeded or not (a failed run may have a deck and log). */
+async function storedFiles(env: Env, job: Job): Promise<RunFileName[]> {
+  const uploads = jobFiles(job).filter((f) => f.direction === "upload");
+  const stored = await Promise.all(uploads.map((f) => env.FILES.head(f.key)));
+  return uploads.filter((_, i) => stored[i] !== null).map((f) => f.name as RunFileName);
+}
+
 /** What the owner is told about a failed job: the worker's message when it is their fault. */
 function problem(completion: Completion & { status: "failed" }, ours: string): string {
   if (completion.failureCategory === "user_fault" && completion.failureMessage) {
@@ -257,6 +265,7 @@ internal.post("/jobs/:id/complete", async (c) => {
       completion.status === "succeeded"
         ? { status: "succeeded", result: validatedSolveResult(completion.result) }
         : { status: "failed", problem: problem(completion, RUN_FAULT) },
+      await storedFiles(c.env, job),
     );
   }
   return c.json({ job: { ...payload(job), status: job.status } } satisfies CompleteResponse);

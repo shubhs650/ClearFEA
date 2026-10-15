@@ -6,6 +6,7 @@ import {
   type SimulationSpec,
   type SolveResult,
   type Topology,
+  type WorkerSoftware,
   validateClaimResponse,
   validateRunListResponse,
   validateRunLogResponse,
@@ -127,9 +128,11 @@ async function requestMesh(simulationId: string): Promise<void> {
   expect(response.status).toBe(201);
 }
 
-async function claim(type: "mesh" | "solve"): Promise<ClaimResponse["job"]> {
+const WORKER: WorkerSoftware = { clearfea: "0.0.0+d9d394b", deckFormat: 1, calculix: "2.21", gmsh: "4.15.2" };
+
+async function claim(type: "mesh" | "solve", software: WorkerSoftware | null = WORKER): Promise<ClaimResponse["job"]> {
   const response = await call("POST", "/internal/jobs/claim", {
-    json: { workerId: "w1", jobTypes: [type] },
+    json: { workerId: "w1", jobTypes: [type], ...(software === null ? {} : { software }) },
     token: TOKEN,
   });
   expect(response.status).toBe(200);
@@ -426,5 +429,125 @@ describe("a finished solve job", () => {
     await upload(job, RUN_FILES);
     await complete(job.id, { status: "succeeded", result: { ...SOLVED, nodes: "many" } });
     expect((await readRun(run.id)).problem).toContain("invalid_result");
+  });
+});
+
+describe("the run record", () => {
+  it("holds the frozen spec, the mesh and the versions that produced the run", async () => {
+    const id = await meshed();
+    const started = await runOf(await startRun(id));
+    expect(started.spec).toMatchObject({ mesh: { size: fixture.mesh.size } });
+    expect(started.mesh).toEqual({ size: fixture.mesh.size, order: 2, nodeCount: 7108, elementCount: 4000 });
+    // The mesh's versions are known from the start, the solver's once the job has ended.
+    expect(started.software).toEqual({ clearfea: null, deckFormat: null, calculix: null, gmsh: "4.15.2", occt: "7.8.1" });
+    expect(started.files).toEqual([]);
+
+    const job = await claim("solve", { ...WORKER, gmsh: "9.9.9" });
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    const done = await readRun(started.id);
+    // Gmsh is the mesh's version, not the solving worker's.
+    expect(done.software).toEqual({
+      clearfea: "0.0.0+d9d394b",
+      deckFormat: 1,
+      calculix: "2.21",
+      gmsh: "4.15.2",
+      occt: "7.8.1",
+    });
+    expect(done.files).toEqual(RUN_FILES);
+    expect(done.spec).toEqual(started.spec);
+  });
+
+  it("leaves the solver's versions unknown when the worker sent none", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve", null);
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    expect((await readRun(run.id)).software).toMatchObject({ clearfea: null, deckFormat: null, calculix: null });
+  });
+
+  it("refuses versions that do not match the schema", async () => {
+    const response = await call("POST", "/internal/jobs/claim", {
+      json: { workerId: "w1", jobTypes: ["solve"], software: { ...WORKER, deckFormat: "one" } },
+      token: TOKEN,
+    });
+    expect(response.status).toBe(400);
+  });
+});
+
+describe("a run's solver input and log", () => {
+  async function file(runId: string, name: string, query = "", cookie = alice): Promise<Response> {
+    return call("GET", `/api/runs/${runId}/files/${name}${query}`, { cookie });
+  }
+
+  it("are shown as plain text and downloaded as files once the run has finished", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    const early = await file(run.id, "deck.inp");
+    expect(early.status).toBe(409);
+    expect(((await early.json()) as { error: string }).error).toContain("still solving");
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    for (const name of ["deck.inp", "solver.log"]) {
+      const shown = await file(run.id, name);
+      expect(shown.status).toBe(200);
+      expect(shown.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+      expect(shown.headers.get("X-Content-Type-Options")).toBe("nosniff");
+      expect(shown.headers.get("Content-Disposition")).toBe(`inline; filename="clearfea-run-${run.id.slice(0, 8)}-${name}"`);
+      expect(await shown.text()).toBe(`${name} content`);
+      const saved = await file(run.id, name, "?download=1");
+      expect(saved.headers.get("Content-Disposition")).toBe(
+        `attachment; filename="clearfea-run-${run.id.slice(0, 8)}-${name}"`,
+      );
+      expect(await saved.text()).toBe(`${name} content`);
+      // Another user's run answers like a missing one.
+      expect((await file(run.id, name, "", bob)).status).toBe(404);
+    }
+  });
+
+  it("serves no other file of the run", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    for (const name of ["results.frd", "fields.bin", "..%2Fspec.json"]) {
+      expect((await file(run.id, name)).status).toBe(404);
+    }
+  });
+
+  it("are kept for a run the solver stopped on", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await upload(job, ["deck.inp", "solver.log"]);
+    await complete(job.id, {
+      status: "failed",
+      failureCategory: "platform_fault",
+      failureCause: "solver_error",
+      failureMessage: "CalculiX stopped on the deck: *ERROR in ...",
+    });
+    const failed = await readRun(run.id);
+    expect(failed).toMatchObject({ status: "failed", files: ["deck.inp", "solver.log"] });
+    expect(await (await file(run.id, "deck.inp")).text()).toBe("deck.inp content");
+    expect(await (await file(run.id, "solver.log")).text()).toBe("solver.log content");
+  });
+
+  it("do not exist when the run stopped before the solver started", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await complete(job.id, {
+      status: "failed",
+      failureCategory: "user_fault",
+      failureCause: "setup_invalid",
+      failureMessage: "Add a support.",
+    });
+    expect((await readRun(run.id)).files).toEqual([]);
+    const response = await file(run.id, "deck.inp");
+    expect(response.status).toBe(404);
+    expect(((await response.json()) as { error: string }).error).toContain("stopped before the solver started");
   });
 });
