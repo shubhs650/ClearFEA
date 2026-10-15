@@ -10,18 +10,23 @@ import {
   hasTemperatureChange,
   type IsotropicMaterial,
   type Load,
+  type LocalMeshScope,
+  type LocalMeshSize,
   loadHasFaces,
   loadKinds,
+  localScopes,
   type MeshView,
   movesByDisplacement,
   type Quantity,
   type RunView,
   type SimulationSpec,
   type Support,
+  sameMeshSettings,
   simulationSpecProblems,
   supportKinds,
   type TopologyTags,
 } from "@clearfea/spec";
+import { toSi } from "../units/convert";
 
 /** The types of support the setup offers (M1.5 fixed; M2.2 prescribed displacement, frictionless; M2.6 elastic). */
 export type SupportType = Support["type"];
@@ -128,8 +133,32 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   const needsLoad = spec.loads.length === 0 && !movesByDisplacement(spec);
   result.set("loads", worst([status([], needsLoad ? ["Add a load."] : []), ...loads]));
 
-  result.set("mesh", status(errorsOf("mesh"), spec.mesh.size === null ? ["Enter a global mesh size."] : []));
+  const settings = status(errorsOf("mesh"), spec.mesh.size === null ? ["Enter a global mesh size."] : []);
+  const global = spec.mesh.size;
+  const locals = (spec.mesh.local ?? []).map((item) => {
+    const missing: string[] = [];
+    if (item.tags.length === 0) missing.push(`Pick the ${localScopes[item.scope].many} to refine.`);
+    if (item.size === null) missing.push("Enter the local size.");
+    const errors = errorsOf(item.id);
+    // Local sizes make the mesh finer (ADR-045); the worker refuses a larger one too.
+    if (errors.length === 0 && item.size !== null && global !== null && larger(item.size, global)) {
+      errors.push("The local size is larger than the global size. Enter one no larger, or make the global size larger.");
+    }
+    const s = status(errors, missing);
+    result.set(item.id, s);
+    return s;
+  });
+  result.set("mesh", worst([settings, ...locals]));
   return result;
+}
+
+/** True when length a is larger than length b; false when either unit is unknown. */
+function larger(a: Quantity, b: Quantity): boolean {
+  try {
+    return toSi(a.value, a.unit, "length") > toSi(b.value, b.unit, "length") * (1 + 1e-9);
+  } catch {
+    return false;
+  }
 }
 
 /** What a load still needs before a run, as the tree item's notes. */
@@ -173,14 +202,9 @@ function loadMissing(load: Load): string[] {
   return missing;
 }
 
-/** True when two quantities are the same value in the same unit, as the user entered them. */
-export function sameQuantity(a: Quantity | null, b: Quantity | null): boolean {
-  return a !== null && b !== null && a.value === b.value && a.unit === b.unit;
-}
-
-/** True when the mesh was made with the spec's current mesh settings. */
+/** True when the mesh was made with the spec's current mesh settings (size, order, local sizes). */
 export function meshIsCurrent(spec: SimulationSpec, mesh: MeshView | null): boolean {
-  return mesh !== null && sameQuantity(mesh.size, spec.mesh.size);
+  return mesh !== null && sameMeshSettings(spec, mesh);
 }
 
 /**
@@ -191,7 +215,7 @@ export function meshStatus(settings: ItemStatus, spec: SimulationSpec, mesh: Mes
   if (settings.mark !== "complete") return settings;
   if (mesh === null) return { mark: "incomplete", notes: ["Generate the mesh."] };
   if (!meshIsCurrent(spec, mesh)) {
-    return { mark: "incomplete", notes: ["The mesh size changed after the mesh was made. Generate the mesh again."] };
+    return { mark: "incomplete", notes: ["The mesh settings changed after the mesh was made. Generate the mesh again."] };
   }
   if (mesh.status === "meshing") return { mark: "incomplete", notes: ["The mesh is being made."] };
   if (mesh.status === "failed") return { mark: "error", notes: [mesh.problem ?? "Meshing failed."] };
@@ -200,7 +224,7 @@ export function meshStatus(settings: ItemStatus, spec: SimulationSpec, mesh: Mes
 
 /** The smallest n for which `${prefix}-${n}` is not an id in the spec. */
 function nextNumber(spec: SimulationSpec, prefix: string): number {
-  const ids = new Set([...spec.materials, ...spec.supports, ...spec.loads].map((item) => item.id));
+  const ids = new Set([...spec.materials, ...spec.supports, ...spec.loads, ...(spec.mesh.local ?? [])].map((item) => item.id));
   let n = 1;
   while (ids.has(`${prefix}-${n}`)) n += 1;
   return n;
@@ -296,6 +320,21 @@ export function addPressure(spec: SimulationSpec, faces: readonly number[]): { s
   return addLoad(spec, "pressure", faces);
 }
 
+/** Adds a local mesh size on faces, edges or bodies, with the given tags and no size yet (M2.8). */
+export function addLocalSize(
+  spec: SimulationSpec,
+  scope: LocalMeshScope,
+  tags: readonly number[],
+): { spec: SimulationSpec; id: string } {
+  const n = nextNumber(spec, "local");
+  const item: LocalMeshSize = { id: `local-${n}`, name: `Local size ${n}`, scope, tags: [...tags], size: null };
+  return { id: item.id, spec: { ...spec, mesh: { ...spec.mesh, local: [...(spec.mesh.local ?? []), item] } } };
+}
+
+export function updateLocalSize(spec: SimulationSpec, item: LocalMeshSize): SimulationSpec {
+  return { ...spec, mesh: { ...spec.mesh, local: (spec.mesh.local ?? []).map((l) => (l.id === item.id ? item : l)) } };
+}
+
 export function updateMaterial(spec: SimulationSpec, material: IsotropicMaterial): SimulationSpec {
   return { ...spec, materials: spec.materials.map((m) => (m.id === material.id ? material : m)) };
 }
@@ -313,10 +352,15 @@ export function assignMaterial(spec: SimulationSpec, body: number, material: str
   return { ...spec, bodies: spec.bodies.map((b) => (b.tag === body ? { ...b, material } : b)) };
 }
 
-/** Removes a material, support or load; bodies that used a removed material are left without one. */
+/**
+ * Removes a material, support, load or local mesh size; bodies that used a removed material are
+ * left without one.
+ */
 export function removeItem(spec: SimulationSpec, id: string): SimulationSpec {
+  const local = spec.mesh.local;
   return {
     ...spec,
+    mesh: local === undefined ? spec.mesh : { ...spec.mesh, local: local.filter((l) => l.id !== id) },
     materials: spec.materials.filter((m) => m.id !== id),
     supports: spec.supports.filter((s) => s.id !== id),
     loads: spec.loads.filter((l) => l.id !== id),
@@ -324,9 +368,19 @@ export function removeItem(spec: SimulationSpec, id: string): SimulationSpec {
   };
 }
 
-/** The faces of a support or load, or null when the id names neither or a load without faces. */
+/**
+ * The faces of a support, load or local mesh size on faces, or null when the id names none of
+ * them or a load without faces.
+ */
 export function facesOf(spec: SimulationSpec, id: string): number[] | null {
+  const local = (spec.mesh.local ?? []).find((l) => l.id === id && l.scope === "faces");
+  if (local) return local.tags;
   return [...spec.supports, ...spec.loads.filter(loadHasFaces)].find((item) => item.id === id)?.faces ?? null;
+}
+
+/** The local mesh size with this id, or undefined. */
+export function localSizeOf(spec: SimulationSpec, id: string): LocalMeshSize | undefined {
+  return (spec.mesh.local ?? []).find((l) => l.id === id);
 }
 
 /** The Run item's mark from the simulation's latest run, or null before the first run. */

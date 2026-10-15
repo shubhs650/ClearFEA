@@ -130,7 +130,9 @@ def run_case(
         raise CaseError(f"Meshing failed: {mesh['problem']}")
     size = mesh["size"]
     counts = f"{mesh['elementCount']} elements, {mesh['nodeCount']} nodes"
-    outcome.mesh = f"{size['value']:g} {size['unit']}, {counts}"
+    local = "".join(f", {q['size']['value']:g} {q['size']['unit']} local" for q in mesh["local"])
+    order = "" if mesh["order"] == 2 else ", first order"
+    outcome.mesh = f"{size['value']:g} {size['unit']}{local}{order}, {counts}"
 
     run = api.json("POST", f"/api/simulations/{sid}/runs")["run"]
     run = api.wait(f"/api/runs/{run['id']}", "run", {"solving"}, timeout)

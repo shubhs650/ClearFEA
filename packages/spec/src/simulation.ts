@@ -4,13 +4,24 @@
 // geometry. A spec that passes may still be incomplete; what is missing for a run is
 // pre-run validation's job (preRunProblems in prerun.ts, M1.12).
 
-import type { Load, Quantity, SimulationSpec } from "./generated/simulation";
+import type {
+  ElementOrder,
+  LocalMeshScope,
+  LocalSizeParams,
+  Load,
+  Quantity,
+  SimulationSpec,
+} from "./generated/simulation";
 import { unitsTable } from "./units";
 
-/** The bodies and faces of a geometry, as topology.json lists them (a face's type when known). */
+/**
+ * The bodies, faces and edges of a geometry, as topology.json lists them (a face's type when
+ * known). Edges are absent for geometries imported before M2.8.
+ */
 export interface TopologyTags {
   bodies: readonly { tag: number }[];
   faces: readonly { tag: number; type?: string }[];
+  edges?: readonly { tag: number }[];
 }
 
 /** The kind of a support as the setup and its messages name it. */
@@ -34,6 +45,60 @@ export const loadKinds = {
   centrifugal: "Centrifugal load",
   temperature: "Temperature change",
 } as const;
+
+/** What a local mesh size applies to, as the setup and its messages name it (M2.8). */
+export const localScopes = {
+  faces: { label: "Faces", one: "face", many: "faces" },
+  edges: { label: "Edges", one: "edge", many: "edges" },
+  bodies: { label: "Bodies", one: "body", many: "bodies" },
+} as const satisfies Record<LocalMeshScope, { label: string; one: string; many: string }>;
+
+/** The element order of meshes made for the spec: 2 unless set (specs saved before M2.8 have none). */
+export function elementOrder(spec: SimulationSpec): ElementOrder {
+  return spec.mesh.order ?? 2;
+}
+
+/**
+ * The local sizes a mesh for the spec is made with: each complete one (tags picked and a size
+ * entered), tags sorted. Names and ids do not change a mesh, so they are left out.
+ */
+export function localSizeParams(spec: SimulationSpec): LocalSizeParams[] {
+  return (spec.mesh.local ?? []).flatMap((item) =>
+    item.size === null || item.tags.length === 0
+      ? []
+      : [{ scope: item.scope, tags: [...item.tags].sort((a, b) => a - b), size: { ...item.size } }],
+  );
+}
+
+function sameSize(a: Quantity | null, b: Quantity | null): boolean {
+  return a === null || b === null ? a === b : a.value === b.value && a.unit === b.unit;
+}
+
+/**
+ * True when a mesh made with these settings is the one the spec asks for: the same global size,
+ * order and local sizes, as entered (a size typed in another unit is another mesh).
+ */
+export function sameMeshSettings(
+  spec: SimulationSpec,
+  mesh: { size: Quantity; order: ElementOrder; local: readonly LocalSizeParams[] },
+): boolean {
+  const local = localSizeParams(spec);
+  return (
+    sameSize(spec.mesh.size, mesh.size) &&
+    elementOrder(spec) === mesh.order &&
+    local.length === mesh.local.length &&
+    local.every((item, k) => {
+      const other = mesh.local[k];
+      return (
+        other !== undefined &&
+        item.scope === other.scope &&
+        sameSize(item.size, other.size) &&
+        item.tags.length === other.tags.length &&
+        item.tags.every((tag, i) => tag === other.tags[i])
+      );
+    })
+  );
+}
 
 /** True when the load acts on faces the user picks (gravity, centrifugal and temperature act on every body). */
 export function loadHasFaces(load: Load): load is Extract<Load, { faces: number[] }> {
@@ -60,7 +125,7 @@ export function emptySimulationSpec(geometryId: string, topology: TopologyTags):
     materials: [],
     supports: [],
     loads: [],
-    mesh: { size: null },
+    mesh: { size: null, order: 2, local: [] },
   };
 }
 
@@ -129,6 +194,7 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
     ...spec.materials.map((m) => ({ id: m.id, label: `material "${m.name}"` })),
     ...spec.supports.map((s) => ({ id: s.id, label: `support "${s.name}"` })),
     ...spec.loads.map((l) => ({ id: l.id, label: `load "${l.name}"` })),
+    ...(spec.mesh.local ?? []).map((l) => ({ id: l.id, label: `local mesh size "${l.name}"` })),
   ];
   for (const entry of items) {
     if (ids.has(entry.id)) add(entry.id, `The id "${entry.id}" of ${entry.label} is used by another item; ids must be unique.`);
@@ -213,6 +279,13 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
     }
   }
   add("mesh", unitProblem(spec.mesh.size, "length", "The global mesh size", true));
+  for (const item of spec.mesh.local ?? []) {
+    add(item.id, unitProblem(item.size, "length", `The size of local mesh size "${item.name}"`, true));
+    const repeated = item.tags.filter((tag, k) => item.tags.indexOf(tag) !== k);
+    if (repeated.length > 0) {
+      add(item.id, `Local mesh size "${item.name}" lists ${localScopes[item.scope].one} ${listTags(repeated)} more than once.`);
+    }
+  }
 
   if (topology !== undefined) {
     const known = new Set(topology.bodies.map((b) => b.tag));
@@ -230,6 +303,30 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
       const unknown = entry.faces.filter((tag) => !faces.has(tag));
       if (unknown.length > 0) {
         add(entry.id, `${entry.label} uses face ${listTags(unknown)}, which the geometry does not have.`);
+      }
+    }
+    const tagsOf: Record<LocalMeshScope, ReadonlySet<number> | undefined> = {
+      faces,
+      bodies: known,
+      edges: topology.edges === undefined ? undefined : new Set(topology.edges.map((e) => e.tag)),
+    };
+    for (const item of spec.mesh.local ?? []) {
+      const tags = tagsOf[item.scope];
+      if (tags === undefined) {
+        if (item.tags.length > 0) {
+          add(
+            item.id,
+            `Local mesh size "${item.name}" uses edges, but this geometry was imported before edges could be picked. Upload the STEP file again to size its edges.`,
+          );
+        }
+        continue;
+      }
+      const unknown = item.tags.filter((tag) => !tags.has(tag));
+      if (unknown.length > 0) {
+        add(
+          item.id,
+          `Local mesh size "${item.name}" uses ${localScopes[item.scope].one} ${listTags(unknown)}, which the geometry does not have.`,
+        );
       }
     }
     // A frictionless support holds flat faces only (DECISIONS.md); the deck generator checks

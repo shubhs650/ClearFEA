@@ -302,6 +302,26 @@
         { "$ref": "#/$defs/TemperatureLoad" }
       ]
     },
+    "LocalMeshScope": {
+      "description": "What a local mesh size applies to: faces, edges or bodies of the geometry, by their topology.json tags.",
+      "enum": ["faces", "edges", "bodies"]
+    },
+    "LocalMeshSize": {
+      "description": "A smaller element size on some faces, edges or bodies (M2.8, ADR-045). The mesh grows from it to the global size away from them.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "scope", "tags", "size"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "scope": { "$ref": "#/$defs/LocalMeshScope" },
+        "tags": { "description": "Face, edge or body tags, as scope says; empty until picked.", "type": "array", "items": { "type": "integer" } },
+        "size": {
+          "description": "Element size on them, a length quantity greater than zero and no larger than the global size; null until entered.",
+          "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+        }
+      }
+    },
     "MeshSettings": {
       "type": "object",
       "additionalProperties": false,
@@ -310,11 +330,20 @@
         "size": {
           "description": "Global element size, a length quantity greater than zero; null until entered.",
           "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+        },
+        "order": {
+          "description": "Element order (M2.8). Absent in specs saved before M2.8, which means 2.",
+          "$ref": "#/$defs/ElementOrder"
+        },
+        "local": {
+          "description": "Local mesh sizes (M2.8). Absent in specs saved before M2.8, which means none.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/LocalMeshSize" }
         }
       }
     },
     "SimulationSpec": {
-      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
+      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
       "type": "object",
       "additionalProperties": false,
       "required": ["version", "analysis", "geometryId", "bodies", "materials", "supports", "loads", "mesh"],
@@ -369,7 +398,7 @@
       "properties": { "simulations": { "type": "array", "items": { "$ref": "#/$defs/SimulationView" } } }
     },
     "ElementOrder": {
-      "description": "1: four-node tetrahedra. 2: ten-node tetrahedra with curved edges on curved faces. Phase 0 meshes always use 2 until M2.8 offers the choice (ADR-028).",
+      "description": "1: four-node tetrahedra (CalculiX C3D4). 2: ten-node tetrahedra with curved edges on curved faces (C3D10), the default (ADR-028, ADR-045).",
       "enum": [1, 2]
     },
     "MeshParams": {
@@ -385,16 +414,50 @@
           "exclusiveMinimum": 0
         },
         "size": { "description": "Global element size as the user entered it (a length quantity); the worker converts it to metres.", "$ref": "#/$defs/Quantity" },
-        "order": { "$ref": "#/$defs/ElementOrder" }
+        "order": { "$ref": "#/$defs/ElementOrder" },
+        "local": {
+          "description": "Local sizes (M2.8), each complete: tags picked and a size entered.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/LocalSizeParams" }
+        }
+      }
+    },
+    "LocalSizeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "tags", "size"],
+      "properties": {
+        "scope": { "$ref": "#/$defs/LocalMeshScope" },
+        "tags": { "description": "Never empty when sent by the API.", "type": "array", "items": { "type": "integer" } },
+        "size": { "$ref": "#/$defs/Quantity" }
+      }
+    },
+    "MeshQuality": {
+      "description": "Quality summary of a mesh (M2.8, ADR-045). shape is Gmsh's gamma, the inscribed to circumscribed sphere radius ratio scaled so a regular tetrahedron is 1 and a flat one 0. jacobianMin is the smallest scaled Jacobian of any element, 1 for an undistorted one; curved second-order elements fall below 1.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["shapeMin", "shapeMean", "shapeHistogram", "jacobianMin"],
+      "properties": {
+        "shapeMin": { "type": "number" },
+        "shapeMean": { "type": "number" },
+        "shapeHistogram": {
+          "description": "Number of elements with shape in [0, 0.1), [0.1, 0.2), ... [0.9, 1].",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "minItems": 10,
+          "maxItems": 10
+        },
+        "jacobianMin": { "type": "number" }
       }
     },
     "MeshResult": {
       "description": "Result summary of a succeeded mesh job.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["order", "nodes", "elements", "surfaceTriangles", "software"],
+      "required": ["order", "nodes", "elements", "surfaceTriangles", "quality", "software"],
       "properties": {
         "order": { "$ref": "#/$defs/ElementOrder" },
+        "quality": { "$ref": "#/$defs/MeshQuality" },
         "nodes": { "type": "integer", "minimum": 4 },
         "elements": { "description": "Tetrahedra in the volume mesh.", "type": "integer", "minimum": 1 },
         "surfaceTriangles": { "description": "Triangles in the mesh display file.", "type": "integer", "minimum": 1 },
@@ -415,16 +478,18 @@
       "description": "A mesh as its owner sees it.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "geometryId", "size", "order", "status", "problem", "nodeCount", "elementCount", "createdAt"],
+      "required": ["id", "geometryId", "size", "order", "local", "status", "problem", "nodeCount", "elementCount", "quality", "createdAt"],
       "properties": {
         "id": { "type": "string" },
         "geometryId": { "type": "string" },
         "size": { "description": "The global size the mesh was made with, as entered.", "$ref": "#/$defs/Quantity" },
         "order": { "$ref": "#/$defs/ElementOrder" },
+        "local": { "description": "The local sizes the mesh was made with, as entered (M2.8).", "type": "array", "items": { "$ref": "#/$defs/LocalSizeParams" } },
         "status": { "$ref": "#/$defs/MeshStatus" },
         "problem": { "description": "Why meshing failed, in plain language.", "type": ["string", "null"] },
         "nodeCount": { "type": ["integer", "null"] },
         "elementCount": { "type": ["integer", "null"] },
+        "quality": { "description": "Null until the mesh is ready, and for meshes made before M2.8.", "oneOf": [{ "$ref": "#/$defs/MeshQuality" }, { "type": "null" }] },
         "createdAt": { "type": "string" }
       }
     },

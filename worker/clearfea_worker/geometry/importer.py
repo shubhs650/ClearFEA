@@ -24,6 +24,7 @@ from ..spec.geometry_schema import (
     Software,
     Topology,
     TopologyBody,
+    TopologyEdge,
     TopologyFace,
     UnitReading,
 )
@@ -35,6 +36,10 @@ from .step_units import Detection, StepFormatError, detect_length_unit
 #: fraction of the model's bounding box diagonal (the values the M1.1 spike checked).
 DISPLAY_CURVATURE_ELEMENTS = 16
 DISPLAY_MAX_SIZE_FRACTION = 1 / 20
+
+#: Points of an edge's display polyline (M2.8): straight edges need their two ends, curved
+#: ones are sampled evenly in their parameter, which draws arcs smoothly at viewer scale.
+EDGE_POINTS_CURVED = 49
 
 log = logging.getLogger(__name__)
 
@@ -146,7 +151,44 @@ def topology(gmsh: ModuleType, unit: UnitReading, scaling: float) -> Topology:
         software=software(gmsh),
         bodies=bodies,
         faces=faces,
+        edges=edges(gmsh),
     )
+
+
+def _rounded(value: float) -> float:
+    """Seven significant digits: a display polyline needs no more, and topology.json stays small."""
+    return float(f"{value:.7g}")
+
+
+def edges(gmsh: ModuleType) -> list[TopologyEdge]:
+    """Every edge of the model with its length, box and faces, and a polyline to draw it (M2.8).
+
+    The polyline is sampled from the curve's own parametrisation, not from a mesh, so the mesh
+    job's re-import finds the same edges without tessellating (its comparison leaves the
+    points out). Degenerate edges of zero length (the apex of a cone) cannot be picked or
+    sized and are left out.
+    """
+    model = gmsh.model
+    result = []
+    for _, tag in model.getEntities(1):
+        length = model.occ.getMass(1, tag)
+        if length <= 0:
+            continue
+        up, _ = model.getAdjacencies(1, tag)
+        lo, hi = model.getParametrizationBounds(1, tag)
+        n = 2 if model.getType(1, tag) == "Line" else EDGE_POINTS_CURVED
+        params = [lo[0] + (hi[0] - lo[0]) * k / (n - 1) for k in range(n)]
+        points = model.getValue(1, tag, params)
+        result.append(
+            TopologyEdge(
+                tag=tag,
+                length=length,
+                bbox=_bbox(gmsh, 1, tag),
+                faces=sorted(int(f) for f in up),
+                points=[_rounded(float(c)) for c in points],
+            )
+        )
+    return result
 
 
 def tessellate(gmsh: ModuleType, size: float) -> list[FacePatch]:

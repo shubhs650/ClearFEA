@@ -51,17 +51,17 @@ Tooling: pnpm workspaces for TypeScript, `uv` for Python, a top-level `Makefile`
 This is the highest-risk design point. A user clicks a face in the viewer and applies a pressure. That same face must be found in the mesh, written into the solver input as the right element faces, and later used to report reactions.
 
 1. **Import.** Gmsh reads the STEP file with its OpenCASCADE kernel and converts lengths to metres. Each body (volume) and face (surface) gets an integer tag.
-2. **Topology file.** The worker writes `topology.json`: for each body and face, its tag, type (plane, cylinder, other), area, centroid, bounding box and parent body. This file is the reference for face identity.
+2. **Topology file.** The worker writes `topology.json`: for each body and face, its tag, type (plane, cylinder, other), area, centroid, bounding box and parent body; since M2.8 also each edge's tag, length, bounding box, the faces it bounds and a polyline the viewer draws and picks it by (ADR-045). This file is the reference for face and edge identity.
 3. **Display mesh.** The worker tessellates each face and writes one binary file with triangles grouped by face tag (`packages/spec/display-mesh.md`). The viewer uses this for rendering and picking, so a click resolves to a face tag.
 4. **Spec.** Loads and supports in the `SimulationSpec` reference face tags (and body tags) of a specific geometry id.
-5. **Mesh.** Gmsh meshes the same imported geometry. Surface elements carry their face tag. The worker writes, for every face tag, the list of volume-element faces lying on it. The mesh file format is `packages/spec/volume-mesh.md` (ADR-028).
+5. **Mesh.** Gmsh meshes the same imported geometry, with a global size, the element order and local sizes on faces, edges or bodies as background fields (ADR-045). Surface elements carry their face tag. The worker writes, for every face tag, the list of volume-element faces lying on it. The mesh file format is `packages/spec/volume-mesh.md` (ADR-028).
 6. **Deck.** The deck generator turns face tags into CalculiX node sets and element-face surfaces.
 7. **Results.** Reaction sums and face-based result tables use the same sets.
 
 Rules that keep the chain intact:
 
 - Gmsh and OpenCASCADE versions are pinned. Tags are only guaranteed stable for the same file with the same versions.
-- The mesh job re-imports the STEP file and compares each face's area and centroid against `topology.json`. Any mismatch fails the job as a platform fault.
+- The mesh job re-imports the STEP file and compares each face's area and centroid (and each edge's length, box and faces) against `topology.json`. Any mismatch fails the job as a platform fault.
 - A geometry record is immutable. A new upload is a new geometry with new tags.
 
 Milestone M1 starts with a spike that proves this chain on three models before any UI is built on it.
@@ -102,7 +102,7 @@ Files in R2, keyed by owner and record id:
 
 One JSON document describes a complete setup: analysis type, per-body material assignment, bonds, supports, loads, mesh settings, output requests and solver options. Every physical quantity is stored as `{ "value": number, "unit": "MPa" }` exactly as the user typed it. The schema lives in `packages/spec`; TypeScript types and Pydantic models are generated from it.
 
-Version 1 (`packages/spec/schemas/simulation.schema.json`, ADR-026) holds the bodies with their material, isotropic materials, fixed supports, pressures and the global mesh size. Values may be null while the setup is built; `checkSimulationSpec` refuses what is wrong (units of the wrong kind, unknown tags), and pre-run validation lists what is missing. Once a simulation uses a geometry, the geometry's unit is locked.
+Version 1 (`packages/spec/schemas/simulation.schema.json`, ADR-026) holds the bodies with their material, isotropic materials, fixed supports, pressures and the global mesh size. Values may be null while the setup is built; `checkSimulationSpec` refuses what is wrong (units of the wrong kind, unknown tags), and pre-run validation lists what is missing. Once a simulation uses a geometry, the geometry's unit is locked. M2 adds supports and loads to the same version (ADR-039 to ADR-044), and M2.8 the element order and local mesh sizes on faces, edges or bodies (ADR-045).
 
 A run stores a frozen copy of the spec. Editing a simulation never changes an existing run.
 

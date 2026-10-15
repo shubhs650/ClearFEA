@@ -105,6 +105,30 @@ export interface TopologyFace {
   bodies: number[];
 }
 /**
+ * An edge (CAD curve) of the geometry (M2.8). points is a polyline along it, from the display tessellation, for drawing and picking it in the viewer; it is not part of the edge's identity.
+ *
+ * This interface was referenced by `Geometry`'s JSON-Schema
+ * via the `definition` "TopologyEdge".
+ */
+export interface TopologyEdge {
+  tag: number;
+  /**
+   * Metres.
+   */
+  length: number;
+  bbox: BoundingBox;
+  /**
+   * The faces the edge bounds.
+   */
+  faces: number[];
+  /**
+   * x, y, z of each polyline point in turn, in metres; a closed edge repeats its first point at the end.
+   *
+   * @minItems 6
+   */
+  points: [number, number, number, number, number, number, ...number[]];
+}
+/**
  * topology.json: the reference for face identity (ARCHITECTURE.md section 3). Written by the import job in metres, at the geometry's confirmed scale once the unit is confirmed.
  *
  * This interface was referenced by `Geometry`'s JSON-Schema
@@ -131,6 +155,10 @@ export interface Topology {
   };
   bodies: TopologyBody[];
   faces: TopologyFace[];
+  /**
+   * Every edge of the geometry (M2.8). Absent for geometries imported before M2.8, whose edges cannot be picked until the file is uploaded again.
+   */
+  edges?: TopologyEdge[];
 }
 /**
  * Parameters of an import job. confirmedUnit is null on the first import, which reads the file as it is.
@@ -235,6 +263,7 @@ export const validateFaceType = validator<FaceType>(schema, "FaceType");
 export const validateUnitReading = validator<UnitReading>(schema, "UnitReading");
 export const validateTopologyBody = validator<TopologyBody>(schema, "TopologyBody");
 export const validateTopologyFace = validator<TopologyFace>(schema, "TopologyFace");
+export const validateTopologyEdge = validator<TopologyEdge>(schema, "TopologyEdge");
 export const validateTopology = validator<Topology>(schema, "Topology");
 export const validateImportParams = validator<ImportParams>(schema, "ImportParams");
 export const validateImportResult = validator<ImportResult>(schema, "ImportResult");

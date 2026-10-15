@@ -59,7 +59,14 @@ export type Support = FixedSupport | PrescribedDisplacement | FrictionlessSuppor
 export type Load =
   PressureLoad | ForceLoad | RemoteLoad | HydrostaticLoad | GravityLoad | CentrifugalLoad | TemperatureLoad;
 /**
- * 1: four-node tetrahedra. 2: ten-node tetrahedra with curved edges on curved faces. Phase 0 meshes always use 2 until M2.8 offers the choice (ADR-028).
+ * What a local mesh size applies to: faces, edges or bodies of the geometry, by their topology.json tags.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "LocalMeshScope".
+ */
+export type LocalMeshScope = "faces" | "edges" | "bodies";
+/**
+ * 1: four-node tetrahedra (CalculiX C3D4). 2: ten-node tetrahedra with curved edges on curved faces (C3D10), the default (ADR-028, ADR-045).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "ElementOrder".
@@ -408,6 +415,25 @@ export interface AxisPoint3 {
   z: OptionalQuantity;
 }
 /**
+ * A smaller element size on some faces, edges or bodies (M2.8, ADR-045). The mesh grows from it to the global size away from them.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "LocalMeshSize".
+ */
+export interface LocalMeshSize {
+  id: ItemId;
+  name: ItemName;
+  scope: LocalMeshScope;
+  /**
+   * Face, edge or body tags, as scope says; empty until picked.
+   */
+  tags: number[];
+  /**
+   * Element size on them, a length quantity greater than zero and no larger than the global size; null until entered.
+   */
+  size: Quantity | null;
+}
+/**
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "MeshSettings".
  */
@@ -416,9 +442,17 @@ export interface MeshSettings {
    * Global element size, a length quantity greater than zero; null until entered.
    */
   size: Quantity | null;
+  /**
+   * Element order (M2.8). Absent in specs saved before M2.8, which means 2.
+   */
+  order?: 1 | 2;
+  /**
+   * Local mesh sizes (M2.8). Absent in specs saved before M2.8, which means none.
+   */
+  local?: LocalMeshSize[];
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -496,6 +530,10 @@ export interface MeshParams {
   scaling: number;
   size: Quantity1;
   order: ElementOrder;
+  /**
+   * Local sizes (M2.8), each complete: tags picked and a size entered.
+   */
+  local?: LocalSizeParams[];
 }
 /**
  * A physical value exactly as the user entered it. unit is a symbol from packages/spec/units.json of the kind the field names; a unit of the wrong kind is refused when the spec is saved.
@@ -505,6 +543,36 @@ export interface Quantity1 {
   unit: string;
 }
 /**
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "LocalSizeParams".
+ */
+export interface LocalSizeParams {
+  scope: LocalMeshScope;
+  /**
+   * Never empty when sent by the API.
+   */
+  tags: number[];
+  size: Quantity;
+}
+/**
+ * Quality summary of a mesh (M2.8, ADR-045). shape is Gmsh's gamma, the inscribed to circumscribed sphere radius ratio scaled so a regular tetrahedron is 1 and a flat one 0. jacobianMin is the smallest scaled Jacobian of any element, 1 for an undistorted one; curved second-order elements fall below 1.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "MeshQuality".
+ */
+export interface MeshQuality {
+  shapeMin: number;
+  shapeMean: number;
+  /**
+   * Number of elements with shape in [0, 0.1), [0.1, 0.2), ... [0.9, 1].
+   *
+   * @minItems 10
+   * @maxItems 10
+   */
+  shapeHistogram: [number, number, number, number, number, number, number, number, number, number];
+  jacobianMin: number;
+}
+/**
  * Result summary of a succeeded mesh job.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -512,6 +580,7 @@ export interface Quantity1 {
  */
 export interface MeshResult {
   order: ElementOrder;
+  quality: MeshQuality;
   nodes: number;
   /**
    * Tetrahedra in the volume mesh.
@@ -540,6 +609,10 @@ export interface MeshView {
   geometryId: string;
   size: Quantity2;
   order: ElementOrder;
+  /**
+   * The local sizes the mesh was made with, as entered (M2.8).
+   */
+  local: LocalSizeParams[];
   status: MeshStatus;
   /**
    * Why meshing failed, in plain language.
@@ -547,6 +620,10 @@ export interface MeshView {
   problem: string | null;
   nodeCount: number | null;
   elementCount: number | null;
+  /**
+   * Null until the mesh is ready, and for meshes made before M2.8.
+   */
+  quality: MeshQuality | null;
   createdAt: string;
 }
 /**
@@ -735,7 +812,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -805,6 +882,9 @@ export const validateComponents = validator<Components>(schema, "Components");
 export const validateRemoteLoad = validator<RemoteLoad>(schema, "RemoteLoad");
 export const validateHydrostaticLoad = validator<HydrostaticLoad>(schema, "HydrostaticLoad");
 export const validateLoad = validator<Load>(schema, "Load");
+export const LocalMeshScopeValues = ["faces", "edges", "bodies"] as const satisfies readonly LocalMeshScope[];
+export const validateLocalMeshScope = validator<LocalMeshScope>(schema, "LocalMeshScope");
+export const validateLocalMeshSize = validator<LocalMeshSize>(schema, "LocalMeshSize");
 export const validateMeshSettings = validator<MeshSettings>(schema, "MeshSettings");
 export const validateSimulationSpec = validator<SimulationSpec>(schema, "SimulationSpec");
 export const validateSimulationView = validator<SimulationView>(schema, "SimulationView");
@@ -814,6 +894,8 @@ export const validateSimulationListResponse = validator<SimulationListResponse>(
 export const ElementOrderValues = [1, 2] as const satisfies readonly ElementOrder[];
 export const validateElementOrder = validator<ElementOrder>(schema, "ElementOrder");
 export const validateMeshParams = validator<MeshParams>(schema, "MeshParams");
+export const validateLocalSizeParams = validator<LocalSizeParams>(schema, "LocalSizeParams");
+export const validateMeshQuality = validator<MeshQuality>(schema, "MeshQuality");
 export const validateMeshResult = validator<MeshResult>(schema, "MeshResult");
 export const MeshStatusValues = ["meshing", "ready", "failed"] as const satisfies readonly MeshStatus[];
 export const validateMeshStatus = validator<MeshStatus>(schema, "MeshStatus");

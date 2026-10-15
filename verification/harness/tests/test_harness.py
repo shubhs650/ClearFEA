@@ -121,6 +121,51 @@ def test_builds_the_spec_with_tags_geometry_and_the_tier_mesh_size() -> None:
     assert case.spec["supports"][0]["faces"] == ["plate"]  # the case itself is unchanged
 
 
+def test_builds_local_mesh_sizes_with_face_tags_and_tier_sizes() -> None:
+    spec = small_case().spec | {
+        "mesh": {
+            "size": {"value": 1, "unit": "mm"},
+            "order": 1,
+            "local": [
+                {"id": "fine", "name": "Fine", "scope": "faces", "tags": ["corner"], "size": None},
+                {
+                    "id": "body",
+                    "name": "Body",
+                    "scope": "bodies",
+                    "tags": [1],
+                    "size": {"value": 3, "unit": "mm"},
+                },
+            ],
+        }
+    }
+    mesh = small_case().mesh | {
+        "local": {
+            "fine": {"coarse": {"value": 1, "unit": "mm"}, "full": {"value": 0.5, "unit": "mm"}}
+        }
+    }
+    built = build_spec(small_case(spec=spec, mesh=mesh), {"plate": 7, "corner": 3}, "g", "full")
+    assert built["mesh"] == {
+        "size": {"value": 2, "unit": "mm"},
+        "order": 1,
+        "local": [
+            {
+                "id": "fine",
+                "name": "Fine",
+                "scope": "faces",
+                "tags": [3],
+                "size": {"value": 0.5, "unit": "mm"},
+            },
+            {
+                "id": "body",
+                "name": "Body",
+                "scope": "bodies",
+                "tags": [1],
+                "size": {"value": 3, "unit": "mm"},
+            },
+        ],
+    }
+
+
 def test_applied_load_pushes_against_the_outward_normal() -> None:
     spec = build_spec(small_case(), {"plate": 7, "corner": 3}, "g", "coarse")
     spec["loads"][0]["faces"] = [7]

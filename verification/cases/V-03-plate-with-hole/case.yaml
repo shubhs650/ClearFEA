@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-03: a quarter of a plate with a central hole, pulled along x, on three symmetry planes,
+# meshed with a local size on the hole. Reference values and their derivation: reference.md.
+id: V-03
+title: Plate with central hole in tension
+analysis: linear_static
+features: [local mesh refinement, force, frictionless support, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  hole: { min: [0, 0, 0], max: [5, 5, 2.5] }
+  x0: { min: [0, 5, 0], max: [0, 50, 2.5] }
+  y0: { min: [5, 0, 0], max: [150, 0, 2.5] }
+  z0: { min: [0, 0, 0], max: [150, 50, 0] }
+  end: { min: [150, 0, 0], max: [150, 50, 2.5] }
+mesh:
+  coarse: { value: 5, unit: mm }
+  full: { value: 2.5, unit: mm }
+  # The size on the hole per tier, replacing the one in spec.json.
+  local:
+    hole:
+      coarse: { value: 0.5, unit: mm }
+      full: { value: 0.25, unit: mm }
+checks:
+  - name: Peak stress at the side of the hole (Kt sigma, Kt = 3.025)
+    quantity: vonMises
+    face: hole
+    # The line across the thickness where the hole meets the symmetry plane x = 0.
+    box: { min: [0, 4.9, 0], max: [0, 5.1, 2.5] }
+    reference: { value: 302.5, unit: MPa }
+    tolerance: { coarse: 0.02, full: 0.01 }
+  - name: Uniform stress at the pulled end (F / A)
+    quantity: vonMises
+    face: end
+    reference: { value: 100, unit: MPa }
+    tolerance: { coarse: 0.005, full: 0.005 }

@@ -16,6 +16,9 @@ type Recorded = {
   meshes: DisplayMesh[];
   bands: (Float32Array | undefined)[];
   selections: number[][];
+  /** Each setEdges call: the edge tags drawn, or null for none. */
+  edges: (number[] | null)[];
+  edgeSelections: number[][];
   disposed: boolean;
 };
 
@@ -26,7 +29,7 @@ vi.mock("../src/viewer/ModelView", () => ({
     record: Recorded;
     constructor(_host: HTMLElement, events: ModelViewEvents) {
       if (scene.failToStart) throw new Error("no WebGL");
-      this.record = { events, meshes: [], bands: [], selections: [], disposed: false };
+      this.record = { events, meshes: [], bands: [], selections: [], edges: [], edgeSelections: [], disposed: false };
       scene.instances.push(this.record);
     }
     setMesh(mesh: DisplayMesh, _edges?: string, _keep?: boolean, bands?: Float32Array) {
@@ -35,6 +38,12 @@ vi.mock("../src/viewer/ModelView", () => ({
     }
     setSelection(tags: ReadonlySet<number>) {
       this.record.selections.push([...tags]);
+    }
+    setEdges(edges: { tag: number }[] | null) {
+      this.record.edges.push(edges === null ? null : edges.map((e) => e.tag));
+    }
+    setEdgeSelection(tags: ReadonlySet<number>) {
+      this.record.edgeSelections.push([...tags]);
     }
     resetView() {}
     dispose() {

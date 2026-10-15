@@ -5,6 +5,9 @@
 import {
   type CreateSimulationRequest,
   checkSimulationSpec,
+  elementOrder,
+  localScopes,
+  localSizeParams,
   type MeshResponse,
   preRunProblems,
   type RunListResponse,
@@ -15,6 +18,7 @@ import {
   type SimulationResponse,
   type SimulationSpec,
   type SimulationView,
+  sameMeshSettings,
   type Topology,
   validateCreateSimulationRequest,
   validateSimulationSpec,
@@ -23,7 +27,7 @@ import {
 import { Hono } from "hono";
 import { readBody } from "../body";
 import { type Geometry, geometryKey, getGeometry } from "../db/geometries";
-import { createMesh, MESH_ORDER, simulationMesh } from "../db/meshes";
+import { createMesh, simulationMesh } from "../db/meshes";
 import { createRun, listRuns } from "../db/runs";
 import {
   createSimulation,
@@ -158,13 +162,27 @@ simulations.get("/:id/mesh", async (c) => {
   return c.json({ mesh: mesh === null ? null : meshView(mesh) } satisfies SimulationMeshResponse);
 });
 
-/** Meshes the simulation's geometry with the global size of its saved spec (M1.6, ADR-028). */
+/**
+ * Meshes the simulation's geometry with the mesh settings of its saved spec: global size (M1.6,
+ * ADR-028), element order and local sizes (M2.8, ADR-045).
+ */
 simulations.post("/:id/mesh", async (c) => {
   const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
   if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
   const size = simulation.spec.mesh.size;
   if (size === null) {
     return c.json({ error: "Enter a global mesh size in the Mesh settings, then generate the mesh." }, 409);
+  }
+  // An unfinished local size would be left out of the mesh without the user knowing.
+  const unfinished = (simulation.spec.mesh.local ?? []).find((l) => l.size === null || l.tags.length === 0);
+  if (unfinished !== undefined) {
+    const { many } = localScopes[unfinished.scope];
+    return c.json(
+      {
+        error: `Local mesh size "${unfinished.name}" is not finished. Give it ${many} and a size, or delete it, then generate the mesh.`,
+      },
+      409,
+    );
   }
   const current = await simulationMesh(c.env.DB, c.var.userId, simulation.id);
   if (current?.status === "meshing") {
@@ -180,7 +198,8 @@ simulations.post("/:id/mesh", async (c) => {
     geometryId: geometry.id,
     scaling: geometry.scaling,
     size,
-    order: MESH_ORDER,
+    order: elementOrder(simulation.spec),
+    local: localSizeParams(simulation.spec),
   });
   return c.json({ mesh: meshView(mesh) } satisfies MeshResponse, 201);
 });
@@ -211,15 +230,14 @@ simulations.post("/:id/runs", async (c) => {
     return c.json({ error: `The setup is not ready to run. ${list}` }, 409);
   }
   const mesh = await simulationMesh(c.env.DB, c.var.userId, simulation.id);
-  const size = simulation.spec.mesh.size;
   if (mesh === null || mesh.status === "failed") {
     return c.json({ error: "Generate the mesh in the Mesh settings, then run the simulation." }, 409);
   }
   if (mesh.status === "meshing") {
     return c.json({ error: "The mesh is still being made. Run the simulation when it has finished." }, 409);
   }
-  if (size === null || size.value !== mesh.size.value || size.unit !== mesh.size.unit) {
-    return c.json({ error: "The mesh size changed after the mesh was made. Generate the mesh again, then run." }, 409);
+  if (!sameMeshSettings(simulation.spec, mesh)) {
+    return c.json({ error: "The mesh settings changed after the mesh was made. Generate the mesh again, then run." }, 409);
   }
   const [latest] = await listRuns(c.env.DB, c.var.userId, simulation.id, 1);
   if (latest?.status === "solving") {

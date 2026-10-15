@@ -4,17 +4,20 @@ import { describe, expect, it } from "vitest";
 import {
   addFixedSupport,
   addLoad,
+  addLocalSize,
   addMaterial,
   addPressure,
   addSupport,
   assignMaterial,
   facesOf,
+  meshIsCurrent,
   meshStatus,
   runStatus,
   removeItem,
   sameSpec,
   setupStatus,
   updateLoad,
+  updateLocalSize,
   updateMaterial,
   updateSupport,
 } from "../src/setup/spec";
@@ -256,10 +259,12 @@ describe("mesh mark", () => {
     geometryId: "g1",
     size: { value: 5, unit: "mm" },
     order: 2,
+    local: [],
     status: "ready",
     problem: null,
     nodeCount: 10,
     elementCount: 4,
+    quality: null,
     createdAt: "2026-10-15T12:00:00.000Z",
     ...overrides,
   });
@@ -284,6 +289,30 @@ describe("mesh mark", () => {
     expect(meshStatus(ok, sized, mesh())).toEqual({ mark: "complete", notes: [] });
     // The same length in another unit is still a different setting from what was meshed.
     expect(meshStatus(ok, sized, mesh({ size: { value: 0.5, unit: "cm" } })).mark).toBe("incomplete");
+  });
+
+  it("marks local sizes and needs a new mesh when the order or a local size changes (M2.8)", () => {
+    const sized: SimulationSpec = { ...empty(), mesh: { size: { value: 5, unit: "mm" } } };
+    const { spec, id } = addLocalSize(sized, "faces", [2]);
+    expect(id).toBe("local-1");
+    expect(facesOf(spec, id)).toEqual([2]);
+    const status = setupStatus(spec, topology);
+    expect(status.get(id)).toEqual({ mark: "incomplete", notes: ["Enter the local size."] });
+    expect(status.get("mesh")).toEqual({ mark: "incomplete", notes: ["Enter the local size."] });
+    const item = spec.mesh.local?.[0];
+    if (!item) throw new Error("no local size");
+    const done = updateLocalSize(spec, { ...item, size: { value: 1, unit: "mm" } });
+    expect(setupStatus(done, topology).get("mesh")?.mark).toBe("complete");
+    const tooLarge = updateLocalSize(spec, { ...item, size: { value: 0.6, unit: "cm" } });
+    expect(setupStatus(tooLarge, topology).get(id)?.mark).toBe("error");
+
+    const made = mesh({ local: [{ scope: "faces", tags: [2], size: { value: 1, unit: "mm" } }] });
+    expect(meshIsCurrent(done, made)).toBe(true);
+    expect(meshIsCurrent({ ...done, mesh: { ...done.mesh, order: 1 } }, made)).toBe(false);
+    expect(meshIsCurrent(removeItem(done, id), made)).toBe(false);
+    expect(meshIsCurrent(removeItem(done, id), mesh())).toBe(true);
+    // Renaming a local size does not change the mesh.
+    expect(meshIsCurrent(updateLocalSize(done, { ...item, name: "Hole", size: { value: 1, unit: "mm" } }), made)).toBe(true);
   });
 
   it("marks a mesh size in the wrong unit kind as an error", () => {

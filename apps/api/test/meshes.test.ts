@@ -64,6 +64,7 @@ const RESULT: MeshResult = {
   nodes: 7108,
   elements: 4000,
   surfaceTriangles: 1720,
+  quality: { shapeMin: 0.21, shapeMean: 0.74, shapeHistogram: [0, 0, 3, 40, 200, 500, 900, 1300, 900, 157], jacobianMin: 0.93 },
   software: { gmsh: "4.15.2", occt: "7.8.1" },
 };
 
@@ -105,10 +106,17 @@ async function geometryRow(): Promise<string> {
   return id;
 }
 
-/** Alice's simulation with the fixture's spec, or with a different mesh size. */
-async function simulation(size: SimulationSpec["mesh"]["size"] = fixture.mesh.size): Promise<string> {
+/** Alice's simulation with the fixture's spec, or with a different mesh size or mesh settings. */
+async function simulation(
+  size: SimulationSpec["mesh"]["size"] = fixture.mesh.size,
+  settings: Partial<SimulationSpec["mesh"]> = {},
+): Promise<string> {
   const geometryId = await geometryRow();
-  const spec = { ...(JSON.parse(JSON.stringify(fixture)) as SimulationSpec), geometryId, mesh: { size } };
+  const spec = {
+    ...(JSON.parse(JSON.stringify(fixture)) as SimulationSpec),
+    geometryId,
+    mesh: { size, ...settings },
+  };
   const response = await call("POST", "/api/simulations", {
     json: { geometryId, name: "Static structural", spec },
     cookie: alice,
@@ -194,8 +202,10 @@ describe("requesting a mesh", () => {
       status: "meshing",
       size: { value: 4, unit: "mm" },
       order: 2,
+      local: [],
       nodeCount: null,
       elementCount: null,
+      quality: null,
     });
     expect(await currentMesh(id)).toEqual(mesh);
 
@@ -213,6 +223,34 @@ describe("requesting a mesh", () => {
     ]);
     const topology = await call("GET", transferPath(job, "topology.json", "download"), { token: TOKEN });
     expect(await topology.json()).toEqual(TOPOLOGY);
+  });
+
+  it("queues the element order and the local sizes of the saved setup (M2.8)", async () => {
+    const id = await simulation(
+      { value: 4, unit: "mm" },
+      {
+        order: 1,
+        local: [{ id: "hole", name: "Hole", scope: "faces", tags: [3, 1], size: { value: 0.5, unit: "mm" } }],
+      },
+    );
+    const mesh = await meshOf(await requestMesh(id));
+    const local = [{ scope: "faces", tags: [1, 3], size: { value: 0.5, unit: "mm" } }];
+    expect(mesh).toMatchObject({ order: 1, local });
+    const job = await claim();
+    expect(job.params).toMatchObject({ order: 1, local });
+  });
+
+  it("refuses to mesh with an unfinished local size", async () => {
+    const id = await simulation(
+      { value: 4, unit: "mm" },
+      { local: [{ id: "edge", name: "Fillet edge", scope: "edges", tags: [], size: { value: 1, unit: "mm" } }] },
+    );
+    const response = await requestMesh(id);
+    expect(response.status).toBe(409);
+    expect((await response.json()) as { error: string }).toEqual({
+      error:
+        'Local mesh size "Fillet edge" is not finished. Give it edges and a size, or delete it, then generate the mesh.',
+    });
   });
 
   it("refuses a second request while the mesh is being made", async () => {
@@ -242,7 +280,13 @@ describe("a finished mesh job", () => {
 
     await runMesh();
     const mesh = await currentMesh(id);
-    expect(mesh).toMatchObject({ id: requested.id, status: "ready", nodeCount: 7108, elementCount: 4000 });
+    expect(mesh).toMatchObject({
+      id: requested.id,
+      status: "ready",
+      nodeCount: 7108,
+      elementCount: 4000,
+      quality: RESULT.quality,
+    });
     const display = await call("GET", `/api/meshes/${requested.id}/display`, { cookie: alice });
     expect(display.status).toBe(200);
     expect(new TextDecoder().decode(await display.arrayBuffer())).toBe("display.bin content");

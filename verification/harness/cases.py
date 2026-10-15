@@ -62,7 +62,7 @@ class Case:
     folder: Path
     unit: str  # the geometry's length unit, confirmed after upload
     faces: dict[str, Box]
-    mesh: dict[str, dict[str, Any]]  # tier -> {value, unit}
+    mesh: dict[str, Any]  # tier -> {value, unit}; "local" -> local size id -> tier -> {value, unit}
     checks: list[Check]
     allowed_warnings: list[re.Pattern[str]]
     spec: dict[str, Any]  # spec.json, faces by name
@@ -104,6 +104,14 @@ def load_case(folder: Path) -> Case:
     for tier in TIERS:
         if tier not in raw["mesh"]:
             raise CaseError(f"{folder.name}: case.yaml has no mesh size for the {tier} tier.")
+    local_ids = {item["id"] for item in spec.get("mesh", {}).get("local", [])}
+    for local_id, tiers in raw["mesh"].get("local", {}).items():
+        if local_id not in local_ids:
+            raise CaseError(
+                f"{folder.name}: case.yaml sizes local size {local_id!r}, which spec.json lacks."
+            )
+        if any(tier not in tiers for tier in TIERS):
+            raise CaseError(f"{folder.name}: local size {local_id!r} needs a size for every tier.")
     checks = []
     for item in raw["checks"]:
         quantity = item["quantity"]
@@ -162,20 +170,34 @@ def name_faces(case: Case, topology: dict[str, Any]) -> dict[str, int]:
     return tags
 
 
+def _tags(case: Case, item: dict[str, Any], names: list[str], tags: dict[str, int]) -> list[int]:
+    unknown = [f for f in names if f not in tags]
+    if unknown:
+        raise CaseError(f"{case.id}: spec.json item {item['id']} names unknown faces {unknown}.")
+    return [tags[f] for f in names]
+
+
 def build_spec(case: Case, tags: dict[str, int], geometry_id: str, tier: str) -> dict[str, Any]:
-    """spec.json with face names turned into tags, the geometry id and the tier's mesh size."""
+    """spec.json with face names turned into tags, the geometry id and the tier's mesh sizes.
+
+    The element order and local sizes come from spec.json (M2.8); a local size on faces names
+    them, a local size on bodies gives body tags, and case.yaml may give a local size per tier.
+    """
     spec = copy.deepcopy(case.spec)
     spec["geometryId"] = geometry_id
     for item in spec["supports"] + spec["loads"]:
         if "faces" not in item:  # gravity and centrifugal loads act on every body
             continue
-        unknown = [f for f in item["faces"] if f not in tags]
-        if unknown:
-            raise CaseError(
-                f"{case.id}: spec.json item {item['id']} names unknown faces {unknown}."
-            )
-        item["faces"] = [tags[f] for f in item["faces"]]
-    spec["mesh"] = {"size": dict(case.mesh[tier])}
+        item["faces"] = _tags(case, item, item["faces"], tags)
+    tiers = case.mesh.get("local", {})
+    for item in spec["mesh"].get("local", []):
+        if item["scope"] == "faces":
+            item["tags"] = _tags(case, item, item["tags"], tags)
+        elif item["scope"] != "bodies":
+            raise CaseError(f"{case.id}: local size {item['id']}: cases name faces or bodies only.")
+        if item["id"] in tiers:
+            item["size"] = dict(tiers[item["id"]][tier])
+    spec["mesh"]["size"] = dict(case.mesh[tier])
     return spec
 
 

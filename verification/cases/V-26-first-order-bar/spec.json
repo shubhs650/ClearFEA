@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "aluminium" }],
+  "materials": [
+    {
+      "id": "aluminium",
+      "name": "Aluminium (case values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 10000, "unit": "ksi" },
+      "poissonsRatio": 0.33
+    }
+  ],
+  "supports": [
+    { "id": "start", "type": "frictionless", "name": "Start", "faces": ["start"] },
+    { "id": "symmetry", "type": "frictionless", "name": "Symmetry planes", "faces": ["y0", "z0"] }
+  ],
+  "loads": [
+    {
+      "id": "pull",
+      "type": "force",
+      "name": "Pull",
+      "faces": ["end"],
+      "x": { "value": 1000, "unit": "lbf" },
+      "y": { "value": 0, "unit": "N" },
+      "z": { "value": 0, "unit": "N" }
+    }
+  ],
+  "mesh": { "size": { "value": 5, "unit": "mm" }, "order": 1, "local": [] }
+}

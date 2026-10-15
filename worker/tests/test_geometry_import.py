@@ -66,6 +66,30 @@ def test_imports_a_millimetre_file_in_metres(mm_step: Path, tmp_path: Path) -> N
     assert topo.bbox == pytest.approx([0, 0, 0, 0.1, 0.05, 0.02], abs=2e-7)
 
 
+def test_lists_every_edge_with_a_polyline_along_it(mm_step: Path, tmp_path: Path) -> None:
+    import_geometry(mm_step, tmp_path, None)
+    topo = load(tmp_path)
+    assert topo.edges is not None
+    hole = next(f.tag for f in topo.faces if f.type == "cylinder")
+    # Twelve box edges, and the hole's two circles and seam (OpenCASCADE may split a circle).
+    box = [e for e in topo.edges if hole not in e.faces]
+    assert len(box) == 12
+    assert sum(e.length for e in box) == pytest.approx(4 * (0.1 + 0.05 + 0.02), rel=1e-9)
+    circles = [
+        e for e in topo.edges if hole in e.faces and e.bbox[2] == pytest.approx(e.bbox[5], abs=1e-6)
+    ]
+    assert sum(e.length for e in circles) == pytest.approx(2 * 2 * math.pi * 0.01, rel=1e-9)
+    for edge in topo.edges:
+        assert all(edge.faces.count(f) == 1 for f in edge.faces)
+        points = [edge.points[k : k + 3] for k in range(0, len(edge.points), 3)]
+        polyline = sum(math.dist(a, b) for a, b in zip(points, points[1:], strict=False))
+        # Straight edges are drawn exactly; 48 chords stand in for each arc.
+        assert polyline == pytest.approx(edge.length, rel=2e-3)
+        for p in points:
+            for axis in range(3):
+                assert edge.bbox[axis] - 2e-7 <= p[axis] <= edge.bbox[axis + 3] + 2e-7
+
+
 def test_display_mesh_covers_every_face(mm_step: Path, tmp_path: Path) -> None:
     output = import_geometry(mm_step, tmp_path, None)
     topo = load(tmp_path)

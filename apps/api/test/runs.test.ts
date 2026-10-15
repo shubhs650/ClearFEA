@@ -68,6 +68,7 @@ const RESULT: MeshResult = {
   nodes: 7108,
   elements: 4000,
   surfaceTriangles: 1720,
+  quality: { shapeMin: 0.2, shapeMean: 0.7, shapeHistogram: [0, 0, 10, 90, 300, 600, 1000, 1200, 700, 100], jacobianMin: 0.9 },
   software: { gmsh: "4.15.2", occt: "7.8.1" },
 };
 
@@ -252,7 +253,15 @@ describe("starting a run", () => {
     const changed = await startRun(id);
     expect(changed.status).toBe(409);
     expect((await changed.json()) as { error: string }).toMatchObject({
-      error: expect.stringContaining("mesh size changed"),
+      error: expect.stringContaining("mesh settings changed"),
+    });
+    // Back to the size the mesh was made with, but first order: still another mesh (M2.8).
+    const order = { ...view.value.simulation.spec, mesh: { ...view.value.simulation.spec.mesh, order: 1 } };
+    expect((await call("PUT", `/api/simulations/${id}/spec`, { json: order, cookie: alice })).status).toBe(200);
+    const reordered = await startRun(id);
+    expect(reordered.status).toBe(409);
+    expect((await reordered.json()) as { error: string }).toMatchObject({
+      error: expect.stringContaining("mesh settings changed"),
     });
   });
 
