@@ -159,12 +159,42 @@ def stretched(root: Path, order: int) -> list[Row]:
     force = sigma * A_SI
     total = [sum(v[i] for v in r.values()) for i in range(3)]
     return [
-        (f"p{order} stretched: von Mises Ed/L at every node", f"{sigma:.6g} Pa", f"worst {worst:.2e}", worst < 1e-4),
-        (f"p{order} stretched: sides contract by nu·eps·y, nu·eps·z", "0 m", f"{lateral:.2e} m", lateral < 1e-5 * STRETCH_MM / 1000),
-        (f"p{order} stretched: end reaction", f"{force:.6g}, 0, 0 N", ", ".join(f"{v:.6g}" for v in r["end"]), rel(r["end"][0], force) < 1e-6 and max(map(abs, r["end"][1:])) < 1e-6 * force),
-        (f"p{order} stretched: start reaction", f"{-force:.6g}, 0, 0 N", ", ".join(f"{v:.6g}" for v in r["start"]), rel(r["start"][0], -force) < 1e-6),
-        (f"p{order} stretched: symmetry planes carry nothing", "0 N", ", ".join(f"{v:.3g}" for v in r["sym"]), max(map(abs, r["sym"])) < 1e-6 * force),
-        (f"p{order} stretched: reactions balance", "0 N", ", ".join(f"{v:.3g}" for v in total), max(map(abs, total)) < 1e-6 * force),
+        (
+            f"p{order} stretched: von Mises Ed/L at every node",
+            f"{sigma:.6g} Pa",
+            f"worst {worst:.2e}",
+            worst < 1e-4,
+        ),
+        (
+            f"p{order} stretched: sides contract by nu·eps·y, nu·eps·z",
+            "0 m",
+            f"{lateral:.2e} m",
+            lateral < 1e-5 * STRETCH_MM / 1000,
+        ),
+        (
+            f"p{order} stretched: end reaction",
+            f"{force:.6g}, 0, 0 N",
+            ", ".join(f"{v:.6g}" for v in r["end"]),
+            rel(r["end"][0], force) < 1e-6 and max(map(abs, r["end"][1:])) < 1e-6 * force,
+        ),
+        (
+            f"p{order} stretched: start reaction",
+            f"{-force:.6g}, 0, 0 N",
+            ", ".join(f"{v:.6g}" for v in r["start"]),
+            rel(r["start"][0], -force) < 1e-6,
+        ),
+        (
+            f"p{order} stretched: symmetry planes carry nothing",
+            "0 N",
+            ", ".join(f"{v:.3g}" for v in r["sym"]),
+            max(map(abs, r["sym"])) < 1e-6 * force,
+        ),
+        (
+            f"p{order} stretched: reactions balance",
+            "0 N",
+            ", ".join(f"{v:.3g}" for v in total),
+            max(map(abs, total)) < 1e-6 * force,
+        ),
     ]
 
 
@@ -179,7 +209,15 @@ def turned(root: Path, order: int) -> list[Row]:
             frictionless("side", [f["y-"]]),
             frictionless("base", [f["z-"]]),
         ],
-        [{"id": "pull", "type": "pressure", "name": "pull", "faces": [f["x+"]], "magnitude": {"value": -PULL_MPA, "unit": "MPa"}}],
+        [
+            {
+                "id": "pull",
+                "type": "pressure",
+                "name": "pull",
+                "faces": [f["x+"]],
+                "magnitude": {"value": -PULL_MPA, "unit": "MPa"},
+            }
+        ],
     )
     fields, result = solve(s, mesh, root / f"turned-p{order}")
     sigma = PULL_MPA * 1e6
@@ -198,22 +236,78 @@ def turned(root: Path, order: int) -> list[Row]:
     force = sigma * A_SI
     r = {x.support_id: x.force for x in result.reactions}
     return [
-        (f"p{order} turned: von Mises = tension at every node", f"{sigma:.6g} Pa", f"worst {worst:.2e}", worst < 1e-4),
-        (f"p{order} turned: displacement field exact", "0 m", f"{off:.2e} m", off < 1e-5 * eps * L / 1000),
-        (f"p{order} turned: start reaction along the bar", f"{-force * c:.6g}, {-force * sn:.6g}, 0 N", ", ".join(f"{v:.6g}" for v in r["start"]), math.dist(r["start"], (-force * c, -force * sn, 0)) < 1e-6 * force),
-        (f"p{order} turned: side and base carry nothing", "0 N", ", ".join(f"{v:.3g}" for v in (*r["side"], *r["base"])), max(map(abs, (*r["side"], *r["base"]))) < 1e-6 * force),
+        (
+            f"p{order} turned: von Mises = tension at every node",
+            f"{sigma:.6g} Pa",
+            f"worst {worst:.2e}",
+            worst < 1e-4,
+        ),
+        (
+            f"p{order} turned: displacement field exact",
+            "0 m",
+            f"{off:.2e} m",
+            off < 1e-5 * eps * L / 1000,
+        ),
+        (
+            f"p{order} turned: start reaction along the bar",
+            f"{-force * c:.6g}, {-force * sn:.6g}, 0 N",
+            ", ".join(f"{v:.6g}" for v in r["start"]),
+            math.dist(r["start"], (-force * c, -force * sn, 0)) < 1e-6 * force,
+        ),
+        (
+            f"p{order} turned: side and base carry nothing",
+            "0 N",
+            ", ".join(f"{v:.3g}" for v in (*r["side"], *r["base"])),
+            max(map(abs, (*r["side"], *r["base"]))) < 1e-6 * force,
+        ),
     ]
 
 
 def refusals(root: Path) -> list[Row]:
     mesh, f = prepare(root, 0.0, 1)
-    pull = [{"id": "p", "type": "pressure", "name": "p", "faces": [f["x+"]], "magnitude": {"value": -1, "unit": "MPa"}}]
+    pull = [
+        {
+            "id": "p",
+            "type": "pressure",
+            "name": "p",
+            "faces": [f["x+"]],
+            "magnitude": {"value": -1, "unit": "MPa"},
+        }
+    ]
     rows = []
     cases = [
-        ("one symmetry plane leaves the part free", spec([frictionless("sym", [f["x-"]])], pull), "slide along y, slide along z and turn about the x axis"),
-        ("all components free holds nothing", spec([displacement("d", [f["x-"]], "free")], pull), "leaves every component free"),
-        ("fixed face and a moved neighbour disagree", spec([{"id": "f", "type": "fixed", "name": "f", "faces": [f["x-"]]}, displacement("d", [f["y-"]], "free", mm(0.1))], pull), "ask it to move in different ways"),
-        ("a prescribed move along a frictionless normal disagrees", spec([frictionless("sym", [f["x-"], f["y-"], f["z-"]]), displacement("d", [f["y+"]], mm(0.1))], pull), "ask it to move in different ways"),
+        (
+            "one symmetry plane leaves the part free",
+            spec([frictionless("sym", [f["x-"]])], pull),
+            "slide along y, slide along z and turn about the x axis",
+        ),
+        (
+            "all components free holds nothing",
+            spec([displacement("d", [f["x-"]], "free")], pull),
+            "leaves every component free",
+        ),
+        (
+            "fixed face and a moved neighbour disagree",
+            spec(
+                [
+                    {"id": "f", "type": "fixed", "name": "f", "faces": [f["x-"]]},
+                    displacement("d", [f["y-"]], "free", mm(0.1)),
+                ],
+                pull,
+            ),
+            "ask it to move in different ways",
+        ),
+        (
+            "a prescribed move along a frictionless normal disagrees",
+            spec(
+                [
+                    frictionless("sym", [f["x-"], f["y-"], f["z-"]]),
+                    displacement("d", [f["y+"]], mm(0.1)),
+                ],
+                pull,
+            ),
+            "ask it to move in different ways",
+        ),
     ]
     for name, s, expected in cases:
         try:

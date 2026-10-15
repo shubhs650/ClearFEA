@@ -135,18 +135,22 @@ def _vector(v: Iterable[float]) -> str:
 
 def _hold_lines(h: Hold) -> tuple[str | None, "_Dofs"]:
     """How a node's Hold is written: the *TRANSFORM data line or None (global axes), and the
-    (degree of freedom, value or None for zero) to hold in that system."""
+    (degree of freedom, value or None for zero) to hold in that system. Values below 1e-12 of
+    the node's largest are rounding left by the solve and written as zero."""
+    size = max((abs(v) for v in h.values), default=0.0)
+
+    def value(v: float) -> str | None:
+        return None if abs(v) <= 1e-12 * size else _number(v)
+
     if h.on_axes or len(h.basis) == 3:
         u = h.displacement()
-        held = sorted({max(range(3), key=lambda i: abs(q[i])) for q in h.basis})
-        if len(h.basis) == 3:
-            held = [0, 1, 2]
-        return None, [(i + 1, _number(u[i] + 0.0) if u[i] != 0.0 else None) for i in held]
+        held = [0, 1, 2]
+        if len(h.basis) < 3:
+            held = sorted({max(range(3), key=lambda i: abs(q[i])) for q in h.basis})
+        return None, [(i + 1, value(u[i])) for i in held]
     a = h.basis[0]
     b = h.basis[1] if len(h.basis) == 2 else _perpendicular(a)
-    return f"{_vector(a)}, {_vector(b)}", [
-        (k + 1, _number(v + 0.0) if v != 0.0 else None) for k, v in enumerate(h.values)
-    ]
+    return f"{_vector(a)}, {_vector(b)}", [(k + 1, value(v)) for k, v in enumerate(h.values)]
 
 
 _Dofs = list[tuple[int, str | None]]
