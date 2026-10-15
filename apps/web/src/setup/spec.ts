@@ -6,10 +6,13 @@
 
 import {
   displacementAxes,
+  hasBodyLoad,
   type IsotropicMaterial,
+  type Load,
+  loadHasFaces,
+  loadKinds,
   type MeshView,
   movesByDisplacement,
-  type PressureLoad,
   type Quantity,
   type RunView,
   type SimulationSpec,
@@ -21,6 +24,9 @@ import {
 
 /** The types of support the setup offers (M1.5 fixed; M2.2 prescribed displacement, frictionless). */
 export type SupportType = Support["type"];
+
+/** The types of load the setup offers (M1.5 pressure; M2.3 force, gravity, centrifugal). */
+export type LoadType = Load["type"];
 
 export type Mark = "complete" | "incomplete" | "error";
 
@@ -56,10 +62,12 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   const errorsOf = (item: string) => errors.get(item) ?? [];
   const result = new Map<string, ItemStatus>();
 
+  const bodyLoad = hasBodyLoad(spec);
   const materials = spec.materials.map((m) => {
     const missing: string[] = [];
     if (m.youngsModulus === null) missing.push("Enter Young's modulus.");
     if (m.poissonsRatio === null) missing.push("Enter Poisson's ratio.");
+    if (bodyLoad && (m.density ?? null) === null) missing.push("Enter the density; gravity and centrifugal loads need it.");
     const s = status(errorsOf(m.id), missing);
     result.set(m.id, s);
     return s;
@@ -96,10 +104,7 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   result.set("supports", worst([status([], spec.supports.length === 0 ? ["Add a support."] : []), ...supports]));
 
   const loads = spec.loads.map((l) => {
-    const missing: string[] = [];
-    if (l.faces.length === 0) missing.push("Pick the faces the pressure acts on.");
-    if (l.magnitude === null) missing.push("Enter the pressure.");
-    const item = status(errorsOf(l.id), missing);
+    const item = status(errorsOf(l.id), loadMissing(l));
     result.set(l.id, item);
     return item;
   });
@@ -109,6 +114,26 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
 
   result.set("mesh", status(errorsOf("mesh"), spec.mesh.size === null ? ["Enter a global mesh size."] : []));
   return result;
+}
+
+/** What a load still needs before a run, as the tree item's notes. */
+function loadMissing(load: Load): string[] {
+  const missing: string[] = [];
+  if (loadHasFaces(load) && load.faces.length === 0) {
+    missing.push(`Pick the faces the ${load.type} acts on.`);
+  }
+  if (load.type === "pressure") {
+    if (load.magnitude === null) missing.push("Enter the pressure.");
+  } else if (load.type === "force" || load.type === "gravity") {
+    for (const axis of displacementAxes) {
+      if (load[axis] === null) missing.push(`Enter the ${axis} component (0 for none).`);
+    }
+  } else {
+    if (load.angularVelocity === null) missing.push("Enter the angular velocity.");
+    if (displacementAxes.some((axis) => load.axisPoint[axis] === null)) missing.push("Enter a point on the axis.");
+    if (displacementAxes.some((axis) => load.axisDirection[axis] === null)) missing.push("Enter the axis direction.");
+  }
+  return missing;
 }
 
 /** True when two quantities are the same value in the same unit, as the user entered them. */
@@ -153,6 +178,7 @@ export function addMaterial(spec: SimulationSpec): { spec: SimulationSpec; id: s
     model: "isotropic_elastic",
     youngsModulus: null,
     poissonsRatio: null,
+    density: null,
   };
   const first = spec.materials.length === 0;
   return {
@@ -189,16 +215,31 @@ export function addFixedSupport(spec: SimulationSpec, faces: readonly number[]):
   return addSupport(spec, "fixed", faces);
 }
 
-export function addPressure(spec: SimulationSpec, faces: readonly number[]): { spec: SimulationSpec; id: string } {
-  const n = nextNumber(spec, "pressure");
-  const load: PressureLoad = {
-    id: `pressure-${n}`,
-    type: "pressure",
-    name: `Pressure ${n}`,
-    faces: [...faces],
-    magnitude: null,
-  };
+/**
+ * Adds a load of the given type, with every value still to enter. A pressure or force takes
+ * the given faces; gravity and a centrifugal load act on every body and have none.
+ */
+export function addLoad(
+  spec: SimulationSpec,
+  type: LoadType,
+  faces: readonly number[],
+): { spec: SimulationSpec; id: string } {
+  const n = nextNumber(spec, type);
+  const base = { id: `${type}-${n}`, name: `${loadKinds[type]} ${n}` };
+  const empty = { x: null, y: null, z: null };
+  const load: Load =
+    type === "pressure"
+      ? { ...base, type, faces: [...faces], magnitude: null }
+      : type === "force"
+        ? { ...base, type, faces: [...faces], ...empty }
+        : type === "gravity"
+          ? { ...base, type, ...empty }
+          : { ...base, type, angularVelocity: null, axisPoint: { ...empty }, axisDirection: { ...empty } };
   return { id: load.id, spec: { ...spec, loads: [...spec.loads, load] } };
+}
+
+export function addPressure(spec: SimulationSpec, faces: readonly number[]): { spec: SimulationSpec; id: string } {
+  return addLoad(spec, "pressure", faces);
 }
 
 export function updateMaterial(spec: SimulationSpec, material: IsotropicMaterial): SimulationSpec {
@@ -209,7 +250,7 @@ export function updateSupport(spec: SimulationSpec, support: Support): Simulatio
   return { ...spec, supports: spec.supports.map((s) => (s.id === support.id ? support : s)) };
 }
 
-export function updateLoad(spec: SimulationSpec, load: PressureLoad): SimulationSpec {
+export function updateLoad(spec: SimulationSpec, load: Load): SimulationSpec {
   return { ...spec, loads: spec.loads.map((l) => (l.id === load.id ? load : l)) };
 }
 
@@ -229,9 +270,9 @@ export function removeItem(spec: SimulationSpec, id: string): SimulationSpec {
   };
 }
 
-/** The faces of a support or load, or null when the id names neither. */
+/** The faces of a support or load, or null when the id names neither or a load without faces. */
 export function facesOf(spec: SimulationSpec, id: string): number[] | null {
-  return [...spec.supports, ...spec.loads].find((item) => item.id === id)?.faces ?? null;
+  return [...spec.supports, ...spec.loads.filter(loadHasFaces)].find((item) => item.id === id)?.faces ?? null;
 }
 
 /** The Run item's mark from the simulation's latest run, or null before the first run. */

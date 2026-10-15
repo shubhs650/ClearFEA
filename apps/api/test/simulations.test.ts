@@ -168,7 +168,7 @@ describe("creating a simulation", () => {
     const other = await create({ geometryId, name: "S", spec: specFor("another") });
     expect(other.status).toBe(400);
     const spec = specFor(geometryId);
-    spec.loads[0] = { ...first(spec.loads), faces: [42] };
+    spec.supports[0] = { ...first(spec.supports), faces: [42] };
     const unknownFace = await create({ geometryId, name: "S", spec });
     expect(unknownFace.status).toBe(400);
     expect(await errorOf(unknownFace)).toMatch(/uses face 42, which the geometry does not have/);

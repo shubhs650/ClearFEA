@@ -15,16 +15,17 @@ import { SimulationTree } from "./layout/SimulationTree";
 import { StatusBar } from "./layout/StatusBar";
 import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
-import { GroupPanel, MaterialPanel, PressurePanel, SupportPanel } from "./setup/ItemPanels";
+import { GroupPanel, LoadPanel, MaterialPanel, SupportPanel } from "./setup/ItemPanels";
 import { MeshPanel } from "./setup/MeshPanel";
 import { type ResultChoice, type ResultUnits, type RunBlocker, RunPanel } from "./setup/RunPanel";
 import {
-  addSupport,
+  addLoad,
   addMaterial,
-  addPressure,
+  addSupport,
   facesOf,
   type Group,
   type ItemStatus,
+  type LoadType,
   meshIsCurrent,
   meshStatus,
   runStatus,
@@ -164,16 +165,16 @@ export function App() {
     edit(next);
   }
 
-  /** Adds an item to a group; a new support or load takes the faces selected in the viewer. */
-  function add(group: Group, type: SupportType = "fixed") {
+  /** Adds an item to a group; a new support, pressure or force takes the faces selected in the viewer. */
+  function add(group: Group, type?: SupportType | LoadType) {
     if (spec === null) return;
     const faces = [...selection].sort((a, b) => a - b);
     const added =
       group === "materials"
         ? addMaterial(spec)
         : group === "supports"
-          ? addSupport(spec, type, faces)
-          : addPressure(spec, faces);
+          ? addSupport(spec, (type ?? "fixed") as SupportType, faces)
+          : addLoad(spec, (type ?? "pressure") as LoadType, faces);
     edit(added.spec);
     setSelected(added.id);
   }
@@ -242,7 +243,7 @@ export function App() {
     const load = spec.loads.find((l) => l.id === selected);
     if (load) {
       return (
-        <PressurePanel key={selected} spec={spec} load={load} status={status} selection={selection} onChange={change} />
+        <LoadPanel key={selected} spec={spec} load={load} status={status} selection={selection} onChange={change} />
       );
     }
     return null;

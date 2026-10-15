@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# V-02: square cantilever in inches, clamped at x = 0, pressed on the last inch of its top.
+# V-02: square cantilever in inches, clamped at x = 0, loaded on the last inch of its top.
 # Reference values and their derivation: reference.md. Layout: verification/README.md.
 id: V-02
 title: Cantilever, end load
 analysis: linear_static
-features: [fixed support, pressure, mixed input units]
+features: [fixed support, force, mixed input units]
 geometry:
   unit: in # declared in the STEP file and confirmed after upload
 # Each face by its bounding box, in the geometry's unit.
@@ -37,3 +37,8 @@ checks:
     box: { min: [4.75, 0, 0], max: [5.25, 0, 1] }
     reference: { value: 13500, unit: psi }
     tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Clamp carries the end load
+    quantity: reaction.y
+    support: fixed-1
+    reference: { value: 500, unit: lbf }
+    tolerance: { coarse: 0.001, full: 0.001 }

@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-10: a square column standing on its fixed base under its own weight, in inches.
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-10
+title: Column under self-weight
+analysis: linear_static
+features: [gravity, fixed support, reaction balance, mixed input units]
+geometry:
+  unit: in
+faces:
+  base: { min: [0, 0, 0], max: [4, 4, 0] }
+  top: { min: [0, 0, 40], max: [4, 4, 40] }
+  side: { min: [4, 0, 0], max: [4, 4, 40] }
+mesh:
+  coarse: { value: 1, unit: in } # about 5,000 elements
+  full: { value: 12.7, unit: mm } # half an inch, about 40,000 elements
+checks:
+  - name: Base carries the weight (ρ g A h)
+    quantity: reaction.z
+    support: base
+    reference: { value: 181.76, unit: lbf }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Axial stress at mid-height (ρ g h/2)
+    quantity: vonMises
+    face: side
+    box: { min: [4, 0, 19], max: [4, 4, 21] }
+    reference: { value: 5.68, unit: psi }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Top shortens by ρ g h²/(2E)
+    quantity: displacement.z
+    face: top
+    reference: { value: -0.00000783244, unit: in }
+    tolerance: { coarse: 0.01, full: 0.005 }

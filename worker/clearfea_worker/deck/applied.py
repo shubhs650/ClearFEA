@@ -15,7 +15,6 @@ from ..spec.simulation_schema import ForceLoad, SimulationSpec
 from .linalg import Vector
 from .loads import body_load, body_nodal_forces, densities, force_nodal_loads
 
-
 #: Nodal force components below this fraction of the largest are rounding and set to zero.
 ROUNDING = 1e-12
 

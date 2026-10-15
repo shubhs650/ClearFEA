@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { emptySimulationSpec, type MeshView, preRunProblems, type RunView, type SimulationSpec } from "@clearfea/spec";
+import { emptySimulationSpec, type Load, type MeshView, preRunProblems, type RunView, type SimulationSpec } from "@clearfea/spec";
 import { describe, expect, it } from "vitest";
 import {
   addFixedSupport,
+  addLoad,
   addMaterial,
   addPressure,
   addSupport,
@@ -33,8 +34,38 @@ function complete(): SimulationSpec {
   spec = addFixedSupport(spec, [1]).spec;
   spec = addPressure(spec, [2, 3]).spec;
   const [load] = spec.loads;
-  if (!load) throw new Error("no load");
+  if (load?.type !== "pressure") throw new Error("no pressure");
   return updateLoad(spec, { ...load, magnitude: { value: 1, unit: "MPa" } });
+}
+
+/** M2.3: a force, gravity and a centrifugal load, each incomplete and complete. */
+function loadCases(full: SimulationSpec): SimulationSpec[] {
+  const n = (value: number) => ({ value, unit: "N" });
+  const g = (value: number) => ({ value, unit: "g" });
+  const mm = (value: number) => ({ value, unit: "mm" });
+  const [material] = full.materials;
+  if (!material) throw new Error("no material");
+  const dense = { ...full, materials: [{ ...material, density: { value: 7850, unit: "kg/m³" } }] };
+  const force = addLoad(full, "force", [2]).spec;
+  const gravity = addLoad(full, "gravity", [2]).spec;
+  const spin = addLoad(dense, "centrifugal", []).spec;
+  const last = (spec: SimulationSpec) => spec.loads.at(-1) as Load;
+  const set = (spec: SimulationSpec, changes: object) => updateLoad(spec, { ...last(spec), ...changes } as Load);
+  return [
+    force,
+    set(force, { x: n(1), y: n(0), z: n(0) }),
+    set(force, { x: n(1), y: n(0), z: n(0), faces: [] }),
+    gravity,
+    set(gravity, { x: g(0), y: g(0), z: g(-1) }),
+    { ...set(gravity, { x: g(0), y: g(0), z: g(-1) }), materials: dense.materials },
+    spin,
+    set(spin, { angularVelocity: { value: 10, unit: "rpm" }, axisPoint: { x: mm(0), y: mm(0), z: mm(0) } }),
+    set(spin, {
+      angularVelocity: { value: 10, unit: "rpm" },
+      axisPoint: { x: mm(0), y: mm(0), z: mm(0) },
+      axisDirection: { x: 0, y: 0, z: 1 },
+    }),
+  ];
 }
 
 function displacementCases(full: SimulationSpec): SimulationSpec[] {
@@ -60,7 +91,7 @@ describe("setup status marks", () => {
     const [material] = full.materials;
     const [support] = full.supports;
     const [load] = full.loads;
-    if (!material || !support || !load) throw new Error("incomplete fixture");
+    if (!material || !support || load?.type !== "pressure") throw new Error("incomplete fixture");
     const cases: SimulationSpec[] = [
       empty(),
       full,
@@ -75,6 +106,7 @@ describe("setup status marks", () => {
       // M2.2: a prescribed displacement asks for every component and one value; one other
       // than zero stands in for a load.
       ...displacementCases(full),
+      ...loadCases(full),
     ];
     for (const spec of cases) {
       expect(allComplete(spec)).toBe(preRunProblems(spec, topology).length === 0);

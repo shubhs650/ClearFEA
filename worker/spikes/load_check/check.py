@@ -334,7 +334,7 @@ def spinning(root: Path, order: int) -> list[Row]:
     r = {x.support_id: x.force for x in result.reactions}
     hoop = RHO * omega**2 * t * (b**3 - a**3) / 3  # each cut plane's x or y reaction
     weight = RHO * G * math.pi / 4 * (b * b - a * a) * t
-    # Plane stress rotating disc (Timoshenko, Theory of Elasticity, section 32): at r = b.
+    # Plane stress rotating disc (Timoshenko and Goodier, rotating discs), at r = b.
     s_b = RHO * omega**2 * ((3 + NU) * a * a + (1 - NU) * b * b) / 4
     p = mesh.positions
     outer = [
