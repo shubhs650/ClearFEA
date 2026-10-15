@@ -45,6 +45,7 @@ const supportAdds: { type: SupportType; label: string }[] = [
   { type: "fixed", label: "Add a fixed support" },
   { type: "displacement", label: "Add a prescribed displacement" },
   { type: "frictionless", label: "Add a frictionless support" },
+  { type: "elastic", label: "Add an elastic support" },
 ];
 
 const loadAdds: { type: LoadType; label: string }[] = [
@@ -187,6 +188,8 @@ const supportHints: Record<SupportType, string> = {
     "Moves the faces by the given amounts along the global x, y and z axes. 0 holds a direction; a free one is left to the solution.",
   frictionless:
     "Holds each flat face against moving along its normal and lets it slide in its plane, both ways (it does not lift off). Use it on symmetry planes.",
+  elastic:
+    "The faces rest on an elastic foundation that pushes back along their normals with a pressure of stiffness × normal displacement, both ways (it does not lift off). It does not stop the faces sliding, so the part may need other supports too.",
 };
 
 /** One global component of a prescribed displacement: free, or a length. */
@@ -246,6 +249,14 @@ export function SupportPanel({
             />
           ))}
         </fieldset>
+      )}
+      {support.type === "elastic" && (
+        <QuantityInput
+          label="Foundation stiffness"
+          kind="foundationStiffness"
+          value={support.stiffness}
+          onChange={(stiffness) => set({ stiffness } as Partial<Support>)}
+        />
       )}
       <FacesField faces={support.faces} selection={selection} onChange={(faces) => set({ faces })} />
       <Remove what="support" onRemove={() => onChange(removeItem(spec, support.id))} />

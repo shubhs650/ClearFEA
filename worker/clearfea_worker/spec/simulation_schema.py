@@ -162,7 +162,26 @@ class FrictionlessSupport(BaseModel):
     faces: FaceTags
 
 
-type Support = FixedSupport | PrescribedDisplacement | FrictionlessSupport
+class ElasticSupport(BaseModel):
+    """
+    The faces rest on an elastic foundation (M2.6): at every point the foundation pushes back along the face's normal with a pressure equal to the stiffness times the displacement along the normal, in both directions (it does not lift off). It does not resist sliding along the faces. Written as grounded springs along the normal at each node, each with the stiffness times the node's share of the face area.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: ItemId
+    type: Literal["elastic"]
+    name: ItemName
+    faces: FaceTags
+    stiffness: OptionalQuantity
+    """
+    Foundation stiffness, the pressure per unit of normal displacement, a foundationStiffness quantity greater than zero.
+    """
+
+
+type Support = FixedSupport | PrescribedDisplacement | FrictionlessSupport | ElasticSupport
 
 
 class PressureLoad(BaseModel):
@@ -357,7 +376,7 @@ class MeshSettings(BaseModel):
 
 class SimulationSpec(BaseModel):
     """
-    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
     """
 
     model_config = ConfigDict(

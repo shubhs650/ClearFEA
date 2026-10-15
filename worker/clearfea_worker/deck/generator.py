@@ -14,6 +14,7 @@ from collections.abc import Iterable
 from ..meshing.volume import NODES_PER_ELEMENT, VolumeMesh
 from ..spec.simulation_schema import (
     CentrifugalLoad,
+    ElasticSupport,
     FixedSupport,
     ForceLoad,
     GravityLoad,
@@ -35,10 +36,13 @@ from .constraints import (
     support_kind,
 )
 from .elements import CCX_NODE_ORDER, ELEMENT_TYPE
-from .linalg import norm
+from .linalg import Vector, norm
 from .loads import (
+    Spring,
     body_loads,
     densities,
+    elastic_springs,
+    elastic_stiffness,
     fixed_support_nodes,
     force_vector,
     hydrostatic_values,
@@ -57,7 +61,13 @@ _PER_LINE = 16
 #: than fixed ones; the result reader shares them between supports (constraints.py).
 REACTION_SET = "RALL"
 
-__all__ = ["DECK_FORMAT", "DeckError", "REACTION_SET", "generate_deck", "support_set_names"]
+__all__ = [
+    "DECK_FORMAT",
+    "DeckError",
+    "REACTION_SET",
+    "generate_deck",
+    "support_set_names",
+]
 
 
 #: CalculiX reads at most this many characters of a number and silently ignores the rest, so
@@ -135,10 +145,20 @@ def support_set_names(spec: SimulationSpec) -> list[str]:
 
 
 def only_fixed_supports(spec: SimulationSpec) -> bool:
-    """True when every support is fixed: the deck then holds each support's node set in all
-    three directions and prints its total reaction (the M1 layout, ADR-029). Otherwise nodes
-    are held through constraint groups and reactions are printed node by node (ADR-039)."""
-    return all(isinstance(s, FixedSupport) for s in spec.supports)
+    """True when every support that holds nodes is fixed (elastic supports hold none): the
+    deck then holds each fixed support's node set in all three directions and prints its total
+    reaction (the M1 layout, ADR-029). Otherwise nodes are held through constraint groups and
+    reactions are printed node by node (ADR-039)."""
+    return all(isinstance(s, (FixedSupport, ElasticSupport)) for s in spec.supports)
+
+
+def _elastic_springs(spec: SimulationSpec, mesh: VolumeMesh) -> list[tuple[int, list[Spring]]]:
+    """(support index, springs) of every elastic support, in spec order."""
+    return [
+        (k, elastic_springs(mesh, s))
+        for k, s in enumerate(spec.supports)
+        if isinstance(s, ElasticSupport)
+    ]
 
 
 def _perpendicular(a: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -223,7 +243,8 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
             "Mesh the simulation again."
         )
     held = holds(spec, mesh)
-    check_held(mesh, held)
+    springs = _elastic_springs(spec, mesh)
+    check_held(mesh, held, [s for _, group in springs for s in group])
     fixed_only = only_fixed_supports(spec)
     normals = {} if fixed_only else frictionless_normals(spec, mesh)
 
@@ -259,7 +280,14 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
             f'** {support_kind(support)} {support.id} "{_label(support.name)}", faces '
             + ", ".join(str(f) for f in support.faces)
         )
-        if isinstance(support, PrescribedDisplacement):
+        if isinstance(support, ElasticSupport):
+            k = elastic_stiffness(support)
+            assert support.stiffness is not None  # elastic_stiffness refuses a missing one
+            line += (
+                f": foundation stiffness {_number(support.stiffness.value)} "
+                f"{support.stiffness.unit} = {_number(k)} N/m^3"
+            )
+        elif isinstance(support, PrescribedDisplacement):
             parts = []
             for axis, component in zip("xyz", (support.x, support.y, support.z), strict=True):
                 if component == "free" or component is None:
@@ -294,6 +322,38 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
         out.append(f"*NSET, NSET={REACTION_SET}")
         out.extend(_lines(n + 1 for n in held))
 
+    # Grounded springs (SPRING1), one element set per direction and stiffness. A direction
+    # along a global axis is that degree of freedom; any other gets an *ORIENTATION whose
+    # local x axis it is, and the spring acts along local direction 1.
+    directions: dict[str, tuple[str | None, int, Vector]] = {}
+    spring_sets: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    element = mesh.element_count
+    for _, group in springs:
+        for spring in group:
+            d = spring.direction
+            key = _vector(d)
+            if key not in directions:
+                if sorted(abs(c) for c in d) == [0.0, 0.0, 1.0]:
+                    directions[key] = (None, max(range(3), key=lambda i: abs(d[i])) + 1, d)
+                else:
+                    named = sum(o is not None for o, _, _ in directions.values())
+                    directions[key] = (f"O{named + 1}", 1, d)
+            element += 1
+            spring_sets.setdefault((key, _number(spring.stiffness)), []).append(
+                (element, spring.node + 1)
+            )
+    if springs:
+        out.append("** Elastic supports: a grounded spring per node and face along the face's")
+        out.append("** normal at the node, stiffness = foundation stiffness x the node's share of")
+        out.append("** the face area (N/m)")
+    for j, members in enumerate(spring_sets.values()):
+        out.append(f"*ELEMENT, TYPE=SPRING1, ELSET=K{j + 1}")
+        out.extend(f"{e}, {n}" for e, n in members)
+    for key, (name, _, d) in directions.items():
+        if name is not None:
+            out.append(f"*ORIENTATION, NAME={name}, SYSTEM=RECTANGULAR")
+            out.append(f"{key}, {_vector(_perpendicular(d))}")
+
     for k, material in enumerate(spec.materials):
         if not any(index == k for _, index, _ in bodies):
             continue
@@ -316,6 +376,11 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
             out.append(_number(rho))
     for tag, _, name in bodies:
         out.append(f"*SOLID SECTION, ELSET=B{tag}, MATERIAL={name}")
+    for j, (key, stiffness) in enumerate(spring_sets):
+        name, dof, _ = directions[key]
+        out.append(f"*SPRING, ELSET=K{j + 1}" + ("" if name is None else f", ORIENTATION={name}"))
+        out.append(str(dof))
+        out.append(stiffness)
 
     # Pressures on the same element face add up (linear analysis), so each face gets one line.
     pressure: dict[tuple[int, int], float] = {}
@@ -424,10 +489,15 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
     out.append("U")
     out.append("*EL FILE")
     out.append("S")
+    # The displacement of an elastic support's nodes gives its reaction (loads/elastic.py).
+    for k, _ in springs:
+        out.append(f"*NODE PRINT, NSET={support_sets[k]}, GLOBAL=YES")
+        out.append("U")
     if fixed_only:
-        for name in support_sets:
-            out.append(f"*NODE PRINT, NSET={name}, TOTALS=ONLY")
-            out.append("RF")
+        for support, name in zip(spec.supports, support_sets, strict=True):
+            if isinstance(support, FixedSupport):
+                out.append(f"*NODE PRINT, NSET={name}, TOTALS=ONLY")
+                out.append("RF")
     else:
         # Node by node, in global axes (a transformed node's forces are otherwise printed in
         # its own axes; checked with ccx 2.21).

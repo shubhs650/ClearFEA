@@ -153,6 +153,21 @@ describe("checkSimulationSpec", () => {
     expect(checkSimulationSpec(s, topology)[0]).toMatch(/^The y component of support "Pull" is given in "MPa", which is not a length unit/);
   });
 
+  it("accepts an elastic support and checks its stiffness (M2.6)", () => {
+    const s = spec();
+    s.supports.push({ id: "soil-1", type: "elastic", name: "Soil", faces: [3], stiffness: { value: 50, unit: "MN/m³" } });
+    expect(validateSimulationSpec(s).ok).toBe(true);
+    expect(checkSimulationSpec(s, topology)).toEqual([]);
+    const { stiffness: _, ...noStiffness } = s.supports[1] as Extract<SimulationSpec["supports"][0], { type: "elastic" }>;
+    expect(validateSimulationSpec({ ...s, supports: [noStiffness] }).ok).toBe(false);
+    s.supports[1] = { ...s.supports[1], stiffness: { value: 50, unit: "MPa" } } as SimulationSpec["supports"][0];
+    expect(checkSimulationSpec(s, topology)[0]).toMatch(
+      /^The stiffness of support "Soil" is given in "MPa", which is not a foundation stiffness unit/,
+    );
+    s.supports[1] = { ...s.supports[1], stiffness: { value: 0, unit: "N/mm³" } } as SimulationSpec["supports"][0];
+    expect(checkSimulationSpec(s, topology)).toEqual(['The stiffness of support "Soil" must be greater than zero; it is 0 N/mm³.']);
+  });
+
   it("refuses a frictionless support on a face that is not flat", () => {
     const s = spec();
     s.supports.push({ id: "plane-1", type: "frictionless", name: "Symmetry", faces: [1, 2, 3] });

@@ -15,6 +15,7 @@ from clearfea_worker.results import (
     DatError,
     FrdError,
     read_fields,
+    read_node_displacements,
     read_node_forces,
     read_reaction_totals,
     read_results,
@@ -23,7 +24,7 @@ from clearfea_worker.results import (
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
 from .deck_meshes import two_tets
-from .test_deck import fixture_spec, supports_spec
+from .test_deck import elastic_spec, elastic_sym_spec, fixture_spec, supports_spec
 
 SOLVE = Path(__file__).resolve().parent / "fixtures" / "solve"
 
@@ -207,3 +208,49 @@ def test_each_support_gets_the_force_along_the_directions_it_holds() -> None:
     got = {r.support_id: r.force for r in result.reactions}
     assert got["sym"] == pytest.approx(sym, abs=1e-9)
     assert got["move"] == pytest.approx(move, abs=1e-9)
+
+
+# --- Elastic support (M2.6, ADR-043) ---
+
+#: What CalculiX 2.21 wrote for the elastic-sym-c3d10 deck snapshot (elastic supports on faces
+#: 2 and 3, a symmetry plane on face 1, a force of (10, 100, -50) N on face 4) and for the
+#: elastic-c3d10 one (the fixture's fixed face 1 and pressure, an elastic support on face 4).
+ELASTIC = Path(__file__).resolve().parent / "fixtures" / "elastic"
+ELASTIC_FIXED = Path(__file__).resolve().parent / "fixtures" / "elastic-fixed"
+
+
+def test_reads_the_displacement_of_every_node_of_a_set() -> None:
+    u = read_node_displacements(ELASTIC / "job.dat", "S2")
+    assert sorted(u) == [0, 1, 2, 5, 6, 7]
+    assert u[0][2] == pytest.approx(4.95e-4, rel=1e-3)
+    with pytest.raises(DatError, match="no displacements for set S9"):
+        read_node_displacements(ELASTIC / "job.dat", "S9")
+
+
+def test_an_elastic_support_reacts_with_the_force_of_its_springs() -> None:
+    spec = SimulationSpec.model_validate(elastic_sym_spec())
+    mesh = two_tets(order=2)
+    _, result = read_results(spec, mesh, ELASTIC / "job.frd", ELASTIC / "job.dat", "")
+    got = {r.support_id: r.force for r in result.reactions}
+    # The base holds z only: 2000 MN/m³ under its 50 mm², a third on each mid-edge node,
+    # pulling back against the slope's lift.
+    u = read_node_displacements(ELASTIC / "job.dat", "S2")
+    base = sum(2e9 * 5e-5 / 3 * u[n][2] for n in (5, 6, 7))
+    assert got["base"] == pytest.approx([0.0, 0.0, -base], abs=1e-9)
+    # The slope's two faces lean, so they take the y load and lift z back. Every support
+    # together balances the applied force, the symmetry plane taking x.
+    total = [sum(r.force[i] for r in result.reactions) for i in range(3)]
+    assert total == pytest.approx([-10.0, -100.0, 50.0], abs=1e-4)
+    assert got["base"][2] == pytest.approx(-50.0, rel=1e-5)
+    assert got["sym"][1:] == [0.0, 0.0]
+
+
+def test_an_elastic_support_beside_fixed_ones_keeps_the_fixed_totals() -> None:
+    spec = SimulationSpec.model_validate(elastic_spec())
+    mesh = two_tets(order=2)
+    dat = ELASTIC_FIXED / "job.dat"
+    _, result = read_results(spec, mesh, ELASTIC_FIXED / "job.frd", dat, "")
+    got = {r.support_id: r.force for r in result.reactions}
+    assert got["fixed-1"] == list(read_reaction_totals(dat, ["S1"])["S1"])
+    # Face 4 meets the fixed face, so its springs hardly move.
+    assert max(abs(f) for f in got["elastic-1"]) < 1e-2

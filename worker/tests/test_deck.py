@@ -214,6 +214,58 @@ def hydrostatic_spec() -> dict:
     return spec
 
 
+def elastic_spec() -> dict:
+    """An elastic support (M2.6) on face 4, two element faces that meet at an angle, in
+    lbf/in³, beside the fixture's fixed face 1 and pressure on faces 2 and 3."""
+    spec = fixture_spec()
+    spec["supports"].append(
+        {
+            "id": "elastic-1",
+            "type": "elastic",
+            "name": "Foundation",
+            "faces": [4],
+            "stiffness": {"value": 500, "unit": "lbf/in³"},
+        }
+    )
+    return spec
+
+
+def elastic_sym_spec() -> dict:
+    """Elastic supports on faces 2 (z = 0) and 3 with a symmetry plane on face 1 (x = 0) and
+    no fixed face, so the deck holds nodes through groups and the springs alone stop the
+    part sliding along y and z; a force on face 4 in N."""
+    spec = fixture_spec()
+    spec["supports"] = [
+        {"id": "sym", "type": "frictionless", "name": "Symmetry", "faces": [1]},
+        {
+            "id": "base",
+            "type": "elastic",
+            "name": "Base",
+            "faces": [2],
+            "stiffness": {"value": 2000, "unit": "MN/m³"},
+        },
+        {
+            "id": "slope",
+            "type": "elastic",
+            "name": "Slope",
+            "faces": [3],
+            "stiffness": {"value": 200000, "unit": "lbf/in³"},
+        },
+    ]
+    spec["loads"] = [
+        {
+            "id": "force-1",
+            "type": "force",
+            "name": "Push",
+            "faces": [4],
+            "x": {"value": 10, "unit": "N"},
+            "y": {"value": 100, "unit": "N"},
+            "z": {"value": -50, "unit": "N"},
+        }
+    ]
+    return spec
+
+
 def two_body_loads_spec() -> dict:
     return loads_spec() | {
         "bodies": [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
@@ -284,6 +336,9 @@ SNAPSHOT_CASES = {
     "loads-two-bodies-c3d4": (two_body_loads_spec, lambda: two_tets(order=1, bodies=2)),
     "remote-c3d10": (remote_spec, lambda: two_tets(order=2)),
     "hydrostatic-c3d10": (hydrostatic_spec, lambda: two_tets(order=2)),
+    "elastic-c3d10": (elastic_spec, lambda: two_tets(order=2)),
+    "elastic-sym-c3d10": (elastic_sym_spec, lambda: two_tets(order=2)),
+    "elastic-sym-c3d4": (elastic_sym_spec, lambda: two_tets(order=1)),
 }
 
 
@@ -681,3 +736,95 @@ def test_every_held_node_is_in_the_reaction_set_and_in_one_group() -> None:
     assert len(grouped) == len(set(grouped))
     assert sorted(grouped) == sets["RALL"]
     assert set(sets["RALL"]) == set(sets["S1"]) | set(sets["S2"])
+
+
+# --- Elastic support (M2.6, ADR-043) ---
+
+
+def test_elastic_springs_lie_along_the_normal_and_add_up_to_stiffness_times_area() -> None:
+    from clearfea_worker.deck.loads import elastic_springs
+    from clearfea_worker.spec.simulation_schema import ElasticSupport
+
+    for order in (1, 2):
+        mesh = two_tets(order=order)
+        support = ElasticSupport.model_validate(elastic_sym_spec()["supports"][1])
+        springs = elastic_springs(mesh, support)
+        # Face 2 is the triangle A B C at z = 0, area 50 mm², at 2000 MN/m³.
+        assert sum(s.stiffness for s in springs) == pytest.approx(2e9 * 5e-5, rel=1e-12)
+        assert {s.direction for s in springs} == {(0.0, 0.0, -1.0)}
+        # A flat six-node triangle's corners have no share of the area, so no spring.
+        assert len(springs) == 3
+
+
+def test_a_node_on_two_faces_of_an_elastic_support_gets_a_spring_for_each() -> None:
+    from clearfea_worker.deck.loads import elastic_springs
+    from clearfea_worker.spec.simulation_schema import ElasticSupport
+
+    support = ElasticSupport.model_validate(elastic_sym_spec()["supports"][1] | {"faces": [2, 1]})
+    springs = elastic_springs(two_tets(order=1), support)
+    # A and C are on both faces; B is only on face 2 and D only on face 1.
+    at = {}
+    for s in springs:
+        at.setdefault(s.node, []).append(s.direction)
+    assert at[0] == [(0.0, 0.0, -1.0), (-1.0, 0.0, 0.0)]
+    assert at[1] == [(0.0, 0.0, -1.0)]
+    assert at[3] == [(-1.0, 0.0, 0.0)]
+
+
+def test_elastic_springs_are_spring1_elements_along_the_normals() -> None:
+    text = deck(elastic_sym_spec(), two_tets(order=2))
+    # 2000 MN/m³ = 2e9 N/m³; a third of face 2's 50 mm² on each mid-edge node, along z.
+    assert "foundation stiffness 2000.0 MN/m³ = 2000000000.0 N/m^3" in text
+    assert "*SPRING, ELSET=K1\n3\n33333.33333333" in text
+    # Face 3 leans, so its springs act along local direction 1 of an orientation.
+    assert "*ORIENTATION, NAME=O1, SYSTEM=RECTANGULAR\n0.5773502691896" in text
+    assert ", ORIENTATION=O1\n1\n" in text
+    assert "*NODE PRINT, NSET=S2, GLOBAL=YES\nU\n" in text
+    # No extra nodes: the result file holds the mesh's nodes only.
+    assert "*NODE FILE\nU\n*EL FILE\nS\n" in text
+    assert text.count("*NODE,") == 1
+
+
+def test_elastic_support_with_fixed_supports_keeps_their_totals() -> None:
+    text = deck(elastic_spec(), two_tets(order=2))
+    assert "*NODE PRINT, NSET=S1, TOTALS=ONLY\nRF\n" in text
+    assert "NSET=S2, TOTALS=ONLY" not in text
+    assert "RALL" not in text
+
+
+def elastic_support_spec(change) -> dict:  # type: ignore[no-untyped-def]
+    spec = elastic_sym_spec()
+    change(spec["supports"][1])
+    return spec
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda s: s.update(faces=[]), "Base has no faces"),
+        (
+            lambda s: s.update(stiffness=None),
+            'Elastic support "Base": foundation stiffness has no value',
+        ),
+        (
+            lambda s: s.update(stiffness={"value": 0, "unit": "N/m³"}),
+            "the foundation stiffness must be greater than zero",
+        ),
+        (
+            lambda s: s.update(stiffness={"value": 1, "unit": "Pa"}),
+            "'Pa' is not a foundation stiffness unit",
+        ),
+    ],
+)
+def test_refuses_elastic_supports_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(DeckError) as error:
+        deck(elastic_support_spec(change), two_tets(order=2))
+    assert message in str(error.value)
+
+
+def test_an_elastic_support_on_one_flat_face_leaves_the_part_free_to_slide() -> None:
+    spec = elastic_sym_spec()
+    spec["supports"] = [spec["supports"][1]]
+    with pytest.raises(DeckError) as error:
+        deck(spec, two_tets(order=2))
+    assert "slide along x, slide along y and turn about the z axis" in str(error.value)

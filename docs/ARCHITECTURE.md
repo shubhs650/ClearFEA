@@ -192,7 +192,7 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 | --- | --- |
 | Fixed support, prescribed displacement | `*BOUNDARY` on the face's node set (fixed); a prescribed displacement's components through the per-node constraint groups below (ADR-039) |
 | Frictionless / symmetry support | Every support becomes constraints u·d = v per node; nodes with the same holds form a group, held by `*BOUNDARY` on global degrees of freedom or, for directions off the axes, through a `*TRANSFORM` of the group (one per node). Supports that disagree at a shared node, and supports that leave a rigid-body motion free, are refused (ADR-039). Planar faces only at the gate |
-| Elastic support | Grounded spring elements per node, stiffness weighted by nodal area |
+| Elastic support | Normal only (a Winkler foundation): a grounded `SPRING1` per node and face, along the node's share of the face normal ∫ N n dA, stiffness k ∫ N dA, through an `*ORIENTATION` unless along an axis; its reaction is −Σ k_i d_i (d_i · u_i) from the nodes' printed displacements (ADR-043) |
 | Force on a face | A uniform traction F / A over all the load's faces, written as consistent nodal loads (`*CLOAD`) that sum to F (ADR-040) |
 | Pressure | `*DLOAD` on element faces |
 | Remote force and moment | The force and moment at the reference point carried to the faces as the statically equivalent linear traction F/A + α × (x − c), J α = M + (P − c) × F (a distributing connection with weights by area), written as consistent nodal loads (`*CLOAD`) that add up to F with the moment M about P; no reference node (ADR-041) |
@@ -206,7 +206,7 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 | Radiation to ambient | `*RADIATE` with the absolute-zero and Stefan-Boltzmann constants set for SI |
 | Thermal stress | Heat transfer step followed by a static step in one deck |
 | Modal | `*FREQUENCY` step |
-| Reactions | Reaction force totals per support node set when all supports are fixed; otherwise the force at each held node, shared between the supports holding it along their own directions (ADR-039). Force, remote, hydrostatic and body loads applied at held nodes are taken out first, since CalculiX counts them in RF (ADR-040) |
+| Reactions | Reaction force totals per support node set when all supports are fixed; otherwise the force at each held node, shared between the supports holding it along their own directions (ADR-039). Force, remote, hydrostatic and body loads applied at held nodes are taken out first, since CalculiX counts them in RF (ADR-040). An elastic support's reaction is its springs' force from the displacements (ADR-043) |
 
 ### Solver configuration
 

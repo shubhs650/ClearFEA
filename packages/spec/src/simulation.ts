@@ -18,6 +18,7 @@ export const supportKinds = {
   fixed: "Fixed support",
   displacement: "Prescribed displacement",
   frictionless: "Frictionless support",
+  elastic: "Elastic support",
 } as const;
 
 /** The global components of a prescribed displacement, a force, gravity or a point. */
@@ -66,6 +67,7 @@ const kindNames = {
   density: "a density",
   acceleration: "an acceleration",
   angularVelocity: "an angular velocity",
+  foundationStiffness: "a foundation stiffness",
 } as const;
 
 function unitProblem(
@@ -140,6 +142,9 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
     add(material.id, unitProblem(material.density ?? null, "density", `The density of material "${material.name}"`, true));
   }
   for (const support of spec.supports) {
+    if (support.type === "elastic") {
+      add(support.id, unitProblem(support.stiffness, "foundationStiffness", `The stiffness of support "${support.name}"`, true));
+    }
     if (support.type !== "displacement") continue;
     for (const axis of displacementAxes) {
       const component = support[axis];

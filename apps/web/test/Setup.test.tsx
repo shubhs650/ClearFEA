@@ -301,6 +301,33 @@ describe("setup tree", () => {
     );
   });
 
+  it("adds an elastic support with a foundation stiffness (M2.6)", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation()], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+    act(() => scene.events[0]?.onPick(3));
+    fireEvent.click(tree().getByRole("button", { name: "Supports, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add an elastic support" }));
+    expect(settings().getByRole("heading", { name: "Elastic support" })).toBeTruthy();
+    expect(settings().getByText(/does not stop the faces sliding/)).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Elastic support 1, incomplete" })).toBeTruthy();
+    expect(settings().getByText("Enter the foundation stiffness.")).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Foundation stiffness"), { target: { value: "20" } });
+    expect(tree().getByRole("button", { name: "Elastic support 1, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.supports).toEqual([
+        {
+          id: "elastic-1",
+          type: "elastic",
+          name: "Elastic support 1",
+          faces: [3],
+          stiffness: { value: 20, unit: "N/mm³" },
+        },
+      ]),
+    );
+  });
+
   it("adds a force, gravity and a centrifugal load, and asks the material for a density (M2.3)", async () => {
     const { sent, route } = saves();
     const spec: SimulationSpec = {

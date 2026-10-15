@@ -51,7 +51,7 @@ export type DisplacementComponent = Quantity | "free" | null;
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "Support".
  */
-export type Support = FixedSupport | PrescribedDisplacement | FrictionlessSupport;
+export type Support = FixedSupport | PrescribedDisplacement | FrictionlessSupport | ElasticSupport;
 /**
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "Load".
@@ -189,6 +189,22 @@ export interface FrictionlessSupport {
   type: "frictionless";
   name: ItemName;
   faces: FaceTags;
+}
+/**
+ * The faces rest on an elastic foundation (M2.6): at every point the foundation pushes back along the face's normal with a pressure equal to the stiffness times the displacement along the normal, in both directions (it does not lift off). It does not resist sliding along the faces. Written as grounded springs along the normal at each node, each with the stiffness times the node's share of the face area.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "ElasticSupport".
+ */
+export interface ElasticSupport {
+  id: ItemId;
+  type: "elastic";
+  name: ItemName;
+  faces: FaceTags;
+  /**
+   * Foundation stiffness, the pressure per unit of normal displacement, a foundationStiffness quantity greater than zero.
+   */
+  stiffness: Quantity | null;
 }
 /**
  * A uniform pressure normal to each face. A positive magnitude pushes on the face towards the body (along the inward normal), as a fluid does; a negative one pulls (suction).
@@ -385,7 +401,7 @@ export interface MeshSettings {
   size: Quantity | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -702,7 +718,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -759,6 +775,7 @@ export const validateFixedSupport = validator<FixedSupport>(schema, "FixedSuppor
 export const validateDisplacementComponent = validator<DisplacementComponent>(schema, "DisplacementComponent");
 export const validatePrescribedDisplacement = validator<PrescribedDisplacement>(schema, "PrescribedDisplacement");
 export const validateFrictionlessSupport = validator<FrictionlessSupport>(schema, "FrictionlessSupport");
+export const validateElasticSupport = validator<ElasticSupport>(schema, "ElasticSupport");
 export const validateSupport = validator<Support>(schema, "Support");
 export const validatePressureLoad = validator<PressureLoad>(schema, "PressureLoad");
 export const validateForceLoad = validator<ForceLoad>(schema, "ForceLoad");

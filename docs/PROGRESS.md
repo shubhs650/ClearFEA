@@ -63,7 +63,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M2.3 Force on a face; gravity; centrifugal load
 - [x] M2.4 Remote force and moment through a reference point
 - [x] M2.5 Hydrostatic pressure (fluid density, free-surface level, direction)
-- [ ] M2.6 Elastic support
+- [x] M2.6 Elastic support
 - [ ] M2.7 Uniform temperature change
 - [ ] M2.8 Local mesh sizes on faces, edges and bodies; element order choice; quality summary
 - [ ] M2.9 Material library (generic values with sources), custom materials saved per user
@@ -86,8 +86,8 @@ Things only the maintainer can do.
 | Tier | Last run | Result |
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
-| Nightly coarse | 2026-10-15 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-01, V-02, V-04, V-05, V-06, V-09, V-10 and V-24, 72 of 72 checks (M2.5) |
-| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5) |
+| Nightly coarse | 2026-10-15 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-01, V-02, V-04, V-05, V-06, V-07, V-09, V-10, V-24 and V-25, 92 of 92 checks (M2.6) |
+| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6) |
 | Browser end-to-end | 2026-10-15 (`make e2e`, run locally) | Green, E-01 (M1.14) |
 | Phase end (CI) | 2026-10-15 (`phase-end.yml` by hand on main 4e42c8d, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); closed M1) | Green: full tier V-01 and V-02, 15 of 15 checks; E-01 |
 
@@ -159,6 +159,8 @@ Written by the last session for the next one. Replace, do not append.
 
 > M2.5 (2026-10-15): hydrostatic pressure (ADR-042, accepted under Shubham's standing M2 instruction, pending his review). Spec: load type `hydrostatic` (faces, `fluidDensity`, `gravity` as three accelerations, `freeSurface` as a point); p = ρ g · (x − s) below the free surface, zero above, pushing into the body; still version 1. Worker: `deck/loads/hydrostatic.py` writes consistent nodal loads (`*CLOAD`, the force's seven-point rule, exact on flat faces under water) and splits element faces the free surface crosses up to six times, so the total is right to a few parts in a million; a load whose faces are all above the surface is refused. Not `*DLOAD` as ARCHITECTURE planned, so `deck/applied.py` takes hydrostatic load on held nodes out of the reactions like a force (ARCHITECTURE section 7 updated). Other decks are byte-identical (snapshots unchanged; new snapshot `hydrostatic-c3d10`). Web: "Add a hydrostatic pressure" under Loads with fluid density, gravity on the fluid and a free-surface point; component fieldsets no longer overflow the panel with wide unit lists (`min-width: 0`). Harness: the balance check integrates hydrostatic pressure exactly over each surface triangle's wet part. Verification: new V-05 (tank wall strip, water to 100 mm below its top, ν = 0) passes coarse and full; `worker/spikes/load_check/` gained a sunk column (Archimedes, wet held base) and a column wet on one side (55 of 55); the other spikes still pass. Surprise: after confirming the unit of a tall thin part, the viewer's first framing was zoomed far in until "Reset view" (seen on the 100 × 20 × 500 mm wall; not investigated). Screenshots in the project's `m2.5/` folder (the screenshot model is clamped at z = 500 mm with gravity along +z, since the base faces away from the starting camera).
 
+> M2.6 (2026-10-15): elastic support (ADR-043, accepted under Shubham's standing M2 instruction, pending his review). Spec: support type `elastic` (faces, `stiffness` a foundationStiffness quantity); normal only (a Winkler foundation, it does not stop sliding), both ways; still version 1. Worker: `deck/loads/elastic.py` gives each node of each face a spring along d_i = ∫ N_i n dA normalised with stiffness k ∫ N_i dA (seven-point rule; flat six-node corners get none), written as `SPRING1` elements, through an `*ORIENTATION` per direction unless along an axis; the rigid-body check counts springs as holding along their direction, so an elastic support alone on one flat face is refused by name. The deck prints `U` for each elastic support's node set and `results/summary.py` sums −k_i d_i (d_i · u_i) for its reaction. Decks without an elastic support are byte-identical (snapshots unchanged; new snapshots `elastic-c3d10`, `elastic-sym-c3d10`, `elastic-sym-c3d4`; solved fixtures in `worker/tests/fixtures/elastic*`). Web: "Add an elastic support" under Supports with a foundation stiffness. Verification: new V-07 (block on 2,000 lbf/in³ with two symmetry planes, 0.1 percent) and new V-25 (V-09's quarter tube in a stiff sleeve against Lamé with σr(b) = −k u(b)); `worker/spikes/support_check/` gained a turned bar pressed into a foundation on a leaning face (33 of 33); deck, solve and load checks still pass. Surprises: CalculiX counts a `SPRINGA` element in the average of nodal stresses with zero stress (halving the stress at its nodes; `extrapolate.f`) and works out its force for RF from deformed positions, so the first version (SPRINGA to a held far node) was replaced by `SPRING1`. Open: springs are not drawn in the viewer; no tangential stiffness. Screenshots in the project's `m2.6/` folder.
+
 > Still to watch from the ADR review: browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -174,6 +176,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-15
 
+- M2.6: elastic support as normal-only grounded springs (SPRING1 along each node's share of the face normal, stiffness k times its share of the area), its reaction from the nodes' displacements; new V-07 block and V-25 tube in an elastic sleeve pass both tiers and the support check's foundation case is exact at every node (ADR-043 accepted under the standing M2 instruction).
 - M2.5: hydrostatic pressure from a fluid density, gravity and a free-surface point, written as consistent nodal loads with faces the surface crosses split; new V-05 tank wall passes both tiers and the load check's sunk and side-wet columns balance (ADR-042 accepted under the standing M2 instruction).
 - M2.4: remote force and moment through a reference point, carried to the faces as the statically equivalent linear traction (consistent nodal loads, no reference node); new V-04 passes both tiers and the load check's remote case balances force and moment node by node (ADR-041 accepted under the standing M2 instruction).
 - M2.3: force on faces as a uniform traction, gravity and centrifugal load as CalculiX body loads with material density; applied load taken out of reactions at held nodes; V-02 switched to a face force, new V-06 and V-10 pass (ADR-040 accepted under the standing M2 instruction).
