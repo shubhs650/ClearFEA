@@ -612,7 +612,7 @@ class MeshView(BaseModel):
 
 class MeshResponse(BaseModel):
     """
-    Answer to POST /api/simulations/{id}/mesh (HTTP 201) and GET /api/meshes/{id}.
+    Answer to POST /api/simulations/{id}/mesh (HTTP 201 for a new mesh, 200 when a mesh with the same settings hash is reused, ADR-047) and GET /api/meshes/{id}.
     """
 
     model_config = ConfigDict(
@@ -620,6 +620,10 @@ class MeshResponse(BaseModel):
         populate_by_name=True,
     )
     mesh: MeshView
+    reused: bool | None = None
+    """
+    Present on POST /api/simulations/{id}/mesh: true when an existing mesh of the same geometry, unit and mesh settings was reused, so no mesh job was queued or charged.
+    """
 
 
 class SimulationMeshResponse(BaseModel):

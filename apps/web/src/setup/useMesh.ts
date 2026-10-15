@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The open simulation's mesh (M1.6): loads its latest mesh, requests a new one, and follows a
-// mesh that is being made until it is ready or failed.
+// mesh that is being made until it is ready or failed. Remembers the id of a mesh the last
+// request reused instead of making (M2.10), so the panel can say so.
 
 import type { MeshView } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
@@ -20,6 +21,7 @@ export function useMesh(simulationId: string | null, onSignedOut: (problem: stri
   const [state, setState] = useState<MeshState>({ kind: "none" });
   const [requesting, setRequesting] = useState(false);
   const [requestProblem, setRequestProblem] = useState<string>();
+  const [reusedId, setReusedId] = useState<string | null>(null);
 
   const failed = useCallback(
     (result: ApiResult<unknown>): string | null => {
@@ -32,6 +34,7 @@ export function useMesh(simulationId: string | null, onSignedOut: (problem: stri
 
   useEffect(() => {
     setRequestProblem(undefined);
+    setReusedId(null);
     if (simulationId === null) {
       setState({ kind: "none" });
       return;
@@ -80,9 +83,11 @@ export function useMesh(simulationId: string | null, onSignedOut: (problem: stri
       return;
     }
     setRequestProblem(undefined);
-    setState({ kind: "loaded", mesh: result.value });
+    setReusedId(result.value.reused ? result.value.mesh.id : null);
+    setState({ kind: "loaded", mesh: result.value.mesh });
   }, [simulationId, failed]);
 
   const mesh = state.kind === "loaded" ? state.mesh : null;
-  return { state, mesh, generate, requesting, requestProblem };
+  const reused = mesh !== null && mesh.id === reusedId;
+  return { state, mesh, generate, requesting, requestProblem, reused };
 }

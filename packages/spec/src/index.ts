@@ -13,6 +13,8 @@ export {
   materialProblems,
   localScopes,
   localSizeParams,
+  MESH_SETTINGS_VERSION,
+  meshSettingsText,
   sameMeshSettings,
   type SpecProblem,
   simulationSpecProblems,

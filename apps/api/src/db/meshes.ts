@@ -1,9 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Meshes (docs/ARCHITECTURE.md section 4, ADR-028). Functions used on behalf of a user take the
 // user id and filter on owner_id. recordMeshOutcome is called for a job the worker holds, and
-// touches only that job's own mesh.
+// touches only that job's own mesh. A mesh is reused, not made again, when a ready or
+// still-meshing mesh of the user has the same settings hash (M2.10, ADR-047).
 
-import type { ElementOrder, LocalSizeParams, MeshQuality, MeshResult, MeshStatus, Quantity } from "@clearfea/spec";
+import {
+  type ElementOrder,
+  type LocalSizeParams,
+  type MeshQuality,
+  type MeshResult,
+  type MeshStatus,
+  meshSettingsText,
+  type Quantity,
+} from "@clearfea/spec";
 import { getJob, type Job, newJob } from "./jobs";
 
 export interface Mesh {
@@ -65,22 +74,62 @@ export function meshKey(ownerId: string, meshId: string, file: MeshFile): string
   return `owners/${ownerId}/meshes/${meshId}/${file}`;
 }
 
+/** What a mesh is made from: the geometry at its scaling, and the mesh settings. */
+export interface MeshRequest {
+  geometryId: string;
+  scaling: number;
+  size: Quantity;
+  order: ElementOrder;
+  local: LocalSizeParams[];
+}
+
+/** The settings hash of a mesh request: SHA-256 of meshSettingsText, in hex. */
+export async function meshSettingsHash(request: MeshRequest): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(meshSettingsText(request)));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 /**
- * Records a mesh, queues its mesh job and makes it the simulation's mesh, in one batch so a
- * mesh never exists without its job. The caller has checked that the simulation is the
- * user's and is on this geometry.
+ * The user's newest mesh with this settings hash that is ready or still being made, or null.
+ * A failed mesh is never reused, so asking again retries it.
+ */
+export async function findReusableMesh(db: D1Database, userId: string, hash: string): Promise<Mesh | null> {
+  const row = await db
+    .prepare(
+      `SELECT * FROM meshes WHERE owner_id = ? AND settings_hash = ? AND status IN ('ready', 'meshing')
+        ORDER BY status = 'ready' DESC, created_at DESC, id DESC LIMIT 1`,
+    )
+    .bind(userId, hash)
+    .first<MeshRow>();
+  return row === null ? null : toMesh(row);
+}
+
+/**
+ * Makes an existing mesh of the user the simulation's mesh, without a new job or a charge. The
+ * mesh must be on the simulation's geometry and not failed; returns false when it is not.
+ */
+export async function linkMesh(db: D1Database, userId: string, simulationId: string, meshId: string): Promise<boolean> {
+  const linked = await db
+    .prepare(
+      `UPDATE simulations SET mesh_id = ?, updated_at = ${NOW}
+        WHERE id = ? AND owner_id = ?
+          AND geometry_id = (SELECT geometry_id FROM meshes
+                              WHERE id = ? AND owner_id = ? AND status IN ('ready', 'meshing'))`,
+    )
+    .bind(meshId, simulationId, userId, meshId, userId)
+    .run();
+  return linked.meta.changes === 1;
+}
+
+/**
+ * Records a mesh with its settings hash, queues its mesh job and makes it the simulation's
+ * mesh, in one batch so a mesh never exists without its job. The caller has checked that the
+ * simulation is the user's and is on this geometry.
  */
 export async function createMesh(
   db: D1Database,
   userId: string,
-  request: {
-    simulationId: string;
-    geometryId: string;
-    scaling: number;
-    size: Quantity;
-    order: ElementOrder;
-    local: LocalSizeParams[];
-  },
+  request: MeshRequest & { simulationId: string; hash: string },
 ): Promise<{ mesh: Mesh; job: Job }> {
   const id = crypto.randomUUID();
   const job = newJob(db, userId, "mesh", id, {
@@ -94,8 +143,8 @@ export async function createMesh(
     job.statement,
     db
       .prepare(
-        `INSERT INTO meshes (id, owner_id, geometry_id, size, element_order, local_sizes, job_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO meshes (id, owner_id, geometry_id, size, element_order, local_sizes, settings_hash, job_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         id,
@@ -104,6 +153,7 @@ export async function createMesh(
         JSON.stringify(request.size),
         request.order,
         JSON.stringify(request.local),
+        request.hash,
         job.id,
       ),
     db

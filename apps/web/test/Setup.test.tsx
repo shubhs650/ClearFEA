@@ -814,7 +814,7 @@ describe("mesh", () => {
     serve(routes([simulation(stale)], { "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } } }));
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Mesh, incomplete" }));
-    expect(settings().getByText("The mesh settings changed after the mesh was made. Generate the mesh again.")).toBeTruthy();
+    expect(await settings().findByText("The mesh settings changed after the mesh was made. Generate the mesh again.")).toBeTruthy();
     cleanup();
 
     const problem = "Enter a mesh size of at least 0.656 mm.";
@@ -827,6 +827,44 @@ describe("mesh", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Mesh, has a problem" }));
     expect(settings().getAllByText(problem)).toHaveLength(1);
     expect(settings().getByRole("button", { name: "Generate mesh again" })).toHaveProperty("disabled", false);
+  });
+});
+
+describe("mesh reuse (M2.10)", () => {
+  it("says when generating picked up a mesh made earlier with the same settings", async () => {
+    serve(
+      routes([simulation(meshed)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh({ id: "m0", size: { value: 4, unit: "mm" } }) } },
+        "POST /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh(), reused: true } },
+        "GET /api/meshes/m0/display": { status: 200, bytes: display },
+        "GET /api/meshes/m1/display": { status: 200, bytes: display },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Mesh, incomplete" }));
+    expect(settings().queryByText(/^Reused the mesh/)).toBeNull();
+    fireEvent.click(settings().getByRole("button", { name: "Generate mesh again" }));
+    expect(
+      await settings().findByText("Reused the mesh made earlier with these settings. Nothing was meshed or charged again."),
+    ).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Mesh, complete" })).toBeTruthy();
+    expect(settings().getByRole("button", { name: "Generate mesh again" })).toHaveProperty("disabled", true);
+  });
+
+  it("does not say so for a new mesh", async () => {
+    serve(
+      routes([simulation(meshed)], {
+        "POST /api/simulations/s1/mesh": {
+          status: 201,
+          json: { mesh: mesh({ status: "meshing", nodeCount: null, elementCount: null }), reused: false },
+        },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Mesh, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Generate mesh" }));
+    expect(await settings().findByText("Meshing with a size of 5 mm…")).toBeTruthy();
+    expect(settings().queryByText(/meshed or charged again|not made or charged twice/)).toBeNull();
   });
 });
 

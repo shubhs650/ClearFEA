@@ -7,6 +7,7 @@ import {
   emptySimulationSpec,
   type LocalMeshSize,
   localSizeParams,
+  meshSettingsText,
   sameMeshSettings,
   type PressureLoad,
   type SimulationSpec,
@@ -382,5 +383,44 @@ describe("checkSimulationSpec", () => {
     expect(sameMeshSettings(s, { size, order: 2, local: [{ scope: "faces", tags: [1], size: { value: 1, unit: "mm" } }] })).toBe(
       false,
     );
+  });
+});
+
+describe("mesh settings text (M2.10)", () => {
+  const base = {
+    geometryId: "g1",
+    scaling: 0.001,
+    size: { value: 4, unit: "mm" },
+    order: 2 as const,
+    local: [{ scope: "faces" as const, tags: [3, 1], size: { value: 1, unit: "mm" } }],
+  };
+
+  it("is the same for the same settings, whatever the key or tag order", () => {
+    const shuffled = {
+      local: [{ size: { unit: "mm", value: 1 }, tags: [1, 3], scope: "faces" as const }],
+      order: 2 as const,
+      size: { unit: "mm", value: 4 },
+      scaling: 0.001,
+      geometryId: "g1",
+    };
+    expect(meshSettingsText(shuffled)).toBe(meshSettingsText(base));
+  });
+
+  it("changes with the geometry, its scale and every mesh setting", () => {
+    const text = meshSettingsText(base);
+    for (const other of [
+      { ...base, geometryId: "g2" },
+      { ...base, scaling: 0.0254 },
+      { ...base, size: { value: 4.5, unit: "mm" } },
+      // A size typed in another unit is another mesh, as for sameMeshSettings.
+      { ...base, size: { value: 0.4, unit: "cm" } },
+      { ...base, order: 1 as const },
+      { ...base, local: [] },
+      { ...base, local: [{ ...base.local[0], scope: "edges" as const }] },
+      { ...base, local: [{ ...base.local[0], tags: [1] }] },
+      { ...base, local: [{ ...base.local[0], size: { value: 2, unit: "mm" } }] },
+    ]) {
+      expect(meshSettingsText(other as typeof base)).not.toBe(text);
+    }
   });
 });

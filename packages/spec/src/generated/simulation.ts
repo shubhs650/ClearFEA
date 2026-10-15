@@ -689,13 +689,17 @@ export interface Quantity2 {
   unit: string;
 }
 /**
- * Answer to POST /api/simulations/{id}/mesh (HTTP 201) and GET /api/meshes/{id}.
+ * Answer to POST /api/simulations/{id}/mesh (HTTP 201 for a new mesh, 200 when a mesh with the same settings hash is reused, ADR-047) and GET /api/meshes/{id}.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "MeshResponse".
  */
 export interface MeshResponse {
   mesh: MeshView;
+  /**
+   * Present on POST /api/simulations/{id}/mesh: true when an existing mesh of the same geometry, unit and mesh settings was reused, so no mesh job was queued or charged.
+   */
+  reused?: boolean;
 }
 /**
  * Answer to GET /api/simulations/{id}/mesh: the simulation's latest mesh, or null before the first one is requested.

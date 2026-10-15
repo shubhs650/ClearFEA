@@ -14,6 +14,7 @@ import fixture from "@clearfea/spec/fixtures/simulation-v1.json";
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { getJob } from "../src/db/jobs";
+import { findReusableMesh } from "../src/db/meshes";
 
 const TOKEN = "test-worker-token";
 
@@ -110,8 +111,9 @@ async function geometryRow(): Promise<string> {
 async function simulation(
   size: SimulationSpec["mesh"]["size"] = fixture.mesh.size,
   settings: Partial<SimulationSpec["mesh"]> = {},
+  geometry?: string,
 ): Promise<string> {
-  const geometryId = await geometryRow();
+  const geometryId = geometry ?? (await geometryRow());
   const spec = {
     ...(JSON.parse(JSON.stringify(fixture)) as SimulationSpec),
     geometryId,
@@ -143,6 +145,28 @@ async function currentMesh(simulationId: string, cookie = alice): Promise<MeshVi
   const body = validateSimulationMeshResponse(await response.json());
   if (!body.ok) throw new Error(body.errors.join(" "));
   return body.value.mesh;
+}
+
+async function geometryOf(simulationId: string): Promise<string> {
+  const row = await env.DB.prepare("SELECT geometry_id AS g FROM simulations WHERE id = ?").bind(simulationId).first<{ g: string }>();
+  return row?.g ?? "";
+}
+
+/** Saves the simulation's spec with other mesh settings. */
+async function saveMesh(simulationId: string, mesh: Partial<SimulationSpec["mesh"]>): Promise<void> {
+  const read = validateSimulationResponse(await (await call("GET", `/api/simulations/${simulationId}`, { cookie: alice })).json());
+  if (!read.ok) throw new Error(read.errors.join(" "));
+  const spec = read.value.simulation.spec;
+  const put = await call("PUT", `/api/simulations/${simulationId}/spec`, {
+    json: { ...spec, mesh: { ...spec.mesh, ...mesh } },
+    cookie: alice,
+  });
+  expect(put.status).toBe(200);
+}
+
+async function count(table: "jobs" | "ledger_entries" | "meshes"): Promise<number> {
+  const row = await env.DB.prepare(`SELECT count(*) AS n FROM ${table}`).first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 async function claim(): Promise<ClaimResponse["job"]> {
@@ -294,11 +318,14 @@ describe("a finished mesh job", () => {
     expect(await stored?.text()).toBe("mesh.bin content");
   });
 
-  it("lets the next request replace the simulation's mesh", async () => {
+  it("lets a request with other settings replace the simulation's mesh", async () => {
     const id = await simulation();
     const first = await meshOf(await requestMesh(id));
     await runMesh();
-    const second = await meshOf(await requestMesh(id));
+    await saveMesh(id, { size: { value: 3, unit: "mm" } });
+    const response = await requestMesh(id);
+    expect(response.status).toBe(201);
+    const second = await meshOf(response);
     expect(second.id).not.toBe(first.id);
     expect((await currentMesh(id))?.id).toBe(second.id);
   });
@@ -343,6 +370,99 @@ describe("a finished mesh job", () => {
     const job = await claim();
     await complete(job.id, { status: "succeeded", result: { elements: "many" } });
     expect((await currentMesh(id))?.problem).toContain("invalid_result");
+  });
+});
+
+describe("reusing a mesh by its settings hash (M2.10)", () => {
+  it("reuses a ready mesh with the same settings without a new job or charge", async () => {
+    const id = await simulation({ value: 4, unit: "mm" });
+    const first = await requestMesh(id);
+    expect(first.status).toBe(201);
+    expect(validateMeshResponse(await first.clone().json())).toMatchObject({ ok: true, value: { reused: false } });
+    const made = await meshOf(first);
+    await runMesh();
+    expect(await count("ledger_entries")).toBe(1);
+
+    const again = await requestMesh(id);
+    expect(again.status).toBe(200);
+    const body = validateMeshResponse(await again.json());
+    if (!body.ok) throw new Error(body.errors.join(" "));
+    expect(body.value.reused).toBe(true);
+    expect(body.value.mesh).toMatchObject({ id: made.id, status: "ready", elementCount: 4000 });
+    expect(await count("jobs")).toBe(1);
+    expect(await count("meshes")).toBe(1);
+    expect(await count("ledger_entries")).toBe(1);
+  });
+
+  it("goes back to the earlier mesh when the settings are changed back", async () => {
+    const id = await simulation({ value: 4, unit: "mm" });
+    const coarse = await meshOf(await requestMesh(id));
+    await runMesh();
+    await saveMesh(id, { size: { value: 2, unit: "mm" }, order: 1 });
+    const fine = await meshOf(await requestMesh(id));
+    expect(fine.id).not.toBe(coarse.id);
+    await runMesh();
+
+    await saveMesh(id, { size: { value: 4, unit: "mm" }, order: 2 });
+    const back = await requestMesh(id);
+    expect(back.status).toBe(200);
+    expect((await meshOf(back)).id).toBe(coarse.id);
+    expect((await currentMesh(id))?.id).toBe(coarse.id);
+    expect(await count("jobs")).toBe(2);
+  });
+
+  it("counts local sizes and a size typed in another unit as other settings", async () => {
+    const id = await simulation({ value: 4, unit: "mm" });
+    const plain = await meshOf(await requestMesh(id));
+    await runMesh();
+    await saveMesh(id, { size: { value: 0.4, unit: "cm" } });
+    const cm = await meshOf(await requestMesh(id));
+    expect(cm.id).not.toBe(plain.id);
+    await runMesh();
+    await saveMesh(id, {
+      size: { value: 4, unit: "mm" },
+      local: [{ id: "hole", name: "Hole", scope: "faces", tags: [2], size: { value: 1, unit: "mm" } }],
+    });
+    const local = await requestMesh(id);
+    expect(local.status).toBe(201);
+    expect((await meshOf(local)).id).not.toBe(plain.id);
+  });
+
+  it("shares a mesh between simulations of the same geometry, even while it is being made", async () => {
+    const first = await simulation({ value: 4, unit: "mm" });
+    const geometryId = await geometryOf(first);
+    const second = await simulation({ value: 4, unit: "mm" }, {}, geometryId);
+    const made = await meshOf(await requestMesh(first));
+    const shared = await requestMesh(second);
+    expect(shared.status).toBe(200);
+    expect(await meshOf(shared)).toMatchObject({ id: made.id, status: "meshing" });
+    await runMesh();
+    expect(await currentMesh(second)).toMatchObject({ id: made.id, status: "ready" });
+    expect(await count("jobs")).toBe(1);
+
+    // Another geometry with the same settings is another mesh.
+    const other = await simulation({ value: 4, unit: "mm" });
+    expect((await requestMesh(other)).status).toBe(201);
+  });
+
+  it("does not reuse a failed mesh, so asking again retries it", async () => {
+    const id = await simulation();
+    const failed = await meshOf(await requestMesh(id));
+    const job = await claim();
+    await complete(job.id, { status: "failed", failureCategory: "platform_fault", failureCause: "crashed" });
+    const retry = await requestMesh(id);
+    expect(retry.status).toBe(201);
+    expect((await meshOf(retry)).id).not.toBe(failed.id);
+  });
+
+  it("never finds another user's mesh", async () => {
+    const id = await simulation();
+    await requestMesh(id);
+    const hash = await env.DB.prepare("SELECT settings_hash AS h FROM meshes").first<{ h: string }>();
+    expect(hash?.h).toMatch(/^[0-9a-f]{64}$/);
+    const bobRow = await env.DB.prepare("SELECT id FROM users WHERE login = 'bob'").first<{ id: string }>();
+    expect(await findReusableMesh(env.DB, bobRow?.id ?? "", hash?.h ?? "")).toBeNull();
+    expect(await findReusableMesh(env.DB, aliceId, hash?.h ?? "")).not.toBeNull();
   });
 });
 
