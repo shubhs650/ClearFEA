@@ -21,7 +21,7 @@ import {
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { type DisplayFace, type DisplayMesh, faceAtTriangle, faceOutlines } from "./displayMesh";
+import { type DisplayFace, type DisplayMesh, faceAtTriangle, faceOutlines, triangleEdges } from "./displayMesh";
 
 const COLOURS = {
   background: new Color("#e9ecef"),
@@ -30,7 +30,11 @@ const COLOURS = {
   selected: new Color("#1c7ed6"),
   selectedHover: new Color("#4dabf7"),
   outline: new Color("#495057"),
+  elementEdge: new Color("#343a40"),
 };
+
+/** Lines drawn over the faces: the face outlines of a geometry, or every element edge of a mesh. */
+export type Edges = "outlines" | "elements";
 
 /** A press that moves less than this many pixels before release is a click, not an orbit. */
 const CLICK_SLOP_PX = 4;
@@ -89,8 +93,11 @@ export class ModelView {
     this.fitCanvas();
   }
 
-  /** Replaces the model and frames the camera on it. */
-  setMesh(mesh: DisplayMesh): void {
+  /**
+   * Replaces the model. The camera is framed on it unless `keepView` is set, which a switch
+   * between a geometry and its mesh uses so the user keeps looking where they were.
+   */
+  setMesh(mesh: DisplayMesh, edges: Edges = "outlines", keepView = false): void {
     this.clearModel();
     this.mesh = mesh;
     this.facesByTag = new Map(mesh.faces.map((face) => [face.tag, face]));
@@ -116,12 +123,15 @@ export class ModelView {
     this.scene.add(this.surface);
 
     const lines = new BufferGeometry();
-    lines.setAttribute("position", new BufferAttribute(faceOutlines(mesh), 3));
-    this.outlines = new LineSegments(lines, new LineBasicMaterial({ color: COLOURS.outline }));
+    const segments = edges === "elements" ? triangleEdges(mesh) : faceOutlines(mesh);
+    lines.setAttribute("position", new BufferAttribute(segments, 3));
+    const colour = edges === "elements" ? COLOURS.elementEdge : COLOURS.outline;
+    this.outlines = new LineSegments(lines, new LineBasicMaterial({ color: colour }));
     this.scene.add(this.outlines);
 
     this.paintAll();
-    this.resetView();
+    if (keepView) this.requestRender();
+    else this.resetView();
   }
 
   /** Points the camera at the whole model from an isometric direction. */

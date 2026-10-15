@@ -80,6 +80,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM simulations"),
+    env.DB.prepare("DELETE FROM meshes"),
     env.DB.prepare("DELETE FROM geometries"),
     env.DB.prepare("DELETE FROM jobs"),
   ]);

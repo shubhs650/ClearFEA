@@ -5,6 +5,7 @@
 import type { Transfer } from "@clearfea/spec";
 import { type GeometryFile, geometryKey } from "../db/geometries";
 import type { Job } from "../db/jobs";
+import { type MeshFile, meshKey } from "../db/meshes";
 
 export interface JobFile {
   name: string;
@@ -20,6 +21,17 @@ export function jobFiles(job: Job): JobFile[] {
       { name: "model.step", direction: "download", key: key("model.step") },
       { name: "topology.json", direction: "upload", key: key("topology.json") },
       { name: "display.bin", direction: "upload", key: key("display.bin") },
+    ];
+  }
+  const geometryId = job.params?.geometryId;
+  if (job.type === "mesh" && target !== null && typeof geometryId === "string") {
+    const geometry = (name: GeometryFile) => geometryKey(job.ownerId, geometryId, name);
+    const mesh = (name: MeshFile) => meshKey(job.ownerId, target, name);
+    return [
+      { name: "model.step", direction: "download", key: geometry("model.step") },
+      { name: "topology.json", direction: "download", key: geometry("topology.json") },
+      { name: "mesh.bin", direction: "upload", key: mesh("mesh.bin") },
+      { name: "display.bin", direction: "upload", key: mesh("display.bin") },
     ];
   }
   return [];

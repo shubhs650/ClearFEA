@@ -12,6 +12,7 @@ import {
   validateCompleteRequest,
   validateHeartbeatRequest,
   validateImportResult,
+  validateMeshResult,
 } from "@clearfea/spec";
 import { Hono } from "hono";
 import { readBody } from "./body";
@@ -24,6 +25,7 @@ import {
   type Job,
   recordHeartbeat,
 } from "./db/jobs";
+import { recordMeshOutcome } from "./db/meshes";
 import type { Env } from "./env";
 import { jobFiles, transfers } from "./jobs/files";
 
@@ -131,10 +133,16 @@ internal.put("/jobs/:id/files/:name", async (c) => {
   return c.json({ stored: held.file.name });
 });
 
+/** The result check of each job type whose result a record depends on. */
+const resultChecks: Partial<Record<Job["type"], (result: unknown) => { ok: boolean }>> = {
+  import: validateImportResult,
+  mesh: validateMeshResult,
+};
+
 /**
- * The completion to record. A succeeded import whose result or output files are not
- * what the import contract says becomes a platform fault, so a geometry never turns ready
- * on outputs the viewer cannot read.
+ * The completion to record. A succeeded import or mesh job whose result or output files are
+ * not what its contract says becomes a platform fault, so a geometry or mesh never turns
+ * ready on outputs the viewer or a later job cannot read.
  */
 async function checkedCompletion(
   env: Env,
@@ -150,14 +158,15 @@ async function checkedCompletion(
     };
   }
   const result = request.result ?? null;
-  if (job.type === "import") {
+  const check = resultChecks[job.type];
+  if (check !== undefined) {
     const fault = (failureCause: string): Completion => ({
       status: "failed",
       failureCategory: "platform_fault",
       failureCause,
       failureMessage: null,
     });
-    if (!validateImportResult(result).ok) return fault("invalid_result");
+    if (!check(result).ok) return fault("invalid_result");
     const uploads = jobFiles(job).filter((f) => f.direction === "upload");
     const stored = await Promise.all(uploads.map((f) => env.FILES.head(f.key)));
     if (stored.some((object) => object === null)) return fault("outputs_missing");
@@ -171,12 +180,24 @@ function validatedImportResult(result: unknown) {
   return checked.value;
 }
 
-function importProblem(completion: Completion & { status: "failed" }): string {
+function validatedMeshResult(result: unknown) {
+  const checked = validateMeshResult(result);
+  if (!checked.ok) throw new Error("checkedCompletion lets only valid mesh results through.");
+  return checked.value;
+}
+
+/** What the owner is told about a failed job: the worker's message when it is their fault. */
+function problem(completion: Completion & { status: "failed" }, ours: string): string {
   if (completion.failureCategory === "user_fault" && completion.failureMessage) {
     return completion.failureMessage;
   }
-  return `The import stopped because of a fault in ClearFEA, not in your file (${completion.failureCause}). Upload the file again; if it fails again, report it.`;
+  return ours.replace("{cause}", completion.failureCause);
 }
+
+const IMPORT_FAULT =
+  "The import stopped because of a fault in ClearFEA, not in your file ({cause}). Upload the file again; if it fails again, report it.";
+const MESH_FAULT =
+  "Meshing stopped because of a fault in ClearFEA, not in your setup ({cause}). Generate the mesh again; if it fails again, report it.";
 
 internal.post("/jobs/:id/heartbeat", async (c) => {
   const body = await readBody(c.req.raw, validateHeartbeatRequest, "HeartbeatRequest", SCHEMA);
@@ -203,7 +224,16 @@ internal.post("/jobs/:id/complete", async (c) => {
       job,
       completion.status === "succeeded"
         ? { status: "succeeded", result: validatedImportResult(completion.result) }
-        : { status: "failed", problem: importProblem(completion) },
+        : { status: "failed", problem: problem(completion, IMPORT_FAULT) },
+    );
+  }
+  if (job.type === "mesh") {
+    await recordMeshOutcome(
+      c.env.DB,
+      job,
+      completion.status === "succeeded"
+        ? { status: "succeeded", result: validatedMeshResult(completion.result) }
+        : { status: "failed", problem: problem(completion, MESH_FAULT) },
     );
   }
   return c.json({ job: { ...payload(job), status: job.status } } satisfies CompleteResponse);

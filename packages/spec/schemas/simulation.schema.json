@@ -162,6 +162,80 @@
       "additionalProperties": false,
       "required": ["simulations"],
       "properties": { "simulations": { "type": "array", "items": { "$ref": "#/$defs/SimulationView" } } }
+    },
+    "ElementOrder": {
+      "description": "1: four-node tetrahedra. 2: ten-node tetrahedra with curved edges on curved faces. Phase 0 meshes always use 2 until M2.8 offers the choice (ADR-028).",
+      "enum": [1, 2]
+    },
+    "MeshParams": {
+      "description": "Parameters of a mesh job (ADR-028). The worker re-imports the geometry's STEP file with scaling, checks it against topology.json, and meshes it with tetrahedra no larger than size.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geometryId", "scaling", "size", "order"],
+      "properties": {
+        "geometryId": { "description": "The geometry whose model.step and topology.json the job reads.", "type": "string" },
+        "scaling": {
+          "description": "Geometry.OCCScaling of the geometry's topology.json; the re-import must use the same.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "size": { "description": "Global element size as the user entered it (a length quantity); the worker converts it to metres.", "$ref": "#/$defs/Quantity" },
+        "order": { "$ref": "#/$defs/ElementOrder" }
+      }
+    },
+    "MeshResult": {
+      "description": "Result summary of a succeeded mesh job.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order", "nodes", "elements", "surfaceTriangles", "software"],
+      "properties": {
+        "order": { "$ref": "#/$defs/ElementOrder" },
+        "nodes": { "type": "integer", "minimum": 4 },
+        "elements": { "description": "Tetrahedra in the volume mesh.", "type": "integer", "minimum": 1 },
+        "surfaceTriangles": { "description": "Triangles in the mesh display file.", "type": "integer", "minimum": 1 },
+        "software": {
+          "description": "Versions that made the mesh.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gmsh", "occt"],
+          "properties": { "gmsh": { "type": "string" }, "occt": { "type": "string" } }
+        }
+      }
+    },
+    "MeshStatus": {
+      "description": "meshing: the mesh job is queued or running. ready: the mesh and its display file exist. failed: problem says why.",
+      "enum": ["meshing", "ready", "failed"]
+    },
+    "MeshView": {
+      "description": "A mesh as its owner sees it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "geometryId", "size", "order", "status", "problem", "nodeCount", "elementCount", "createdAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "geometryId": { "type": "string" },
+        "size": { "description": "The global size the mesh was made with, as entered.", "$ref": "#/$defs/Quantity" },
+        "order": { "$ref": "#/$defs/ElementOrder" },
+        "status": { "$ref": "#/$defs/MeshStatus" },
+        "problem": { "description": "Why meshing failed, in plain language.", "type": ["string", "null"] },
+        "nodeCount": { "type": ["integer", "null"] },
+        "elementCount": { "type": ["integer", "null"] },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "MeshResponse": {
+      "description": "Answer to POST /api/simulations/{id}/mesh (HTTP 201) and GET /api/meshes/{id}.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mesh"],
+      "properties": { "mesh": { "$ref": "#/$defs/MeshView" } }
+    },
+    "SimulationMeshResponse": {
+      "description": "Answer to GET /api/simulations/{id}/mesh: the simulation's latest mesh, or null before the first one is requested.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mesh"],
+      "properties": { "mesh": { "oneOf": [{ "$ref": "#/$defs/MeshView" }, { "type": "null" }] } }
     }
   }
 }

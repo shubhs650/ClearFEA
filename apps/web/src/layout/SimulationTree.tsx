@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The simulation tree (M1.5): geometry, then materials, supports and loads with their items.
+// The simulation tree (M1.5): geometry, then materials, supports and loads with their items,
+// then the mesh (M1.6).
 // Each row carries a complete / incomplete / error mark; selecting a row opens its settings.
 
 import type { GeometryStatus, GeometryView } from "@clearfea/spec";
@@ -128,6 +129,11 @@ export function SimulationTree({
               </li>
             );
           })}
+        {setup.kind === "open" && (
+          <li>
+            <Row id="mesh" label="Mesh" status={statuses.get("mesh")} selected={selected} onSelect={onSelect} />
+          </li>
+        )}
       </ul>
       {setup.kind === "none" && geometry !== null && geometry.status !== "failed" && (
         <p className="pane-empty tree-note">Confirm the geometry's length unit to start the setup.</p>

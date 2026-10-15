@@ -355,6 +355,13 @@ button:disabled {
   right: 12px;
 }
 
+.viewer-mesh {
+  position: absolute;
+  top: 28px;
+  left: 12px;
+  pointer-events: none;
+}
+
 .viewer-selection {
   position: absolute;
   left: 12px;

@@ -10,6 +10,7 @@ import { StatusBar } from "./layout/StatusBar";
 import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { GroupPanel, MaterialPanel, PressurePanel, SupportPanel } from "./setup/ItemPanels";
+import { MeshPanel } from "./setup/MeshPanel";
 import {
   addFixedSupport,
   addMaterial,
@@ -17,8 +18,10 @@ import {
   facesOf,
   type Group,
   type ItemStatus,
+  meshStatus,
   setupStatus,
 } from "./setup/spec";
+import { useMesh } from "./setup/useMesh";
 import { useSimulation } from "./setup/useSimulation";
 
 type SessionState =
@@ -77,10 +80,15 @@ export function App() {
   const simulation = useSimulation(geometry, signedOut);
   const { setup, edit } = simulation;
   const spec = setup.kind === "open" ? setup.spec : null;
-  const statuses = useMemo(
-    () => (setup.kind === "open" ? setupStatus(setup.spec, setup.topology) : new Map<string, ItemStatus>()),
-    [setup],
-  );
+  const meshes = useMesh(setup.kind === "open" ? setup.id : null, signedOut);
+  const { mesh } = meshes;
+  const statuses = useMemo(() => {
+    if (setup.kind !== "open") return new Map<string, ItemStatus>();
+    const result = setupStatus(setup.spec, setup.topology);
+    const settings = result.get("mesh");
+    if (settings) result.set("mesh", meshStatus(settings, setup.spec, mesh));
+    return result;
+  }, [setup, mesh]);
 
   async function leave() {
     await signOut();
@@ -124,6 +132,21 @@ export function App() {
   function settings() {
     if (spec === null || selected === "geometry") return null;
     const status = statuses.get(selected);
+    if (selected === "mesh") {
+      return (
+        <MeshPanel
+          spec={spec}
+          status={status}
+          defaultUnit={geometry?.confirmedUnit ?? "mm"}
+          mesh={mesh}
+          saved={simulation.save.kind === "saved"}
+          requesting={meshes.requesting}
+          requestProblem={meshes.requestProblem}
+          onChange={change}
+          onGenerate={() => void meshes.generate()}
+        />
+      );
+    }
     if (GROUPS.includes(selected)) {
       const group = selected as Group;
       return <GroupPanel group={group} status={status} onAdd={() => add(group)} />;
@@ -187,6 +210,7 @@ export function App() {
       />
       <Viewer
         geometry={geometry}
+        mesh={!showGeometry && selected === "mesh" ? mesh : null}
         selection={selection}
         onSelectionChange={setSelection}
         onSignedOut={signedOut}

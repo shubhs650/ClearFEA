@@ -2,7 +2,7 @@
 // The setup flow in the whole app (M1.5): start a simulation on a ready geometry, add a
 // material, a fixed support and a pressure from the tree, and see each edit saved.
 
-import type { GeometryView, SimulationSpec, SimulationView } from "@clearfea/spec";
+import type { GeometryView, MeshView, SimulationSpec, SimulationView } from "@clearfea/spec";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -10,14 +10,16 @@ import type { ModelViewEvents } from "../src/viewer/ModelView";
 import { readFixture } from "./fixtures";
 
 // jsdom has no WebGL: a stand-in scene lets the test pick faces and see the selection.
-const scene = vi.hoisted(() => ({ events: [] as ModelViewEvents[], selections: [] as number[][] }));
+const scene = vi.hoisted(() => ({ events: [] as ModelViewEvents[], selections: [] as number[][], edges: [] as string[] }));
 
 vi.mock("../src/viewer/ModelView", () => ({
   ModelView: class {
     constructor(_host: HTMLElement, events: ModelViewEvents) {
       scene.events.push(events);
     }
-    setMesh() {}
+    setMesh(_mesh: unknown, edges = "outlines") {
+      scene.edges.push(edges);
+    }
     setSelection(tags: ReadonlySet<number>) {
       scene.selections.push([...tags].sort((a, b) => a - b));
     }
@@ -119,6 +121,7 @@ function routes(simulations: SimulationView[], extra: Record<string, Route> = {}
     "GET /api/geometries/g1/display": { status: 200, bytes: display },
     "GET /api/geometries/g1/topology": { status: 200, json: topology },
     "GET /api/simulations?geometryId=g1": { status: 200, json: { simulations } },
+    "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: null } },
     ...extra,
   };
 }
@@ -140,6 +143,7 @@ const settings = () => within(screen.getByRole("complementary", { name: "Setting
 beforeEach(() => {
   scene.events.length = 0;
   scene.selections.length = 0;
+  scene.edges.length = 0;
 });
 
 afterEach(() => {
@@ -273,5 +277,92 @@ describe("setup tree", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Materials, incomplete" }));
     fireEvent.click(settings().getByRole("button", { name: "Add a material" }));
     expect(await tree().findByText("Not saved: The setup cannot be saved: something.")).toBeTruthy();
+  });
+});
+
+function mesh(overrides: Partial<MeshView> = {}): MeshView {
+  return {
+    id: "m1",
+    geometryId: "g1",
+    size: { value: 5, unit: "mm" },
+    order: 2,
+    status: "ready",
+    problem: null,
+    nodeCount: 7108,
+    elementCount: 4000,
+    createdAt: "2026-10-15T12:00:00.000Z",
+    ...overrides,
+  };
+}
+
+const meshed: SimulationSpec = { ...emptySpec, mesh: { size: { value: 5, unit: "mm" } } };
+
+describe("mesh", () => {
+  it("asks for a size, then meshes with the saved size", async () => {
+    const { sent, route } = saves();
+    const fetchMock = serve(
+      routes([simulation()], {
+        "PUT /api/simulations/s1/spec": route,
+        "POST /api/simulations/s1/mesh": { status: 201, json: { mesh: mesh({ status: "meshing", nodeCount: null, elementCount: null }) } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Mesh, incomplete" }));
+    expect(settings().getByText("Enter a global mesh size.")).toBeTruthy();
+    const generate = settings().getByRole("button", { name: "Generate mesh" });
+    expect(generate).toHaveProperty("disabled", true);
+
+    // The geometry's own unit is offered first.
+    expect(settings().getByLabelText("Global size unit")).toHaveProperty("value", "mm");
+    fireEvent.change(settings().getByLabelText("Global size"), { target: { value: "5" } });
+    expect(settings().getByText("Generate the mesh.")).toBeTruthy();
+    await waitFor(() => expect(sent.at(-1)?.mesh).toEqual({ size: { value: 5, unit: "mm" } }));
+    await waitFor(() => expect(generate).toHaveProperty("disabled", false));
+    fireEvent.click(generate);
+    expect(await settings().findByText("Meshing with a size of 5 mm…")).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Mesh, incomplete" }).getAttribute("title")).toBe("The mesh is being made.");
+    expect(fetchMock.mock.calls.some(([path, init]) => path === "/api/simulations/s1/mesh" && init?.method === "POST")).toBe(true);
+  });
+
+  it("draws a ready mesh with its element edges and counts while the Mesh item is open", async () => {
+    const fetchMock = serve(
+      routes([simulation(meshed)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/meshes/m1/display": { status: 200, bytes: display },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Mesh, complete" }));
+    expect(settings().getByText("4,000")).toBeTruthy();
+    expect(settings().getByText("7,108")).toBeTruthy();
+    expect(await screen.findByText("Mesh: 4,000 elements, 7,108 nodes")).toBeTruthy();
+    expect(scene.edges.at(-1)).toBe("elements");
+    expect(fetchMock.mock.calls.some(([path]) => path === "/api/meshes/m1/display")).toBe(true);
+    expect(settings().getByRole("button", { name: "Generate mesh again" })).toHaveProperty("disabled", true);
+
+    // Back on the geometry the viewer draws the faces again.
+    fireEvent.click(tree().getByRole("button", { name: "Geometry, complete" }));
+    await waitFor(() => expect(scene.edges.at(-1)).toBe("outlines"));
+    expect(screen.queryByText(/^Mesh: /)).toBeNull();
+  });
+
+  it("asks for a new mesh once the size changes, and shows why meshing failed", async () => {
+    const stale = { ...emptySpec, mesh: { size: { value: 4, unit: "mm" } } };
+    serve(routes([simulation(stale)], { "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } } }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Mesh, incomplete" }));
+    expect(settings().getByText("The mesh size changed after the mesh was made. Generate the mesh again.")).toBeTruthy();
+    cleanup();
+
+    const problem = "Enter a mesh size of at least 0.656 mm.";
+    serve(
+      routes([simulation(meshed)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh({ status: "failed", problem }) } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Mesh, has a problem" }));
+    expect(settings().getAllByText(problem).length).toBeGreaterThan(0);
+    expect(settings().getByRole("button", { name: "Generate mesh again" })).toHaveProperty("disabled", false);
   });
 });
