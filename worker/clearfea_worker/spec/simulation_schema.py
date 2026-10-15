@@ -817,6 +817,92 @@ class RunCost(BaseModel):
     charged: bool
 
 
+class SizeEstimate(BaseModel):
+    """
+    What a run is estimated to cost on one machine size (M2.12, ADR-049). Money is in whole micro-credits: 1,000,000 is one credit.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    size: Annotated[str, Field(min_length=1)]
+    cores: Annotated[int, Field(ge=1)]
+    memory_bytes: Annotated[int, Field(alias="memoryBytes", ge=1)]
+    """
+    The machine size's memory.
+    """
+    rate_per_hour: Annotated[int, Field(alias="ratePerHour", ge=0)]
+    """
+    Micro-credits per hour of billable time.
+    """
+    cost: Annotated[int, Field(ge=0)]
+    """
+    The estimated seconds, billed at this size's rate.
+    """
+    fits: bool
+    """
+    Whether the size's usable memory holds the estimated peak memory with the estimator's margin.
+    """
+
+
+class RunEstimate(BaseModel):
+    """
+    Memory, time and cost estimated for solving a simulation on its mesh, from the estimator's fitted coefficients (packages/spec/estimator.json, ADR-049), and the machine size recommended: the smallest that fits, or null when none does.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    estimator: Annotated[int, Field(ge=1)]
+    """
+    Version of estimator.json that made the estimate.
+    """
+    nodes: Annotated[int, Field(ge=0)]
+    """
+    The mesh's node count the estimate is made from.
+    """
+    memory_bytes: Annotated[int, Field(alias="memoryBytes", ge=0)]
+    """
+    Estimated peak memory of the solver.
+    """
+    seconds: Annotated[int, Field(ge=0)]
+    """
+    Estimated billable time of the solve job, whole seconds.
+    """
+    extrapolated: bool
+    """
+    True when the mesh is larger than any the estimator was fitted on, so the estimate is less certain.
+    """
+    sizes: list[SizeEstimate]
+    recommended: str | None
+
+
+class EstimateResponse(BaseModel):
+    """
+    Answer to GET /api/simulations/{id}/estimate: the estimate for the simulation's current ready mesh.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    estimate: RunEstimate
+
+
+class CreateRunRequest(BaseModel):
+    """
+    Body of POST /api/simulations/{id}/runs, which may also be sent empty. machineSize names the machine size to run on; without it the run takes the recommended size (the largest when none fits).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    machine_size: Annotated[str | None, Field(alias="machineSize", min_length=1)] = None
+
+
 class RunLogResponse(BaseModel):
     """
     Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.
@@ -995,6 +1081,10 @@ class RunView(BaseModel):
     machine: RunMachine | None
     """
     Null for runs made before M1.11, which were not metered.
+    """
+    estimate: RunEstimate | None
+    """
+    The estimate made when the run started (ADR-049); null for runs made before M2.12.
     """
     cost: RunCost | None
     """

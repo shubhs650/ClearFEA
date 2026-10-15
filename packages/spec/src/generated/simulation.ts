@@ -833,6 +833,80 @@ export interface RunCost {
   charged: boolean;
 }
 /**
+ * What a run is estimated to cost on one machine size (M2.12, ADR-049). Money is in whole micro-credits: 1,000,000 is one credit.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "SizeEstimate".
+ */
+export interface SizeEstimate {
+  size: string;
+  cores: number;
+  /**
+   * The machine size's memory.
+   */
+  memoryBytes: number;
+  /**
+   * Micro-credits per hour of billable time.
+   */
+  ratePerHour: number;
+  /**
+   * The estimated seconds, billed at this size's rate.
+   */
+  cost: number;
+  /**
+   * Whether the size's usable memory holds the estimated peak memory with the estimator's margin.
+   */
+  fits: boolean;
+}
+/**
+ * Memory, time and cost estimated for solving a simulation on its mesh, from the estimator's fitted coefficients (packages/spec/estimator.json, ADR-049), and the machine size recommended: the smallest that fits, or null when none does.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunEstimate".
+ */
+export interface RunEstimate {
+  /**
+   * Version of estimator.json that made the estimate.
+   */
+  estimator: number;
+  /**
+   * The mesh's node count the estimate is made from.
+   */
+  nodes: number;
+  /**
+   * Estimated peak memory of the solver.
+   */
+  memoryBytes: number;
+  /**
+   * Estimated billable time of the solve job, whole seconds.
+   */
+  seconds: number;
+  /**
+   * True when the mesh is larger than any the estimator was fitted on, so the estimate is less certain.
+   */
+  extrapolated: boolean;
+  sizes: SizeEstimate[];
+  recommended: string | null;
+}
+/**
+ * Answer to GET /api/simulations/{id}/estimate: the estimate for the simulation's current ready mesh.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "EstimateResponse".
+ */
+export interface EstimateResponse {
+  estimate: RunEstimate;
+}
+/**
+ * Body of POST /api/simulations/{id}/runs, which may also be sent empty. machineSize names the machine size to run on; without it the run takes the recommended size (the largest when none fits).
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "CreateRunRequest".
+ */
+export interface CreateRunRequest {
+  machineSize?: string;
+}
+/**
  * A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032, ADR-033).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -853,6 +927,10 @@ export interface RunView {
    * Null for runs made before M1.11, which were not metered.
    */
   machine: RunMachine | null;
+  /**
+   * The estimate made when the run started (ADR-049); null for runs made before M2.12.
+   */
+  estimate: RunEstimate | null;
   /**
    * Known once the run has finished; null while it solves and for runs that were not metered.
    */
@@ -979,6 +1057,10 @@ export const RunFileNameValues = ["deck.inp", "solver.log", "results.frd", "resu
 export const validateRunFileName = validator<RunFileName>(schema, "RunFileName");
 export const validateRunMachine = validator<RunMachine>(schema, "RunMachine");
 export const validateRunCost = validator<RunCost>(schema, "RunCost");
+export const validateSizeEstimate = validator<SizeEstimate>(schema, "SizeEstimate");
+export const validateRunEstimate = validator<RunEstimate>(schema, "RunEstimate");
+export const validateEstimateResponse = validator<EstimateResponse>(schema, "EstimateResponse");
+export const validateCreateRunRequest = validator<CreateRunRequest>(schema, "CreateRunRequest");
 export const validateRunView = validator<RunView>(schema, "RunView");
 export const validateRunResponse = validator<RunResponse>(schema, "RunResponse");
 export const validateRunListResponse = validator<RunListResponse>(schema, "RunListResponse");

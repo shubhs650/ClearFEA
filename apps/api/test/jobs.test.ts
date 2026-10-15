@@ -125,7 +125,7 @@ describe("internal job routes", () => {
     await post(`/jobs/${job.id}/complete`, { workerId: "w1", status: "succeeded", metering: { billableMs: 1234 } });
     expect(await getJob(env.DB, "alice", job.id)).toMatchObject({ billableMs: 1234, billedSeconds: null, cost: null });
     const solve = await createJob(env.DB, "alice", "solve");
-    expect(solve).toMatchObject({ machineSize: "local", ratePerHour: 1_000_000 });
+    expect(solve).toMatchObject({ machineSize: "medium", ratePerHour: 1_000_000 });
     const entries = await env.DB.prepare("SELECT COUNT(*) AS n FROM ledger_entries").first<{ n: number }>();
     expect(entries?.n).toBe(0);
   });

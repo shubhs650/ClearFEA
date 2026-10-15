@@ -22,6 +22,7 @@ import { GroupPanel, LoadPanel, MaterialPanel, SupportPanel } from "./setup/Item
 import { MaterialChooser } from "./setup/MaterialLibrary";
 import { LocalSizePanel, MeshPanel } from "./setup/MeshPanel";
 import { type ResultChoice, type ResultUnits, type RunBlocker, RunPanel } from "./setup/RunPanel";
+import { useEstimate } from "./setup/useEstimate";
 import {
   addLoad,
   addLocalSize,
@@ -109,6 +110,11 @@ export function App() {
   const meshes = useMesh(setup.kind === "open" ? setup.id : null, signedOut);
   const { mesh } = meshes;
   const runs = useRun(setup.kind === "open" ? setup.id : null, signedOut);
+  const estimate = useEstimate(
+    setup.kind === "open" ? setup.id : null,
+    setup.kind === "open" && mesh?.status === "ready" && meshIsCurrent(setup.spec, mesh) ? mesh.id : null,
+    signedOut,
+  );
   const { run } = runs;
   const project = useProject(session.kind === "signedIn", signedOut);
   const materials = useMaterials(setup.kind === "open", signedOut);
@@ -286,9 +292,10 @@ export function App() {
           onOpen={select}
           units={resultUnits}
           supportNames={new Map(spec.supports.map((s) => [s.id, s.name]))}
+          estimate={estimate}
           requesting={runs.requesting}
           requestProblem={runs.requestProblem}
-          onRun={() => void runs.start()}
+          onRun={(machineSize) => void runs.start(machineSize)}
           choice={resultChoice}
           onChoiceChange={setResultChoice}
         />

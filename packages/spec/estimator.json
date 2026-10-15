@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "source": "worker/benchmarks/solver/steps.json, fitted by worker/benchmarks/solver/fit.py",
+  "analyses": {
+    "linear_static": {
+      "solver": "SPOOLES on one thread (ADR-048), CalculiX 2.21",
+      "peakMemoryBytes": {
+        "constant": 8329030.0,
+        "coefficient": 571.025,
+        "exponent": 1.3574,
+        "largestRatio": 1.01596
+      },
+      "jobSeconds": {
+        "constant": 0.80185,
+        "coefficient": 3.68649e-08,
+        "exponent": 1.99136,
+        "largestRatio": 1.20676
+      },
+      "fittedNodes": [
+        5212,
+        73717
+      ]
+    }
+  },
+  "memoryMargin": 1.25,
+  "usableMemoryFraction": 0.85
+}

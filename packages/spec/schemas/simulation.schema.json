@@ -681,12 +681,60 @@
         "charged": { "type": "boolean" }
       }
     },
+    "SizeEstimate": {
+      "description": "What a run is estimated to cost on one machine size (M2.12, ADR-049). Money is in whole micro-credits: 1,000,000 is one credit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size", "cores", "memoryBytes", "ratePerHour", "cost", "fits"],
+      "properties": {
+        "size": { "type": "string", "minLength": 1 },
+        "cores": { "type": "integer", "minimum": 1 },
+        "memoryBytes": { "description": "The machine size's memory.", "type": "integer", "minimum": 1 },
+        "ratePerHour": { "description": "Micro-credits per hour of billable time.", "type": "integer", "minimum": 0 },
+        "cost": { "description": "The estimated seconds, billed at this size's rate.", "type": "integer", "minimum": 0 },
+        "fits": {
+          "description": "Whether the size's usable memory holds the estimated peak memory with the estimator's margin.",
+          "type": "boolean"
+        }
+      }
+    },
+    "RunEstimate": {
+      "description": "Memory, time and cost estimated for solving a simulation on its mesh, from the estimator's fitted coefficients (packages/spec/estimator.json, ADR-049), and the machine size recommended: the smallest that fits, or null when none does.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["estimator", "nodes", "memoryBytes", "seconds", "extrapolated", "sizes", "recommended"],
+      "properties": {
+        "estimator": { "description": "Version of estimator.json that made the estimate.", "type": "integer", "minimum": 1 },
+        "nodes": { "description": "The mesh's node count the estimate is made from.", "type": "integer", "minimum": 0 },
+        "memoryBytes": { "description": "Estimated peak memory of the solver.", "type": "integer", "minimum": 0 },
+        "seconds": { "description": "Estimated billable time of the solve job, whole seconds.", "type": "integer", "minimum": 0 },
+        "extrapolated": {
+          "description": "True when the mesh is larger than any the estimator was fitted on, so the estimate is less certain.",
+          "type": "boolean"
+        },
+        "sizes": { "type": "array", "items": { "$ref": "#/$defs/SizeEstimate" } },
+        "recommended": { "type": ["string", "null"] }
+      }
+    },
+    "EstimateResponse": {
+      "description": "Answer to GET /api/simulations/{id}/estimate: the estimate for the simulation's current ready mesh.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["estimate"],
+      "properties": { "estimate": { "$ref": "#/$defs/RunEstimate" } }
+    },
+    "CreateRunRequest": {
+      "description": "Body of POST /api/simulations/{id}/runs, which may also be sent empty. machineSize names the machine size to run on; without it the run takes the recommended size (the largest when none fits).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "machineSize": { "type": "string", "minLength": 1 } }
+    },
     "RunView": {
       "description": "A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032, ADR-033).",
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "id", "simulationId", "meshId", "spec", "mesh", "software", "files", "machine", "cost", "status", "stage",
+        "id", "simulationId", "meshId", "spec", "mesh", "software", "files", "machine", "estimate", "cost", "status", "stage",
         "problem", "result", "createdAt", "finishedAt"
       ],
       "properties": {
@@ -704,6 +752,10 @@
         "machine": {
           "description": "Null for runs made before M1.11, which were not metered.",
           "oneOf": [{ "$ref": "#/$defs/RunMachine" }, { "type": "null" }]
+        },
+        "estimate": {
+          "description": "The estimate made when the run started (ADR-049); null for runs made before M2.12.",
+          "oneOf": [{ "$ref": "#/$defs/RunEstimate" }, { "type": "null" }]
         },
         "cost": {
           "description": "Known once the run has finished; null while it solves and for runs that were not metered.",

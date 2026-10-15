@@ -101,7 +101,8 @@ export interface NewJob {
 /**
  * The statement that queues a job, for callers that must create it in one batch with the
  * record it works on. Run it, then read the job back with getJob. A metered job takes the
- * default machine size and keeps that size's current rate (ADR-033).
+ * machine size named, or the default one, and keeps that size's current rate (ADR-033); it is
+ * not inserted when no such size exists.
  */
 export function newJob(
   db: D1Database,
@@ -109,17 +110,25 @@ export function newJob(
   type: JobType,
   targetId: string | null = null,
   params: Record<string, unknown> | null = null,
+  machineSize?: string,
 ): NewJob {
   const id = crypto.randomUUID();
   const values = [id, userId, type, targetId, params === null ? null : JSON.stringify(params)];
-  const statement = isMetered(type)
-    ? db
-        .prepare(
-          `INSERT INTO jobs (id, owner_id, type, target_id, params, machine_size, rate_per_hour)
-           SELECT ?, ?, ?, ?, ?, name, rate_per_hour FROM machine_sizes WHERE is_default = 1`,
-        )
-        .bind(...values)
-    : db.prepare("INSERT INTO jobs (id, owner_id, type, target_id, params) VALUES (?, ?, ?, ?, ?)").bind(...values);
+  const statement = !isMetered(type)
+    ? db.prepare("INSERT INTO jobs (id, owner_id, type, target_id, params) VALUES (?, ?, ?, ?, ?)").bind(...values)
+    : machineSize === undefined
+      ? db
+          .prepare(
+            `INSERT INTO jobs (id, owner_id, type, target_id, params, machine_size, rate_per_hour)
+             SELECT ?, ?, ?, ?, ?, name, rate_per_hour FROM machine_sizes WHERE is_default = 1`,
+          )
+          .bind(...values)
+      : db
+          .prepare(
+            `INSERT INTO jobs (id, owner_id, type, target_id, params, machine_size, rate_per_hour)
+             SELECT ?, ?, ?, ?, ?, name, rate_per_hour FROM machine_sizes WHERE name = ?`,
+          )
+          .bind(...values, machineSize);
   return { id, statement };
 }
 

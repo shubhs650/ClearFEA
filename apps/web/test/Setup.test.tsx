@@ -8,6 +8,7 @@ import {
   type MeshQuality,
   type MeshView,
   materialLibrary,
+  type RunEstimate,
   type RunView,
   type SimulationSpec,
   type SimulationView,
@@ -142,6 +143,22 @@ function serve(routes: Record<string, Route>) {
   return fetchMock;
 }
 
+const GiB = 2 ** 30;
+
+/** An estimate for the test mesh's 7,108 nodes, in the API's shape. */
+const ESTIMATE: RunEstimate = {
+  estimator: 1,
+  nodes: 7108,
+  memoryBytes: 95 * 2 ** 20,
+  seconds: 3,
+  extrapolated: false,
+  sizes: [
+    { size: "small", cores: 2, memoryBytes: 8 * GiB, ratePerHour: 500_000, cost: 417, fits: true },
+    { size: "medium", cores: 4, memoryBytes: 16 * GiB, ratePerHour: 1_000_000, cost: 833, fits: true },
+  ],
+  recommended: "small",
+};
+
 /** The routes of a signed-in user with one ready geometry and the given simulations. */
 function routes(simulations: SimulationView[], extra: Record<string, Route> = {}): Record<string, Route> {
   return {
@@ -154,6 +171,7 @@ function routes(simulations: SimulationView[], extra: Record<string, Route> = {}
     "GET /api/simulations?geometryId=g1": { status: 200, json: { simulations } },
     "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: null } },
     "GET /api/simulations/s1/runs": { status: 200, json: { runs: [] } },
+    "GET /api/simulations/s1/estimate": { status: 200, json: { estimate: ESTIMATE } },
     "GET /api/project": { status: 200, json: { project: { id: "p1", name: "My project", unitSystem: "metric-mm" } } },
     "GET /api/materials": { status: 200, json: { library: materialLibrary.materials, custom: [] } },
     ...extra,
@@ -843,7 +861,8 @@ describe("mesh reuse (M2.10)", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Mesh, incomplete" }));
     expect(settings().queryByText(/^Reused the mesh/)).toBeNull();
-    fireEvent.click(settings().getByRole("button", { name: "Generate mesh again" }));
+    // The mesh loads after the tree item opens; wait for its button (it was a race).
+    fireEvent.click(await settings().findByRole("button", { name: "Generate mesh again" }));
     expect(
       await settings().findByText("Reused the mesh made earlier with these settings. Nothing was meshed or charged again."),
     ).toBeTruthy();
@@ -878,6 +897,7 @@ function run(overrides: Partial<RunView> = {}): RunView {
     software: { clearfea: "0.0.0+d9d394b", deckFormat: 1, calculix: "2.21", gmsh: "4.15.2", occt: "7.9.0" },
     files: [],
     machine: { size: "local", ratePerHour: 1_000_000 },
+    estimate: null,
     cost: null,
     status: "solving",
     stage: "queued",
@@ -983,6 +1003,16 @@ describe("run", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
     const button = settings().getByRole("button", { name: "Run" });
     await waitFor(() => expect(button).toHaveProperty("disabled", false));
+    // The estimate for the mesh, with the recommended size chosen.
+    const estimate = within(await settings().findByLabelText("Estimate"));
+    expect(estimate.getByText("about 95 MiB at its peak")).toBeTruthy();
+    expect(estimate.getByText("about 3 s")).toBeTruthy();
+    const size = estimate.getByRole("combobox", { name: "Machine size" }) as HTMLSelectElement;
+    expect(size.value).toBe("small");
+    expect([...size.options].map((o) => o.text)).toEqual([
+      "small: 2 cores, 8 GiB, about 0.000417 credits (recommended)",
+      "medium: 4 cores, 16 GiB, about 0.000833 credits",
+    ]);
     fireEvent.click(button);
     expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
     expect(await settings().findByText("CalculiX Version 2.21")).toBeTruthy();
@@ -991,7 +1021,43 @@ describe("run", () => {
     expect(tree().getByRole("button", { name: "Run, incomplete" }).getAttribute("title")).toBe(
       "The simulation is being solved.",
     );
-    expect(fetchMock.mock.calls.some(([path, init]) => path === "/api/simulations/s1/runs" && init?.method === "POST")).toBe(true);
+    const post = fetchMock.mock.calls.find(([path, init]) => path === "/api/simulations/s1/runs" && init?.method === "POST");
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ machineSize: "small" });
+  });
+
+  it("runs on the machine size the user picks, and says when it has too little memory", async () => {
+    const tight: RunEstimate = {
+      ...ESTIMATE,
+      memoryBytes: 10 * GiB,
+      sizes: ESTIMATE.sizes.map((s) => ({ ...s, fits: s.size === "medium" })),
+      recommended: "medium",
+    };
+    const fetchMock = serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/estimate": { status: 200, json: { estimate: tight } },
+        "POST /api/simulations/s1/runs": { status: 201, json: { run: run() } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    const estimate = within(await settings().findByLabelText("Estimate"));
+    const size = estimate.getByRole("combobox", { name: "Machine size" }) as HTMLSelectElement;
+    expect(size.value).toBe("medium");
+    expect(size.options[0]?.text).toBe("small: 2 cores, 8 GiB, about 0.000417 credits (too little memory)");
+    fireEvent.change(size, { target: { value: "small" } });
+    expect(
+      estimate.getByText(
+        "The estimate needs more memory than this size has, so the run may stop for lack of memory. The recommended size is medium.",
+      ),
+    ).toBeTruthy();
+    const button = settings().getByRole("button", { name: "Run" });
+    await waitFor(() => expect(button).toHaveProperty("disabled", false));
+    fireEvent.click(button);
+    expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
+    const post = fetchMock.mock.calls.find(([path, init]) => path === "/api/simulations/s1/runs" && init?.method === "POST");
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ machineSize: "small" });
   });
 
   it("shows a finished run's figures in display units, with numbers only", async () => {

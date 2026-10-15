@@ -107,10 +107,11 @@ export function useRun(simulationId: string | null, onSignedOut: (problem: strin
     };
   }, [runId, solving, failed]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(
+    async (machineSize?: string) => {
     if (simulationId === null) return;
     setRequesting(true);
-    const result = await startRun(simulationId);
+    const result = await startRun(simulationId, machineSize);
     setRequesting(false);
     const problem = failed(result);
     if (problem !== null || result.kind !== "ok") {
@@ -119,7 +120,9 @@ export function useRun(simulationId: string | null, onSignedOut: (problem: strin
     }
     setRequestProblem(undefined);
     setState({ kind: "loaded", run: result.value });
-  }, [simulationId, failed]);
+    },
+    [simulationId, failed],
+  );
 
   return { state, run, log: log.runId === runId ? log.text : "", start, requesting, requestProblem };
 }

@@ -7,7 +7,10 @@ import {
   type SolveResult,
   type Topology,
   type WorkerSoftware,
+  estimateMesh,
+  estimatorTable,
   validateClaimResponse,
+  validateEstimateResponse,
   validateRunListResponse,
   validateRunLogResponse,
   validateRunResponse,
@@ -191,8 +194,8 @@ async function meshed(): Promise<string> {
   return id;
 }
 
-async function startRun(simulationId: string, cookie = alice): Promise<Response> {
-  return call("POST", `/api/simulations/${simulationId}/runs`, { cookie });
+async function startRun(simulationId: string, cookie = alice, json?: Record<string, unknown>): Promise<Response> {
+  return call("POST", `/api/simulations/${simulationId}/runs`, json === undefined ? { cookie } : { cookie, json });
 }
 
 async function runOf(response: Response): Promise<RunView> {
@@ -585,8 +588,13 @@ describe("a run's solver input and log", () => {
 });
 
 describe("metering (ADR-033)", () => {
-  /** 2.5 s (the complete helper's billableMs) bills 3 s; at 1 credit an hour that is 833 micro-credits. */
+  /**
+   * 2.5 s (the complete helper's billableMs) bills 3 s: 833 micro-credits for a mesh job on the
+   * default size (medium, 1 credit an hour) and 417 for a solve on the size recommended for the
+   * test mesh (small, 0.5 credit an hour).
+   */
   const THREE_SECONDS = 833;
+  const THREE_SECONDS_SMALL = 417;
 
   async function finish(body: Record<string, unknown>): Promise<RunView> {
     const id = await meshed();
@@ -597,23 +605,24 @@ describe("metering (ADR-033)", () => {
     return readRun(run.id);
   }
 
-  it("bills a run on the default machine size from the moment it starts", async () => {
+  it("bills a run on the recommended machine size from the moment it starts", async () => {
     const id = await meshed();
     const run = await runOf(await startRun(id));
-    expect(run).toMatchObject({ machine: { size: "local", ratePerHour: 1_000_000 }, cost: null });
+    expect(run).toMatchObject({ machine: { size: "small", ratePerHour: 500_000 }, cost: null });
+    expect(run.estimate).toMatchObject({ nodes: 7108, recommended: "small" });
   });
 
   it("charges a succeeded run its billed seconds at the rate, with one ledger entry", async () => {
     const run = await finish({ status: "succeeded", result: SOLVED });
-    expect(run.cost).toEqual({ billedSeconds: 3, amount: THREE_SECONDS, charged: true });
+    expect(run.cost).toEqual({ billedSeconds: 3, amount: THREE_SECONDS_SMALL, charged: true });
     const ledger = await listLedger(env.DB, aliceId);
     // The mesh job and the solve job, each charged once.
     expect(ledger.map((e) => [e.reason, e.amount, e.balance])).toEqual([
       ["mesh", -THREE_SECONDS, -THREE_SECONDS],
-      ["solve", -THREE_SECONDS, -2 * THREE_SECONDS],
+      ["solve", -THREE_SECONDS_SMALL, -THREE_SECONDS - THREE_SECONDS_SMALL],
     ]);
     const job = await getJob(env.DB, aliceId, ledger[1]?.jobId ?? "");
-    expect(job).toMatchObject({ type: "solve", billableMs: 2500, billedSeconds: 3, cost: THREE_SECONDS });
+    expect(job).toMatchObject({ type: "solve", billableMs: 2500, billedSeconds: 3, cost: THREE_SECONDS_SMALL });
   });
 
   it("charges a run that failed through the user's setup", async () => {
@@ -623,7 +632,7 @@ describe("metering (ADR-033)", () => {
       failureCause: "setup_invalid",
       failureMessage: "Add a support.",
     });
-    expect(run.cost).toEqual({ billedSeconds: 3, amount: THREE_SECONDS, charged: true });
+    expect(run.cost).toEqual({ billedSeconds: 3, amount: THREE_SECONDS_SMALL, charged: true });
     expect((await listLedger(env.DB, aliceId)).map((e) => e.reason)).toEqual(["mesh", "solve"]);
   });
 
@@ -649,23 +658,27 @@ describe("metering (ADR-033)", () => {
     const job = await claim("solve");
     await upload(job, RUN_FILES);
     await complete(job.id, { status: "succeeded", result: SOLVED, metering: { billableMs: 3_600_001 } });
-    // 3601 s at 1,000,000 an hour: 1,000,277.78 rounds to 1,000,278.
-    expect((await readRun(run.id)).cost).toEqual({ billedSeconds: 3601, amount: 1_000_278, charged: true });
+    // 3601 s at 500,000 an hour: 500,138.89 rounds to 500,139.
+    expect((await readRun(run.id)).cost).toEqual({ billedSeconds: 3601, amount: 500_139, charged: true });
   });
 
   it("keeps the rate a job was queued at when the configured rate changes", async () => {
     const id = await meshed();
     const run = await runOf(await startRun(id));
-    await env.DB.prepare("UPDATE machine_sizes SET rate_per_hour = 7200000 WHERE name = 'local'").run();
+    await env.DB.prepare("UPDATE machine_sizes SET rate_per_hour = 7200000 WHERE name = 'small'").run();
     try {
       const job = await claim("solve");
       await upload(job, RUN_FILES);
       await complete(job.id, { status: "succeeded", result: SOLVED });
-      expect((await readRun(run.id)).cost).toMatchObject({ amount: THREE_SECONDS });
+      expect((await readRun(run.id)).cost).toMatchObject({ amount: THREE_SECONDS_SMALL });
+      // At 14.4 times the medium size's rate, small is no longer the cheapest size that fits.
       const next = await runOf(await startRun(id));
-      expect(next.machine).toEqual({ size: "local", ratePerHour: 7_200_000 });
+      expect(next.machine).toEqual({ size: "medium", ratePerHour: 1_000_000 });
+      await complete((await claim("solve")).id, { status: "succeeded", result: SOLVED });
+      const chosen = await runOf(await startRun(id, alice, { machineSize: "small" }));
+      expect(chosen.machine).toEqual({ size: "small", ratePerHour: 7_200_000 });
     } finally {
-      await env.DB.prepare("UPDATE machine_sizes SET rate_per_hour = 1000000 WHERE name = 'local'").run();
+      await env.DB.prepare("UPDATE machine_sizes SET rate_per_hour = 500000 WHERE name = 'small'").run();
     }
   });
 
@@ -698,7 +711,8 @@ describe("metering (ADR-033)", () => {
   it("keeps a running balance that reconciles with the sum of the entries", async () => {
     const id = await meshed();
     for (const billableMs of [1, 999, 1000, 1001, 45_250]) {
-      await runOf(await startRun(id));
+      // On the medium size, at 1 credit an hour.
+      await runOf(await startRun(id, alice, { machineSize: "medium" }));
       const job = await claim("solve");
       await upload(job, RUN_FILES);
       await complete(job.id, { status: "succeeded", result: SOLVED, metering: { billableMs } });
@@ -719,3 +733,80 @@ async function signedInId(login: string): Promise<string | undefined> {
   const row = await env.DB.prepare("SELECT id FROM users WHERE login = ?").bind(login).first<{ id: string }>();
   return row?.id;
 }
+
+describe("estimates (ADR-049)", () => {
+  async function estimate(simulationId: string, cookie = alice): Promise<Response> {
+    return call("GET", `/api/simulations/${simulationId}/estimate`, { cookie });
+  }
+
+  it("estimate the current mesh on every machine size and recommend the cheapest that fits", async () => {
+    const id = await meshed();
+    const response = await estimate(id);
+    expect(response.status).toBe(200);
+    const body = validateEstimateResponse(await response.json());
+    if (!body.ok) throw new Error(body.errors.join(" "));
+    const fitted = estimateMesh(7108);
+    expect(body.value.estimate).toMatchObject({
+      estimator: estimatorTable.version,
+      nodes: 7108,
+      memoryBytes: fitted.memoryBytes,
+      seconds: fitted.seconds,
+      extrapolated: false,
+      recommended: "small",
+    });
+    expect(body.value.estimate.sizes.map((s) => [s.size, s.cores, s.memoryBytes / 2 ** 30, s.ratePerHour, s.fits])).toEqual([
+      ["small", 2, 8, 500_000, true],
+      ["medium", 4, 16, 1_000_000, true],
+      ["large", 8, 32, 2_000_000, true],
+      ["xlarge", 16, 64, 4_000_000, true],
+    ]);
+  });
+
+  it("are refused, saying what to do, until the mesh is ready", async () => {
+    const id = await simulation();
+    const response = await estimate(id);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as { error: string }).error).toContain("Generate the mesh");
+  });
+
+  it("are the owner's only", async () => {
+    const id = await meshed();
+    expect((await estimate(id, bob)).status).toBe(404);
+  });
+
+  it("are frozen with a run started on the size the user chose", async () => {
+    const id = await meshed();
+    const before = validateEstimateResponse(await (await estimate(id)).json());
+    if (!before.ok) throw new Error(before.errors.join(" "));
+    const response = await startRun(id, alice, { machineSize: "xlarge" });
+    expect(response.status).toBe(201);
+    const run = await runOf(response);
+    expect(run.machine).toEqual({ size: "xlarge", ratePerHour: 4_000_000 });
+    expect(run.estimate).toEqual(before.value.estimate);
+    const job = await claim("solve");
+    expect(job.id).toBeDefined();
+  });
+
+  it("refuse a machine size that is not on the list, and queue nothing", async () => {
+    const id = await meshed();
+    const response = await startRun(id, alice, { machineSize: "huge" });
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toBe(
+      "There is no machine size called huge. Choose one of: small, medium, large, xlarge.",
+    );
+    const list = validateRunListResponse(await (await call("GET", `/api/simulations/${id}/runs`, { cookie: alice })).json());
+    expect(list.ok && list.value.runs.length).toBe(0);
+    const none = await call("POST", "/internal/jobs/claim", {
+      json: { workerId: "w1", jobTypes: ["solve"] },
+      token: TOKEN,
+    });
+    expect(none.status).toBe(204);
+  });
+
+  it("refuse a run request that is not a CreateRunRequest", async () => {
+    const id = await meshed();
+    const response = await startRun(id, alice, { machine: "small" });
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toContain("CreateRunRequest");
+  });
+});
