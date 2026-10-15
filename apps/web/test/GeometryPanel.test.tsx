@@ -19,6 +19,7 @@ function geometry(overrides: Partial<GeometryView> = {}): GeometryView {
     readingFactor: 0.001,
     scaling: 1,
     confirmedUnit: null,
+    unitLocked: false,
     bodyCount: 1,
     faceCount: 7,
     size: 0.1136,
@@ -103,6 +104,15 @@ describe("geometry panel", () => {
     fireEvent.click(button);
     expect(await screen.findByText("Importing")).toBeTruthy();
     expect(fetchMock.mock.calls[1]?.[1]?.body).toBe(JSON.stringify({ unit: "in" }));
+  });
+
+  it("shows a locked unit without a way to change it", async () => {
+    const used = geometry({ status: "ready", confirmedUnit: "mm", unitLocked: true });
+    serve({ "GET /api/geometries": { status: 200, body: { geometries: [used] } } });
+    render(<GeometryPanel onSignedOut={() => {}} />);
+    expect(await screen.findByText(/The unit is mm and is locked, because a simulation uses/)).toBeTruthy();
+    expect(screen.queryByLabelText("Length unit of the file")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change unit" })).toBeNull();
   });
 
   it("shows why an import failed", async () => {

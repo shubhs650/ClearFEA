@@ -132,7 +132,7 @@
       "additionalProperties": false,
       "required": [
         "id", "name", "sizeBytes", "status", "problem", "declaredUnit", "detectedUnit",
-        "unitProblem", "readingFactor", "scaling", "confirmedUnit", "bodyCount", "faceCount", "size", "bbox", "createdAt"
+        "unitProblem", "readingFactor", "scaling", "confirmedUnit", "unitLocked", "bodyCount", "faceCount", "size", "bbox", "createdAt"
       ],
       "properties": {
         "id": { "type": "string" },
@@ -149,6 +149,10 @@
         },
         "scaling": { "description": "Geometry.OCCScaling of the current topology.", "type": ["number", "null"] },
         "confirmedUnit": { "oneOf": [{ "$ref": "#/$defs/LengthUnit" }, { "type": "null" }] },
+        "unitLocked": {
+          "description": "True once a simulation uses the geometry: its face tags and sizes are then fixed, so the unit can no longer be changed (ADR-026).",
+          "type": "boolean"
+        },
         "bodyCount": { "type": ["integer", "null"] },
         "faceCount": { "type": ["integer", "null"] },
         "size": { "description": "Bounding box diagonal in metres at the current scale.", "type": ["number", "null"] },
