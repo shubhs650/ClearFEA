@@ -144,6 +144,15 @@ describe("pre-run validation", () => {
     ]);
   });
 
+  it("asks an elastic support for faces and a foundation stiffness (M2.6)", () => {
+    const s = spec();
+    const foundation = { id: "e-1", type: "elastic", name: "Soil", faces: [], stiffness: null } as SimulationSpec["supports"][0];
+    expect(messages({ ...s, supports: [...s.supports, foundation] })).toEqual([
+      `Support "Soil" has no faces. Select the faces it supports and add them to it.`,
+      `Support "Soil" has no foundation stiffness. Enter it.`,
+    ]);
+  });
+
   it("asks the M2.3 loads for their values and every material for a density", () => {
     const s = spec();
     s.loads = [

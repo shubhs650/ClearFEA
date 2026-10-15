@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-07: a block on an elastic foundation, pressed down by a force on its top.
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-07
+title: Block on an elastic support
+analysis: linear_static
+features: [elastic support, frictionless support, force, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  base: { min: [0, 0, 0], max: [100, 60, 0] }
+  top: { min: [0, 0, 40], max: [100, 60, 40] }
+  x0: { min: [0, 0, 0], max: [0, 60, 40] }
+  y0: { min: [0, 0, 0], max: [100, 0, 40] }
+  side: { min: [100, 0, 0], max: [100, 60, 40] }
+mesh:
+  coarse: { value: 10, unit: mm }
+  full: { value: 5, unit: mm }
+# The stress is uniform and the base moves down as one, which the mesh represents exactly
+# (reference.md), so every check is tight on both tiers.
+checks:
+  - name: Base settles by F / (k A)
+    quantity: displacement.z
+    face: base
+    reference: { value: -1.84197927, unit: mm }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Top moves by F / (k A) + F H / (E A)
+    quantity: displacement.z
+    face: top
+    reference: { value: -2.24197927, unit: mm }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Uniform compression F / A
+    quantity: vonMises
+    face: side
+    reference: { value: 1, unit: MPa }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Foundation carries the force
+    quantity: reaction.z
+    support: foundation
+    reference: { value: 6, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }

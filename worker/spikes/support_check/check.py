@@ -7,7 +7,9 @@ checks what the deck generator and result reader alone decide for the new suppor
 prescribed value reaches the nodes, a frictionless face slides in its plane and not along its
 normal (on an inclined plane through *TRANSFORM too), reactions are shared between supports
 that meet at an edge, and setups that leave the part free or ask for two motions at once are
-refused.
+refused. Since M2.6 it also checks the elastic support: grounded springs along a leaning
+face's normal, at nodes that a frictionless plane holds through local axes too, and the
+support's reaction.
 
     cd worker && uv run python spikes/support_check/check.py [--out DIR]
 
@@ -263,6 +265,84 @@ def turned(root: Path, order: int) -> list[Row]:
     ]
 
 
+#: Foundation stiffness and the pressure pushing the turned bar into it (M2.6).
+K_N_MM3, PRESS_MPA = 1000.0, 10.0
+
+
+def on_foundation(root: Path, order: int) -> list[Row]:
+    """The turned bar with its leaning side y- on an elastic support (M2.6), the start and the
+    base on frictionless planes, pressed into the foundation by a pressure on the side y+."""
+    angle = 30.0
+    mesh, f = prepare(root, angle, order)
+    s = spec(
+        [
+            frictionless("start", [f["x-"]]),
+            frictionless("base", [f["z-"]]),
+            {
+                "id": "soil",
+                "type": "elastic",
+                "name": "soil",
+                "faces": [f["y-"]],
+                "stiffness": {"value": K_N_MM3, "unit": "N/mm³"},
+            },
+        ],
+        [
+            {
+                "id": "press",
+                "type": "pressure",
+                "name": "press",
+                "faces": [f["y+"]],
+                "magnitude": {"value": PRESS_MPA, "unit": "MPa"},
+            }
+        ],
+    )
+    fields, result = solve(s, mesh, root / f"foundation-p{order}")
+    sigma = PRESS_MPA * 1e6
+    k = K_N_MM3 * 1e9
+    mises = von_mises_field(fields)
+    worst = max(rel(v, sigma) for v in mises)
+    c, sn = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    eps = sigma / E_SI
+    settle = sigma / k
+    p = mesh.positions
+    off = 0.0
+    for n in range(mesh.node_count):
+        x, y, z = p[3 * n : 3 * n + 3]
+        lx, ly = c * x + sn * y, -sn * x + c * y
+        # Uniform compression across the bar on a foundation that gives way by p / k.
+        ux, uy, uz = (NU * eps * lx, -settle - eps * ly, NU * eps * z)
+        exact = (c * ux - sn * uy, sn * ux + c * uy, uz)
+        off = max(off, max(abs(fields.displacement[3 * n + i] - exact[i]) for i in range(3)))
+    force = sigma * L * H / 1e6
+    r = {x.support_id: x.force for x in result.reactions}
+    return [
+        (
+            f"p{order} foundation: von Mises = pressure at every node",
+            f"{sigma:.6g} Pa",
+            f"worst {worst:.2e}",
+            worst < 1e-4,
+        ),
+        (
+            f"p{order} foundation: settles by p/k, displacement field exact",
+            f"{settle:.6g} m settlement, 0 m off",
+            f"{off:.2e} m off",
+            off < 1e-5 * settle,
+        ),
+        (
+            f"p{order} foundation: elastic support pushes back p·A along the side's normal",
+            f"{-force * sn:.6g}, {force * c:.6g}, 0 N",
+            ", ".join(f"{v:.6g}" for v in r["soil"]),
+            math.dist(r["soil"], (-force * sn, force * c, 0)) < 1e-5 * force,
+        ),
+        (
+            f"p{order} foundation: start and base carry nothing",
+            "0 N",
+            ", ".join(f"{v:.3g}" for v in (*r["start"], *r["base"])),
+            max(map(abs, (*r["start"], *r["base"]))) < 1e-5 * force,
+        ),
+    ]
+
+
 def refusals(root: Path) -> list[Row]:
     mesh, f = prepare(root, 0.0, 1)
     pull = [
@@ -280,6 +360,22 @@ def refusals(root: Path) -> list[Row]:
             "one symmetry plane leaves the part free",
             spec([frictionless("sym", [f["x-"]])], pull),
             "slide along y, slide along z and turn about the x axis",
+        ),
+        (
+            "an elastic support alone on one face leaves the part free",
+            spec(
+                [
+                    {
+                        "id": "e",
+                        "type": "elastic",
+                        "name": "e",
+                        "faces": [f["z-"]],
+                        "stiffness": {"value": 1, "unit": "N/mm³"},
+                    }
+                ],
+                pull,
+            ),
+            "slide along x, slide along y and turn about the z axis",
         ),
         (
             "all components free holds nothing",
@@ -329,6 +425,7 @@ def main() -> int:
     for order in (1, 2):
         rows += stretched(root, order)
         rows += turned(root, order)
+        rows += on_foundation(root, order)
     rows += refusals(root)
     print("| Check | Expected | Got | OK |\n| --- | --- | --- | --- |")
     for name, expected, got, ok in rows:

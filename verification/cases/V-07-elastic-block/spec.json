@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "polymer" }],
+  "materials": [
+    {
+      "id": "polymer",
+      "name": "Stiff polymer (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 100, "unit": "MPa" },
+      "poissonsRatio": 0.3
+    }
+  ],
+  "supports": [
+    {
+      "id": "foundation",
+      "type": "elastic",
+      "name": "Foundation",
+      "faces": ["base"],
+      "stiffness": { "value": 2000, "unit": "lbf/in³" }
+    },
+    { "id": "x0", "type": "frictionless", "name": "Symmetry x", "faces": ["x0"] },
+    { "id": "y0", "type": "frictionless", "name": "Symmetry y", "faces": ["y0"] }
+  ],
+  "loads": [
+    {
+      "id": "press",
+      "type": "force",
+      "name": "Press",
+      "faces": ["top"],
+      "x": { "value": 0, "unit": "lbf" },
+      "y": { "value": 0, "unit": "N" },
+      "z": { "value": -6, "unit": "kN" }
+    }
+  ],
+  "mesh": { "size": { "value": 10, "unit": "mm" } }
+}

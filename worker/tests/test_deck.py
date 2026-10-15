@@ -771,15 +771,18 @@ def test_a_node_on_two_faces_of_an_elastic_support_gets_a_spring_for_each() -> N
     assert at[3] == [(-1.0, 0.0, 0.0)]
 
 
-def test_elastic_springs_have_held_far_nodes_and_the_results_leave_them_out() -> None:
+def test_elastic_springs_are_spring1_elements_along_the_normals() -> None:
     text = deck(elastic_sym_spec(), two_tets(order=2))
-    assert "*BOUNDARY\nG2, 1, 3\nG3, 1, 3\n" in text
-    assert "*NODE FILE, NSET=NALL\nU\n*EL FILE, NSET=NALL\nS\n" in text
-    assert "*NODE PRINT, NSET=S2, GLOBAL=YES\nU\n" in text
-    # 2000 MN/m³ = 2e9 N/m³; a third of face 2's 50 mm² on each mid-edge node.
+    # 2000 MN/m³ = 2e9 N/m³; a third of face 2's 50 mm² on each mid-edge node, along z.
     assert "foundation stiffness 2000.0 MN/m³ = 2000000000.0 N/m^3" in text
-    # Decks without an elastic support are unchanged (snapshots), with no output node set.
-    assert "*NODE FILE\nU\n" in deck(supports_spec(), two_tets(order=2))
+    assert "*SPRING, ELSET=K1\n3\n33333.33333333" in text
+    # Face 3 leans, so its springs act along local direction 1 of an orientation.
+    assert "*ORIENTATION, NAME=O1, SYSTEM=RECTANGULAR\n0.5773502691896" in text
+    assert ", ORIENTATION=O1\n1\n" in text
+    assert "*NODE PRINT, NSET=S2, GLOBAL=YES\nU\n" in text
+    # No extra nodes: the result file holds the mesh's nodes only.
+    assert "*NODE FILE\nU\n*EL FILE\nS\n" in text
+    assert text.count("*NODE,") == 1
 
 
 def test_elastic_support_with_fixed_supports_keeps_their_totals() -> None:

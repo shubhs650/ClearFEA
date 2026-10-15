@@ -17,13 +17,15 @@ edge) gets a spring for each face, along that face's normal. Nodes whose w_i is 
 ROUNDING of the support's largest get none (on curved faces a corner's w_i can be slightly
 negative, and a spring cannot have a negative stiffness).
 
-Each spring is a CalculiX SPRINGA element from the node to a node of its own, GROUND_LENGTH
-away along d_i and held in all directions (checked with ccx 2.21: a linear SPRINGA acts along
-the line between its nodes), so the springs need no *TRANSFORM and do not clash with the
-constraint groups of other supports. The support's reaction is worked out from the
-displacements of its nodes, not from CalculiX's reaction at the far nodes (see
-GROUND_LENGTH): the force the foundation puts on the part is -k_i d_i (d_i · u_i) at each
-spring.
+Each spring is a CalculiX SPRING1 element at the node, acting along local direction 1 of an
+*ORIENTATION whose x axis is d_i, or along the global degree of freedom when d_i is an axis
+(checked with ccx 2.21; the spring adds k d dᵀ at the node in global axes, so it needs no
+*TRANSFORM and does not clash with the constraint groups of other supports). Not SPRINGA to a
+held far node: CalculiX averages nodal stresses over every element at a node and counts a
+SPRINGA among them with zero stress, which halved the stress at a spring's node in M2.6's
+check, while SPRING1 elements are left out of the average (extrapolate.f). The support's
+reaction is worked out from the displacements of its nodes, -k_i d_i (d_i · u_i) at each
+spring, which is the force CalculiX's linear SPRING1 applies.
 """
 
 from dataclasses import dataclass
@@ -40,18 +42,6 @@ ROUNDING = 1e-12
 #: A spring direction whose other components are all below this is snapped to the axis, so the
 #: common case of a face on x, y or z reads plainly in the deck.
 NORMAL_SNAP = 1e-9
-#: Distance (m) from a node to the held far node of its spring. Any length gives the same
-#: solution (checked with ccx 2.21: the displacements were identical for 1 m and 1e6 m), but
-#: not the same reaction output: CalculiX works out a SPRINGA's force for RF from the
-#: deformed positions, k (|g - x - u| - |g - x|) along the deformed line. Across a short
-#: spring a sliding node tilts that force (a 53 mm slide across 1 m put 5 percent of it
-#: sideways) and adds k |u_t|² / 2L along it; across a long one the length change is lost to
-#: rounding (3e-6 of the force at 1e6 m). So the reader takes an elastic support's reaction
-#: from displacements, not from RF at the far nodes. A spring at a node another support holds
-#: still shows in that node's RF; at 1 km the error there is below 1e-6 of the spring's force
-#: for displacements up to a millimetre, and the far node's coordinates keep their direction
-#: to about 1e-16.
-GROUND_LENGTH = 1000.0
 
 
 @dataclass(frozen=True)
@@ -132,17 +122,6 @@ def elastic_springs(mesh: VolumeMesh, support: ElasticSupport) -> list[Spring]:
             direction = _snap([c / length for c in vector])
             springs.append(Spring(node, direction, k * w))
     return springs
-
-
-def ground_point(mesh: VolumeMesh, spring: Spring) -> Vector:
-    """Where the held far node of ``spring`` is (m)."""
-    p = mesh.positions
-    n = spring.node
-    return (
-        p[3 * n] + GROUND_LENGTH * spring.direction[0],
-        p[3 * n + 1] + GROUND_LENGTH * spring.direction[1],
-        p[3 * n + 2] + GROUND_LENGTH * spring.direction[2],
-    )
 
 
 def spring_reaction(springs: list[Spring], displacements: dict[int, Vector]) -> Vector:

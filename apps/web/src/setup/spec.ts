@@ -22,7 +22,7 @@ import {
   type TopologyTags,
 } from "@clearfea/spec";
 
-/** The types of support the setup offers (M1.5 fixed; M2.2 prescribed displacement, frictionless). */
+/** The types of support the setup offers (M1.5 fixed; M2.2 prescribed displacement, frictionless; M2.6 elastic). */
 export type SupportType = Support["type"];
 
 /**
@@ -90,8 +90,16 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   const supports = spec.supports.map((s) => {
     const missing: string[] = [];
     if (s.faces.length === 0) {
-      missing.push({ fixed: "Pick the faces to fix.", displacement: "Pick the faces to move.", frictionless: "Pick the flat faces it holds." }[s.type]);
+      missing.push(
+        {
+          fixed: "Pick the faces to fix.",
+          displacement: "Pick the faces to move.",
+          frictionless: "Pick the flat faces it holds.",
+          elastic: "Pick the faces it supports.",
+        }[s.type],
+      );
     }
+    if (s.type === "elastic" && s.stiffness === null) missing.push("Enter the foundation stiffness.");
     if (s.type === "displacement") {
       for (const axis of displacementAxes) {
         if (s[axis] === null) missing.push(`Enter the ${axis} displacement or set it free.`);
@@ -228,7 +236,9 @@ export function addSupport(
       ? { ...base, type, x: "free", y: "free", z: "free" }
       : type === "frictionless"
         ? { ...base, type }
-        : { ...base, type: "fixed" };
+        : type === "elastic"
+          ? { ...base, type, stiffness: null }
+          : { ...base, type: "fixed" };
   return { id: support.id, spec: { ...spec, supports: [...spec.supports, support] } };
 }
 

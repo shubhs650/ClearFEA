@@ -206,9 +206,11 @@ describe("setup edits", () => {
   it("adds each type of support with its own id, name and defaults", () => {
     let spec = addSupport(empty(), "displacement", [1]).spec;
     spec = addSupport(spec, "frictionless", [2]).spec;
+    spec = addSupport(spec, "elastic", []).spec;
     expect(spec.supports).toEqual([
       { id: "displacement-1", type: "displacement", name: "Prescribed displacement 1", faces: [1], x: "free", y: "free", z: "free" },
       { id: "frictionless-1", type: "frictionless", name: "Frictionless support 1", faces: [2] },
+      { id: "elastic-1", type: "elastic", name: "Elastic support 1", faces: [], stiffness: null },
     ]);
     const status = setupStatus(spec, topology);
     expect(status.get("displacement-1")).toEqual({
@@ -216,6 +218,10 @@ describe("setup edits", () => {
       notes: ["Give at least one component a value; every one is free."],
     });
     expect(status.get("frictionless-1")).toEqual({ mark: "complete", notes: [] });
+    expect(status.get("elastic-1")).toEqual({
+      mark: "incomplete",
+      notes: ["Pick the faces it supports.", "Enter the foundation stiffness."],
+    });
   });
 
   it("numbers new items with the smallest free number", () => {

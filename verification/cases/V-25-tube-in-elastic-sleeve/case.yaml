@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-25: V-09's quarter tube under internal pressure, its outside resting on an elastic
+# foundation. Reference values and their derivation: reference.md.
+id: V-25
+title: Tube in an elastic sleeve (curved elastic support)
+analysis: linear_static
+features: [elastic support on a curved face, frictionless support, inclined symmetry planes, pressure]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit, as V-09.
+faces:
+  cut-30: { min: [34.6410, 20, 0], max: [51.9615, 30, 100] }
+  cut-120: { min: [-30, 34.6410, 0], max: [-20, 51.9615, 100] }
+  base: { min: [-30, 20, 0], max: [51.9615, 60, 0] }
+  bore: { min: [-20, 20, 0], max: [34.6410, 40, 100] }
+  outside: { min: [-30, 30, 0], max: [51.9615, 60, 100] }
+mesh:
+  coarse: { value: 1, unit: cm } # two quadratic elements through the wall, as V-01 and V-09
+  full: { value: 5, unit: mm }
+# The open-ended Lamé solution with a foundation on the outside holds in the whole quarter
+# (reference.md), so the checks read whole faces.
+checks:
+  - name: von Mises stress at the bore
+    quantity: vonMises
+    face: bore
+    reference: { value: 26.0574, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: von Mises stress at the outside
+    quantity: vonMises
+    face: outside
+    reference: { value: 12.3499, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Radial displacement of the bore
+    quantity: displacement.radial
+    face: bore
+    reference: { value: 0.00451524, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Radial displacement of the outside
+    quantity: displacement.radial
+    face: outside
+    reference: { value: 0.00356877, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Foundation's push on the outside, x
+    quantity: reaction.x
+    support: sleeve
+    reference: { value: -3.91878, unit: kN }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Foundation's push on the outside, y
+    quantity: reaction.y
+    support: sleeve
+    reference: { value: -14.6251, unit: kN }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Hoop force on the 30° plane, y
+    quantity: reaction.y
+    support: cut-30
+    reference: { value: -25.3691, unit: kN }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Hoop force on the 120° plane, x
+    quantity: reaction.x
+    support: cut-120
+    reference: { value: -25.3691, unit: kN }
+    tolerance: { coarse: 0.01, full: 0.005 }

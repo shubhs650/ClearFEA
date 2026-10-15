@@ -6,7 +6,6 @@ from .generator import (
     REACTION_SET,
     DeckError,
     generate_deck,
-    ground_set_name,
     only_fixed_supports,
     support_set_names,
 )
@@ -16,7 +15,6 @@ __all__ = [
     "REACTION_SET",
     "DeckError",
     "generate_deck",
-    "ground_set_name",
     "only_fixed_supports",
     "support_set_names",
 ]
