@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Solver supervision, with small scripts standing in for CalculiX."""
 
-import os
 import sys
 import threading
 import time
@@ -70,9 +69,12 @@ def test_a_cancel_stops_the_solver(tmp_path: Path) -> None:
     assert time.monotonic() - started < 10
 
 
-def test_ccx_gets_every_core_unless_told_otherwise(tmp_path: Path) -> None:
-    ccx = fake_solver(tmp_path, 'import os\nprint(os.environ.get("OMP_NUM_THREADS"), flush=True)')
+def test_spooles_runs_on_one_thread_whatever_the_environment_says(tmp_path: Path) -> None:
+    ccx = fake_solver(
+        tmp_path, 'import os\nprint(os.environ.get("CCX_NPROC_EQUATION_SOLVER"), flush=True)'
+    )
     lines: list[str] = []
     run_calculix(deck(tmp_path), lines.append, threading.Event(), executable=ccx)
-    assert lines == [f"{len(os.sched_getaffinity(0))}\n"]
-    assert solver_environment({"OMP_NUM_THREADS": "2"})["OMP_NUM_THREADS"] == "2"
+    assert lines == ["1\n"]
+    env = solver_environment({"CCX_NPROC_EQUATION_SOLVER": "4", "OMP_NUM_THREADS": "4"})
+    assert env == {"CCX_NPROC_EQUATION_SOLVER": "1", "OMP_NUM_THREADS": "4"}

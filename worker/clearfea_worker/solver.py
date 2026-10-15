@@ -21,15 +21,18 @@ TERMINATE_SECONDS = 5.0
 
 
 def solver_environment(base: dict[str, str] | None = None) -> dict[str, str]:
-    """CalculiX's environment with every core this process may use given to it (ADR-048).
+    """CalculiX's environment, with SPOOLES held to one thread whatever else is set (ADR-048).
 
-    Without OMP_NUM_THREADS ccx sets up the matrix, factorises with SPOOLES and computes
-    stresses on one core. With four, SPOOLES solved 97,000 second-order tetrahedra in 271 s
-    instead of 574 s, but needed 9.8 GiB instead of 5.3 GiB (M2.11 benchmark). A value already
-    set (by whoever runs the worker) is kept.
+    ccx 2.21's multithreaded SPOOLES (CCX_NPROC_EQUATION_SOLVER, or OMP_NUM_THREADS when that
+    is unset) now and then returns a wrong solution: solved 20 times on 4 threads, two of the
+    support check's decks (elastic support, turned support) came out off by up to 240 and 25
+    percent of their largest value, and V-07 and V-24 once failed make verify by up to 200
+    percent, while every single-threaded solve was identical (M2.11). Other threads (matrix
+    set-up, stresses) follow OMP_NUM_THREADS, which the worker leaves unset, so ccx uses one
+    core for everything.
     """
     env = dict(os.environ if base is None else base)
-    env.setdefault("OMP_NUM_THREADS", str(len(os.sched_getaffinity(0))))
+    env["CCX_NPROC_EQUATION_SOLVER"] = "1"
     return env
 
 
