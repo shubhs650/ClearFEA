@@ -144,8 +144,14 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await treeRow(page, "Run").click();
     const run = settings.getByRole("region", { name: "Run", exact: true });
     await expect(run.getByRole("region", { name: "Before running", exact: true })).toHaveCount(0);
+    // The estimate before the run (M2.12): the small block fits the smallest machine size.
+    const estimate = run.getByRole("region", { name: "Estimate", exact: true });
+    await expect(estimate).toContainText(/about [\d.]+ (MiB|GiB) at its peak/);
+    await expect(estimate.getByLabel("Machine size")).toHaveValue("small");
+    await page.screenshot({ path: `${OUT}/e01-estimate.png` });
     await run.getByRole("button", { name: "Run", exact: true }).click();
     await expect(run.getByLabel("Run results")).toContainText("Largest von Mises stress", { timeout: 180_000 });
+    await expect(run.getByLabel("Run record")).toContainText(/Estimate.*about \d+ s/);
 
     const legend = page.getByRole("region", { name: "Legend", exact: true });
     await expect(legend).toContainText("Von Mises stress (MPa)", { timeout: 60_000 });

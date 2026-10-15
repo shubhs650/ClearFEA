@@ -1010,9 +1010,10 @@ describe("run", () => {
     const size = estimate.getByRole("combobox", { name: "Machine size" }) as HTMLSelectElement;
     expect(size.value).toBe("small");
     expect([...size.options].map((o) => o.text)).toEqual([
-      "small: 2 cores, 8 GiB, about 0.000417 credits (recommended)",
-      "medium: 4 cores, 16 GiB, about 0.000833 credits",
+      "small (2 cores, 8 GiB), recommended",
+      "medium (4 cores, 16 GiB)",
     ]);
+    expect(estimate.getByText("about 0.000417 credits on small")).toBeTruthy();
     fireEvent.click(button);
     expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
     expect(await settings().findByText("CalculiX Version 2.21")).toBeTruthy();
@@ -1045,8 +1046,9 @@ describe("run", () => {
     const estimate = within(await settings().findByLabelText("Estimate"));
     const size = estimate.getByRole("combobox", { name: "Machine size" }) as HTMLSelectElement;
     expect(size.value).toBe("medium");
-    expect(size.options[0]?.text).toBe("small: 2 cores, 8 GiB, about 0.000417 credits (too little memory)");
+    expect(size.options[0]?.text).toBe("small (2 cores, 8 GiB), too little memory");
     fireEvent.change(size, { target: { value: "small" } });
+    expect(estimate.getByText("about 0.000417 credits on small")).toBeTruthy();
     expect(
       estimate.getByText(
         "The estimate needs more memory than this size has, so the run may stop for lack of memory. The recommended size is medium.",

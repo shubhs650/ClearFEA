@@ -55,13 +55,11 @@ function Blockers({ blockers, onOpen }: { blockers: readonly RunBlocker[]; onOpe
   );
 }
 
-/** One machine size as an option: its cores, memory and the estimated cost on it. */
+/** One machine size as an option: its cores and memory, and whether it is the recommended one. */
 function sizeLabel(size: RunEstimate["sizes"][number], recommended: string | null): string {
-  const notes = [size.size === recommended ? "recommended" : null, size.fits ? null : "too little memory"].filter(
-    (note) => note !== null,
-  );
-  const label = `${size.size}: ${size.cores} cores, ${memory(size.memoryBytes)}, about ${credits(size.cost)}`;
-  return notes.length === 0 ? label : `${label} (${notes.join(", ")})`;
+  const label = `${size.size} (${size.cores} cores, ${memory(size.memoryBytes)})`;
+  if (size.size === recommended) return `${label}, recommended`;
+  return size.fits ? label : `${label}, too little memory`;
 }
 
 /**
@@ -92,6 +90,14 @@ function Estimate({
         <dd>about {memory(estimate.memoryBytes)} at its peak</dd>
         <dt>Time</dt>
         <dd>about {duration(estimate.seconds)}</dd>
+        {chosen !== undefined && (
+          <>
+            <dt>Cost</dt>
+            <dd>
+              about {credits(chosen.cost)} on {chosen.size}
+            </dd>
+          </>
+        )}
       </dl>
       <label className="field">
         Machine size
