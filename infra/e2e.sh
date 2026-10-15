@@ -33,7 +33,7 @@ stack_start
 
 say "Starting the web app on :$web_port."
 CLEARFEA_API_ORIGIN="http://127.0.0.1:$port" pnpm --silent --filter @clearfea/web exec \
-  vite --port "$web_port" --strictPort </dev/null >"$out/web.log" 2>&1 &
+  vite --host 127.0.0.1 --port "$web_port" --strictPort </dev/null >"$out/web.log" 2>&1 &
 pids+=("$(jobs -p %%)")
 for _ in $(seq 1 60); do
   curl -fsS -o /dev/null "http://127.0.0.1:$web_port/api/health" 2>/dev/null && break
