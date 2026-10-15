@@ -58,10 +58,10 @@ export function MeshPanel({
           {requestProblem}
         </p>
       )}
-      {mesh !== null && (
+      {/* A failed mesh's reason is the first note above. */}
+      {mesh !== null && mesh.status !== "failed" && (
         <div className="mesh-summary" role="status" aria-label="Latest mesh">
           {mesh.status === "meshing" && <p>Meshing with a size of {mesh.size.value} {mesh.size.unit}…</p>}
-          {mesh.status === "failed" && <p className="form-problem">{mesh.problem}</p>}
           {mesh.status === "ready" && (
             <dl className="geometry-facts">
               <dt>Elements</dt>

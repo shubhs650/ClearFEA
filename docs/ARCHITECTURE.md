@@ -54,7 +54,7 @@ This is the highest-risk design point. A user clicks a face in the viewer and ap
 2. **Topology file.** The worker writes `topology.json`: for each body and face, its tag, type (plane, cylinder, other), area, centroid, bounding box and parent body. This file is the reference for face identity.
 3. **Display mesh.** The worker tessellates each face and writes one binary file with triangles grouped by face tag (`packages/spec/display-mesh.md`). The viewer uses this for rendering and picking, so a click resolves to a face tag.
 4. **Spec.** Loads and supports in the `SimulationSpec` reference face tags (and body tags) of a specific geometry id.
-5. **Mesh.** Gmsh meshes the same imported geometry. Surface elements carry their face tag. The worker writes, for every face tag, the list of volume-element faces lying on it.
+5. **Mesh.** Gmsh meshes the same imported geometry. Surface elements carry their face tag. The worker writes, for every face tag, the list of volume-element faces lying on it. The mesh file format is `packages/spec/volume-mesh.md` (ADR-028).
 6. **Deck.** The deck generator turns face tags into CalculiX node sets and element-face surfaces.
 7. **Results.** Reaction sums and face-based result tables use the same sets.
 

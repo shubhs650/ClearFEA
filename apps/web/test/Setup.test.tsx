@@ -362,7 +362,7 @@ describe("mesh", () => {
     );
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Mesh, has a problem" }));
-    expect(settings().getAllByText(problem).length).toBeGreaterThan(0);
+    expect(settings().getAllByText(problem)).toHaveLength(1);
     expect(settings().getByRole("button", { name: "Generate mesh again" })).toHaveProperty("disabled", false);
   });
 });
