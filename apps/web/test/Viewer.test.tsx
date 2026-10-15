@@ -148,7 +148,8 @@ describe("viewer", () => {
     render(<Harness view={geometry()} />);
     expect(await screen.findByText(/Click a face to select it/)).toBeTruthy();
     const view = scene.instances[0];
-    expect(view?.meshes).toHaveLength(1);
+    // The scene is given the mesh in an effect, which can run just after the text appears.
+    await vi.waitFor(() => expect(view?.meshes).toHaveLength(1));
     expect(view?.meshes[0]?.faces.map((f) => f.tag)).toEqual([3, 7]);
   });
 

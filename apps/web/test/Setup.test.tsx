@@ -337,7 +337,8 @@ describe("mesh", () => {
     expect(settings().getByText("4,000")).toBeTruthy();
     expect(settings().getByText("7,108")).toBeTruthy();
     expect(await screen.findByText("Mesh: 4,000 elements, 7,108 nodes")).toBeTruthy();
-    expect(scene.edges.at(-1)).toBe("elements");
+    // The scene is given the mesh in an effect, which can run just after the text appears.
+    await waitFor(() => expect(scene.edges.at(-1)).toBe("elements"));
     expect(fetchMock.mock.calls.some(([path]) => path === "/api/meshes/m1/display")).toBe(true);
     expect(settings().getByRole("button", { name: "Generate mesh again" })).toHaveProperty("disabled", true);
 
