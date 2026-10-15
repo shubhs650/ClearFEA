@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Pure helpers for the setup tree (M1.5): adding, changing and removing SimulationSpec items,
 // and the complete / incomplete / error mark of each tree item. The marks say what an item
-// still needs in plain language; the full pre-run list beside the Run button is M1.12.
+// still needs in plain language; the full pre-run list beside the Run button is preRunProblems
+// in packages/spec (M1.12).
 
 import {
   type FixedSupport,

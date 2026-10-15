@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { emptySimulationSpec, type MeshView, type RunView, type SimulationSpec } from "@clearfea/spec";
+import { emptySimulationSpec, type MeshView, preRunProblems, type RunView, type SimulationSpec } from "@clearfea/spec";
 import { describe, expect, it } from "vitest";
 import {
   addFixedSupport,
@@ -36,6 +36,31 @@ function complete(): SimulationSpec {
 }
 
 describe("setup status marks", () => {
+  it("agree with the pre-run list: every mark is complete exactly when nothing stops a run", () => {
+    const allComplete = (spec: SimulationSpec) =>
+      [...setupStatus(spec, topology).values()].every((status) => status.mark === "complete");
+    const full = complete();
+    const [material] = full.materials;
+    const [support] = full.supports;
+    const [load] = full.loads;
+    if (!material || !support || !load) throw new Error("incomplete fixture");
+    const cases: SimulationSpec[] = [
+      empty(),
+      full,
+      addMaterial(empty()).spec,
+      { ...full, mesh: { size: null } },
+      { ...full, loads: [] },
+      { ...full, supports: [{ ...support, faces: [] }] },
+      { ...full, loads: [{ ...load, magnitude: null }] },
+      { ...full, materials: [{ ...material, poissonsRatio: null }] },
+      { ...full, bodies: [{ tag: 1, material: null }] },
+      { ...full, supports: [{ ...support, faces: [9] }] },
+    ];
+    for (const spec of cases) {
+      expect(allComplete(spec)).toBe(preRunProblems(spec, topology).length === 0);
+    }
+  });
+
   it("marks an empty setup's groups incomplete and says what to add", () => {
     const status = setupStatus(empty(), topology);
     expect(status.get("materials")).toEqual({ mark: "incomplete", notes: ["Add a material."] });

@@ -391,18 +391,51 @@ function run(overrides: Partial<RunView> = {}): RunView {
   };
 }
 
+/** A setup with nothing missing, so only the mesh decides whether it can run. */
 const supported: SimulationSpec = {
   ...meshed,
+  bodies: [{ tag: 1, material: "material-1" }],
+  materials: [
+    {
+      id: "material-1",
+      name: "Steel",
+      model: "isotropic_elastic",
+      youngsModulus: { value: 200, unit: "GPa" },
+      poissonsRatio: 0.3,
+    },
+  ],
   supports: [{ id: "fixed-1", type: "fixed", name: "Base", faces: [3] }],
+  loads: [{ id: "pressure-1", type: "pressure", name: "Top", faces: [7], magnitude: { value: 1, unit: "MPa" } }],
 };
 
 describe("run", () => {
+  it("lists what stops the setup from running, and each line opens its item", async () => {
+    const incomplete: SimulationSpec = {
+      ...supported,
+      materials: [],
+      bodies: [{ tag: 1, material: null }],
+      loads: [{ id: "pressure-1", type: "pressure", name: "Top", faces: [], magnitude: null }],
+    };
+    serve(routes([simulation(incomplete)], { "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } } }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    const list = within(await settings().findByLabelText("Before running"));
+    expect(settings().getByRole("button", { name: "Run" })).toHaveProperty("disabled", true);
+    expect(list.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "There is no material. Add a material under Materials.",
+      'Load "Top" has no faces. Select the faces it acts on and add them to it.',
+      'Load "Top" has no pressure value. Enter it.',
+    ]);
+    fireEvent.click(list.getByRole("button", { name: 'Load "Top" has no pressure value. Enter it.' }));
+    expect(settings().getByRole("region", { name: "Pressure" })).toBeTruthy();
+  });
+
   it("waits for a current mesh, then solves and shows the solver log", async () => {
     serve(routes([simulation(supported)]));
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
     expect(settings().getByRole("button", { name: "Run" })).toHaveProperty("disabled", true);
-    expect(settings().getByText("Generate the mesh first.")).toBeTruthy();
+    expect(settings().getByText("There is no mesh. Generate it under Mesh.")).toBeTruthy();
     cleanup();
 
     const fetchMock = serve(

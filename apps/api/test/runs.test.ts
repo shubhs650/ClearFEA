@@ -256,6 +256,27 @@ describe("starting a run", () => {
     });
   });
 
+  it("refuses a setup the pre-run list finds incomplete, before any job is queued or charged", async () => {
+    const id = await meshed();
+    const simulationRow = await call("GET", `/api/simulations/${id}`, { cookie: alice });
+    const view = validateSimulationResponse(await simulationRow.json());
+    if (!view.ok) throw new Error(view.errors.join(" "));
+    const saved = view.value.simulation.spec;
+    const incomplete = { ...saved, loads: [], supports: saved.supports.map((s) => ({ ...s, faces: [] })) };
+    expect((await call("PUT", `/api/simulations/${id}/spec`, { json: incomplete, cookie: alice })).status).toBe(200);
+    const jobsBefore = await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs").first<{ n: number }>();
+    const refused = await startRun(id);
+    expect(refused.status).toBe(409);
+    const { error } = (await refused.json()) as { error: string };
+    expect(error).toContain("The setup is not ready to run.");
+    expect(error).toContain(`Support "Fixed support 1" has no faces.`);
+    expect(error).toContain("There is no load");
+    const jobsAfter = await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs").first<{ n: number }>();
+    expect(jobsAfter?.n).toBe(jobsBefore?.n);
+    const list = await call("GET", `/api/simulations/${id}/runs`, { cookie: alice });
+    expect(((await list.json()) as { runs: unknown[] }).runs).toEqual([]);
+  });
+
   it("freezes the saved spec and queues a solve job on the current mesh", async () => {
     const id = await meshed();
     const response = await startRun(id);

@@ -469,6 +469,17 @@ button:disabled {
   color: var(--error);
 }
 
+.run-blockers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.run-blockers .link-button {
+  color: inherit;
+  text-align: left;
+}
+
 .field-hint {
   color: var(--muted);
   margin: 0;

@@ -5,6 +5,8 @@
 // From M1.10 it shows the run record: when it ran, the mesh and versions it was solved with,
 // whether the setup has changed since, and links to view or download the deck and log. From
 // M1.11 the record also shows the machine size, its rate and what the run cost (ADR-033).
+// From M1.12 the button sits above the plain-language list of what stops the setup from being
+// run (ADR-034); each line opens the tree item it is about.
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import type { RunFileName, RunView, SimulationSpec } from "@clearfea/spec";
@@ -20,6 +22,34 @@ import { type ItemStatus, sameSpec } from "./spec";
 /** Units the result figures are shown in until M2.1 brings display-unit choice. */
 export const STRESS_UNIT = "MPa";
 export const FORCE_UNIT = "N";
+
+/** One reason the setup cannot be run now, and the tree item that fixes it (null for none). */
+export interface RunBlocker {
+  message: string;
+  item: string | null;
+}
+
+/** The list beside the Run button of what still stops the setup from being run. */
+function Blockers({ blockers, onOpen }: { blockers: readonly RunBlocker[]; onOpen: (item: string) => void }) {
+  return (
+    <section className="run-blockers" aria-label="Before running">
+      <p className="field-hint">Before the simulation can run:</p>
+      <ul className="setup-notes setup-notes-incomplete">
+        {blockers.map((blocker) => (
+          <li key={blocker.message}>
+            {blocker.item === null ? (
+              blocker.message
+            ) : (
+              <button type="button" className="link-button" onClick={() => onOpen(blocker.item ?? "")}>
+                {blocker.message}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 /** What the viewer draws of the run's results. */
 export type ResultChoice = { quantity: Quantity; deformation: Deformation };
@@ -141,7 +171,8 @@ export function RunPanel({
   run,
   currentSpec,
   log,
-  blocked,
+  blockers,
+  onOpen,
   lengthUnit,
   supportNames,
   requesting,
@@ -155,8 +186,10 @@ export function RunPanel({
   /** The simulation's setup as saved now, to tell whether the run's frozen setup differs. */
   currentSpec: SimulationSpec;
   log: string;
-  /** Why the simulation cannot be run now, or null when it can. */
-  blocked: string | null;
+  /** What stops the simulation from being run now; empty when it can be run. */
+  blockers: readonly RunBlocker[];
+  /** Opens a tree item, from a line of the blocker list. */
+  onOpen: (item: string) => void;
   /** The unit lengths are shown in: the geometry's own length unit. */
   lengthUnit: string;
   /** Names of the setup's supports by id, for the reaction lines. */
@@ -173,10 +206,10 @@ export function RunPanel({
     <section className="setup-panel" aria-label="Run">
       <h2 className="pane-title">Run</h2>
       <Notes status={status} />
-      <button type="button" onClick={onRun} disabled={blocked !== null || requesting || solving}>
+      <button type="button" onClick={onRun} disabled={blockers.length > 0 || requesting || solving}>
         {run === null ? "Run" : "Run again"}
       </button>
-      {blocked !== null && !solving && <p className="field-hint">{blocked}</p>}
+      {blockers.length > 0 && !solving && <Blockers blockers={blockers} onOpen={onOpen} />}
       {requestProblem && (
         <p className="form-problem" role="alert">
           {requestProblem}
