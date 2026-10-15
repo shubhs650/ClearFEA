@@ -1,0 +1,63 @@
+** ClearFEA solver input, deck format 1. Generated from the simulation's
+** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
+** Geometry 00000000-0000-4000-8000-000000000002
+*HEADING
+ClearFEA linear static analysis
+** 14 nodes, 2 C3D10 elements
+*NODE, NSET=NALL
+1, 0.0, 0.0, 0.0
+2, 0.01, 0.0, 0.0
+3, 0.0, 0.01, 0.0
+4, 0.0, 0.0, 0.01
+5, 0.01, 0.01, 0.01
+6, 0.005, 0.0, 0.0
+7, 0.005, 0.005, 0.0
+8, 0.0, 0.005, 0.0
+9, 0.0, 0.0, 0.005
+10, 0.0, 0.005, 0.005
+11, 0.005, 0.0, 0.005
+12, 0.01, 0.005, 0.005
+13, 0.005, 0.005, 0.01
+14, 0.005, 0.01, 0.005
+** Body 1
+*ELEMENT, TYPE=C3D10, ELSET=B1
+1, 1, 2, 3, 4, 6, 7, 8, 9, 11, 10
+** Body 2
+*ELEMENT, TYPE=C3D10, ELSET=B2
+2, 2, 3, 4, 5, 7, 10, 11, 12, 14, 13
+** Fixed support fixed-1 "Base", faces 1
+*NSET, NSET=S1
+1, 3, 4, 8, 9, 10
+** Fixed support fixed-2 "Side", faces 4
+*NSET, NSET=S2
+1, 2, 3, 4, 5, 6, 9, 10, 11, 13, 14
+** Material steel "Steel (US units)"
+*MATERIAL, NAME=M2
+*ELASTIC
+199947961501.88248, 0.29
+** Material alu "Aluminium"
+*MATERIAL, NAME=M3
+*ELASTIC
+69000000000.0, 0.33
+*SOLID SECTION, ELSET=B1, MATERIAL=M2
+*SOLID SECTION, ELSET=B2, MATERIAL=M3
+** Pressure pressure-1 "Inside", faces 2, 3: 150.0 psi = 1034213.5939752542 Pa
+** Pressure pressure-2 "Suction", faces 3: -0.5 MPa = -500000.0 Pa
+*STEP
+*STATIC
+*BOUNDARY
+S1, 1, 3
+S2, 1, 3
+*DLOAD
+1, P1, 1034213.5939752542
+2, P2, 534213.5939752542
+2, P4, 534213.5939752542
+*NODE FILE
+U
+*EL FILE
+S
+*NODE PRINT, NSET=S1, TOTALS=ONLY
+RF
+*NODE PRINT, NSET=S2, TOTALS=ONLY
+RF
+*END STEP
