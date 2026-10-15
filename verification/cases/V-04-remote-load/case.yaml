@@ -28,16 +28,16 @@ checks:
     face: surface
     box: { min: [70, 14.97, -1], max: [130, 15, 1] }
     reference: { value: 55.8112, unit: MPa }
-    tolerance: { coarse: 0.02, full: 0.01 }
+    tolerance: { coarse: 0.01, full: 0.005 }
   - name: Bending, torsion and tension underneath (y = -R)
     quantity: vonMises
     face: surface
     box: { min: [70, -15, -1], max: [130, -14.97, 1] }
     reference: { value: 68.9330, unit: MPa }
-    tolerance: { coarse: 0.02, full: 0.01 }
+    tolerance: { coarse: 0.01, full: 0.005 }
   - name: Torsion and tension on the side (z = +R, no bending)
     quantity: vonMises
     face: surface
     box: { min: [70, -1, 14.97], max: [130, 1, 15] }
     reference: { value: 40.1140, unit: MPa }
-    tolerance: { coarse: 0.02, full: 0.01 }
+    tolerance: { coarse: 0.01, full: 0.005 }

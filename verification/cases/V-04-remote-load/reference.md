@@ -43,4 +43,4 @@ Each check is the mean von Mises over the surface vertices in a strip along the 
 ## Tolerances
 
 - Clamp reaction: 0.1 percent at both tiers, as the automatic balance check: it follows from equilibrium, and the nodal loads add up to the force exactly.
-- Stresses: 2 percent coarse, 1 percent full. Looser than V-02's bending (1 and 0.5 percent) because the values are nodal stresses on a curved surface, where ten-node tetrahedra recover stress less well than on V-02's flat faces, and the strips add up to 0.1 percent of their own.
+- Stresses: 1 percent coarse, 0.5 percent full, as V-02's bending stresses. The strips add up to 0.1 percent of their own; the coarse tier's first run was within 0.11 percent.
