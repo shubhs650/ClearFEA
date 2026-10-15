@@ -360,7 +360,10 @@ class SolveParams(BaseModel):
     spec: SimulationSpec
 
 
-type Vector3 = Annotated[list[float], Field(max_length=3, min_length=3)]
+type XYZ = Annotated[list[float], Field(max_length=3, min_length=3)]
+"""
+x, y and z components.
+"""
 
 
 class NodeValue(BaseModel):
@@ -377,7 +380,7 @@ class NodeValue(BaseModel):
     """
     Index of the node in mesh.bin, from 0.
     """
-    position: Vector3
+    position: XYZ
 
 
 class SupportReaction(BaseModel):
@@ -390,7 +393,7 @@ class SupportReaction(BaseModel):
         populate_by_name=True,
     )
     support_id: Annotated[ItemId, Field(alias="supportId")]
-    force: Vector3
+    force: XYZ
 
 
 class Displacement(BaseModel):

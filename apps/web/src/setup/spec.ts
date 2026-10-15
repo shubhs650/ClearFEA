@@ -9,6 +9,7 @@ import {
   type MeshView,
   type PressureLoad,
   type Quantity,
+  type RunView,
   type SimulationSpec,
   simulationSpecProblems,
   type TopologyTags,
@@ -195,4 +196,12 @@ export function removeItem(spec: SimulationSpec, id: string): SimulationSpec {
 /** The faces of a support or load, or null when the id names neither. */
 export function facesOf(spec: SimulationSpec, id: string): number[] | null {
   return [...spec.supports, ...spec.loads].find((item) => item.id === id)?.faces ?? null;
+}
+
+/** The Run item's mark from the simulation's latest run, or null before the first run. */
+export function runStatus(run: RunView | null): ItemStatus {
+  if (run === null) return { mark: "incomplete", notes: ["Run the simulation to get results."] };
+  if (run.status === "solving") return { mark: "incomplete", notes: ["The simulation is being solved."] };
+  if (run.status === "failed") return { mark: "error", notes: [run.problem ?? "The run failed."] };
+  return { mark: "complete", notes: [] };
 }

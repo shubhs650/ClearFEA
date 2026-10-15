@@ -234,3 +234,42 @@ export async function completeJob(
     .first<JobRow>();
   return row === null ? null : toJob(row);
 }
+
+/**
+ * Appends log text the worker sent with a heartbeat as the job's next chunk. The caller has
+ * checked that this worker holds the job.
+ */
+export async function appendJobLog(db: D1Database, jobId: string, text: string): Promise<void> {
+  if (text === "") return;
+  await db
+    .prepare(
+      `INSERT INTO job_logs (job_id, seq, text)
+       SELECT ?, COALESCE(MAX(seq), 0) + 1, ? FROM job_logs WHERE job_id = ?`,
+    )
+    .bind(jobId, text, jobId)
+    .run();
+}
+
+/** Most log chunks one read returns; a client reads on from the `next` it gets back. */
+export const LOG_CHUNKS_PER_READ = 100;
+
+/** The user's job's log text after chunk `after`, and the chunk number to read on from. */
+export async function readJobLog(
+  db: D1Database,
+  userId: string,
+  jobId: string,
+  after: number,
+): Promise<{ text: string; next: number }> {
+  const { results } = await db
+    .prepare(
+      `SELECT job_logs.seq, job_logs.text FROM job_logs JOIN jobs ON jobs.id = job_logs.job_id
+        WHERE job_logs.job_id = ? AND jobs.owner_id = ? AND job_logs.seq > ?
+        ORDER BY job_logs.seq LIMIT ?`,
+    )
+    .bind(jobId, userId, after, LOG_CHUNKS_PER_READ)
+    .all<{ seq: number; text: string }>();
+  return {
+    text: results.map((r) => r.text).join(""),
+    next: results.length === 0 ? after : (results[results.length - 1]?.seq ?? after),
+  };
+}

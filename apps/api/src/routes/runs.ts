@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// The signed-in user's runs and their solver logs (M1.8, ADR-030). Runs are started through
+// POST /api/simulations/:id/runs. Shapes: simulation.schema.json.
+
+import type { RunLogResponse, RunResponse, RunView } from "@clearfea/spec";
+import { Hono } from "hono";
+import { readJobLog } from "../db/jobs";
+import { getRun, type Run } from "../db/runs";
+import { requireUser, type SessionEnv } from "../session";
+
+export const runs = new Hono<SessionEnv>();
+
+runs.use("*", requireUser);
+
+const NOT_FOUND = "There is no run with that id in your account.";
+
+export function runView(run: Run): RunView {
+  return {
+    id: run.id,
+    simulationId: run.simulationId,
+    meshId: run.meshId,
+    status: run.status,
+    stage: run.status !== "solving" ? null : run.jobStatus === "queued" ? "queued" : run.jobStage,
+    problem: run.problem,
+    result: run.result,
+    createdAt: run.createdAt,
+    finishedAt: run.finishedAt,
+  };
+}
+
+runs.get("/:id", async (c) => {
+  const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
+  // Another user's run answers exactly like a missing one, so ids reveal nothing.
+  if (run === null) return c.json({ error: NOT_FOUND }, 404);
+  return c.json({ run: runView(run) } satisfies RunResponse);
+});
+
+/** The solver log written after chunk ?after= (0 for the whole log), for polling while it runs. */
+runs.get("/:id/log", async (c) => {
+  const raw = c.req.query("after") ?? "0";
+  const after = Number(raw);
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(after)) {
+    return c.json({ error: "?after= must be a whole number of log chunks, 0 or more." }, 400);
+  }
+  const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
+  if (run === null) return c.json({ error: NOT_FOUND }, 404);
+  const log = await readJobLog(c.env.DB, c.var.userId, run.jobId, after);
+  return c.json(log satisfies RunLogResponse);
+});

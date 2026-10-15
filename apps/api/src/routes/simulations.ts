@@ -6,6 +6,8 @@ import {
   type CreateSimulationRequest,
   checkSimulationSpec,
   type MeshResponse,
+  type RunListResponse,
+  type RunResponse,
   type SimulationMeshResponse,
   emptySimulationSpec,
   type SimulationListResponse,
@@ -21,6 +23,7 @@ import { Hono } from "hono";
 import { readBody } from "../body";
 import { type Geometry, geometryKey, getGeometry } from "../db/geometries";
 import { createMesh, MESH_ORDER, simulationMesh } from "../db/meshes";
+import { createRun, listRuns } from "../db/runs";
 import {
   createSimulation,
   getSimulation,
@@ -31,6 +34,7 @@ import {
 import type { Env } from "../env";
 import { requireUser, type SessionEnv } from "../session";
 import { meshView } from "./meshes";
+import { runView } from "./runs";
 
 export const simulations = new Hono<SessionEnv>();
 
@@ -178,4 +182,45 @@ simulations.post("/:id/mesh", async (c) => {
     order: MESH_ORDER,
   });
   return c.json({ mesh: meshView(mesh) } satisfies MeshResponse, 201);
+});
+
+simulations.get("/:id/runs", async (c) => {
+  const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
+  if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  const list = await listRuns(c.env.DB, c.var.userId, simulation.id);
+  return c.json({ runs: list.map(runView) } satisfies RunListResponse);
+});
+
+/**
+ * Solves the simulation's saved spec on its current mesh (M1.8, ADR-030). The run keeps a copy
+ * of the spec as it is now; later edits to the simulation never change it. Whether the setup
+ * is complete is the worker's deck generator's call until pre-run validation (M1.12).
+ */
+simulations.post("/:id/runs", async (c) => {
+  const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
+  if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  const mesh = await simulationMesh(c.env.DB, c.var.userId, simulation.id);
+  const size = simulation.spec.mesh.size;
+  if (mesh === null || mesh.status === "failed") {
+    return c.json({ error: "Generate the mesh in the Mesh settings, then run the simulation." }, 409);
+  }
+  if (mesh.status === "meshing") {
+    return c.json({ error: "The mesh is still being made. Run the simulation when it has finished." }, 409);
+  }
+  if (size === null || size.value !== mesh.size.value || size.unit !== mesh.size.unit) {
+    return c.json({ error: "The mesh size changed after the mesh was made. Generate the mesh again, then run." }, 409);
+  }
+  const [latest] = await listRuns(c.env.DB, c.var.userId, simulation.id, 1);
+  if (latest?.status === "solving") {
+    return c.json({ error: "The simulation is already being solved. Wait for that run to finish." }, 409);
+  }
+  const created = await createRun(c.env.DB, c.var.userId, {
+    simulationId: simulation.id,
+    meshId: mesh.id,
+    spec: simulation.spec,
+  });
+  if (created === null) {
+    return c.json({ error: "The mesh changed meanwhile. Generate the mesh again, then run." }, 409);
+  }
+  return c.json({ run: runView(created.run) } satisfies RunResponse, 201);
 });

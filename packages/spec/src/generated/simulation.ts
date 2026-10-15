@@ -48,13 +48,15 @@ export type ElementOrder = 1 | 2;
  */
 export type MeshStatus = "meshing" | "ready" | "failed";
 /**
+ * x, y and z components.
+ *
  * @minItems 3
  * @maxItems 3
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
- * via the `definition` "Vector3".
+ * via the `definition` "XYZ".
  */
-export type Vector3 = [number, number, number];
+export type XYZ = [number, number, number];
 /**
  * solving while the solve job is queued or running; succeeded or failed once it ends.
  *
@@ -334,7 +336,7 @@ export interface NodeValue {
    * Index of the node in mesh.bin, from 0.
    */
   node: number;
-  position: Vector3;
+  position: XYZ;
 }
 /**
  * Total reaction force of one support, in newtons, as CalculiX reports it for the support's node set.
@@ -344,7 +346,7 @@ export interface NodeValue {
  */
 export interface SupportReaction {
   supportId: ItemId;
-  force: Vector3;
+  force: XYZ;
 }
 /**
  * Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons.
@@ -460,7 +462,7 @@ export const validateMeshView = validator<MeshView>(schema, "MeshView");
 export const validateMeshResponse = validator<MeshResponse>(schema, "MeshResponse");
 export const validateSimulationMeshResponse = validator<SimulationMeshResponse>(schema, "SimulationMeshResponse");
 export const validateSolveParams = validator<SolveParams>(schema, "SolveParams");
-export const validateVector3 = validator<Vector3>(schema, "Vector3");
+export const validateXYZ = validator<XYZ>(schema, "XYZ");
 export const validateNodeValue = validator<NodeValue>(schema, "NodeValue");
 export const validateSupportReaction = validator<SupportReaction>(schema, "SupportReaction");
 export const validateSolveResult = validator<SolveResult>(schema, "SolveResult");

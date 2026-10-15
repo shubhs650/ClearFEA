@@ -7,6 +7,7 @@ import { internal } from "./internal";
 import { geometries } from "./routes/geometries";
 import { jobs } from "./routes/jobs";
 import { meshes } from "./routes/meshes";
+import { runs } from "./routes/runs";
 import { session } from "./routes/session";
 import { simulations } from "./routes/simulations";
 
@@ -33,6 +34,7 @@ app.route("/api/jobs", jobs);
 app.route("/api/geometries", geometries);
 app.route("/api/simulations", simulations);
 app.route("/api/meshes", meshes);
+app.route("/api/runs", runs);
 app.route("/internal", internal);
 
 export default app;

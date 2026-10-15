@@ -247,7 +247,7 @@
         "spec": { "$ref": "#/$defs/SimulationSpec" }
       }
     },
-    "Vector3": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+    "XYZ": { "description": "x, y and z components.", "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
     "NodeValue": {
       "description": "A nodal result value and where it occurs. SI units; position in metres.",
       "type": "object",
@@ -256,7 +256,7 @@
       "properties": {
         "value": { "type": "number" },
         "node": { "description": "Index of the node in mesh.bin, from 0.", "type": "integer", "minimum": 0 },
-        "position": { "$ref": "#/$defs/Vector3" }
+        "position": { "$ref": "#/$defs/XYZ" }
       }
     },
     "SupportReaction": {
@@ -266,7 +266,7 @@
       "required": ["supportId", "force"],
       "properties": {
         "supportId": { "$ref": "#/$defs/ItemId" },
-        "force": { "$ref": "#/$defs/Vector3" }
+        "force": { "$ref": "#/$defs/XYZ" }
       }
     },
     "SolveResult": {
