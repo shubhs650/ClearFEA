@@ -94,7 +94,7 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
   const settings = page.getByRole("complementary", { name: "Settings" });
   await test.step("material", async () => {
     await treeRow(page, "Materials").click();
-    await page.getByRole("button", { name: "Add a material" }).click();
+    await page.getByRole("button", { name: "Add an empty material" }).click();
     const material = page.getByRole("region", { name: "Material", exact: true });
     await material.getByLabel("Young's modulus", { exact: true }).fill("200");
     await material.getByLabel("Young's modulus unit").selectOption("GPa");

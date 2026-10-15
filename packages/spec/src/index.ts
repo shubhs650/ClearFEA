@@ -10,6 +10,7 @@ export {
   hasTemperatureChange,
   loadHasFaces,
   loadKinds,
+  materialProblems,
   localScopes,
   localSizeParams,
   sameMeshSettings,
@@ -20,3 +21,4 @@ export {
 } from "./simulation";
 export { checkUnitsTable, isUnitSystem, systemUnit, unitsTable } from "./units";
 export { type Validation, validator } from "./validate";
+export { checkMaterialLibrary, materialLibrary } from "./library";

@@ -6,6 +6,7 @@
 
 import type {
   ElementOrder,
+  IsotropicMaterial,
   LocalMeshScope,
   LocalSizeParams,
   Load,
@@ -165,6 +166,18 @@ function listTags(tags: readonly number[]): string {
 }
 
 /**
+ * What is wrong with a material's values (units of the wrong kind, a modulus or density of zero
+ * or less), in plain language; empty when nothing is. Missing values are not wrong here.
+ */
+export function materialProblems(material: IsotropicMaterial): string[] {
+  return [
+    unitProblem(material.youngsModulus, "pressure", `Young's modulus of material "${material.name}"`, true),
+    unitProblem(material.density ?? null, "density", `The density of material "${material.name}"`, true),
+    unitProblem(material.thermalExpansion ?? null, "thermalExpansion", `The thermal expansion of material "${material.name}"`, false),
+  ].filter((problem) => problem !== null);
+}
+
+/**
  * A problem with a spec and the item it belongs to: the id of a material, support or load,
  * "bodies" for the body list, "mesh" for the mesh settings.
  */
@@ -212,12 +225,7 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
   }
 
   for (const material of spec.materials) {
-    add(material.id, unitProblem(material.youngsModulus, "pressure", `Young's modulus of material "${material.name}"`, true));
-    add(material.id, unitProblem(material.density ?? null, "density", `The density of material "${material.name}"`, true));
-    add(
-      material.id,
-      unitProblem(material.thermalExpansion ?? null, "thermalExpansion", `The thermal expansion of material "${material.name}"`, false),
-    );
+    for (const problem of materialProblems(material)) add(material.id, problem);
   }
   for (const support of spec.supports) {
     if (support.type === "elastic") {

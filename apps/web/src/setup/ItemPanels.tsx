@@ -20,20 +20,22 @@ import {
   type Support,
   supportKinds,
 } from "@clearfea/spec";
+import { type ReactNode, useState } from "react";
 import { QuantityInput } from "../units/QuantityInput";
 import type { QuantityKind } from "../units/system";
 import { FacesField, NumberField, TextField } from "./fields";
 import {
   assignMaterial,
+  editMaterial,
   type Group,
   type ItemStatus,
   type LoadType,
   removeItem,
   type SupportType,
   updateLoad,
-  updateMaterial,
   updateSupport,
 } from "./spec";
+import type { MaterialAction } from "./useMaterials";
 
 const groupTitles: Record<Group, string> = {
   materials: "Materials",
@@ -73,11 +75,14 @@ export function GroupPanel({
   group,
   status,
   onAdd,
+  children,
 }: {
   group: Group;
   status: ItemStatus | undefined;
   /** Adds an item; for supports and loads, of the type chosen. */
   onAdd: (type?: SupportType | LoadType) => void;
+  /** Shown below the add buttons: the material library for Materials. */
+  children?: ReactNode;
 }) {
   const adds = group === "supports" ? supportAdds : group === "loads" ? loadAdds : null;
   return (
@@ -95,7 +100,7 @@ export function GroupPanel({
       )}
       {adds === null ? (
         <button type="button" onClick={() => onAdd()}>
-          Add a material
+          Add an empty material
         </button>
       ) : (
         <div className="field-actions field-actions-column">
@@ -106,6 +111,7 @@ export function GroupPanel({
           ))}
         </div>
       )}
+      {children}
     </section>
   );
 }
@@ -123,19 +129,26 @@ export function MaterialPanel({
   material,
   status,
   onChange,
+  onSave,
 }: {
   spec: SimulationSpec;
   material: IsotropicMaterial;
   status: ItemStatus | undefined;
   onChange: (spec: SimulationSpec) => void;
+  /** Keeps a copy among the user's own materials (M2.9). */
+  onSave: (material: IsotropicMaterial) => Promise<MaterialAction>;
 }) {
-  const set = (changes: Partial<IsotropicMaterial>) => onChange(updateMaterial(spec, { ...material, ...changes }));
+  const set = (changes: Partial<IsotropicMaterial>) => onChange(editMaterial(spec, material, changes));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<MaterialAction>();
+  const complete = material.youngsModulus !== null && material.poissonsRatio !== null;
   return (
     <section className="setup-panel" aria-label="Material">
       <h2 className="pane-title">Material</h2>
       <Notes status={status} />
       <TextField label="Name" value={material.name} onChange={(name) => set({ name })} />
       <p className="field-hint">Linear elastic, isotropic.</p>
+      {material.source && <p className="field-hint">Values from {material.source}</p>}
       <QuantityInput
         label="Young's modulus"
         positive
@@ -185,6 +198,30 @@ export function MaterialPanel({
           );
         })}
       </fieldset>
+      <div className="field-actions">
+        <button
+          type="button"
+          disabled={!complete || saving}
+          onClick={async () => {
+            setSaving(true);
+            setSaved(await onSave(material));
+            setSaving(false);
+          }}
+        >
+          Save to my materials
+        </button>
+      </div>
+      {saved ? (
+        <p className={saved.kind === "ok" ? "field-hint" : "field-problem"} role="status">
+          {saved.kind === "ok" ? saved.message : saved.problem}
+        </p>
+      ) : (
+        <p className="field-hint">
+          {complete
+            ? "Keeps a copy you can add to any of your simulations."
+            : "Enter Young's modulus and Poisson's ratio to save it to your materials."}
+        </p>
+      )}
       <Remove what="material" onRemove={() => onChange(removeItem(spec, material.id))} />
     </section>
   );

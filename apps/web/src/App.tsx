@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import {
   type GeometryView,
+  type IsotropicMaterial,
   type LocalMeshScope,
   type LocalMeshSize,
   preRunProblems,
@@ -18,6 +19,7 @@ import { StatusBar } from "./layout/StatusBar";
 import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { GroupPanel, LoadPanel, MaterialPanel, SupportPanel } from "./setup/ItemPanels";
+import { MaterialChooser } from "./setup/MaterialLibrary";
 import { LocalSizePanel, MeshPanel } from "./setup/MeshPanel";
 import { type ResultChoice, type ResultUnits, type RunBlocker, RunPanel } from "./setup/RunPanel";
 import {
@@ -36,6 +38,7 @@ import {
   type SupportType,
   setupStatus,
 } from "./setup/spec";
+import { useMaterials } from "./setup/useMaterials";
 import { useMesh } from "./setup/useMesh";
 import { useRun } from "./setup/useRun";
 import { useSimulation } from "./setup/useSimulation";
@@ -108,6 +111,7 @@ export function App() {
   const runs = useRun(setup.kind === "open" ? setup.id : null, signedOut);
   const { run } = runs;
   const project = useProject(session.kind === "signedIn", signedOut);
+  const materials = useMaterials(setup.kind === "open", signedOut);
   const { unitSystem } = project;
   // One object per unit system, so the viewer does not redraw the results on every render.
   const resultUnits = useMemo<ResultUnits>(
@@ -211,6 +215,14 @@ export function App() {
     else if (item?.scope === "edges") setEdgeSelection(new Set(item.tags));
   }
 
+  /** Adds a copy of a library or saved material (M2.9). */
+  function addFrom(material: IsotropicMaterial) {
+    if (spec === null) return;
+    const added = addMaterial(spec, material);
+    edit(added.spec);
+    setSelected(added.id);
+  }
+
   /** Adds an item to a group; a new support, pressure or force takes the faces selected in the viewer. */
   function add(group: Group, type?: SupportType | LoadType) {
     if (spec === null) return;
@@ -283,11 +295,26 @@ export function App() {
     }
     if (GROUPS.includes(selected)) {
       const group = selected as Group;
-      return <GroupPanel group={group} status={status} onAdd={(type) => add(group, type)} />;
+      return (
+        <GroupPanel group={group} status={status} onAdd={(type) => add(group, type)}>
+          {group === "materials" && (
+            <MaterialChooser list={materials.list} onAdd={addFrom} onDelete={materials.remove} />
+          )}
+        </GroupPanel>
+      );
     }
     const material = spec.materials.find((m) => m.id === selected);
     if (material) {
-      return <MaterialPanel key={selected} spec={spec} material={material} status={status} onChange={change} />;
+      return (
+        <MaterialPanel
+          key={selected}
+          spec={spec}
+          material={material}
+          status={status}
+          onChange={change}
+          onSave={materials.save}
+        />
+      );
     }
     const support = spec.supports.find((s) => s.id === selected);
     if (support) {
