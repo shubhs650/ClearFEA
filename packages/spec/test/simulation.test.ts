@@ -153,6 +153,28 @@ describe("checkSimulationSpec", () => {
     expect(checkSimulationSpec(s, topology)[0]).toMatch(/^The y component of support "Pull" is given in "MPa", which is not a length unit/);
   });
 
+  it("accepts a temperature change and checks its units, one per setup (M2.7)", () => {
+    const s = spec();
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    s.materials = [{ ...steel, thermalExpansion: { value: 12, unit: "µm/(m·K)" } }];
+    s.loads.push({ id: "heat-1", type: "temperature", name: "Warm-up", change: { value: 50, unit: "°C" } });
+    expect(validateSimulationSpec(s).ok).toBe(true);
+    expect(checkSimulationSpec(s, topology)).toEqual([]);
+    s.materials = [{ ...steel, thermalExpansion: { value: 12, unit: "°C" } }];
+    s.loads[1] = { id: "heat-1", type: "temperature", name: "Warm-up", change: { value: 50, unit: "1/°C" } };
+    expect(checkSimulationSpec(s, topology)).toEqual([
+      `The thermal expansion of material "${steel.name}" is given in "°C", which is not a thermal expansion unit. Use one of: 1/K, 1/°C, 1/°F, µm/(m·K), µin/(in·°F).`,
+      'The temperature change of load "Warm-up" is given in "1/°C", which is not a temperature difference unit. Use one of: K, °C, °F.',
+    ]);
+    s.materials = [{ ...steel, thermalExpansion: { value: -1e-6, unit: "1/K" } }];
+    s.loads[1] = { id: "heat-1", type: "temperature", name: "Warm-up", change: { value: -50, unit: "K" } };
+    s.loads.push({ id: "heat-2", type: "temperature", name: "Again", change: null });
+    expect(checkSimulationSpec(s, topology)).toEqual([
+      'Load "Again" is a second temperature change. A setup can have one; delete the other.',
+    ]);
+  });
+
   it("accepts an elastic support and checks its stiffness (M2.6)", () => {
     const s = spec();
     s.supports.push({ id: "soil-1", type: "elastic", name: "Soil", faces: [3], stiffness: { value: 50, unit: "MN/m³" } });

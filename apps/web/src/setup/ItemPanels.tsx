@@ -444,7 +444,7 @@ export function LoadPanel({
       {load.type === "centrifugal" && <CentrifugalFields load={load} set={set} />}
       {load.type === "temperature" && (
         <QuantityInput
-          label="Temperature change"
+          label="Change"
           kind="temperatureDifference"
           value={load.change}
           onChange={(change) => set({ change })}

@@ -208,6 +208,7 @@ describe("setup tree", () => {
         youngsModulus: { value: 200000, unit: "MPa" },
         poissonsRatio: 0.3,
         density: null,
+        thermalExpansion: null,
       },
     ]);
     expect(sent.at(-1)?.bodies).toEqual([{ tag: 1, material: "material-1" }]);
@@ -326,6 +327,45 @@ describe("setup tree", () => {
         },
       ]),
     );
+  });
+
+  it("adds a temperature change and asks the material for its thermal expansion (M2.7)", async () => {
+    const { sent, route } = saves();
+    const spec: SimulationSpec = {
+      ...emptySpec,
+      materials: [
+        {
+          id: "steel",
+          name: "Steel",
+          model: "isotropic_elastic",
+          youngsModulus: { value: 200, unit: "GPa" },
+          poissonsRatio: 0.3,
+        },
+      ],
+      bodies: [{ tag: 1, material: "steel" }],
+    };
+    serve(routes([simulation(spec)], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+    act(() => scene.events[0]?.onPick(3));
+    fireEvent.click(tree().getByRole("button", { name: "Loads, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add a temperature change" }));
+    expect(settings().getByRole("heading", { name: "Temperature change" })).toBeTruthy();
+    expect(settings().queryByText("Faces")).toBeNull();
+    expect(settings().getByText("Enter the temperature change (negative for cooling).")).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Change"), { target: { value: "-30" } });
+    expect(tree().getByRole("button", { name: "Temperature change 1, complete" })).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Steel, incomplete" })).toBeTruthy();
+    fireEvent.click(tree().getByRole("button", { name: "Steel, incomplete" }));
+    expect(settings().getByText("Enter the thermal expansion; the temperature change needs it.")).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Thermal expansion"), { target: { value: "12e-6" } });
+    expect(tree().getByRole("button", { name: "Steel, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.materials[0]?.thermalExpansion).toEqual({ value: 12e-6, unit: "1/°C" }),
+    );
+    expect(sent.at(-1)?.loads).toEqual([
+      { id: "temperature-1", type: "temperature", name: "Temperature change 1", change: { value: -30, unit: "°C" } },
+    ]);
   });
 
   it("adds a force, gravity and a centrifugal load, and asks the material for a density (M2.3)", async () => {

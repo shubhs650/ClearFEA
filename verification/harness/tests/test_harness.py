@@ -247,6 +247,12 @@ def test_applied_load_adds_forces_weight_and_spin() -> None:
     assert gross == pytest.approx(1000 + mass * 9.80665 + mass * omega2 * 0.2, rel=2e-3)
 
 
+def test_a_temperature_change_applies_no_load() -> None:
+    surface = box_surface((0, 0, 0), (0.1, 0.1, 0.1))
+    spec = body_spec([{"type": "temperature", "change": {"value": 50, "unit": "°C"}}])
+    assert applied_load(spec, surface) == ([0.0, 0.0, 0.0], 0.0)
+
+
 def test_applied_load_adds_a_remote_loads_force_but_not_its_moment() -> None:
     surface = box_surface((0, 0, 0), (0.1, 0.1, 0.1))
 

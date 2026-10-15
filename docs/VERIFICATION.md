@@ -55,7 +55,7 @@ Stress is checked away from supports and load application points unless the case
 | V-05 | Tank wall strip clamped at its base, water against one side up to 100 mm below its top (ν = 0) | Base reaction ρ g b H²/2 (ρg × depth-weighted area); bending stress from the cubic moment ρ g b (H − z)³/6 at two depths; top deflection of a cantilever under a triangular load | M2 |
 | V-06 | Thin rotating ring: a quarter on three symmetry planes | Plane stress rotating disc (hoop stress ρω²r² in the thin limit): hoop stress and radial growth on both faces; hoop force ρω²t(b³ − a³)/3 across each cut | M2 |
 | V-07 | Block on an elastic support, pressed by a force on its top, sliding stopped by two symmetry planes | Base settlement F/(k·A), top displacement adding F·H/(E·A), uniform stress F/A, foundation reaction F | M2 |
-| V-08 | Bar with ends restrained, uniform temperature rise | Axial stress −EαΔT | M2 |
+| V-08 | Bar with ends restrained (frictionless ends, two symmetry planes), uniform temperature rise | Axial stress −EαΔT (von Mises and end reactions ±EαΔT·A); sideways growth (1 + ν)αΔT | M2 |
 | V-09 | Symmetry model against full model: a quarter of V-01's tube on leaning symmetry planes and a frictionless base | Quarter model results equal the full tube's Lamé values; hoop force p·a·L on each cut plane | M2 |
 | V-10 | Column under self-weight, standing on a fixed base | Base reaction equals weight; stress ρg(h − z); top shortening ρgh²/2E | M2 |
 | V-11 | Two bonded blocks against one block | Displacement and stress away from the interface match the single body | M4 |
@@ -84,7 +84,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | --- | --- |
 | Fixed support | V-01, V-02, V-03, V-04, V-05, V-10 |
 | Prescribed displacement | V-24, V-12 |
-| Frictionless / symmetry support | V-09, V-24, V-06, V-07, V-25 |
+| Frictionless / symmetry support | V-09, V-24, V-06, V-07, V-08, V-25 |
 | Elastic support | V-07, V-25 |
 | Force | V-02, V-12 |
 | Pressure | V-01, V-23 |
@@ -103,7 +103,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Thermal stress | V-18 |
 | Temperature-dependent properties | V-19 |
 | Modal | V-20, V-21, V-22 |
-| Reaction balance check | V-04, V-05, V-06, V-07, V-10, V-25 |
+| Reaction balance check | V-04, V-05, V-06, V-07, V-08, V-10, V-25 |
 | Local mesh refinement | V-03 |
 | First-order elements | to be added in M2 |
 | Mixed input units | all |

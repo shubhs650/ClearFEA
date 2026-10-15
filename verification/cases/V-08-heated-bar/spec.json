@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 29000, "unit": "ksi" },
+      "poissonsRatio": 0.3,
+      "thermalExpansion": { "value": 6.5, "unit": "µin/(in·°F)" }
+    }
+  ],
+  "supports": [
+    { "id": "start", "type": "frictionless", "name": "Start", "faces": ["start"] },
+    { "id": "end", "type": "frictionless", "name": "End", "faces": ["end"] },
+    { "id": "sym", "type": "frictionless", "name": "Symmetry", "faces": ["y0", "z0"] }
+  ],
+  "loads": [
+    {
+      "id": "warm",
+      "type": "temperature",
+      "name": "Warm-up",
+      "change": { "value": 90, "unit": "°F" }
+    }
+  ],
+  "mesh": { "size": { "value": 10, "unit": "mm" } }
+}
