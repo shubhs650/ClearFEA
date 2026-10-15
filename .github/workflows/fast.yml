@@ -35,6 +35,12 @@ jobs:
           python-version: "3.12"
           enable-cache: true
           cache-dependency-glob: worker/uv.lock
+      # System libraries the Gmsh wheel loads, as in worker/Dockerfile; worker tests import with Gmsh.
+      - name: Gmsh system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1 libglu1-mesa libgomp1 libxrender1 libxcursor1 libxft2 libxinerama1
       - run: make install
       - run: make test
 
