@@ -181,6 +181,7 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 
 - Shrink the worker image (about 990 MB): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use.
 - A rigid (kinematic) option for remote loads, which keeps the loaded faces' shape (ADR-041 item 2), and drawing a remote load's reference point in the viewer. Needs the maintainer's decision on the option.
+- Adopt PaStiX as the production solver (Shubham chose "adopt later", 2026-10-15, ADR-048 item 7): its own task after M2, a 64-bit-integer PaStiX4CalculiX build in the worker image (CUDA runtime libraries included) as a pinned version bump with a full verification run. Build recipe in `worker/benchmarks/solver/README.md`. 4 to 6 times faster than SPOOLES, no larger models.
 
 ## Log
 
