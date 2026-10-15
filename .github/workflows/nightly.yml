@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# Nightly tier placeholder. The physics suite (`make verify`, M1.13) and browser end-to-end
-# tests (`make e2e`, M1.14) do not exist yet; they replace the step below when they land.
-# See docs/VERIFICATION.md for what this tier will run.
+# Nightly tier placeholder. `make verify` and `make e2e` run at the end of each milestone instead
+# (phase-end.yml, ADR-037); this schedule stays so a nightly run can return without a new workflow.
+# See docs/VERIFICATION.md for the tiers.
 name: Nightly
 
 on:
@@ -18,4 +18,4 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - run: echo "No nightly suites yet. make verify arrives in M1.13 and make e2e in M1.14."
+      - run: echo "Nothing runs nightly. make verify and make e2e run at each milestone's end (phase-end.yml)."

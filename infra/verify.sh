@@ -23,6 +23,7 @@ stack_checks
 
 state=$(mktemp -d "${TMPDIR:-/tmp}/clearfea-verify-state.XXXXXX")
 out=${VERIFY_OUT:-$(mktemp -d "${TMPDIR:-/tmp}/clearfea-verify.XXXXXX")}
+mkdir -p "$out"
 stack_start
 
 say "Running the $tier tier."
