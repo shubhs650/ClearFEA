@@ -19,7 +19,7 @@ import { GroupPanel, MaterialPanel, PressurePanel, SupportPanel } from "./setup/
 import { MeshPanel } from "./setup/MeshPanel";
 import { type ResultChoice, type ResultUnits, type RunBlocker, RunPanel } from "./setup/RunPanel";
 import {
-  addFixedSupport,
+  addSupport,
   addMaterial,
   addPressure,
   facesOf,
@@ -28,6 +28,7 @@ import {
   meshIsCurrent,
   meshStatus,
   runStatus,
+  type SupportType,
   setupStatus,
 } from "./setup/spec";
 import { useMesh } from "./setup/useMesh";
@@ -164,14 +165,14 @@ export function App() {
   }
 
   /** Adds an item to a group; a new support or load takes the faces selected in the viewer. */
-  function add(group: Group) {
+  function add(group: Group, type: SupportType = "fixed") {
     if (spec === null) return;
     const faces = [...selection].sort((a, b) => a - b);
     const added =
       group === "materials"
         ? addMaterial(spec)
         : group === "supports"
-          ? addFixedSupport(spec, faces)
+          ? addSupport(spec, type, faces)
           : addPressure(spec, faces);
     edit(added.spec);
     setSelected(added.id);
@@ -219,7 +220,7 @@ export function App() {
     }
     if (GROUPS.includes(selected)) {
       const group = selected as Group;
-      return <GroupPanel group={group} status={status} onAdd={() => add(group)} />;
+      return <GroupPanel group={group} status={status} onAdd={(type) => add(group, type)} />;
     }
     const material = spec.materials.find((m) => m.id === selected);
     if (material) {

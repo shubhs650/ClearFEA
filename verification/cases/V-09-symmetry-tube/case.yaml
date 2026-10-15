@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-09: a quarter of V-01's tube on frictionless symmetry planes, checked against the full
+# tube's Lamé values. Reference values and their derivation: reference.md.
+id: V-09
+title: Symmetry model against full model (quarter tube)
+analysis: linear_static
+features: [frictionless support, inclined symmetry planes, pressure, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit. The cut faces lie at 30 and 120
+# degrees about z.
+faces:
+  cut-30: { min: [34.6410, 20, 0], max: [51.9615, 30, 100] }
+  cut-120: { min: [-30, 34.6410, 0], max: [-20, 51.9615, 100] }
+  base: { min: [-30, 20, 0], max: [51.9615, 60, 0] }
+  bore: { min: [-20, 20, 0], max: [34.6410, 40, 100] }
+  outside: { min: [-30, 30, 0], max: [51.9615, 60, 100] }
+mesh:
+  coarse: { value: 1, unit: cm } # two quadratic elements through the wall, as V-01
+  full: { value: 5, unit: mm }
+# With the base on a frictionless plane and the far end open, the open-ended Lamé solution
+# holds in the whole quarter (reference.md), so the checks read whole faces.
+checks:
+  - name: von Mises stress at the bore (full tube 32.1870 MPa)
+    quantity: vonMises
+    face: bore
+    reference: { value: 32.1870, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: von Mises stress at the outside (full tube 16.0 MPa)
+    quantity: vonMises
+    face: outside
+    reference: { value: 16.0, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Radial displacement of the bore (full tube 0.0058 mm)
+    quantity: displacement.radial
+    face: bore
+    reference: { value: 0.0058, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Radial displacement of the outside (full tube 0.0048 mm)
+    quantity: displacement.radial
+    face: outside
+    reference: { value: 0.0048, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Hoop force on the 30° plane, x
+    quantity: reaction.x
+    support: cut-30
+    reference: { value: 20, unit: kN }
+    tolerance: { coarse: 0.005, full: 0.002 }
+  - name: Hoop force on the 30° plane, y
+    quantity: reaction.y
+    support: cut-30
+    reference: { value: -34.6410, unit: kN }
+    tolerance: { coarse: 0.005, full: 0.002 }
+  - name: Hoop force on the 120° plane, x
+    quantity: reaction.x
+    support: cut-120
+    reference: { value: -34.6410, unit: kN }
+    tolerance: { coarse: 0.005, full: 0.002 }
+  - name: Hoop force on the 120° plane, y
+    quantity: reaction.y
+    support: cut-120
+    reference: { value: -20, unit: kN }
+    tolerance: { coarse: 0.005, full: 0.002 }

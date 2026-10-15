@@ -3,10 +3,23 @@
 // start, in plain language. A pure function over the spec and the geometry's topology, so the
 // API refuses a run with exactly the list the web app shows beside the Run button, before any
 // machine is used (DECISIONS.md, pricing: pre-run checks). The mesh's own state (made, current)
-// is not part of the spec and is checked where the mesh is known.
+// is not part of the spec and is checked where the mesh is known. Whether the supports hold every
+// rigid-body motion needs the mesh's face normals and is checked by the deck generator (ADR-039).
 
 import type { SimulationSpec } from "./generated/simulation";
-import { type SpecProblem, simulationSpecProblems, type TopologyTags } from "./simulation";
+import { displacementAxes, type SpecProblem, simulationSpecProblems, type TopologyTags } from "./simulation";
+
+/** True when the setup moves something by itself: a prescribed displacement other than zero. */
+export function movesByDisplacement(spec: SimulationSpec): boolean {
+  return spec.supports.some(
+    (s) =>
+      s.type === "displacement" &&
+      displacementAxes.some((axis) => {
+        const c = s[axis];
+        return c !== null && c !== "free" && c.value !== 0;
+      }),
+  );
+}
 
 /**
  * What stops the setup from being run, in the order of the setup tree, each with the item it
@@ -36,16 +49,34 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
   }
 
   if (spec.supports.length === 0) {
-    add("supports", "There is no support, so the part is free to move. Add a fixed support.");
+    add("supports", "There is no support, so the part is free to move. Add a support under Supports.");
   }
   for (const support of spec.supports) {
     if (support.faces.length === 0) {
-      add(support.id, `Support "${support.name}" has no faces. Select the faces to fix and add them to it.`);
+      const what = { fixed: "to fix", displacement: "to move", frictionless: "it holds" }[support.type];
+      add(support.id, `Support "${support.name}" has no faces. Select the faces ${what} and add them to it.`);
+    }
+    if (support.type === "displacement") {
+      const missing = displacementAxes.filter((axis) => support[axis] === null);
+      for (const axis of missing) {
+        add(support.id, `Support "${support.name}" has no value for its ${axis} component. Enter one or set it free.`);
+      }
+      if (displacementAxes.every((axis) => support[axis] === "free")) {
+        add(
+          support.id,
+          `Support "${support.name}" leaves every component free, so it holds nothing. Give at least one component a value (0 holds the faces in that direction).`,
+        );
+      }
     }
   }
 
-  if (spec.loads.length === 0) {
-    add("loads", "There is no load, so every result would be zero. Add a pressure under Loads.");
+  // A prescribed displacement other than zero loads the part by itself (ADR-034 item 3,
+  // narrowed by ADR-039).
+  if (spec.loads.length === 0 && !movesByDisplacement(spec)) {
+    add(
+      "loads",
+      "There is no load, so every result would be zero. Add a pressure under Loads, or give a prescribed displacement a value other than zero.",
+    );
   }
   for (const load of spec.loads) {
     if (load.faces.length === 0) {

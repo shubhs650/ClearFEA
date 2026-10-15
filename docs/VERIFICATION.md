@@ -56,7 +56,7 @@ Stress is checked away from supports and load application points unless the case
 | V-06 | Thin rotating ring | Hoop stress ρω²r² | M2 |
 | V-07 | Block on elastic support | Displacement F/(k·A) | M2 |
 | V-08 | Bar with ends restrained, uniform temperature rise | Axial stress −EαΔT | M2 |
-| V-09 | Symmetry model against full model | Quarter model results equal full model | M2 |
+| V-09 | Symmetry model against full model: a quarter of V-01's tube on leaning symmetry planes and a frictionless base | Quarter model results equal the full tube's Lamé values; hoop force p·a·L on each cut plane | M2 |
 | V-10 | Column under self-weight | Base reaction equals weight; stress ρgh | M2 |
 | V-11 | Two bonded blocks against one block | Displacement and stress away from the interface match the single body | M4 |
 | V-12 | Bi-material bar in tension | Series stiffness; uniform stress | M4 |
@@ -71,6 +71,7 @@ Stress is checked away from supports and load application points unless the case
 | V-21 | Fixed-fixed beam frequencies | Euler-Bernoulli, first two bending modes | M6 |
 | V-22 | Unrestrained body | Six rigid-body modes near zero, first elastic mode against reference | M6 |
 | V-23 | NAFEMS LE10, thick plate under pressure | Published target stress at point D; take the value from the NAFEMS document when implementing | M3 |
+| V-24 | Quarter bar stretched by prescribed end displacements on two symmetry planes | Uniform stress Eδ/L, lateral contraction νεy, end reaction σA | M2 |
 
 More published benchmarks (NAFEMS thermal and free-vibration sets) are added as their feature lands. Reference values from publications are cited in `reference.md` and never copied wholesale.
 
@@ -81,8 +82,8 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Feature | Cases |
 | --- | --- |
 | Fixed support | V-01, V-02, V-03 |
-| Prescribed displacement | V-12 |
-| Frictionless / symmetry support | V-01, V-09 |
+| Prescribed displacement | V-24, V-12 |
+| Frictionless / symmetry support | V-09, V-24 |
 | Elastic support | V-07 |
 | Force | V-02, V-12 |
 | Pressure | V-01, V-23 |

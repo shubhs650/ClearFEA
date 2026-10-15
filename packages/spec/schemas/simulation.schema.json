@@ -81,6 +81,44 @@
         "faces": { "$ref": "#/$defs/FaceTags" }
       }
     },
+    "DisplacementComponent": {
+      "description": "One global component of a prescribed displacement: a length quantity (zero holds it, any other value moves the faces by that much), \"free\" when the component is not prescribed, or null until the user has chosen.",
+      "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "const": "free" }, { "type": "null" }]
+    },
+    "PrescribedDisplacement": {
+      "description": "The faces' nodes moved by a given displacement in the global x, y and z directions; a free component is left to the solution. At least one component must have a value before a run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces", "x", "y", "z"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "displacement" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" },
+        "x": { "$ref": "#/$defs/DisplacementComponent" },
+        "y": { "$ref": "#/$defs/DisplacementComponent" },
+        "z": { "$ref": "#/$defs/DisplacementComponent" }
+      }
+    },
+    "FrictionlessSupport": {
+      "description": "Each face held against moving along its own normal and free to slide in its plane, in both directions (it does not lift off). The support for symmetry planes. Flat faces only (DECISIONS.md, gate scope).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "frictionless" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" }
+      }
+    },
+    "Support": {
+      "oneOf": [
+        { "$ref": "#/$defs/FixedSupport" },
+        { "$ref": "#/$defs/PrescribedDisplacement" },
+        { "$ref": "#/$defs/FrictionlessSupport" }
+      ]
+    },
     "PressureLoad": {
       "description": "A uniform pressure normal to each face. A positive magnitude pushes on the face towards the body (along the inward normal), as a fluid does; a negative one pulls (suction).",
       "type": "object",
@@ -109,7 +147,7 @@
       }
     },
     "SimulationSpec": {
-      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, pressures and a global mesh size. version changes whenever the shape does; older stored specs are upgraded by code, never reinterpreted.",
+      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), pressures and a global mesh size. Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
       "type": "object",
       "additionalProperties": false,
       "required": ["version", "analysis", "geometryId", "bodies", "materials", "supports", "loads", "mesh"],
@@ -119,7 +157,7 @@
         "geometryId": { "description": "The geometry whose face and body tags the spec uses.", "type": "string" },
         "bodies": { "type": "array", "items": { "$ref": "#/$defs/BodyAssignment" } },
         "materials": { "type": "array", "items": { "$ref": "#/$defs/IsotropicMaterial" } },
-        "supports": { "type": "array", "items": { "$ref": "#/$defs/FixedSupport" } },
+        "supports": { "type": "array", "items": { "$ref": "#/$defs/Support" } },
         "loads": { "type": "array", "items": { "$ref": "#/$defs/PressureLoad" } },
         "mesh": { "$ref": "#/$defs/MeshSettings" }
       }
@@ -260,7 +298,7 @@
       }
     },
     "SupportReaction": {
-      "description": "Total reaction force of one support, in newtons, as CalculiX reports it for the support's node set.",
+      "description": "Total reaction force of one support, in newtons: CalculiX's total for the support's node set when every support is fixed, otherwise the sum over its nodes of the force along the directions it holds, shared with other supports at nodes they also hold (ADR-039).",
       "type": "object",
       "additionalProperties": false,
       "required": ["supportId", "force"],

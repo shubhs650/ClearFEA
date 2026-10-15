@@ -10,10 +10,12 @@ from pathlib import Path
 
 import pytest
 
+from clearfea_worker.deck.elements import FACE_NODES
 from clearfea_worker.results import (
     DatError,
     FrdError,
     read_fields,
+    read_node_forces,
     read_reaction_totals,
     read_results,
     von_mises,
@@ -21,7 +23,7 @@ from clearfea_worker.results import (
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
 from .deck_meshes import two_tets
-from .test_deck import fixture_spec
+from .test_deck import fixture_spec, supports_spec
 
 SOLVE = Path(__file__).resolve().parent / "fixtures" / "solve"
 
@@ -166,3 +168,42 @@ def test_refuses_a_binary_result_file(tmp_path: Path) -> None:
 def test_refuses_a_dat_file_without_the_support_set() -> None:
     with pytest.raises(DatError, match="no total reaction for S2"):
         read_reaction_totals(SOLVE / "job.dat", ["S1", "S2"])
+
+
+# --- Supports other than fixed ones (M2.2, ADR-039) ---
+
+#: What CalculiX 2.21 wrote for the supports-c3d10 deck snapshot: two symmetry planes (faces 1
+#: at x = 0 and 2 at z = 0), a prescribed y displacement on face 4, a pressure on face 3.
+SUPPORTS = Path(__file__).resolve().parent / "fixtures" / "supports"
+
+
+def test_reads_the_reaction_force_of_every_node_of_a_set() -> None:
+    forces = read_node_forces(SUPPORTS / "job.dat", "RALL")
+    assert len(forces) == 13
+    assert forces[0] == (1.014394e-01, 6.425768e-02, -1.627285e-01)
+    assert forces[13] == (-1.666667e01, -2.098787e01, 1.666667e01)
+
+
+def test_refuses_a_dat_file_without_the_node_set() -> None:
+    with pytest.raises(DatError, match="no reaction forces for set RX"):
+        read_node_forces(SUPPORTS / "job.dat", "RX")
+
+
+def test_each_support_gets_the_force_along_the_directions_it_holds() -> None:
+    spec = SimulationSpec.model_validate(supports_spec())
+    mesh = two_tets(order=2)
+    _, result = read_results(spec, mesh, SUPPORTS / "job.frd", SUPPORTS / "job.dat", "2.21")
+    forces = read_node_forces(SUPPORTS / "job.dat", "RALL")
+
+    def nodes(face: int) -> set[int]:
+        return {
+            mesh.elements[e * 10 + k] for e, local in mesh.faces[face] for k in FACE_NODES[2][local]
+        }
+
+    # Every plane and component here lies along a global axis, so each support takes exactly
+    # the component it holds at each of its nodes, and nothing a node is free in.
+    sym = (sum(forces[n][0] for n in nodes(1)), 0.0, sum(forces[n][2] for n in nodes(2)))
+    move = (0.0, sum(forces[n][1] for n in nodes(4)), 0.0)
+    got = {r.support_id: r.force for r in result.reactions}
+    assert got["sym"] == pytest.approx(sym, abs=1e-9)
+    assert got["move"] == pytest.approx(move, abs=1e-9)

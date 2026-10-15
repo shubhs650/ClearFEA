@@ -532,6 +532,27 @@ button:disabled {
   gap: 4px;
 }
 
+.field-actions-column {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.setup-components {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin: 0;
+  padding: 6px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.component-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .checkbox {
   display: flex;
   align-items: center;

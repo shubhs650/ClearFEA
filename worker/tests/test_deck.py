@@ -8,6 +8,7 @@ it and explain in the pull request why the new deck is correct (docs/VERIFICATIO
 
 import copy
 import json
+import math
 import os
 from pathlib import Path
 
@@ -89,6 +90,36 @@ def two_body_spec() -> dict:
     }
 
 
+def supports_spec() -> dict:
+    """The new supports of M2.2: two symmetry planes, a prescribed displacement in mixed
+    units on a face that meets both, and a pressure."""
+    spec = fixture_spec()
+    spec["supports"] = [
+        {"id": "sym", "type": "frictionless", "name": "Symmetry", "faces": [1, 2]},
+        {
+            "id": "move",
+            "type": "displacement",
+            "name": "Moved side",
+            "faces": [4],
+            "x": "free",
+            "y": {"value": 0.1, "unit": "mm"},
+            "z": "free",
+        },
+    ]
+    spec["loads"] = [spec["loads"][0] | {"faces": [3]}]
+    return spec
+
+
+def turned(mesh: VolumeMesh, degrees: float = 30.0) -> VolumeMesh:
+    """``mesh`` turned about the z axis, so faces 1 (x = 0) and 4 lean."""
+    c, s = math.cos(math.radians(degrees)), math.sin(math.radians(degrees))
+    p = list(mesh.positions)
+    for n in range(len(p) // 3):
+        x, y = p[3 * n], p[3 * n + 1]
+        p[3 * n], p[3 * n + 1] = c * x - s * y, s * x + c * y
+    return VolumeMesh(mesh.order, p, mesh.elements, mesh.bodies, mesh.faces)
+
+
 def deck(spec: dict, mesh: VolumeMesh) -> str:
     return generate_deck(SimulationSpec.model_validate(spec), mesh)
 
@@ -137,6 +168,8 @@ SNAPSHOT_CASES = {
     "fixture-c3d10": (fixture_spec, lambda: two_tets(order=2)),
     "fixture-c3d4": (fixture_spec, lambda: two_tets(order=1)),
     "two-bodies-c3d10": (two_body_spec, lambda: two_tets(order=2, bodies=2)),
+    "supports-c3d10": (supports_spec, lambda: two_tets(order=2)),
+    "supports-turned-c3d4": (supports_spec, lambda: turned(two_tets(order=1))),
 }
 
 
@@ -226,6 +259,74 @@ def broken(change) -> dict:  # type: ignore[no-untyped-def]
         (lambda s: s["bodies"][0].update(material="brass"), "'brass', which is not"),
         (lambda s: s["bodies"].append({"tag": 7, "material": "steel"}), "bodies [7]"),
         (lambda s: s.update(bodies=[]), "Body 1 has no material"),
+        (
+            lambda s: s["supports"].append(
+                {
+                    "id": "d",
+                    "type": "displacement",
+                    "name": "D",
+                    "faces": [2],
+                    "x": "free",
+                    "y": "free",
+                    "z": "free",
+                }
+            ),
+            "leaves every component free",
+        ),
+        (
+            lambda s: s["supports"].append(
+                {
+                    "id": "d",
+                    "type": "displacement",
+                    "name": "D",
+                    "faces": [2],
+                    "x": None,
+                    "y": "free",
+                    "z": "free",
+                }
+            ),
+            "the x component has no value",
+        ),
+        (
+            lambda s: s["supports"].append(
+                {
+                    "id": "d",
+                    "type": "displacement",
+                    "name": "D",
+                    "faces": [2],
+                    "x": {"value": 1, "unit": "MPa"},
+                    "y": "free",
+                    "z": "free",
+                }
+            ),
+            "not a length",
+        ),
+        (
+            lambda s: s["supports"].append(
+                {"id": "f", "type": "frictionless", "name": "F", "faces": [3]}
+            ),
+            "face 3 is not flat",
+        ),
+        (
+            lambda s: s.update(
+                supports=[{"id": "f", "type": "frictionless", "name": "F", "faces": [1]}]
+            ),
+            "slide along y, slide along z and turn about the x axis",
+        ),
+        (
+            lambda s: s["supports"].append(
+                {
+                    "id": "d",
+                    "type": "displacement",
+                    "name": "D",
+                    "faces": [2],
+                    "x": "free",
+                    "y": "free",
+                    "z": {"value": 1, "unit": "mm"},
+                }
+            ),
+            'The fixed support "Fixed support 1" and the prescribed displacement "D" meet',
+        ),
     ],
 )
 def test_refuses_a_spec_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
@@ -243,3 +344,47 @@ def test_refuses_a_mesh_with_nodes_outside_every_element() -> None:
 
 def test_nodes_per_element_matches_element_types() -> None:
     assert set(NODES_PER_ELEMENT) == set(CCX_NODE_ORDER)
+
+
+# --- Prescribed displacement and frictionless support (M2.2, ADR-039) ---
+
+
+def test_fixed_only_setups_keep_the_m1_layout() -> None:
+    text = deck(fixture_spec(), two_tets(order=2))
+    assert "TOTALS=ONLY" in text
+    assert "*TRANSFORM," not in text and "RALL" not in text
+
+
+def test_axis_aligned_planes_and_components_need_no_transform() -> None:
+    text = deck(supports_spec(), two_tets(order=2))
+    assert "*TRANSFORM," not in text
+    assert "*NODE PRINT, NSET=RALL, GLOBAL=YES\nRF\n" in text
+    assert "TOTALS=ONLY" not in text
+    # 0.1 mm along y, in metres, on the moved face's nodes.
+    assert ", 2, 2, 0.0001\n" in text
+
+
+def test_inclined_plane_gets_its_own_axes() -> None:
+    text = deck(supports_spec(), turned(two_tets(order=1)))
+    assert "*TRANSFORM, NSET=C" in text
+    # Face 1's outward normal, -x turned by 30 degrees about z.
+    assert "1: (-0.8660254037844387, -0.5, 0.0)" in text
+
+
+def test_every_held_node_is_in_the_reaction_set_and_in_one_group() -> None:
+    text = deck(supports_spec(), turned(two_tets(order=2)))
+    sets: dict[str, list[int]] = {}
+    name = None
+    for line in text.splitlines():
+        if line.startswith("*NSET, NSET="):
+            name = line.split("=")[1]
+            sets[name] = []
+        elif line.startswith("*"):
+            name = None
+        elif name is not None:
+            sets[name].extend(int(n) for n in line.split(", "))
+    groups = [nodes for name, nodes in sets.items() if name.startswith("C")]
+    grouped = [n for nodes in groups for n in nodes]
+    assert len(grouped) == len(set(grouped))
+    assert sorted(grouped) == sets["RALL"]
+    assert set(sets["RALL"]) == set(sets["S1"]) | set(sets["S2"])

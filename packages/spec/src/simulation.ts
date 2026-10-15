@@ -7,11 +7,21 @@
 import type { Quantity, SimulationSpec } from "./generated/simulation";
 import { unitsTable } from "./units";
 
-/** The bodies and faces of a geometry, as topology.json lists them. */
+/** The bodies and faces of a geometry, as topology.json lists them (a face's type when known). */
 export interface TopologyTags {
   bodies: readonly { tag: number }[];
-  faces: readonly { tag: number }[];
+  faces: readonly { tag: number; type?: string }[];
 }
+
+/** The kind of a support as the setup and its messages name it. */
+export const supportKinds = {
+  fixed: "Fixed support",
+  displacement: "Prescribed displacement",
+  frictionless: "Frictionless support",
+} as const;
+
+/** The global components of a prescribed displacement. */
+export const displacementAxes = ["x", "y", "z"] as const;
 
 /** A new, empty spec for a geometry: every body listed, nothing else set. */
 export function emptySimulationSpec(geometryId: string, topology: TopologyTags): SimulationSpec {
@@ -97,6 +107,14 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
   for (const material of spec.materials) {
     add(material.id, unitProblem(material.youngsModulus, "pressure", `Young's modulus of material "${material.name}"`, true));
   }
+  for (const support of spec.supports) {
+    if (support.type !== "displacement") continue;
+    for (const axis of displacementAxes) {
+      const component = support[axis];
+      if (component === "free") continue;
+      add(support.id, unitProblem(component, "length", `The ${axis} component of support "${support.name}"`, false));
+    }
+  }
   for (const load of spec.loads) {
     add(load.id, unitProblem(load.magnitude, "pressure", `The magnitude of load "${load.name}"`, false));
   }
@@ -118,6 +136,20 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
       const unknown = entry.faces.filter((tag) => !faces.has(tag));
       if (unknown.length > 0) {
         add(entry.id, `${entry.label} uses face ${listTags(unknown)}, which the geometry does not have.`);
+      }
+    }
+    // A frictionless support holds flat faces only (DECISIONS.md); the deck generator checks
+    // the mesh again.
+    const type = new Map(topology.faces.map((f) => [f.tag, f.type]));
+    for (const support of spec.supports) {
+      if (support.type !== "frictionless") continue;
+      const curved = support.faces.filter((tag) => type.get(tag) !== undefined && type.get(tag) !== "plane");
+      if (curved.length > 0) {
+        const which = curved.length === 1 ? `face ${curved[0]}, which is` : `faces ${listTags(curved)}, which are`;
+        add(
+          support.id,
+          `Frictionless support "${support.name}" uses ${which} not flat. It holds flat faces only; use a fixed support or a prescribed displacement on curved faces.`,
+        );
       }
     }
   }

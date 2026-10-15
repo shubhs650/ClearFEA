@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 29000, "unit": "ksi" },
+      "poissonsRatio": 0.29
+    }
+  ],
+  "supports": [
+    {
+      "id": "start",
+      "type": "displacement",
+      "name": "Start held along the bar",
+      "faces": ["start"],
+      "x": { "value": 0, "unit": "mm" },
+      "y": "free",
+      "z": "free"
+    },
+    {
+      "id": "end",
+      "type": "displacement",
+      "name": "End pulled",
+      "faces": ["end"],
+      "x": { "value": 0.0508, "unit": "mm" },
+      "y": "free",
+      "z": "free"
+    },
+    { "id": "symmetry", "type": "frictionless", "name": "Symmetry planes", "faces": ["sym-y", "sym-z"] }
+  ],
+  "loads": [],
+  "mesh": { "size": { "value": 0.25, "unit": "in" } }
+}

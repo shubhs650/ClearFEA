@@ -257,6 +257,49 @@ describe("setup tree", () => {
     expect(scene.selections.at(-1)).toEqual([3]);
   });
 
+  it("adds a prescribed displacement and a frictionless support (M2.2)", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation()], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+    act(() => scene.events[0]?.onPick(3));
+    fireEvent.click(tree().getByRole("button", { name: "Supports, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add a prescribed displacement" }));
+    // Every component starts free, which holds nothing.
+    expect(tree().getByRole("button", { name: "Prescribed displacement 1, incomplete" })).toBeTruthy();
+    expect(settings().getByText("Give at least one component a value; every one is free.")).toBeTruthy();
+    fireEvent.click(settings().getByLabelText("z free"));
+    expect(settings().getByText("Enter the z displacement or set it free.")).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("z displacement"), { target: { value: "0.5" } });
+    expect(tree().getByRole("button", { name: "Prescribed displacement 1, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.supports).toEqual([
+        {
+          id: "displacement-1",
+          type: "displacement",
+          name: "Prescribed displacement 1",
+          faces: [3],
+          x: "free",
+          y: "free",
+          z: { value: 0.5, unit: "mm" },
+        },
+      ]),
+    );
+
+    fireEvent.click(tree().getByRole("button", { name: "Supports, complete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add a frictionless support" }));
+    expect(settings().getByRole("heading", { name: "Frictionless support" })).toBeTruthy();
+    expect(settings().getByText(/slide in its plane/)).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.supports[1]).toEqual({
+        id: "frictionless-1",
+        type: "frictionless",
+        name: "Frictionless support 1",
+        faces: [3],
+      }),
+    );
+  });
+
   it("deletes an item and opens its group", async () => {
     const { sent, route } = saves();
     const spec: SimulationSpec = {

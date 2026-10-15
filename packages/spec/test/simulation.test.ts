@@ -131,4 +131,30 @@ describe("checkSimulationSpec", () => {
       "fixed-1",
     ]);
   });
+
+  it("accepts the M2.2 supports and refuses a component that is not a length", () => {
+    const s = spec();
+    s.supports.push(
+      { id: "move-1", type: "displacement", name: "Pull", faces: [2], x: { value: 0.1, unit: "mm" }, y: "free", z: null },
+      { id: "plane-1", type: "frictionless", name: "Symmetry", faces: [3] },
+    );
+    expect(validateSimulationSpec(s).ok).toBe(true);
+    expect(checkSimulationSpec(s, topology)).toEqual([]);
+    expect(validateSimulationSpec({ ...s, supports: [{ ...s.supports[1], y: "fixed" }] }).ok).toBe(false);
+    s.supports[1] = { ...s.supports[1], y: { value: 1, unit: "MPa" } } as SimulationSpec["supports"][0];
+    expect(checkSimulationSpec(s, topology)[0]).toMatch(/^The y component of support "Pull" is given in "MPa", which is not a length unit/);
+  });
+
+  it("refuses a frictionless support on a face that is not flat", () => {
+    const s = spec();
+    s.supports.push({ id: "plane-1", type: "frictionless", name: "Symmetry", faces: [1, 2, 3] });
+    const shaped = { ...topology, faces: [{ tag: 1, type: "plane" }, { tag: 2, type: "cylinder" }, { tag: 3, type: "other" }] };
+    expect(simulationSpecProblems(s, shaped)).toEqual([
+      {
+        item: "plane-1",
+        message:
+          'Frictionless support "Symmetry" uses faces 2, 3, which are not flat. It holds flat faces only; use a fixed support or a prescribed displacement on curved faces.',
+      },
+    ]);
+  });
 });

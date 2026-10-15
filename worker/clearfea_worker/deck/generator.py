@@ -12,8 +12,16 @@ import re
 from collections.abc import Iterable
 
 from ..meshing.volume import NODES_PER_ELEMENT, VolumeMesh
-from ..spec.simulation_schema import Quantity, SimulationSpec
-from ..units import UnitError, to_si
+from ..spec.simulation_schema import FixedSupport, PrescribedDisplacement, SimulationSpec
+from .common import DeckError, si
+from .constraints import (
+    AXES,
+    Hold,
+    check_held,
+    frictionless_normals,
+    holds,
+    support_kind,
+)
 from .elements import CCX_NODE_ORDER, ELEMENT_TYPE
 from .loads import fixed_support_nodes, pressure_faces
 
@@ -23,9 +31,11 @@ DECK_FORMAT = 1
 #: CalculiX reads at most 16 entries on a data line.
 _PER_LINE = 16
 
+#: The node set whose reaction forces are printed node by node when a setup has supports other
+#: than fixed ones; the result reader shares them between supports (constraints.py).
+REACTION_SET = "RALL"
 
-class DeckError(ValueError):
-    """The spec cannot be turned into solver input. The message says what to change."""
+__all__ = ["DECK_FORMAT", "DeckError", "REACTION_SET", "generate_deck", "support_set_names"]
 
 
 #: CalculiX reads at most this many characters of a number and silently ignores the rest, so
@@ -60,13 +70,7 @@ def _lines(values: Iterable[int]) -> list[str]:
     ]
 
 
-def _si(quantity: Quantity | None, kind: str, what: str) -> float:
-    if quantity is None:
-        raise DeckError(f"{what} has no value. Enter one before running.")
-    try:
-        return to_si(quantity.value, quantity.unit, kind)
-    except UnitError as error:
-        raise DeckError(f"{what}: {error}") from None
+_si = si
 
 
 def _check_faces(mesh: VolumeMesh, faces: list[int], what: str) -> None:
@@ -108,6 +112,65 @@ def support_set_names(spec: SimulationSpec) -> list[str]:
     return [f"S{k + 1}" for k in range(len(spec.supports))]
 
 
+def only_fixed_supports(spec: SimulationSpec) -> bool:
+    """True when every support is fixed: the deck then holds each support's node set in all
+    three directions and prints its total reaction (the M1 layout, ADR-029). Otherwise nodes
+    are held through constraint groups and reactions are printed node by node (ADR-039)."""
+    return all(isinstance(s, FixedSupport) for s in spec.supports)
+
+
+def _perpendicular(a: tuple[float, float, float]) -> tuple[float, float, float]:
+    """A unit vector at right angles to unit vector ``a``, the same for the same ``a``."""
+    axis = min(range(3), key=lambda i: (abs(a[i]), i))
+    e = AXES[axis]
+    d = sum(a[i] * e[i] for i in range(3))
+    v = [e[i] - d * a[i] for i in range(3)]
+    length = sum(x * x for x in v) ** 0.5
+    return (v[0] / length, v[1] / length, v[2] / length)
+
+
+def _vector(v: Iterable[float]) -> str:
+    return ", ".join(_number(x + 0.0) for x in v)
+
+
+def _hold_lines(h: Hold) -> tuple[str | None, "_Dofs"]:
+    """How a node's Hold is written: the *TRANSFORM data line or None (global axes), and the
+    (degree of freedom, value or None for zero) to hold in that system. Values below 1e-12 of
+    the node's largest are rounding left by the solve and written as zero."""
+    size = max((abs(v) for v in h.values), default=0.0)
+
+    def value(v: float) -> str | None:
+        return None if abs(v) <= 1e-12 * size else _number(v)
+
+    if h.on_axes or len(h.basis) == 3:
+        u = h.displacement()
+        held = [0, 1, 2]
+        if len(h.basis) < 3:
+            held = sorted({max(range(3), key=lambda i: abs(q[i])) for q in h.basis})
+        return None, [(i + 1, value(u[i])) for i in held]
+    a = h.basis[0]
+    b = h.basis[1] if len(h.basis) == 2 else _perpendicular(a)
+    return f"{_vector(a)}, {_vector(b)}", [(k + 1, value(v)) for k, v in enumerate(h.values)]
+
+
+_Dofs = list[tuple[int, str | None]]
+_Group = tuple[list[int], str | None, _Dofs]
+
+
+def _constraint_groups(held: dict[int, Hold], skip: set[int]) -> list[_Group]:
+    """Held nodes not in ``skip`` grouped by identical deck text: (nodes, transform, dofs)."""
+    groups: dict[tuple[object, ...], _Group] = {}
+    for node, h in held.items():
+        if node in skip:
+            continue
+        transform, dofs = _hold_lines(h)
+        key = (transform, tuple(dofs))
+        if key not in groups:
+            groups[key] = ([], transform, dofs)
+        groups[key][0].append(node)
+    return list(groups.values())
+
+
 def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
     """CalculiX input for a linear static analysis of ``spec`` on ``mesh``.
 
@@ -128,6 +191,10 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
             f"The mesh has {mesh.node_count - len(used)} nodes that belong to no element. "
             "Mesh the simulation again."
         )
+    held = holds(spec, mesh)
+    check_held(mesh, held)
+    fixed_only = only_fixed_supports(spec)
+    normals = {} if fixed_only else frictionless_normals(spec, mesh)
 
     out = [
         f"** ClearFEA solver input, deck format {DECK_FORMAT}. Generated from the simulation's",
@@ -154,13 +221,47 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
             out.append(f"{e + 1}, " + ", ".join(str(nodes[k] + 1) for k in order))
 
     support_sets = support_set_names(spec)
+    fixed_nodes: set[int] = set()
     for support, name in zip(spec.supports, support_sets, strict=True):
-        out.append(
-            f'** Fixed support {support.id} "{_label(support.name)}", faces '
+        nodes = fixed_support_nodes(mesh, support.faces)
+        line = (
+            f'** {support_kind(support)} {support.id} "{_label(support.name)}", faces '
             + ", ".join(str(f) for f in support.faces)
         )
+        if isinstance(support, PrescribedDisplacement):
+            parts = []
+            for axis, component in zip("xyz", (support.x, support.y, support.z), strict=True):
+                if component == "free" or component is None:
+                    parts.append(f"{axis} free")
+                else:
+                    value = _si(component, "length", f"{support.name}: {axis} component")
+                    parts.append(
+                        f"{axis} {_number(component.value)} {component.unit} = {_number(value)} m"
+                    )
+            line += ": " + ", ".join(parts)
+        elif not isinstance(support, FixedSupport):
+            line += "; normals " + "; ".join(
+                f"{tag}: ({_vector(normals[tag])})" for tag in support.faces
+            )
+        else:
+            fixed_nodes.update(nodes)
+        out.append(line)
         out.append(f"*NSET, NSET={name}")
-        out.extend(_lines(n + 1 for n in fixed_support_nodes(mesh, support.faces)))
+        out.extend(_lines(n + 1 for n in nodes))
+
+    groups = [] if fixed_only else _constraint_groups(held, fixed_nodes)
+    if groups:
+        out.append("** Nodes held by prescribed displacements and frictionless supports, grouped")
+        out.append("** by how they are held; a *TRANSFORM gives a group its own directions 1 to 3")
+    for k, (nodes, transform, _) in enumerate(groups):
+        out.append(f"*NSET, NSET=C{k + 1}")
+        out.extend(_lines(n + 1 for n in nodes))
+        if transform is not None:
+            out.append(f"*TRANSFORM, NSET=C{k + 1}, TYPE=R")
+            out.append(transform)
+    if not fixed_only:
+        out.append(f"*NSET, NSET={REACTION_SET}")
+        out.extend(_lines(n + 1 for n in held))
 
     for k, material in enumerate(spec.materials):
         if not any(index == k for _, index, _ in bodies):
@@ -195,7 +296,14 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
     out.append("*STEP")
     out.append("*STATIC")
     out.append("*BOUNDARY")
-    out.extend(f"{name}, 1, 3" for name in support_sets)
+    for support, name in zip(spec.supports, support_sets, strict=True):
+        if isinstance(support, FixedSupport):
+            out.append(f"{name}, 1, 3")
+    for k, (_, _, dofs) in enumerate(groups):
+        out.extend(
+            f"C{k + 1}, {dof}, {dof}" + ("" if value is None else f", {value}")
+            for dof, value in dofs
+        )
     if pressure:
         out.append("*DLOAD")
         out.extend(
@@ -206,8 +314,14 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh) -> str:
     out.append("U")
     out.append("*EL FILE")
     out.append("S")
-    for name in support_sets:
-        out.append(f"*NODE PRINT, NSET={name}, TOTALS=ONLY")
+    if fixed_only:
+        for name in support_sets:
+            out.append(f"*NODE PRINT, NSET={name}, TOTALS=ONLY")
+            out.append("RF")
+    else:
+        # Node by node, in global axes (a transformed node's forces are otherwise printed in
+        # its own axes; checked with ccx 2.21).
+        out.append(f"*NODE PRINT, NSET={REACTION_SET}, GLOBAL=YES")
         out.append("RF")
     out.append("*END STEP")
     return "\n".join(out) + "\n"

@@ -7,12 +7,20 @@ The deck asks for ``*NODE PRINT, NSET=<set>, TOTALS=ONLY`` with ``RF``, for whic
      total force (fx,fy,fz) for set S1 and time  0.1000000E+01
 
             4.000000E+02  2.101885E-12  2.868564E-12
+
+With supports other than fixed ones it asks for ``*NODE PRINT, NSET=RALL, GLOBAL=YES`` with
+``RF`` instead (ADR-039), for which CalculiX writes one line per node after the header:
+
+     forces (fx,fy,fz) for set RALL and time  0.1000000E+01
+
+            1 -5.752237E-14 -4.145566E-14  3.483120E-14
 """
 
 import re
 from pathlib import Path
 
 _TOTAL = re.compile(r"^\s*total force \(fx,fy,fz\) for set (\S+) and time\s+(\S+)\s*$")
+_FORCES = re.compile(r"^\s*forces \(fx,fy,fz\) for set (\S+) and time\s+(\S+)\s*$")
 
 
 class DatError(ValueError):
@@ -38,3 +46,37 @@ def read_reaction_totals(path: Path, sets: list[str]) -> dict[str, tuple[float, 
     if absent:
         raise DatError(f"The .dat file has no total reaction for {', '.join(absent)}.")
     return {s: totals[s.upper()] for s in sets}
+
+
+def read_node_forces(path: Path, name: str) -> dict[int, tuple[float, float, float]]:
+    """The last block of reaction forces of each node of set ``name`` (0-based node -> N)."""
+    lines = path.read_text(encoding="ascii", errors="replace").splitlines()
+    found: dict[int, tuple[float, float, float]] | None = None
+    k = 0
+    while k < len(lines):
+        match = _FORCES.match(lines[k])
+        k += 1
+        if match is None or match.group(1).upper() != name.upper():
+            continue
+        block: dict[int, tuple[float, float, float]] = {}
+        while k < len(lines) and not lines[k].strip():
+            k += 1
+        while k < len(lines) and lines[k].strip():
+            values = lines[k].split()
+            try:
+                if len(values) != 4:
+                    raise ValueError
+                node = int(values[0])
+                fx, fy, fz = (float(v) for v in values[1:])
+            except ValueError:
+                raise DatError(
+                    f"line {k + 1}: a reaction force of set {name} is unreadable."
+                ) from None
+            if node < 1 or node - 1 in block:
+                raise DatError(f"line {k + 1}: node {node} of set {name} is out of place.")
+            block[node - 1] = (fx, fy, fz)
+            k += 1
+        found = block
+    if found is None:
+        raise DatError(f"The .dat file has no reaction forces for set {name}.")
+    return found

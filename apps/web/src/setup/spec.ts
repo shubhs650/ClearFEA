@@ -5,16 +5,22 @@
 // in packages/spec (M1.12).
 
 import {
-  type FixedSupport,
+  displacementAxes,
   type IsotropicMaterial,
   type MeshView,
+  movesByDisplacement,
   type PressureLoad,
   type Quantity,
   type RunView,
   type SimulationSpec,
+  type Support,
   simulationSpecProblems,
+  supportKinds,
   type TopologyTags,
 } from "@clearfea/spec";
+
+/** The types of support the setup offers (M1.5 fixed; M2.2 prescribed displacement, frictionless). */
+export type SupportType = Support["type"];
 
 export type Mark = "complete" | "incomplete" | "error";
 
@@ -71,14 +77,23 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   result.set("materials", worst([bodies, ...materials]));
 
   const supports = spec.supports.map((s) => {
-    const item = status(errorsOf(s.id), s.faces.length === 0 ? ["Pick the faces to fix."] : []);
+    const missing: string[] = [];
+    if (s.faces.length === 0) {
+      missing.push({ fixed: "Pick the faces to fix.", displacement: "Pick the faces to move.", frictionless: "Pick the flat faces it holds." }[s.type]);
+    }
+    if (s.type === "displacement") {
+      for (const axis of displacementAxes) {
+        if (s[axis] === null) missing.push(`Enter the ${axis} displacement or set it free.`);
+      }
+      if (displacementAxes.every((axis) => s[axis] === "free")) {
+        missing.push("Give at least one component a value; every one is free.");
+      }
+    }
+    const item = status(errorsOf(s.id), missing);
     result.set(s.id, item);
     return item;
   });
-  result.set(
-    "supports",
-    worst([status([], spec.supports.length === 0 ? ["Add a fixed support."] : []), ...supports]),
-  );
+  result.set("supports", worst([status([], spec.supports.length === 0 ? ["Add a support."] : []), ...supports]));
 
   const loads = spec.loads.map((l) => {
     const missing: string[] = [];
@@ -88,7 +103,9 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
     result.set(l.id, item);
     return item;
   });
-  result.set("loads", worst([status([], spec.loads.length === 0 ? ["Add a load."] : []), ...loads]));
+  // A prescribed displacement other than zero loads the part by itself (ADR-039).
+  const needsLoad = spec.loads.length === 0 && !movesByDisplacement(spec);
+  result.set("loads", worst([status([], needsLoad ? ["Add a load."] : []), ...loads]));
 
   result.set("mesh", status(errorsOf("mesh"), spec.mesh.size === null ? ["Enter a global mesh size."] : []));
   return result;
@@ -148,10 +165,28 @@ export function addMaterial(spec: SimulationSpec): { spec: SimulationSpec; id: s
   };
 }
 
-export function addFixedSupport(spec: SimulationSpec, faces: readonly number[]): { spec: SimulationSpec; id: string } {
-  const n = nextNumber(spec, "fixed");
-  const support: FixedSupport = { id: `fixed-${n}`, type: "fixed", name: `Fixed support ${n}`, faces: [...faces] };
+/**
+ * Adds a support of the given type. A prescribed displacement starts with every component
+ * free, so the user gives a value only to the ones it holds.
+ */
+export function addSupport(
+  spec: SimulationSpec,
+  type: SupportType,
+  faces: readonly number[],
+): { spec: SimulationSpec; id: string } {
+  const n = nextNumber(spec, type);
+  const base = { id: `${type}-${n}`, name: `${supportKinds[type]} ${n}`, faces: [...faces] };
+  const support: Support =
+    type === "displacement"
+      ? { ...base, type, x: "free", y: "free", z: "free" }
+      : type === "frictionless"
+        ? { ...base, type }
+        : { ...base, type: "fixed" };
   return { id: support.id, spec: { ...spec, supports: [...spec.supports, support] } };
+}
+
+export function addFixedSupport(spec: SimulationSpec, faces: readonly number[]): { spec: SimulationSpec; id: string } {
+  return addSupport(spec, "fixed", faces);
 }
 
 export function addPressure(spec: SimulationSpec, faces: readonly number[]): { spec: SimulationSpec; id: string } {
@@ -170,7 +205,7 @@ export function updateMaterial(spec: SimulationSpec, material: IsotropicMaterial
   return { ...spec, materials: spec.materials.map((m) => (m.id === material.id ? material : m)) };
 }
 
-export function updateSupport(spec: SimulationSpec, support: FixedSupport): SimulationSpec {
+export function updateSupport(spec: SimulationSpec, support: Support): SimulationSpec {
   return { ...spec, supports: spec.supports.map((s) => (s.id === support.id ? support : s)) };
 }
 

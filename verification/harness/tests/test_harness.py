@@ -18,10 +18,12 @@ from harness.cases import (
     CaseError,
     Check,
     applied_load,
+    balance,
     build_spec,
     evaluate,
     load_case,
     name_faces,
+    reaction,
     unexpected_warnings,
 )
 
@@ -137,6 +139,37 @@ def test_evaluates_the_mean_over_a_face_inside_a_box() -> None:
     assert evaluate(radial, s, fields, {"plate": 7}) == (pytest.approx(0.004), 1)
 
 
+def test_reads_a_reaction_component_of_the_named_support() -> None:
+    check = Check("r", "reaction.y", None, None, 1.0, "N", {"coarse": 0.1, "full": 0.1}, "b")
+    reactions = [{"supportId": "a", "force": [1, 2, 3]}, {"supportId": "b", "force": [4, 5, 6]}]
+    assert reaction(check, reactions) == 5.0
+
+
+def test_balance_without_a_load_is_measured_against_the_reactions() -> None:
+    assert balance([0.0, 0.0, -10.0], 10.0, [[0.0, 0.0, 9.0]]) == pytest.approx((1.0, 10.0))
+    miss, size = balance(
+        [0.0, 0.0, 0.0], 0.0, [[3.0, 0.0, 0.0], [-3.0, 0.0, 0.0], [0.0, 0.0, 1e-3]]
+    )
+    assert (miss, size) == pytest.approx((1e-3, 6.001))
+
+
+def test_a_reaction_check_must_name_a_support_of_the_spec(tmp_path: Path) -> None:
+    folder = tmp_path / "V-99-x"
+    folder.mkdir()
+    (folder / "spec.json").write_text(json.dumps({"supports": [{"id": "end"}], "loads": []}))
+    raw = (
+        "id: V-99\ntitle: x\ngeometry: {unit: mm}\nfaces: {}\n"
+        "mesh: {coarse: {value: 1, unit: mm}, full: {value: 1, unit: mm}}\n"
+        "checks:\n  - {name: r, quantity: reaction.x, support: start,"
+        " reference: {value: 1, unit: kN}, tolerance: {coarse: 0.1, full: 0.1}}\n"
+    )
+    (folder / "case.yaml").write_text(raw)
+    with pytest.raises(CaseError, match="must name a support id"):
+        load_case(folder)
+    (folder / "case.yaml").write_text(raw.replace("support: start", "support: end"))
+    assert load_case(folder).checks[0].reference == 1000.0
+
+
 def test_reports_warnings_the_case_does_not_expect() -> None:
     log = "ok\n *WARNING in e_c3d: nonpositive jacobian\n *warning: expected one\n"
     assert unexpected_warnings(log, [re.compile("expected one")]) == [
@@ -199,13 +232,47 @@ def test_v02_references_are_timoshenko_beam_values() -> None:
         assert checks[name].reference == pytest.approx(stress, rel=1e-6)
 
 
+def test_v09_references_are_the_full_tubes_lame_values() -> None:
+    quarter, full = (
+        load_case(CASES / "V-09-symmetry-tube"),
+        load_case(CASES / "V-01-thick-cylinder"),
+    )
+    for check in full.checks:
+        [same] = [
+            c for c in quarter.checks if c.face == check.face and c.quantity == check.quantity
+        ]
+        assert same.reference == pytest.approx(check.reference, rel=1e-9)
+    # Hoop force p a L across each cut face, along its outward normal.
+    p, a, length = 10e6, 0.04, 0.1
+    checks = by_name(quarter)
+    for degrees, sign, plane in ((30, -1, "30°"), (120, 1, "120°")):
+        t = math.radians(degrees)
+        normal = (-sign * math.sin(t), sign * math.cos(t))
+        for axis, component in zip("xy", normal, strict=True):
+            check = checks[f"Hoop force on the {plane} plane, {axis}"]
+            assert check.reference == pytest.approx(p * a * length * component, rel=1e-5)
+
+
+def test_v24_references_are_a_uniformly_stretched_bar() -> None:
+    case = load_case(CASES / "V-24-stretched-bar")
+    inch, ksi = 0.0254, 6894757.293168362
+    e, nu = 29000 * ksi, case.spec["materials"][0]["poissonsRatio"]
+    strain = case.spec["supports"][1]["x"]["value"] / 1000 / (4 * inch)
+    checks = by_name(case)
+    assert checks["von Mises stress at the end (E ε)"].reference == pytest.approx(e * strain)
+    assert checks["Side contracts in y (−ν ε y)"].reference == pytest.approx(
+        -nu * strain * 0.5 * inch
+    )
+    assert checks["Force needed at the end (σ A)"].reference == pytest.approx(
+        e * strain * (0.5 * inch) ** 2
+    )
+
+
 def test_spec_templates_use_mixed_units() -> None:
     units = set()
     for folder in CASES.iterdir():
         spec = json.loads((folder / "spec.json").read_text())
-        units |= {
-            spec["materials"][0]["youngsModulus"]["unit"],
-            spec["loads"][0]["magnitude"]["unit"],
-        }
+        units.add(spec["materials"][0]["youngsModulus"]["unit"])
+        units |= {load["magnitude"]["unit"] for load in spec["loads"]}
         units.add(load_case(folder).unit)
     assert {"GPa", "bar", "mm", "ksi", "psi", "in"} <= units

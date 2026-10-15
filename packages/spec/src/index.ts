@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export * from "./generated";
-export { preRunProblems } from "./prerun";
+export { movesByDisplacement, preRunProblems } from "./prerun";
 export {
   checkSimulationSpec,
+  displacementAxes,
   emptySimulationSpec,
   type SpecProblem,
   simulationSpecProblems,
+  supportKinds,
   type TopologyTags,
 } from "./simulation";
 export { checkUnitsTable, isUnitSystem, systemUnit, unitsTable } from "./units";

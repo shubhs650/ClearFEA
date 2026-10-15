@@ -42,3 +42,5 @@ Thumbs.db
 # Solver output kept as test fixtures (CalculiX output of a deck snapshot, ADR-030).
 !worker/tests/fixtures/solve/*.frd
 !worker/tests/fixtures/solve/*.dat
+!worker/tests/fixtures/supports/*.frd
+!worker/tests/fixtures/supports/*.dat
