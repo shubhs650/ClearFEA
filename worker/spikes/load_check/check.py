@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""M2.3 load check: solve parts under a force on a face, gravity and a centrifugal load with
-CalculiX and compare with closed-form answers and with equilibrium (ADR-040).
+"""M2.3/M2.4 load check: solve parts under a force on a face, gravity, a centrifugal load and a
+remote force and moment with CalculiX and compare with closed-form answers and with
+equilibrium (ADR-040, ADR-041).
 
 Script only, like spikes/support_check (the fast tier runs no solver). It checks what the
 deck generator and result reader alone decide for the new loads: a force reaches the nodes
@@ -20,13 +21,14 @@ import tempfile
 import threading
 from pathlib import Path
 
-from clearfea_worker.deck import DeckError, generate_deck
+from clearfea_worker.deck import REACTION_SET, DeckError, generate_deck
 from clearfea_worker.deck.applied import force_loads
 from clearfea_worker.deck.loads import body_load, body_nodal_forces, densities
 from clearfea_worker.geometry.importer import import_geometry
 from clearfea_worker.meshing.mesher import mesh_geometry
 from clearfea_worker.meshing.volume import VolumeMesh, read_volume_mesh
 from clearfea_worker.results import read_results
+from clearfea_worker.results.dat import read_node_forces
 from clearfea_worker.results.fields import von_mises_field
 from clearfea_worker.solver import run_calculix
 from clearfea_worker.spec.geometry_schema import Topology
@@ -42,6 +44,10 @@ PULL_KN = 20.0
 #: Quarter ring in millimetres: radii A to B, height T from z = 0, spun about z.
 A, B, T = 90.0, 100.0, 5.0
 RPM = 10000.0
+#: Remote load on the column's top: point (mm), force (N) and moment (N·m).
+REMOTE_POINT = (30.0, -10.0, L + 50.0)
+REMOTE_FORCE = (1000.0, -2000.0, -5000.0)
+REMOTE_MOMENT = (40.0, -25.0, 60.0)
 
 Row = tuple[str, str, str, bool]
 
@@ -411,6 +417,131 @@ def spinning(root: Path, order: int) -> list[Row]:
     return rows
 
 
+def cross(a, b) -> list[float]:  # type: ignore[no-untyped-def]
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+
+
+def moment_about(mesh: VolumeMesh, forces, point) -> list[float]:  # type: ignore[no-untyped-def]
+    """The moment about ``point`` (m) of nodal forces (0-based node -> N)."""
+    p = mesh.positions
+    total = [0.0, 0.0, 0.0]
+    for node, f in forces.items():
+        m = cross([p[3 * node + i] - point[i] for i in range(3)], f)
+        for i in range(3):
+            total[i] += m[i]
+    return total
+
+
+def remote_load(root: Path, order: int) -> list[Row]:
+    """Column held at its base (a zero prescribed displacement, so the reactions are printed
+    node by node), loaded on its top through a point off to the side and above it: the nodal
+    loads have the force and, about the point, the moment; the base reaction balances both;
+    and the axial stress at mid-height is the beam's N/A + bending."""
+    mesh, topo = prepare(root, "column", column, order, 0.005)
+    base = face(topo, lambda x, y, z: abs(z) < 1e-6)
+    top = face(topo, lambda x, y, z: abs(z - L) < 1e-6)
+
+    def xyz(v, unit):  # type: ignore[no-untyped-def]
+        return {a: q(c, unit) for a, c in zip("xyz", v, strict=True)}
+
+    s = spec(
+        [
+            {
+                "id": "base",
+                "type": "displacement",
+                "name": "base",
+                "faces": [base],
+                "x": q(0, "mm"),
+                "y": q(0, "mm"),
+                "z": q(0, "mm"),
+            }
+        ],
+        [
+            {
+                "id": "remote",
+                "type": "remote",
+                "name": "remote",
+                "faces": [top],
+                "point": xyz(REMOTE_POINT, "mm"),
+                "force": xyz(REMOTE_FORCE, "N"),
+                "moment": xyz(REMOTE_MOMENT, "N·m"),
+            }
+        ],
+        density=False,
+    )
+    work = root / f"remote-p{order}"
+    fields, result = solve(s, mesh, work)
+    point = [c / 1000 for c in REMOTE_POINT]
+    f, m = REMOTE_FORCE, REMOTE_MOMENT
+    size_f, size_m = math.hypot(*f), math.hypot(*m)
+    nodal = force_loads(s, mesh)
+    total = [sum(v[i] for v in nodal.values()) for i in range(3)]
+    turning = moment_about(mesh, nodal, point)
+    # The base holds every node of its face; none carries load, so RF is the reaction.
+    rf = read_node_forces(work / "job.dat", REACTION_SET)
+    reaction = [sum(v[i] for v in rf.values()) for i in range(3)]
+    reaction_m = moment_about(mesh, rf, point)
+    (r,) = [x.force for x in result.reactions]
+    # Beam theory at mid-height: the section at z = L/2 carries the load's force and its
+    # moment about the section's centre c, M + (P - c) x F. Axial stress at (x, y):
+    # Fz/A + Mx (y - yc)/I - My (x - xc)/I, with I = H^4/12 (Saint-Venant, far from both ends).
+    c = (H / 2000, H / 2000, L / 2000)
+    inner = cross([point[i] - c[i] for i in range(3)], f)
+    mx, my = m[0] + inner[0], m[1] + inner[1]
+    i_ = (H / 1000) ** 4 / 12
+    pos = mesh.positions
+    stress = fields.stress
+    middle = [n for n in range(mesh.node_count) if abs(pos[3 * n + 2] * 1000 - L / 2) < 1e-6]
+    peak = abs(f[2]) / A_SI + (abs(mx) + abs(my)) * (H / 2000) / i_
+    worst = 0.0
+    for n in middle:
+        x, y = pos[3 * n] - c[0], pos[3 * n + 1] - c[1]
+        beam = f[2] / A_SI + mx * y / i_ - my * x / i_
+        worst = max(worst, abs(stress[6 * n + 2] - beam) / peak)
+    # The moments in the check are of size M plus the arm to the base times F, which cancel
+    # down to M; the printed reactions have seven digits, so the miss is measured against it.
+    scale = size_m + math.dist(point, (c[0], c[1], 0.0)) * size_f
+    rows = [
+        (
+            f"p{order} remote: nodal loads add up to the force",
+            show(f) + " N",
+            show(total),
+            math.dist(total, f) < 1e-12 * size_f,
+        ),
+        (
+            f"p{order} remote: nodal loads' moment about the point",
+            show(m) + " N·m",
+            show(turning),
+            math.dist(turning, m) < 1e-12 * size_m,
+        ),
+        (
+            f"p{order} remote: base reaction",
+            show(-v for v in f) + " N",
+            show(r),
+            math.dist(r, [-v for v in f]) < 1e-6 * size_f and math.dist(reaction, r) < 1e-9,
+        ),
+        (
+            f"p{order} remote: base reaction's moment about the point",
+            show(-v for v in m) + " N·m",
+            show(reaction_m),
+            math.dist(reaction_m, [-v for v in m]) < 1e-6 * scale,
+        ),
+    ]
+    # Four-node tetrahedra have constant strain, so they cannot bend a section that is four
+    # elements across (they come out about a quarter too stiff here); only ten-node ones are
+    # compared with beam theory.
+    if order == 2:
+        rows.append(
+            (
+                f"p{order} remote: axial stress at mid-height from beam theory",
+                f"peak {peak:.6g} Pa",
+                f"worst {worst:.2e} of peak over {len(middle)} nodes",
+                worst < 2e-3,
+            )
+        )
+    return rows
+
+
 def refusals(root: Path) -> list[Row]:
     mesh, topo = prepare(root, "short-column", column, 1, 0.01)
     base = [
@@ -433,6 +564,24 @@ def refusals(root: Path) -> list[Row]:
             "gravity missing a component",
             spec(base, [{**gravity(), "y": None}]),
             "y component has no value",
+        ),
+        (
+            "a remote load missing a moment component",
+            spec(
+                base,
+                [
+                    {
+                        "id": "r",
+                        "type": "remote",
+                        "name": "r",
+                        "faces": base[0]["faces"],
+                        "point": {"x": q(0, "mm"), "y": q(0, "mm"), "z": q(0, "mm")},
+                        "force": {"x": q(0, "N"), "y": q(0, "N"), "z": q(1, "N")},
+                        "moment": {"x": q(0, "N·m"), "y": None, "z": q(0, "N·m")},
+                    }
+                ],
+            ),
+            "y component of its moment has no value",
         ),
     ]
     rows = []
@@ -457,6 +606,7 @@ def main() -> int:
         rows += pulled(root, order)
         rows += self_weight(root, order)
         rows += spinning(root, order)
+        rows += remote_load(root, order)
     rows += refusals(root)
     print("| Check | Expected | Got | OK |\n| --- | --- | --- | --- |")
     for name, expected, got, ok in rows:

@@ -27,6 +27,6 @@ cases/V-01-thick-cylinder/
 - `checks`: each has a `name`, a `quantity` (`vonMises`, `displacement`, `displacement.x`/`.y`/`.z`, or `displacement.radial` about the z axis), the `face` it is read on, an optional `box` (in the geometry's unit) that limits it to part of the face, a `reference` with its unit, and a relative `tolerance` per tier. The computed value is the mean over the run's surface vertices on that face inside the box, read from the run's `surface.bin` and `fields.bin`.
 - `allowedWarnings`: optional regular expressions for solver log lines that may contain "warning".
 
-Every case also gets the automatic checks: the STEP unit detected, reactions balancing the applied loads within 0.1 percent (pressures, forces, and gravity and centrifugal loads on the volume the run's surface encloses), no unexpected solver warnings, and billed seconds with one ledger entry.
+Every case also gets the automatic checks: the STEP unit detected, reactions balancing the applied loads within 0.1 percent (pressures, forces, remote loads' forces, and gravity and centrifugal loads on the volume the run's surface encloses), no unexpected solver warnings, and billed seconds with one ledger entry.
 
 A tolerance is never loosened to make a case pass without a written reason in `reference.md` (docs/VERIFICATION.md).

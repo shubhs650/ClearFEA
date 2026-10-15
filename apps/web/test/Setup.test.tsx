@@ -381,6 +381,42 @@ describe("setup tree", () => {
     expect(sent.at(-1)?.materials[0]?.density).toEqual({ value: 7850, unit: "kg/m³" });
   });
 
+  it("adds a remote force and moment on the selected faces (M2.4)", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation(emptySpec)], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+    act(() => scene.events[0]?.onPick(3));
+    fireEvent.click(tree().getByRole("button", { name: "Loads, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add a remote force and moment" }));
+    expect(settings().getByRole("heading", { name: "Remote load" })).toBeTruthy();
+    expect(settings().getByText("Enter the reference point.")).toBeTruthy();
+    expect(settings().getByText("Enter the force (0 for none).")).toBeTruthy();
+    expect(settings().getByText("Enter the moment (0 for none).")).toBeTruthy();
+    const fields = settings().getAllByLabelText(/^[xyz]$/);
+    // Point x, y, z, then force x, y, z, then moment x, y, z.
+    for (const [k, value] of ["0", "0", "250", "0", "-500", "0", "1000", "0", "0"].entries()) {
+      fireEvent.change(fields[k] as HTMLElement, { target: { value } });
+    }
+    expect(tree().getByRole("button", { name: "Remote load 1, complete" })).toBeTruthy();
+    const mm = (value: number) => ({ value, unit: "mm" });
+    const n = (value: number) => ({ value, unit: "N" });
+    const nmm = (value: number) => ({ value, unit: "N·mm" });
+    await waitFor(() =>
+      expect(sent.at(-1)?.loads).toEqual([
+        {
+          id: "remote-1",
+          type: "remote",
+          name: "Remote load 1",
+          faces: [3],
+          point: { x: mm(0), y: mm(0), z: mm(250) },
+          force: { x: n(0), y: n(-500), z: n(0) },
+          moment: { x: nmm(1000), y: nmm(0), z: nmm(0) },
+        },
+      ]),
+    );
+  });
+
   it("deletes an item and opens its group", async () => {
     const { sent, route } = saves();
     const spec: SimulationSpec = {

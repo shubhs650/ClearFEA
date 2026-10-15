@@ -51,7 +51,7 @@ Stress is checked away from supports and load application points unless the case
 | V-01 | Thick cylinder, internal pressure, one end fixed and one open | Lamé (open ends): von Mises stress and radial displacement at the bore and the outside | M1 |
 | V-02 | Cantilever, end load: a force on an end patch of the top face (a pressure until M2.3) | Timoshenko beam: tip deflection under the patch load, bending stress at mid-length; clamp reaction | M1 |
 | V-03 | Plate with central hole in tension | Kirsch factor 3 for a wide plate, with finite-width correction | M2 |
-| V-04 | Remote force and moment on a stub | Reactions equal the applied force and moment; bending stress at mid-length from beam theory | M2 |
+| V-04 | Remote force and moment on a round stub: an axial force through a point off the axis, a torque and a bending moment | Saint-Venant extension, bending and torsion: von Mises on top, underneath and on the side along the middle, which carry the remote point's lever; clamp reaction equals the force (reaction moments with M3.2) | M2 |
 | V-05 | Tank wall, hydrostatic pressure | Total reaction equals ρg × depth-weighted area; pressure at depth | M2 |
 | V-06 | Thin rotating ring: a quarter on three symmetry planes | Plane stress rotating disc (hoop stress ρω²r² in the thin limit): hoop stress and radial growth on both faces; hoop force ρω²t(b³ − a³)/3 across each cut | M2 |
 | V-07 | Block on elastic support | Displacement F/(k·A) | M2 |
@@ -81,7 +81,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 
 | Feature | Cases |
 | --- | --- |
-| Fixed support | V-01, V-02, V-03, V-10 |
+| Fixed support | V-01, V-02, V-03, V-04, V-10 |
 | Prescribed displacement | V-24, V-12 |
 | Frictionless / symmetry support | V-09, V-24, V-06 |
 | Elastic support | V-07 |

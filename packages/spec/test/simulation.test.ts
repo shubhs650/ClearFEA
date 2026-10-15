@@ -196,6 +196,40 @@ describe("checkSimulationSpec", () => {
     ]);
   });
 
+  it("accepts a remote load and checks its units and faces (M2.4)", () => {
+    const s = spec();
+    s.loads.push({
+      id: "remote-1",
+      type: "remote",
+      name: "Pipe",
+      faces: [2],
+      point: { x: { value: 1, unit: "in" }, y: null, z: { value: 0, unit: "mm" } },
+      force: { x: { value: 1, unit: "kN" }, y: null, z: { value: 0, unit: "lbf" } },
+      moment: { x: { value: 5, unit: "N·m" }, y: { value: 1, unit: "lbf·ft" }, z: null },
+    });
+    expect(validateSimulationSpec(s).ok).toBe(true);
+    expect(checkSimulationSpec(s, topology)).toEqual([]);
+    // A remote load needs all three parts.
+    const { moment: _, ...noMoment } = s.loads[1] as Extract<SimulationSpec["loads"][0], { type: "remote" }>;
+    expect(validateSimulationSpec({ ...s, loads: [noMoment] }).ok).toBe(false);
+
+    s.loads[1] = {
+      id: "remote-1",
+      type: "remote",
+      name: "Pipe",
+      faces: [2, 99],
+      point: { x: { value: 1, unit: "N" }, y: null, z: null },
+      force: { x: { value: 1, unit: "N·m" }, y: null, z: null },
+      moment: { x: { value: 1, unit: "N" }, y: null, z: null },
+    };
+    expect(checkSimulationSpec(s, topology)).toEqual([
+      expect.stringMatching(/^The x coordinate of the reference point of load "Pipe" is given in "N", which is not a length unit/),
+      expect.stringMatching(/^The x component of the force of load "Pipe" is given in "N·m", which is not a force unit/),
+      expect.stringMatching(/^The x component of the moment of load "Pipe" is given in "N", which is not a moment unit/),
+      'Load "Pipe" uses face 99, which the geometry does not have.',
+    ]);
+  });
+
   it("refuses a zero axis, a second centrifugal load and a density of zero", () => {
     const s = spec();
     s.materials[0] = { ...first(s.materials), density: { value: 0, unit: "kg/m³" } };

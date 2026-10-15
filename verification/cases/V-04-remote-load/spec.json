@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200, "unit": "GPa" },
+      "poissonsRatio": 0.3
+    }
+  ],
+  "supports": [{ "id": "clamp", "type": "fixed", "name": "Clamped end", "faces": ["fixed-end"] }],
+  "loads": [
+    {
+      "id": "remote",
+      "type": "remote",
+      "name": "Load through the point",
+      "faces": ["loaded-end"],
+      "point": {
+        "x": { "value": 25, "unit": "cm" },
+        "y": { "value": -1, "unit": "cm" },
+        "z": { "value": 0, "unit": "cm" }
+      },
+      "force": {
+        "x": { "value": 6, "unit": "kN" },
+        "y": { "value": 0, "unit": "lbf" },
+        "z": { "value": 0, "unit": "N" }
+      },
+      "moment": {
+        "x": { "value": 120, "unit": "N·m" },
+        "y": { "value": 0, "unit": "kN·m" },
+        "z": { "value": 600, "unit": "lbf·in" }
+      }
+    }
+  ],
+  "mesh": { "size": { "value": 3, "unit": "mm" } }
+}

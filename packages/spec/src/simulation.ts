@@ -27,13 +27,14 @@ export const displacementAxes = ["x", "y", "z"] as const;
 export const loadKinds = {
   pressure: "Pressure",
   force: "Force",
+  remote: "Remote load",
   gravity: "Gravity",
   centrifugal: "Centrifugal load",
 } as const;
 
 /** True when the load acts on faces the user picks (gravity and centrifugal act on every body). */
 export function loadHasFaces(load: Load): load is Extract<Load, { faces: number[] }> {
-  return load.type === "pressure" || load.type === "force";
+  return load.type === "pressure" || load.type === "force" || load.type === "remote";
 }
 
 /** True when the setup has a gravity or centrifugal load, which need every material's density. */
@@ -60,6 +61,7 @@ const kindNames = {
   length: "a length",
   pressure: "a pressure",
   force: "a force",
+  moment: "a moment",
   density: "a density",
   acceleration: "an acceleration",
   angularVelocity: "an angular velocity",
@@ -152,6 +154,12 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
       const kind = load.type === "force" ? "force" : "acceleration";
       for (const axis of displacementAxes) {
         add(load.id, unitProblem(load[axis], kind, `The ${axis} component of load "${load.name}"`, false));
+      }
+    } else if (load.type === "remote") {
+      for (const axis of displacementAxes) {
+        add(load.id, unitProblem(load.point[axis], "length", `The ${axis} coordinate of the reference point of load "${load.name}"`, false));
+        add(load.id, unitProblem(load.force[axis], "force", `The ${axis} component of the force of load "${load.name}"`, false));
+        add(load.id, unitProblem(load.moment[axis], "moment", `The ${axis} component of the moment of load "${load.name}"`, false));
       }
     } else {
       add(load.id, unitProblem(load.angularVelocity, "angularVelocity", `The angular velocity of load "${load.name}"`, false));

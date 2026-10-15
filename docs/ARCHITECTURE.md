@@ -195,7 +195,7 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 | Elastic support | Grounded spring elements per node, stiffness weighted by nodal area |
 | Force on a face | A uniform traction F / A over all the load's faces, written as consistent nodal loads (`*CLOAD`) that sum to F (ADR-040) |
 | Pressure | `*DLOAD` on element faces |
-| Remote force and moment | Reference node coupled to the face (`*COUPLING` with distributing or kinematic option), loads applied at the reference node |
+| Remote force and moment | The force and moment at the reference point carried to the faces as the statically equivalent linear traction F/A + α × (x − c), J α = M + (P − c) × F (a distributing connection with weights by area), written as consistent nodal loads (`*CLOAD`) that add up to F with the moment M about P; no reference node (ADR-041) |
 | Hydrostatic pressure | Per-element-face pressure computed from depth below the free surface, written as `*DLOAD` |
 | Gravity, centrifugal | `*DLOAD` `GRAV` and `CENTRIF` on each body's element set, with `*DENSITY` per material; gravity loads added into one vector, one centrifugal load per setup (ADR-040) |
 | Uniform temperature change | Initial and final temperature fields |
@@ -206,7 +206,7 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 | Radiation to ambient | `*RADIATE` with the absolute-zero and Stefan-Boltzmann constants set for SI |
 | Thermal stress | Heat transfer step followed by a static step in one deck |
 | Modal | `*FREQUENCY` step |
-| Reactions | Reaction force totals per support node set when all supports are fixed; otherwise the force at each held node, shared between the supports holding it along their own directions (ADR-039). Force and body loads applied at held nodes are taken out first, since CalculiX counts them in RF (ADR-040) |
+| Reactions | Reaction force totals per support node set when all supports are fixed; otherwise the force at each held node, shared between the supports holding it along their own directions (ADR-039). Force, remote and body loads applied at held nodes are taken out first, since CalculiX counts them in RF (ADR-040) |
 
 ### Solver configuration
 

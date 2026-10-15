@@ -25,7 +25,7 @@ import {
 /** The types of support the setup offers (M1.5 fixed; M2.2 prescribed displacement, frictionless). */
 export type SupportType = Support["type"];
 
-/** The types of load the setup offers (M1.5 pressure; M2.3 force, gravity, centrifugal). */
+/** The types of load the setup offers (M1.5 pressure; M2.3 force, gravity, centrifugal; M2.4 remote). */
 export type LoadType = Load["type"];
 
 export type Mark = "complete" | "incomplete" | "error";
@@ -120,7 +120,7 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
 function loadMissing(load: Load): string[] {
   const missing: string[] = [];
   if (loadHasFaces(load) && load.faces.length === 0) {
-    missing.push(`Pick the faces the ${load.type} acts on.`);
+    missing.push(`Pick the faces the ${load.type === "remote" ? "remote load" : load.type} acts on.`);
   }
   if (load.type === "pressure") {
     if (load.magnitude === null) missing.push("Enter the pressure.");
@@ -128,6 +128,10 @@ function loadMissing(load: Load): string[] {
     for (const axis of displacementAxes) {
       if (load[axis] === null) missing.push(`Enter the ${axis} component (0 for none).`);
     }
+  } else if (load.type === "remote") {
+    if (displacementAxes.some((axis) => load.point[axis] === null)) missing.push("Enter the reference point.");
+    if (displacementAxes.some((axis) => load.force[axis] === null)) missing.push("Enter the force (0 for none).");
+    if (displacementAxes.some((axis) => load.moment[axis] === null)) missing.push("Enter the moment (0 for none).");
   } else {
     if (load.angularVelocity === null) missing.push("Enter the angular velocity.");
     if (displacementAxes.some((axis) => load.axisPoint[axis] === null)) missing.push("Enter a point on the axis.");
@@ -216,8 +220,8 @@ export function addFixedSupport(spec: SimulationSpec, faces: readonly number[]):
 }
 
 /**
- * Adds a load of the given type, with every value still to enter. A pressure or force takes
- * the given faces; gravity and a centrifugal load act on every body and have none.
+ * Adds a load of the given type, with every value still to enter. A pressure, force or remote
+ * load takes the given faces; gravity and a centrifugal load act on every body and have none.
  */
 export function addLoad(
   spec: SimulationSpec,
@@ -232,7 +236,9 @@ export function addLoad(
       ? { ...base, type, faces: [...faces], magnitude: null }
       : type === "force"
         ? { ...base, type, faces: [...faces], ...empty }
-        : type === "gravity"
+        : type === "remote"
+          ? { ...base, type, faces: [...faces], point: { ...empty }, force: { ...empty }, moment: { ...empty } }
+          : type === "gravity"
           ? { ...base, type, ...empty }
           : { ...base, type, angularVelocity: null, axisPoint: { ...empty }, axisDirection: { ...empty } };
   return { id: load.id, spec: { ...spec, loads: [...spec.loads, load] } };

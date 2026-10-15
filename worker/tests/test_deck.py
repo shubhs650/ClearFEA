@@ -157,6 +157,36 @@ def loads_spec() -> dict:
     return spec
 
 
+def remote_spec() -> dict:
+    """A remote force and moment on two faces (M2.4) beside the fixture's pressure: the point
+    in inches off the faces, the force in kN and lbf, the moment in N·m, lbf·in and kN·m."""
+    spec = fixture_spec()
+    spec["loads"].append(
+        {
+            "id": "remote-1",
+            "type": "remote",
+            "name": "Pipe load",
+            "faces": [3, 4],
+            "point": {
+                "x": {"value": 1, "unit": "in"},
+                "y": {"value": 0.5, "unit": "in"},
+                "z": {"value": -2, "unit": "in"},
+            },
+            "force": {
+                "x": {"value": 2, "unit": "kN"},
+                "y": {"value": -150, "unit": "lbf"},
+                "z": {"value": 0, "unit": "kN"},
+            },
+            "moment": {
+                "x": {"value": 15, "unit": "N·m"},
+                "y": {"value": -80, "unit": "lbf·in"},
+                "z": {"value": 0.02, "unit": "kN·m"},
+            },
+        }
+    )
+    return spec
+
+
 def two_body_loads_spec() -> dict:
     return loads_spec() | {
         "bodies": [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
@@ -225,6 +255,7 @@ SNAPSHOT_CASES = {
     "supports-turned-c3d4": (supports_spec, lambda: turned(two_tets(order=1))),
     "loads-c3d10": (loads_spec, lambda: two_tets(order=2)),
     "loads-two-bodies-c3d4": (two_body_loads_spec, lambda: two_tets(order=1, bodies=2)),
+    "remote-c3d10": (remote_spec, lambda: two_tets(order=2)),
 }
 
 
@@ -457,6 +488,64 @@ def test_force_cloads_add_up_to_the_entered_force() -> None:
         _, dof, value = line.split(", ")
         total[int(dof) - 1] += float(value)
     assert total == pytest.approx([1500.0, 0.0, -250 * 4.4482216152605], rel=1e-12)
+
+
+def remote_load_spec(change) -> dict:  # type: ignore[no-untyped-def]
+    spec = remote_spec()
+    change(spec["loads"][1])
+    return spec
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda r: r.update(faces=[]), "Pipe load has no faces"),
+        (lambda r: r.update(faces=[3, 9]), "uses faces [9], which the mesh does not have"),
+        (
+            lambda r: r["point"].update(y=None),
+            'Remote load "Pipe load": y component of its reference point has no value',
+        ),
+        (
+            lambda r: r["force"].update(z=None),
+            'Remote load "Pipe load": z component of its force has no value',
+        ),
+        (
+            lambda r: r["moment"].update(x=None),
+            'Remote load "Pipe load": x component of its moment has no value',
+        ),
+        (lambda r: r["moment"].update(x={"value": 1, "unit": "N"}), "not a moment"),
+        (lambda r: r["force"].update(x={"value": 1, "unit": "N·m"}), "not a force"),
+        (lambda r: r["point"].update(x={"value": 1, "unit": "N"}), "not a length"),
+    ],
+)
+def test_refuses_remote_loads_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(DeckError) as error:
+        deck(remote_load_spec(change), two_tets(order=2))
+    assert message in str(error.value)
+
+
+def test_remote_cloads_add_up_to_the_force_with_the_moment_about_the_point() -> None:
+    mesh = two_tets(order=2)
+    text = deck(remote_spec(), mesh)
+    lines = text.split("*CLOAD\n")[1].split("*")[0].strip().splitlines()
+    forces: dict[int, list[float]] = {}
+    for line in lines:
+        node, dof, value = line.split(", ")
+        forces.setdefault(int(node) - 1, [0.0, 0.0, 0.0])[int(dof) - 1] += float(value)
+    lbf, inch = 4.4482216152605, 0.0254
+    f = [2000.0, -150 * lbf, 0.0]
+    m = [15.0, -80 * lbf * inch, 20.0]
+    point = [inch, 0.5 * inch, -2 * inch]
+    total = [sum(v[i] for v in forces.values()) for i in range(3)]
+    assert total == pytest.approx(f, rel=1e-12)
+    moment = [0.0, 0.0, 0.0]
+    p = mesh.positions
+    for node, v in forces.items():
+        r = [p[3 * node + i] - point[i] for i in range(3)]
+        moment[0] += r[1] * v[2] - r[2] * v[1]
+        moment[1] += r[2] * v[0] - r[0] * v[2]
+        moment[2] += r[0] * v[1] - r[1] * v[0]
+    assert moment == pytest.approx(m, rel=1e-12)
 
 
 def test_refuses_a_mesh_with_nodes_outside_every_element() -> None:

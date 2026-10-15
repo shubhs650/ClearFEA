@@ -7,6 +7,7 @@ from .fixed import fixed_support_nodes
 from .force import force_nodal_loads, force_vector
 from .frictionless import face_normal
 from .pressure import pressure_faces
+from .remote import remote_nodal_loads, remote_vectors
 
 __all__ = [
     "BodyLoad",
@@ -20,4 +21,6 @@ __all__ = [
     "force_vector",
     "prescribed_components",
     "pressure_faces",
+    "remote_nodal_loads",
+    "remote_vectors",
 ]

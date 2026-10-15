@@ -10,6 +10,8 @@ exact for flat ones. Each node's share is the same fraction of every component, 
 shares add up to one, so the nodal loads sum to the entered force.
 """
 
+from collections.abc import Iterator
+
 from ...meshing.volume import NODES_PER_ELEMENT, TET_FACES, VolumeMesh
 from ...spec.simulation_schema import ForceLoad
 from ..common import DeckError, si
@@ -65,15 +67,17 @@ def _triangle_shape(
     return n, d
 
 
-def face_node_weights(mesh: VolumeMesh, faces: list[int]) -> dict[int, float]:
-    """The integral of each node's shape function over ``faces`` (m²), 0-based node -> weight.
+FacePoint = tuple[list[int], list[float], float, Vector]
 
-    The weights add up to the faces' area.
-    """
+
+def face_points(mesh: VolumeMesh, faces: list[int]) -> Iterator[FacePoint]:
+    """The integration points of the seven-point rule on every element face of ``faces``:
+    (0-based nodes of the face, their shape functions at the point, the area the point stands
+    for in m², the point's position in m). Positions follow the shape functions, so a node's
+    loads have the moment, about any point, of the traction they come from."""
     npe = NODES_PER_ELEMENT[mesh.order]
     p = mesh.positions
     rule = [(w, *_triangle_shape(mesh.order, l1, l2)) for l1, l2, w in _TRIANGLE_RULE]
-    weights: dict[int, float] = {}
     for tag in faces:
         for element, local in mesh.faces[tag]:
             base = element * npe
@@ -82,10 +86,21 @@ def face_node_weights(mesh: VolumeMesh, faces: list[int]) -> dict[int, float]:
             for w, n, d in rule:
                 t1 = [sum(d[k][0] * xyz[k][i] for k in range(len(ids))) for i in range(3)]
                 t2 = [sum(d[k][1] * xyz[k][i] for k in range(len(ids))) for i in range(3)]
+                x = [sum(n[k] * xyz[k][i] for k in range(len(ids))) for i in range(3)]
                 # The reference triangle has area 1/2.
                 da = 0.5 * w * norm(cross(t1, t2))
-                for k, node in enumerate(ids):
-                    weights[node] = weights.get(node, 0.0) + n[k] * da
+                yield ids, n, da, (x[0], x[1], x[2])
+
+
+def face_node_weights(mesh: VolumeMesh, faces: list[int]) -> dict[int, float]:
+    """The integral of each node's shape function over ``faces`` (m²), 0-based node -> weight.
+
+    The weights add up to the faces' area.
+    """
+    weights: dict[int, float] = {}
+    for ids, n, da, _ in face_points(mesh, faces):
+        for k, node in enumerate(ids):
+            weights[node] = weights.get(node, 0.0) + n[k] * da
     return weights
 
 

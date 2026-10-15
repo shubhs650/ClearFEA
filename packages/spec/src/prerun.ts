@@ -99,6 +99,16 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
       for (const axis of displacementAxes) {
         if (load[axis] === null) add(load.id, `Load "${load.name}" has no value for its ${axis} component. Enter one (0 for none).`);
       }
+    } else if (load.type === "remote") {
+      if (displacementAxes.some((axis) => load.point[axis] === null)) {
+        add(load.id, `Load "${load.name}" has no complete reference point. Enter x, y and z.`);
+      }
+      if (displacementAxes.some((axis) => load.force[axis] === null)) {
+        add(load.id, `Load "${load.name}" has no complete force. Enter x, y and z (0 for none).`);
+      }
+      if (displacementAxes.some((axis) => load.moment[axis] === null)) {
+        add(load.id, `Load "${load.name}" has no complete moment. Enter x, y and z (0 for none).`);
+      }
     } else {
       if (load.angularVelocity === null) add(load.id, `Load "${load.name}" has no angular velocity. Enter it.`);
       if (displacementAxes.some((axis) => load.axisPoint[axis] === null)) {
