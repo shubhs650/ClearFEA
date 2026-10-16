@@ -82,6 +82,7 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | `job_logs` | Job, sequence number, text chunk |
 | `ledger_entries` | User, amount, reason, job id, running balance. Append-only |
 | `materials` | A user's own materials: owner, name (unique per owner), the material as JSON with its source note. The generic library is the reviewed file `packages/spec/library/materials.json`, not rows here (ADR-046) |
+| `views` | Saved views of a simulation: name (unique per simulation), camera, hidden bodies and the result display as JSON (`view.schema.json`, ADR-055). The report picks its pictures from them |
 | `share_links` | Run, token hash, revoked flag |
 | `machine_sizes` | Name, cores, memory, hourly rate. Configuration |
 | `settings` | Free storage quota, retention days, stop-limit multiplier. Configuration |
@@ -248,7 +249,7 @@ React, Vite, TypeScript, three.js.
 
 - **Layout:** simulation tree on the left, 3D viewer in the centre, settings panel on the right for the selected tree item, run and status bar along the bottom.
 - **Tree items:** geometry, materials, bonds, supports, loads, mesh, runs, and under each run its results and report. Each shows complete, incomplete or error.
-- **Viewer:** renders the display mesh with one pickable group per face. Hover highlights a face; click adds it to the active selection. Result mode colours surface nodes from the field arrays with a legend, deformed shape scaling, cut planes and probes.
+- **Viewer:** renders the display mesh with one pickable group per face. Hover highlights a face; click adds it to the active selection. Result mode colours surface nodes from the field arrays with a legend, deformed shape scaling, cut planes and probes. Bodies can be hidden in every mode, and the camera, hidden bodies and result display can be saved as named views of the simulation (ADR-055).
 - **Quantity input:** one shared component for every physical value (`apps/web/src/units/QuantityInput.tsx`): number field plus unit dropdown, limited to units of the right kind, defaulting to the project system. The system is chosen under the simulation tree.
 - **State:** the `SimulationSpec` is the single source of truth for setup. The UI edits it and saves it through the API; nothing about the setup lives only in component state.
 - **Desktop only.** Minimum supported width is a laptop screen.

@@ -9,10 +9,12 @@
 // Given a cut plane (M3.4, ADR-053), it hides the model on the plane's far side and draws the
 // section there. The cut is made on the undeformed shape, so the model is clipped by each
 // point's undeformed position (a `reference` attribute) and the section meets it exactly on
-// the deformed shape too.
+// the deformed shape too. Faces can be hidden (M3.6, to hide bodies): they are not drawn,
+// picked or probed, and the camera can be read and set to restore a saved view.
 
 import {
   AmbientLight,
+  Box3,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -28,6 +30,7 @@ import {
   PerspectiveCamera,
   Raycaster,
   Scene,
+  Sphere,
   SRGBColorSpace,
   Vector2,
   Vector3,
@@ -38,6 +41,9 @@ import { type DisplayFace, type DisplayMesh, faceAtTriangle, faceOutlines, trian
 import { type EdgePolyline, type EdgeSegments, edgeSegments, nearestEdge } from "./edges";
 import { BAND_COLOURS, nearestCorner } from "./resultFields";
 import type { Plane } from "./section";
+
+/** Where the camera is and what it looks at, in metres (a saved view's camera, M3.6). */
+export type CameraView = { position: [number, number, number]; target: [number, number, number] };
 
 const COLOURS = {
   background: new Color("#e9ecef"),
@@ -140,6 +146,10 @@ export class ModelView {
   private reference: Float32Array | null = null;
   private section: Mesh<BufferGeometry, MeshStandardMaterial> | null = null;
   private plane: Plane | null = null;
+  /** Faces not drawn (M3.6); kept across setMesh, since every model of a geometry uses its tags. */
+  private hiddenFaces: ReadonlySet<number> = new Set();
+  /** Which outlines setMesh drew, so they can be redrawn without the hidden faces. */
+  private edgesKind: Edges = "outlines";
   /** Shared by every clipped material's shader; cutOn is 0 while there is no cut. */
   private readonly clip = {
     cutNormal: { value: new Vector3() },
@@ -205,6 +215,7 @@ export class ModelView {
     geometry.setAttribute("position", new BufferAttribute(mesh.positions, 3));
     geometry.setAttribute("reference", new BufferAttribute(reference, 3));
     geometry.setAttribute("color", new BufferAttribute(new Float32Array(mesh.positions.length), 3));
+    geometry.setAttribute("shown", new BufferAttribute(this.shownOf(mesh), 1));
     if (bandCoordinates !== undefined) {
       geometry.setAttribute("uv", new BufferAttribute(bandUv(bandCoordinates), 2));
       this.bands ??= bandTexture();
@@ -225,25 +236,19 @@ export class ModelView {
         polygonOffsetUnits: 1,
       }),
     );
-    this.clipped(this.surface.material);
+    this.clipped(this.surface.material, true);
     this.scene.add(this.surface);
 
-    const lines = new BufferGeometry();
-    const segmentsOf = edges === "elements" ? triangleEdges : faceOutlines;
-    lines.setAttribute("position", new BufferAttribute(segmentsOf(mesh), 3));
-    lines.setAttribute("reference", new BufferAttribute(segmentsOf({ ...mesh, positions: reference }), 3));
-    const colour = edges === "elements" ? COLOURS.elementEdge : COLOURS.outline;
-    this.outlines = new LineSegments(lines, this.clipped(new LineBasicMaterial({ color: colour })));
-    this.scene.add(this.outlines);
-
+    this.edgesKind = edges;
+    this.drawOutlines();
     this.paintAll();
     if (keepView) this.requestRender();
     else this.resetView();
   }
 
-  /** Points the camera at the whole model from an isometric direction. */
+  /** Points the camera at the whole model, or the faces left shown, from an isometric direction. */
   resetView(): void {
-    const sphere = this.surface?.geometry.boundingSphere;
+    const sphere = this.shownSphere();
     if (!sphere) return;
     const radius = Math.max(sphere.radius, 1e-6);
     const fov = (this.camera.fov * Math.PI) / 180;
@@ -257,6 +262,44 @@ export class ModelView {
     this.controls.minDistance = radius / 50;
     this.controls.maxDistance = distance * 20;
     this.controls.update();
+    this.requestRender();
+  }
+
+  /** Where the camera is now. */
+  cameraView(): CameraView {
+    const { x, y, z } = this.camera.position;
+    const t = this.controls.target;
+    return { position: [x, y, z], target: [t.x, t.y, t.z] };
+  }
+
+  /** Moves the camera to a saved place, keeping the zoom limits sensible for the model. */
+  setCamera(view: CameraView): void {
+    this.camera.position.set(...view.position);
+    this.controls.target.set(...view.target);
+    const distance = Math.max(this.camera.position.distanceTo(this.controls.target), 1e-6);
+    const radius = this.surface?.geometry.boundingSphere?.radius ?? distance;
+    this.camera.near = Math.min(distance, radius) / 100;
+    this.camera.far = (distance + radius) * 100;
+    this.camera.updateProjectionMatrix();
+    this.controls.minDistance = Math.min(radius / 50, distance);
+    this.controls.maxDistance = Math.max(this.controls.maxDistance, distance * 2);
+    this.controls.update();
+    this.requestRender();
+  }
+
+  /**
+   * Hides faces by tag, or shows them all again with an empty set (M3.6). Hidden faces are not
+   * drawn, hovered, picked or probed, and markers on them are hidden. Kept across setMesh.
+   */
+  setHiddenFaces(tags: ReadonlySet<number>): void {
+    this.hiddenFaces = new Set(tags);
+    const shown = this.surface?.geometry.getAttribute("shown");
+    if (this.mesh && shown instanceof BufferAttribute) {
+      shown.copyArray(this.shownOf(this.mesh));
+      shown.needsUpdate = true;
+      this.drawOutlines();
+    }
+    if (this.hovered !== null && this.hiddenFaces.has(this.hovered)) this.setHovered(null);
     this.requestRender();
   }
 
@@ -405,22 +448,80 @@ export class ModelView {
 
   /**
    * Makes a material discard what lies beyond the cut plane, judged by the undeformed position
-   * in the geometry's `reference` attribute.
+   * in the geometry's `reference` attribute, and with `hiding` what its `shown` attribute marks
+   * 0 (a hidden face's vertices).
    */
-  private clipped<T extends Material>(material: T): T {
+  private clipped<T extends Material>(material: T, hiding = false): T {
     material.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, this.clip);
+      const declare = hiding ? "\nattribute float shown;\nvarying float vShown;" : "";
       shader.vertexShader = shader.vertexShader
-        .replace("#include <common>", "#include <common>\nattribute vec3 reference;\nvarying vec3 vReference;")
-        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvReference = reference;");
+        .replace("#include <common>", `#include <common>\nattribute vec3 reference;\nvarying vec3 vReference;${declare}`)
+        .replace("#include <begin_vertex>", `#include <begin_vertex>\nvReference = reference;${hiding ? "\nvShown = shown;" : ""}`);
       shader.fragmentShader = shader.fragmentShader
         .replace(
           "#include <common>",
-          "#include <common>\nuniform vec3 cutNormal;\nuniform float cutOffset;\nuniform float cutOn;\nvarying vec3 vReference;",
+          `#include <common>\nuniform vec3 cutNormal;\nuniform float cutOffset;\nuniform float cutOn;\nvarying vec3 vReference;${hiding ? "\nvarying float vShown;" : ""}`,
         )
-        .replace("void main() {", "void main() {\nif (cutOn > 0.5 && dot(cutNormal, vReference) > cutOffset) discard;");
+        .replace(
+          "void main() {",
+          `void main() {\nif (cutOn > 0.5 && dot(cutNormal, vReference) > cutOffset) discard;${hiding ? "\nif (vShown < 0.5) discard;" : ""}`,
+        );
     };
     return material;
+  }
+
+  /** 1 for each vertex of a shown face, 0 for a hidden face's. */
+  private shownOf(mesh: DisplayMesh): Float32Array {
+    const shown = new Float32Array(mesh.positions.length / 3).fill(1);
+    for (const face of mesh.faces) {
+      if (this.hiddenFaces.has(face.tag)) shown.fill(0, face.firstVertex, face.firstVertex + face.vertexCount);
+    }
+    return shown;
+  }
+
+  /** Whether a vertex of the model belongs to a hidden face. */
+  private vertexHidden(vertex: number): boolean {
+    const shown = this.surface?.geometry.getAttribute("shown");
+    return shown instanceof BufferAttribute && shown.getX(vertex) < 0.5;
+  }
+
+  /** (Re)draws the lines over the shown faces: their outlines, or every element edge. */
+  private drawOutlines(): void {
+    if (this.outlines) {
+      this.scene.remove(this.outlines);
+      this.outlines.geometry.dispose();
+      const material = this.outlines.material;
+      if (!Array.isArray(material)) material.dispose();
+      this.outlines = null;
+    }
+    const mesh = this.mesh;
+    if (!mesh) return;
+    const faces = mesh.faces.filter((face) => !this.hiddenFaces.has(face.tag));
+    const reference = this.reference ?? mesh.positions;
+    const lines = new BufferGeometry();
+    const segmentsOf = this.edgesKind === "elements" ? triangleEdges : faceOutlines;
+    lines.setAttribute("position", new BufferAttribute(segmentsOf({ ...mesh, faces }), 3));
+    lines.setAttribute("reference", new BufferAttribute(segmentsOf({ ...mesh, faces, positions: reference }), 3));
+    const colour = this.edgesKind === "elements" ? COLOURS.elementEdge : COLOURS.outline;
+    this.outlines = new LineSegments(lines, this.clipped(new LineBasicMaterial({ color: colour })));
+    this.scene.add(this.outlines);
+  }
+
+  /** The sphere around the shown faces' vertices (the whole model when none is hidden). */
+  private shownSphere(): Sphere | null {
+    const geometry = this.surface?.geometry;
+    const whole = geometry?.boundingSphere ?? null;
+    if (!geometry || this.hiddenFaces.size === 0) return whole;
+    const positions = geometry.getAttribute("position");
+    const box = new Box3();
+    const point = new Vector3();
+    for (let v = 0; v < positions.count; v++) {
+      if (!this.vertexHidden(v)) box.expandByPoint(point.fromBufferAttribute(positions, v));
+    }
+    if (box.isEmpty()) return whole;
+    const sphere = box.getBoundingSphere(new Sphere());
+    return sphere;
   }
 
   /** Whether an undeformed point is cut away by the cut plane. */
@@ -489,11 +590,12 @@ export class ModelView {
     const r = this.reference;
     for (const { marker, element } of this.markers) {
       const from = marker.onSection ? onSection : positions;
-      // A marker on a part the cut plane hides is hidden with it.
+      // A marker on a part the cut plane or a hidden body hides is hidden with it.
       const away =
         !marker.onSection &&
-        r !== null &&
-        this.cutAway(r[marker.vertex * 3] ?? 0, r[marker.vertex * 3 + 1] ?? 0, r[marker.vertex * 3 + 2] ?? 0);
+        ((r !== null &&
+          this.cutAway(r[marker.vertex * 3] ?? 0, r[marker.vertex * 3 + 1] ?? 0, r[marker.vertex * 3 + 2] ?? 0)) ||
+          this.vertexHidden(marker.vertex));
       if (!from || marker.vertex >= from.count || away) {
         element.hidden = true;
         continue;
@@ -541,6 +643,7 @@ export class ModelView {
     // The first hit on a part the cut plane leaves standing, unless the section is in front.
     const r = this.reference;
     const hit = this.raycaster.intersectObject(this.surface, false).find((h) => {
+      if (h.face && this.vertexHidden(h.face.a)) return false;
       if (r === null || this.plane === null || !h.face || !h.barycoord) return true;
       const { a, b, c } = h.face;
       const w = h.barycoord;

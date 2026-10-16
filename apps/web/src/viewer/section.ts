@@ -20,6 +20,8 @@ export type VolumeMesh = {
   positions: Float64Array;
   /** 4 or 10 node indices per element, in Gmsh's node order. */
   elements: Uint32Array;
+  /** Each body's run of elements, in ascending tag order (M3.6: hidden bodies are not cut). */
+  bodies: { tag: number; firstElement: number; elementCount: number }[];
 };
 
 export class VolumeMeshError extends Error {}
@@ -59,7 +61,15 @@ export function parseVolumeMesh(buffer: ArrayBuffer): VolumeMesh {
   for (let i = 0; i < elements.length; i++) {
     if ((elements[i] ?? 0) >= nodeCount) throw broken("an element uses a node that does not exist");
   }
-  return { order, nodeCount, elementCount, positions, elements };
+  const bodies: VolumeMesh["bodies"] = [];
+  const bodiesStart = elementsStart + elementCount * npe * 4;
+  for (let k = 0; k < bodyCount; k++) {
+    const at = bodiesStart + k * 12;
+    const body = { tag: view.getInt32(at, true), firstElement: view.getUint32(at + 4, true), elementCount: view.getUint32(at + 8, true) };
+    if (body.firstElement + body.elementCount > elementCount) throw broken(`body ${body.tag} runs past the last element`);
+    bodies.push(body);
+  }
+  return { order, nodeCount, elementCount, positions, elements, bodies };
 }
 
 /** A cut plane: the points x with normal · x = offset; the side normal · x > offset is cut away. */
@@ -116,8 +126,8 @@ class Grow<T extends Uint32Array | Float32Array> {
   }
 }
 
-/** Cuts the mesh by the plane. */
-export function cutMesh(mesh: VolumeMesh, plane: Plane): Section {
+/** Cuts the mesh by the plane, leaving out the elements of hidden bodies (M3.6). */
+export function cutMesh(mesh: VolumeMesh, plane: Plane, hiddenBodies: ReadonlySet<number> = new Set()): Section {
   const { positions, elements, nodeCount } = mesh;
   const [nx, ny, nz] = plane.normal;
   const distance = new Float64Array(nodeCount);
@@ -174,7 +184,12 @@ export function cutMesh(mesh: VolumeMesh, plane: Plane): Section {
   const above: number[] = [];
   const below: number[] = [];
   let elementsCut = 0;
+  const hidden = new Uint8Array(mesh.elementCount);
+  for (const body of mesh.bodies) {
+    if (hiddenBodies.has(body.tag)) hidden.fill(1, body.firstElement, body.firstElement + body.elementCount);
+  }
   for (let e = 0; e < mesh.elementCount; e++) {
+    if (hidden[e] === 1) continue;
     const base = e * npe;
     // A node exactly on the plane counts as cut away, so every cut edge has one node on each side.
     let some = false;

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "View",
+  "description": "Saved views of a simulation (M3.6, ADR-055): where the camera is, which bodies are hidden and, for views saved on results, what the result view shows. The report (M7) draws its pictures from them. Lengths are in metres. Each message is a definition under $defs.",
+  "$defs": {
+    "ViewPoint": {
+      "description": "x, y, z in metres, in the geometry's axes.",
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "ViewCamera": {
+      "description": "The camera looks from position at target, with the y axis up on screen (the viewer orbits about y). Its field of view is the viewer's own.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["position", "target"],
+      "properties": {
+        "position": { "$ref": "#/$defs/ViewPoint" },
+        "target": { "$ref": "#/$defs/ViewPoint" }
+      }
+    },
+    "ResultQuantity": {
+      "description": "A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts).",
+      "type": "string",
+      "enum": [
+        "displacement",
+        "vonMises",
+        "principal1",
+        "principal2",
+        "principal3",
+        "stressXX",
+        "stressYY",
+        "stressZZ",
+        "stressXY",
+        "stressYZ",
+        "stressZX",
+        "strainXX",
+        "strainYY",
+        "strainZZ",
+        "strainXY",
+        "strainYZ",
+        "strainZX",
+        "safetyFactor"
+      ]
+    },
+    "Deformation": {
+      "description": "How the result view draws the shape: undeformed, at true scale, or exaggerated to be seen.",
+      "type": "string",
+      "enum": ["undeformed", "true", "auto"]
+    },
+    "ViewCut": {
+      "description": "A cut plane across one axis (M3.4): at is where along the model it lies, 0 at the smallest coordinate and 1 at the largest; it cuts away the larger coordinates unless flipped.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axis", "at", "flipped"],
+      "properties": {
+        "axis": { "type": "integer", "enum": [0, 1, 2] },
+        "at": { "type": "number", "minimum": 0, "maximum": 1 },
+        "flipped": { "type": "boolean" }
+      }
+    },
+    "ViewResult": {
+      "description": "What a view saved on results shows. Probes are not kept: they belong to one run's mesh.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["quantity", "deformation", "extremes", "cut"],
+      "properties": {
+        "quantity": { "$ref": "#/$defs/ResultQuantity" },
+        "deformation": { "$ref": "#/$defs/Deformation" },
+        "extremes": { "description": "Whether the min and max markers are drawn.", "type": "boolean" },
+        "cut": { "oneOf": [{ "$ref": "#/$defs/ViewCut" }, { "type": "null" }] }
+      }
+    },
+    "ViewSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["camera", "hiddenBodies", "result"],
+      "properties": {
+        "camera": { "$ref": "#/$defs/ViewCamera" },
+        "hiddenBodies": {
+          "description": "Tags (topology.json) of the bodies not drawn. At least one body of the geometry stays shown.",
+          "type": "array",
+          "items": { "type": "integer" },
+          "uniqueItems": true
+        },
+        "result": {
+          "description": "Null for a view saved on the geometry or the mesh.",
+          "oneOf": [{ "$ref": "#/$defs/ViewResult" }, { "type": "null" }]
+        }
+      }
+    },
+    "ViewName": { "type": "string", "minLength": 1, "maxLength": 100, "pattern": "\\S" },
+    "SavedView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "settings", "updatedAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "$ref": "#/$defs/ViewName" },
+        "settings": { "$ref": "#/$defs/ViewSettings" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "SaveViewRequest": {
+      "description": "Body of POST /api/simulations/:id/views. A view of the same name in the simulation is replaced.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "settings"],
+      "properties": {
+        "name": { "$ref": "#/$defs/ViewName" },
+        "settings": { "$ref": "#/$defs/ViewSettings" }
+      }
+    },
+    "ViewResponse": {
+      "description": "Answer to POST /api/simulations/:id/views.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["view"],
+      "properties": { "view": { "$ref": "#/$defs/SavedView" } }
+    },
+    "ViewListResponse": {
+      "description": "Answer to GET /api/simulations/:id/views: the simulation's views by name.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["views"],
+      "properties": { "views": { "type": "array", "items": { "$ref": "#/$defs/SavedView" } } }
+    }
+  }
+}

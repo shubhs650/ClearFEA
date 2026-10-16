@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // A unit cube of n × n × n cells, each split into six tetrahedra the way Gmsh splits a cube,
-// written in the mesh.bin layout (packages/spec/volume-mesh.md) with no bodies or faces. Used
+// written in the mesh.bin layout (packages/spec/volume-mesh.md) with no faces, and no bodies
+// unless `twoBodies` splits it at half height into body 1 below and body 2 above. Used
 // by the cut plane tests and the cut plane measurement (bench/section-bench.ts, ADR-053). No
 // imports, so Node can run the measurement straight from the TypeScript source.
 
@@ -24,7 +25,7 @@ const EDGES = [
   [3, 1],
 ] as const;
 
-export function boxMesh(n: number, order: 1 | 2 = 2): ArrayBuffer {
+export function boxMesh(n: number, order: 1 | 2 = 2, twoBodies = false): ArrayBuffer {
   const side = n + 1;
   const corner = (i: number, j: number, k: number) => i + side * (j + side * k);
   const cornerCount = side ** 3;
@@ -60,13 +61,23 @@ export function boxMesh(n: number, order: 1 | 2 = 2): ArrayBuffer {
     }
   }
   const npe = order === 1 ? 4 : 10;
-  const buffer = new ArrayBuffer(32 + nodeCount * 24 + elements.length * 4);
+  const elementCount = elements.length / npe;
+  // Elements go up layer by layer, so the lower half is one run.
+  const lower = Math.floor(n / 2) * n * n * 6;
+  const bodies = twoBodies ? [[1, 0, lower], [2, lower, elementCount - lower]] : [];
+  const elementsEnd = 32 + nodeCount * 24 + elements.length * 4;
+  const buffer = new ArrayBuffer(elementsEnd + bodies.length * 12);
   const view = new DataView(buffer);
   for (let i = 0; i < 4; i++) view.setUint8(i, "CFVM".charCodeAt(i));
-  [1, order, nodeCount, elements.length / npe, 0, 0, 0].forEach((v, i) => {
+  [1, order, nodeCount, elementCount, bodies.length, 0, 0].forEach((v, i) => {
     view.setUint32(4 + 4 * i, v, true);
   });
   new Float64Array(buffer, 32, nodeCount * 3).set(positions);
   new Uint32Array(buffer, 32 + nodeCount * 24, elements.length).set(elements);
+  bodies.forEach(([tag = 0, first = 0, count = 0], k) => {
+    view.setInt32(elementsEnd + 12 * k, tag, true);
+    view.setUint32(elementsEnd + 12 * k + 4, first, true);
+    view.setUint32(elementsEnd + 12 * k + 8, count, true);
+  });
   return buffer;
 }

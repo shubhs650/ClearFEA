@@ -51,6 +51,11 @@ vi.mock("../src/viewer/ModelView", () => ({
     setMarkers() {}
     setBands() {}
     setCut() {}
+    setHiddenFaces() {}
+    cameraView() {
+      return { position: [1, 1, 1], target: [0, 0, 0] };
+    }
+    setCamera() {}
     resetView() {}
     dispose() {}
   },
