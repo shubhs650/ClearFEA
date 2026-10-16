@@ -841,6 +841,34 @@ class BalanceCheck(BaseModel):
     moment_ratio: Annotated[float, Field(alias="momentRatio", ge=0.0)]
 
 
+class HeatFlow(BaseModel):
+    """
+    Net heat flow (W) of one load of a steady-state thermal run into the body, positive in, negative out (M5.3). A fixed temperature's is the heat its faces take in or give out, from the solver's nodal heat flows with the heat other loads apply at its nodes taken out; a heat flux's, a convection's and a radiation's are integrated over their faces as the solver does, the last two at the solved surface temperatures; a heat generation's is its power times the volume of its bodies.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    load_id: Annotated[ItemId, Field(alias="loadId")]
+    heat: float
+
+
+class HeatBalance(BaseModel):
+    """
+    Heat in against heat out of a steady-state thermal run (M5.3). heatIn is the sum of the loads' heat flows into the body, heatOut the sum of those out of it (positive); ratio is |heatIn - heatOut| over scale, half the sum of the sizes of every load's nodal heat flows, which equals heatIn and heatOut when no load both heats and cools, so a convection that heats part of a face and cools the rest is still measured against its own size. Numbers only; no verdict.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    heat_in: Annotated[float, Field(alias="heatIn", ge=0.0)]
+    heat_out: Annotated[float, Field(alias="heatOut", ge=0.0)]
+    scale: Annotated[float, Field(ge=0.0)]
+    ratio: Annotated[float, Field(ge=0.0)]
+
+
 class Displacement(BaseModel):
     """
     Largest displacement magnitude.
@@ -879,6 +907,18 @@ class Temperature(BaseModel):
     max: NodeValue
 
 
+class HeatFlux(BaseModel):
+    """
+    Largest heat flux magnitude of a steady-state thermal run, in W/m², from CalculiX's nodal heat flux (M5.3). Absent for thermal runs solved before M5.3.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    max: NodeValue
+
+
 class SafetyFactor(BaseModel):
     """
     Smallest safety factor against yield over every node of the mesh: the yield strength of the node's material over its von Mises stress, at most 15 (ADR-054). Absent when a material of the setup has no yield strength, and for runs solved before M3.5.
@@ -905,7 +945,7 @@ class Software2(BaseModel):
 
 class SolveResult(BaseModel):
     """
-    Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons, temperature in kelvin. A linear static run has displacement, vonMises and reactions; a steady-state thermal run has temperature instead (M5.1, ADR-064).
+    Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons, temperature in kelvin, heat flux in W/m², heat flows in watts. A linear static run has displacement, vonMises and reactions; a steady-state thermal run has temperature instead (M5.1, ADR-064), and since M5.3 heatFlux, heatFlows and heatBalance.
     """
 
     model_config = ConfigDict(
@@ -927,6 +967,18 @@ class SolveResult(BaseModel):
     temperature: Temperature | None = None
     """
     Smallest and largest nodal temperature of a steady-state thermal run, in kelvin (M5.1).
+    """
+    heat_flux: Annotated[HeatFlux | None, Field(alias="heatFlux")] = None
+    """
+    Largest heat flux magnitude of a steady-state thermal run, in W/m², from CalculiX's nodal heat flux (M5.3). Absent for thermal runs solved before M5.3.
+    """
+    heat_flows: Annotated[list[HeatFlow] | None, Field(alias="heatFlows")] = None
+    """
+    One entry per thermal load of a steady-state thermal run, in spec order (M5.3). Absent for thermal runs solved before M5.3.
+    """
+    heat_balance: Annotated[HeatBalance | None, Field(alias="heatBalance")] = None
+    """
+    Absent for thermal runs solved before M5.3.
     """
     reactions: list[SupportReaction] | None = None
     """

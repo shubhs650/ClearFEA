@@ -24,6 +24,8 @@ from clearfea_worker.results import (
     von_mises,
     write_viewer_files,
 )
+from clearfea_worker.results.dat import read_node_heat_flows, read_node_temperatures
+from clearfea_worker.results.heat import HeatFlow, heat_balance
 from clearfea_worker.results.summary import Reaction, balance
 from clearfea_worker.results.surface import read_fields as read_fields_file
 from clearfea_worker.spec.simulation_schema import SimulationSpec
@@ -33,6 +35,7 @@ from .test_deck import (
     elastic_spec,
     elastic_sym_spec,
     fixture_spec,
+    heat_loads_spec,
     heat_two_bodies_spec,
     supports_spec,
 )
@@ -388,20 +391,25 @@ def test_balance_of_a_load_that_cancels_itself_is_measured_against_its_gross_siz
 # --- Steady-state thermal runs (M5.1, ADR-064) ---
 
 #: What CalculiX 2.21 wrote for the heat-two-bodies-c3d4 deck snapshot: two one-element
-#: bodies with no shared nodes, body 1 held at 373.15 K on one face, body 2 at 293.15 K.
+#: bodies with no shared nodes, body 1 held at 373.15 K on one face, body 2 at 293.15 K; and
+#: for the heat-loads-c3d10 one (every thermal load, M5.2), solved with SPOOLES since the
+#: host's ccx has no PaStiX (the same equations).
 HEAT = Path(__file__).resolve().parent / "fixtures" / "heat"
 
 
 def test_reads_the_temperature_of_every_node() -> None:
     fields = read_thermal_fields(HEAT / "heat-two-bodies-c3d4.frd", 8)
     assert list(fields.temperature) == [373.15] * 4 + [293.15] * 4
+    # Each body is at one temperature, so no heat flows (M5.3): what CalculiX writes is
+    # rounding, at most a few nW/m².
+    assert list(fields.heat_flux) == pytest.approx([0.0] * 24, abs=1e-7)
 
 
 def test_thermal_run_summary_has_temperatures_and_no_structural_results(tmp_path: Path) -> None:
     spec = SimulationSpec.model_validate(heat_two_bodies_spec())
     mesh = bonded_tets(1)
     fields, result = read_results(
-        spec, mesh, HEAT / "heat-two-bodies-c3d4.frd", tmp_path / "absent.dat", "2.21"
+        spec, mesh, HEAT / "heat-two-bodies-c3d4.frd", HEAT / "heat-two-bodies-c3d4.dat", "2.21"
     )
     assert result.temperature is not None
     assert result.temperature.max.value == 373.15
@@ -410,17 +418,135 @@ def test_thermal_run_summary_has_temperatures_and_no_structural_results(tmp_path
     assert result.temperature.min.node == 4
     assert result.temperature.min.position == list(mesh.positions[12:15])
     dumped = result.model_dump(mode="json", by_alias=True, exclude_none=True)
-    assert set(dumped) == {"nodes", "temperature", "software"}
+    assert set(dumped) == {
+        "nodes",
+        "temperature",
+        "heatFlux",
+        "heatFlows",
+        "heatBalance",
+        "software",
+    }
+    assert [f["loadId"] for f in dumped["heatFlows"]] == [x.id for x in spec.loads]
+    # No heat flows, only CalculiX's rounding (1e-13 W): the balance is measured against at
+    # least a millionth of a millionth of k T L, not against the rounding itself.
+    got = dumped["heatBalance"]
+    assert got["heatIn"] < 1e-12 and got["heatOut"] < 1e-12
+    assert got["ratio"] < 1e-3
     files = write_viewer_files(mesh, fields, tmp_path)
     for path in (files.fields_path, files.nodes_path):
         _, written = read_fields_file(path)
         assert [(f.name, f.kind, f.components) for f in written] == [
-            ("temperature", "temperature", 1)
+            ("temperature", "temperature", 1),
+            ("heatFlux", "heatFlux", 3),
         ]
     _, nodes = read_fields_file(files.nodes_path)
     assert list(nodes[0].values) == pytest.approx(list(fields.temperature), rel=1e-7)
 
 
+def _face_area(mesh, face: int) -> float:  # type: ignore[no-untyped-def]
+    """The area of a flat face of the mesh from its element faces' corners."""
+    npe = 10 if mesh.order == 2 else 4
+    p = mesh.positions
+    total = 0.0
+    for element, local in mesh.faces[face]:
+        a, b, c = (mesh.elements[element * npe + k] for k in FACE_NODES[mesh.order][local][:3])
+        u = [p[3 * b + i] - p[3 * a + i] for i in range(3)]
+        v = [p[3 * c + i] - p[3 * a + i] for i in range(3)]
+        n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]
+        total += math.sqrt(sum(x * x for x in n)) / 2
+    return total
+
+
+def _volume(mesh, first: int, count: int) -> float:  # type: ignore[no-untyped-def]
+    """The volume of straight-edged four- or ten-node tetrahedra from their corners."""
+    npe = 10 if mesh.order == 2 else 4
+    p = mesh.positions
+    total = 0.0
+    for e in range(first, first + count):
+        a, b, c, d = (mesh.elements[e * npe + k] for k in range(4))
+        u, v, w = ([p[3 * x + i] - p[3 * a + i] for i in range(3)] for x in (b, c, d))
+        det = (
+            u[0] * (v[1] * w[2] - v[2] * w[1])
+            - u[1] * (v[0] * w[2] - v[2] * w[0])
+            + u[2] * (v[0] * w[1] - v[1] * w[0])
+        )
+        total += abs(det) / 6
+    return total
+
+
+def test_heat_flows_of_every_thermal_load_balance(tmp_path: Path) -> None:
+    # M5.3: each load's heat flow from the loads and the solved temperatures, the fixed
+    # temperature's from CalculiX's RFL with the other loads' heat at its nodes taken out.
+    spec = SimulationSpec.model_validate(heat_loads_spec())
+    mesh = two_tets(order=2)
+    fields, result = read_results(
+        spec, mesh, HEAT / "heat-loads-c3d10.frd", HEAT / "heat-loads-c3d10.dat", "2.21"
+    )
+    flows = {f.load_id: f.heat for f in result.heat_flows or []}
+    assert list(flows) == ["hot-1", "q-1", "q-2", "h-1", "r-1", "g-1"]
+    # A uniform flux brings in its value times the face's area; heat generation its power
+    # times the body's volume (both elements are straight-edged).
+    area = _face_area(mesh, 2)
+    assert flows["q-1"] == pytest.approx(20000 * area, rel=1e-12)
+    assert flows["q-2"] == pytest.approx(5000 * area, rel=1e-12)
+    first, count = mesh.bodies[1]
+    assert flows["g-1"] == pytest.approx(1e6 * _volume(mesh, first, count), rel=1e-12)
+    # The faces are above the ambient, so convection and radiation take heat out.
+    assert flows["h-1"] < 0 and flows["r-1"] < 0
+    balance = result.heat_balance
+    assert balance is not None
+    heat_in = flows["q-1"] + flows["q-2"] + flows["g-1"]
+    assert balance.heat_in == pytest.approx(heat_in, rel=1e-12)
+    assert balance.heat_out == pytest.approx(-(flows["hot-1"] + flows["h-1"] + flows["r-1"]))
+    # The solver's equations hold to its printed digits.
+    assert balance.ratio < 1e-5
+    # Half the gross heat flow is a little above the heat in: the fixed temperature's nodal
+    # heat flows on a ten-node face are not all of one sign.
+    assert heat_in <= balance.scale <= 1.05 * heat_in
+    assert result.heat_flux is not None
+    q = fields.heat_flux
+    node = result.heat_flux.max.node
+    size = math.sqrt(sum(q[3 * node + i] ** 2 for i in range(3)))
+    assert result.heat_flux.max.value == size > 0
+
+
+def test_a_heat_balance_measures_a_self_cancelling_load_by_its_size() -> None:
+    # A convection that heats half its face and cools the other half nets zero; the balance
+    # is measured against half the gross of every load, not against the net heat in.
+    flows = [HeatFlow(0.0, {}, 10.0), HeatFlow(1.0, {}, 1.0), HeatFlow(-0.999, {}, 0.999)]
+    got = heat_balance(flows, 1e-9)
+    assert got["heatIn"] == 1.0 and got["heatOut"] == 0.999
+    assert got["scale"] == pytest.approx(5.9995)
+    assert got["ratio"] == pytest.approx(0.001 / 5.9995)
+    # The floor stands in for a scale smaller than it, such as no heat flow at all.
+    assert heat_balance([], 0.0)["ratio"] == 0.0
+    assert heat_balance([HeatFlow(1e-12, {}, 2e-12)], 1e-6) == {
+        "heatIn": 1e-12,
+        "heatOut": 0.0,
+        "scale": 1e-6,
+        "ratio": 1e-6,
+    }
+
+
+def test_reads_nodal_heat_flows_and_temperatures_from_the_dat_file() -> None:
+    flows = read_node_heat_flows(HEAT / "heat-loads-c3d10.dat", "TALL")
+    assert sorted(flows) == [0, 2, 3, 7, 8, 9]
+    assert flows[0] == -1.103052e-01
+    temperatures = read_node_temperatures(HEAT / "heat-loads-c3d10.dat", "xall")
+    assert temperatures[1] == 3.760814e02
+    with pytest.raises(DatError, match="no heat flows for set XALL"):
+        read_node_heat_flows(HEAT / "heat-loads-c3d10.dat", "XALL")
+
+
+def test_a_thermal_run_without_its_heat_flows_is_refused(tmp_path: Path) -> None:
+    spec = SimulationSpec.model_validate(heat_two_bodies_spec())
+    (tmp_path / "job.dat").write_text("")
+    with pytest.raises(DatError, match="no heat flows for set TALL"):
+        read_results(
+            spec, bonded_tets(1), HEAT / "heat-two-bodies-c3d4.frd", tmp_path / "job.dat", "2.21"
+        )
+
+
 def test_refuses_a_thermal_result_file_without_temperatures() -> None:
-    with pytest.raises(FrdError, match="no NDTEMP block"):
+    with pytest.raises(FrdError, match="no FLUX, NDTEMP block"):
         read_thermal_fields(SOLVE / "job.frd", 14)

@@ -3,6 +3,8 @@
 
 from .generator import (
     DECK_FORMAT,
+    EXCHANGE_SET,
+    HEAT_SET,
     REACTION_SET,
     TIE_SET,
     DeckError,
@@ -13,6 +15,8 @@ from .generator import (
 
 __all__ = [
     "DECK_FORMAT",
+    "EXCHANGE_SET",
+    "HEAT_SET",
     "REACTION_SET",
     "TIE_SET",
     "DeckError",

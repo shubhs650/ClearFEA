@@ -54,6 +54,7 @@ class Check:
     tolerance: dict[str, float]  # tier -> relative tolerance
     support: str | None = None  # the spec support id of a reaction check
     inside: bool = False  # read at the mesh nodes in the box, not on a face (M3.4)
+    load: str | None = None  # the spec load id of a heat flow check (M5.3)
 
 
 @dataclass(frozen=True)
@@ -78,9 +79,15 @@ TENSOR = ("xx", "yy", "zz", "xy", "yz", "zx")
 #: components and principal stresses (σ1 ≥ σ2 ≥ σ3) are the run's fields as written (M3.1);
 #: shear strains are tensor components, half of γ. The safety factor against yield is the
 #: run's field (M3.5, ADR-054). The temperature is a steady-state thermal run's field, absolute,
-#: in kelvin (M5.1, ADR-064).
+#: in kelvin (M5.1, ADR-064), and so is its heat flux, q = -k grad T, in W/m² (M5.3). A heat
+#: flow is one thermal load's net heat into the body in the run's result, in watts (M5.3).
 QUANTITIES = {
     "temperature": "temperature",
+    "heatFlux": "heatFlux",
+    "heatFlux.x": "heatFlux",
+    "heatFlux.y": "heatFlux",
+    "heatFlux.z": "heatFlux",
+    "heatFlow": "heatFlow",
     "vonMises": "pressure",
     **{f"stress.{c}": "pressure" for c in TENSOR},
     **{f"principal.{k}": "pressure" for k in (1, 2, 3)},
@@ -139,8 +146,14 @@ def load_case(folder: Path) -> Case:
             raise CaseError(
                 f"{folder.name}: unknown quantity {quantity}; use one of {list(QUANTITIES)}."
             )
-        support = None
-        if quantity.startswith(REACTION_QUANTITIES):
+        support = load = None
+        if quantity == "heatFlow":
+            load = item.get("load")
+            if load not in {x["id"] for x in spec["loads"]}:
+                raise CaseError(
+                    f"{folder.name}: check {item['name']!r} must name a load id of spec.json."
+                )
+        elif quantity.startswith(REACTION_QUANTITIES):
             support = item.get("support")
             if support not in {s["id"] for s in spec["supports"]}:
                 raise CaseError(
@@ -167,6 +180,7 @@ def load_case(folder: Path) -> Case:
                 tolerance=tolerance,
                 support=support,
                 inside=bool(item.get("inside", False)),
+                load=load,
             )
         )
     allowed = [re.compile(p) for p in raw.get("allowedWarnings", [])]
@@ -234,6 +248,9 @@ def _value(
     if quantity in ("vonMises", "safetyFactor", "temperature"):
         return fields[quantity][v][0]
     field, _, part = quantity.partition(".")
+    if field == "heatFlux":
+        q = fields["heatFlux"][v]
+        return math.sqrt(sum(c * c for c in q)) if not part else q["xyz".index(part)]
     if field in ("stress", "strain"):
         return fields[field][v][TENSOR.index(part)]
     if field == "principal":
@@ -292,6 +309,37 @@ def reaction(check: Check, reactions: list[dict[str, Any]]) -> float:
     if key not in found:
         raise CaseError(f"The run's result has no reaction {key} for support {check.support}.")
     return float(found[key]["xyz".index(check.quantity[-1])])
+
+
+def heat_flow(check: Check, flows: list[dict[str, Any]]) -> float:
+    """The net heat flow (W, into the body) the run's result gives for the check's load."""
+    found = [f for f in flows if f["loadId"] == check.load]
+    if len(found) != 1:
+        raise CaseError(f"The run's result has no heat flow for load {check.load}.")
+    return float(found[0]["heat"])
+
+
+def applied_heat(spec: dict[str, Any], surface: Surface) -> dict[str, float]:
+    """The heat (W) each heat flux and heat generation of the spec brings into the body, by
+    load id, integrated on the run's surface: a flux times the area of its faces, a generation
+    times the volume the surface encloses (every case with one has a single body). These
+    depend on the setup alone; the fixed temperatures', convections' and radiations' depend on
+    the solution, so the run's own balance checks them (M5.3)."""
+    out: dict[str, float] = {}
+    areas: dict[int, float] = {}
+    for tag, a, b, c in _triangles(surface):
+        n2 = _cross([b[i] - a[i] for i in range(3)], [c[i] - a[i] for i in range(3)])
+        areas[tag] = areas.get(tag, 0.0) + math.sqrt(sum(x * x for x in n2)) / 2
+    for load in spec["loads"]:
+        if load["type"] == "heat_flux":
+            q = to_si(load["flux"]["value"], load["flux"]["unit"], "heatFlux")
+            out[load["id"]] = q * sum(areas.get(tag, 0.0) for tag in load["faces"])
+        elif load["type"] == "heat_generation":
+            if len(spec["bodies"]) != 1:
+                raise CaseError("Heat generation in the harness needs a single body.")
+            power = to_si(load["power"]["value"], load["power"]["unit"], "heatGeneration")
+            out[load["id"]] = power * volume_and_moment(surface)[0]
+    return out
 
 
 def balance(load: list[float], gross: float, reactions: list[list[float]]) -> tuple[float, float]:

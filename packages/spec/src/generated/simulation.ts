@@ -916,7 +916,29 @@ export interface BalanceCheck {
   momentRatio: number;
 }
 /**
- * Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons, temperature in kelvin. A linear static run has displacement, vonMises and reactions; a steady-state thermal run has temperature instead (M5.1, ADR-064).
+ * Net heat flow (W) of one load of a steady-state thermal run into the body, positive in, negative out (M5.3). A fixed temperature's is the heat its faces take in or give out, from the solver's nodal heat flows with the heat other loads apply at its nodes taken out; a heat flux's, a convection's and a radiation's are integrated over their faces as the solver does, the last two at the solved surface temperatures; a heat generation's is its power times the volume of its bodies.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "HeatFlow".
+ */
+export interface HeatFlow {
+  loadId: ItemId;
+  heat: number;
+}
+/**
+ * Heat in against heat out of a steady-state thermal run (M5.3). heatIn is the sum of the loads' heat flows into the body, heatOut the sum of those out of it (positive); ratio is |heatIn - heatOut| over scale, half the sum of the sizes of every load's nodal heat flows, which equals heatIn and heatOut when no load both heats and cools, so a convection that heats part of a face and cools the rest is still measured against its own size. Numbers only; no verdict.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "HeatBalance".
+ */
+export interface HeatBalance {
+  heatIn: number;
+  heatOut: number;
+  scale: number;
+  ratio: number;
+}
+/**
+ * Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons, temperature in kelvin, heat flux in W/m², heat flows in watts. A linear static run has displacement, vonMises and reactions; a steady-state thermal run has temperature instead (M5.1, ADR-064), and since M5.3 heatFlux, heatFlows and heatBalance.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SolveResult".
@@ -947,6 +969,17 @@ export interface SolveResult {
     max: NodeValue;
   };
   /**
+   * Largest heat flux magnitude of a steady-state thermal run, in W/m², from CalculiX's nodal heat flux (M5.3). Absent for thermal runs solved before M5.3.
+   */
+  heatFlux?: {
+    max: NodeValue;
+  };
+  /**
+   * One entry per thermal load of a steady-state thermal run, in spec order (M5.3). Absent for thermal runs solved before M5.3.
+   */
+  heatFlows?: HeatFlow[];
+  heatBalance?: HeatBalance1;
+  /**
    * One entry per support, in spec order.
    */
   reactions?: SupportReaction[];
@@ -962,6 +995,15 @@ export interface SolveResult {
     min: NodeValue;
   };
   software: SolveSoftware;
+}
+/**
+ * Absent for thermal runs solved before M5.3.
+ */
+export interface HeatBalance1 {
+  heatIn: number;
+  heatOut: number;
+  scale: number;
+  ratio: number;
 }
 /**
  * Absent for runs solved before M3.2.
@@ -1271,6 +1313,8 @@ export const validateNodeValue = validator<NodeValue>(schema, "NodeValue");
 export const validateSupportReaction = validator<SupportReaction>(schema, "SupportReaction");
 export const validateLoadTotal = validator<LoadTotal>(schema, "LoadTotal");
 export const validateBalanceCheck = validator<BalanceCheck>(schema, "BalanceCheck");
+export const validateHeatFlow = validator<HeatFlow>(schema, "HeatFlow");
+export const validateHeatBalance = validator<HeatBalance>(schema, "HeatBalance");
 export const validateSolveResult = validator<SolveResult>(schema, "SolveResult");
 export const RunStatusValues = ["solving", "succeeded", "failed"] as const satisfies readonly RunStatus[];
 export const validateRunStatus = validator<RunStatus>(schema, "RunStatus");

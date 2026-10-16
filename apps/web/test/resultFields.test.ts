@@ -82,8 +82,17 @@ describe("result view helpers", () => {
     expect([...quantityValues(stress, QUANTITIES.stressXY.component)]).toEqual([4, -4]);
     expect([...quantityValues(stress, QUANTITIES.stressZX.component)]).toEqual([6, -6]);
     // Every quantity names a field and component the worker writes (result-fields.md); the
-    // temperature is the only field of a steady-state thermal run (M5.1).
-    const written: Record<string, number> = { displacement: 3, vonMises: 1, stress: 6, principalStress: 3, strain: 6, safetyFactor: 1, temperature: 1 };
+    // temperature and the heat flux are the fields of a steady-state thermal run (M5.1, M5.3).
+    const written: Record<string, number> = {
+      displacement: 3,
+      vonMises: 1,
+      stress: 6,
+      principalStress: 3,
+      strain: 6,
+      safetyFactor: 1,
+      temperature: 1,
+      heatFlux: 3,
+    };
     for (const q of Object.values(QUANTITIES)) {
       expect(written[q.field]).toBe(q.components);
       expect(q.component === null || q.component < q.components).toBe(true);
@@ -144,11 +153,13 @@ describe("quantities of a run (M5.1)", () => {
   const staticRun = { spec, result: null };
   const thermalRun = { spec: { ...spec, analysis: "steady_thermal" as const }, result: null };
 
-  it("offers a thermal run its temperature alone, and a static run everything else", () => {
+  it("offers a thermal run its temperature and heat flux, and a static run everything else", () => {
     expect(isThermalRun(thermalRun)).toBe(true);
     expect(isThermalRun(staticRun)).toBe(false);
-    expect(runQuantities(thermalRun)).toEqual(["temperature"]);
+    expect(runQuantities(thermalRun)).toEqual(["temperature", "heatFlux", "heatFluxX", "heatFluxY", "heatFluxZ"]);
     expect(runQuantities(staticRun)).not.toContain("temperature");
+    expect(runQuantities(staticRun)).not.toContain("heatFlux");
+    expect(QUANTITIES.heatFluxY).toMatchObject({ kind: "heatFlux", group: "Heat flux", field: "heatFlux", components: 3, component: 1 });
     expect(runQuantities(staticRun)[0]).toBe("displacement");
     expect(QUANTITIES.temperature).toMatchObject({ label: "Temperature", kind: "temperature", group: "Temperature", field: "temperature" });
   });

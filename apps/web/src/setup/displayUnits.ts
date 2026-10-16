@@ -9,16 +9,17 @@ import { systemUnit, unitsTable } from "@clearfea/spec";
 import { useCallback, useMemo, useState } from "react";
 
 /** The quantity kinds a result is shown in, in the order the Run panel lists them; the
- * temperature since M5.1. */
-export const DISPLAY_KINDS = ["length", "pressure", "force", "moment", "strain", "temperature"] as const;
+ * temperature since M5.1, heat flux and heat flow since M5.3. */
+export const DISPLAY_KINDS = ["length", "pressure", "force", "moment", "strain", "temperature", "heatFlux", "heatFlow"] as const;
 
 export type DisplayKind = (typeof DISPLAY_KINDS)[number];
 
 /** The kinds a linear static run shows. */
 export const STATIC_KINDS: readonly DisplayKind[] = ["length", "pressure", "force", "moment", "strain"];
 
-/** The kinds a steady-state thermal run shows (M5.1): positions and temperatures. */
-export const THERMAL_KINDS: readonly DisplayKind[] = ["length", "temperature"];
+/** The kinds a steady-state thermal run shows (M5.1): positions, temperatures, and since M5.3
+ * heat fluxes and heat flows. */
+export const THERMAL_KINDS: readonly DisplayKind[] = ["length", "temperature", "heatFlux", "heatFlow"];
 
 /** The unit picked for a kind; a kind left out follows the unit system. */
 export type DisplayUnitChoice = Partial<Record<DisplayKind, string>>;
@@ -41,6 +42,8 @@ export function resultUnits(system: string, choice: DisplayUnitChoice): ResultUn
     moment: unit("moment"),
     strain: unit("strain"),
     temperature: unit("temperature"),
+    heatFlux: unit("heatFlux"),
+    heatFlow: unit("heatFlow"),
     ratio: systemUnit(system, "ratio"),
   };
 }

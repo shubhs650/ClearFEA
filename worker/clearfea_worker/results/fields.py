@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Nodal displacement, stress and strain from the solver output, and the derived von Mises
-and principal stresses; nodal temperatures of a steady-state thermal run (M5.1).
+and principal stresses; nodal temperatures and heat flux of a steady-state thermal run (M5.1,
+M5.3).
 
 Physics-critical (ADR-030, ADR-050). CalculiX writes stresses and strains extrapolated from the
 integration points to the nodes and averaged over the elements that share a node; von Mises
 and the principal stresses are derived from those nodal stresses. The strain is CalculiX's
 total strain (``E``: elastic plus thermal), with tensor shear components (half the engineering
-shear strain). Everything is SI: metres, pascals and m/m.
+shear strain). The heat flux is CalculiX's too (``HFL``: the vector q = -k grad T, W/m², from
+the integration points to the nodes and averaged in the same way). Everything is SI: metres,
+pascals, m/m, kelvin and W/m².
 """
 
 import math
@@ -21,6 +24,8 @@ DISPLACEMENT = ("D1", "D2", "D3")
 STRESS = ("SXX", "SYY", "SZZ", "SXY", "SYZ", "SZX")
 #: The same order for the total strain.
 STRAIN = ("EXX", "EYY", "EZZ", "EXY", "EYZ", "EZX")
+#: The heat flux vector's x, y and z components.
+HEAT_FLUX = ("F1", "F2", "F3")
 
 
 @dataclass(frozen=True)
@@ -39,19 +44,23 @@ class NodalFields:
 
 @dataclass(frozen=True)
 class ThermalFields:
-    """``temperature[n]``: the temperature of node n in kelvin, as CalculiX wrote it (M5.1)."""
+    """``temperature[n]``: the temperature of node n in kelvin (M5.1), and since M5.3
+    ``heat_flux[3 n + i]``: component i of its heat flux in W/m², both as CalculiX wrote them."""
 
     node_count: int
     temperature: array
+    heat_flux: array
 
 
 def read_thermal_fields(frd: Path, node_count: int) -> ThermalFields:
-    """The temperature of every node from the ``.frd`` file of a heat transfer step."""
-    block = read_nodal_blocks(frd, node_count, {"NDTEMP"})["NDTEMP"]
-    temperature = _ordered(block, ("T",))
-    if not all(math.isfinite(v) for v in temperature):
+    """The temperature and heat flux of every node from the ``.frd`` file of a heat transfer
+    step."""
+    blocks = read_nodal_blocks(frd, node_count, {"NDTEMP", "FLUX"})
+    temperature = _ordered(blocks["NDTEMP"], ("T",))
+    heat_flux = _ordered(blocks["FLUX"], HEAT_FLUX)
+    if not all(math.isfinite(v) for v in (*temperature, *heat_flux)):
         raise FrdError("The result file holds values that are not finite numbers.")
-    return ThermalFields(node_count, temperature)
+    return ThermalFields(node_count, temperature, heat_flux)
 
 
 def von_mises(sxx: float, syy: float, szz: float, sxy: float, syz: float, szx: float) -> float:
@@ -127,6 +136,17 @@ def displacement_magnitude(fields: NodalFields) -> array:
         "d",
         (
             math.sqrt(d[3 * n] ** 2 + d[3 * n + 1] ** 2 + d[3 * n + 2] ** 2)
+            for n in range(fields.node_count)
+        ),
+    )
+
+
+def heat_flux_magnitude(fields: ThermalFields) -> array:
+    q = fields.heat_flux
+    return array(
+        "d",
+        (
+            math.sqrt(q[3 * n] ** 2 + q[3 * n + 1] ** 2 + q[3 * n + 2] ** 2)
             for n in range(fields.node_count)
         ),
     )

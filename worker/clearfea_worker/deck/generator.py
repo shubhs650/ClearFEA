@@ -74,7 +74,7 @@ from .loads.thermal import expansions, temperature_change
 from .loads.tie import Equation, body_groups, tied_bonds, ties
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
-DECK_FORMAT = 4
+DECK_FORMAT = 5
 
 #: CalculiX reads at most 16 entries on a data line.
 _PER_LINE = 16
@@ -87,9 +87,21 @@ REACTION_SET = "RALL"
 #: reader passes their tie forces on to held master nodes (loads/tie.py, ADR-060).
 TIE_SET = "TIED"
 
+#: The node set of every node a fixed temperature holds, whose nodal heat flows (RFL) are
+#: printed node by node: the result reader takes each fixed temperature's heat flow from them
+#: (results/heat.py, M5.3).
+HEAT_SET = "TALL"
+
+#: The node set of every node on a face with convection or radiation, whose temperatures are
+#: printed to seven digits (the .frd file keeps five): the result reader integrates the heat
+#: these faces exchange from them (M5.3).
+EXCHANGE_SET = "XALL"
+
 __all__ = [
     "DECK_FORMAT",
     "DeckError",
+    "EXCHANGE_SET",
+    "HEAT_SET",
     "REACTION_SET",
     "TIE_SET",
     "generate_deck",
@@ -360,6 +372,15 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> 
         )
         out.append(f"*NSET, NSET=T{j + 1}")
         out.extend(_lines(n + 1 for n in item.nodes))
+    if held:
+        out.append(f"*NSET, NSET={HEAT_SET}")
+        out.extend(_lines(sorted({n + 1 for item in held for n in item.nodes})))
+    exchanged = sorted(
+        {n + 1 for item in [*films, *radiates] for n in fixed_support_nodes(mesh, item.load.faces)}
+    )
+    if exchanged:
+        out.append(f"*NSET, NSET={EXCHANGE_SET}")
+        out.extend(_lines(exchanged))
     for j, material in enumerate(spec.materials):
         if material.id not in k:
             continue
@@ -456,6 +477,16 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> 
             )
     out.append("*NODE FILE")
     out.append("NT")
+    # The heat flux at the nodes, extrapolated from the integration points and averaged like
+    # the stress (M5.3).
+    out.append("*EL FILE")
+    out.append("HFL")
+    if held:
+        out.append(f"*NODE PRINT, NSET={HEAT_SET}")
+        out.append("RFL")
+    if exchanged:
+        out.append(f"*NODE PRINT, NSET={EXCHANGE_SET}")
+        out.append("NT")
     out.append("*END STEP")
     return "\n".join(out) + "\n"
 

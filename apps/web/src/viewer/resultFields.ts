@@ -71,12 +71,12 @@ export function parseResultFields(buffer: ArrayBuffer): ResultFields {
 }
 
 /** The quantities the result view can colour the model by (M1.9; components and principal
- * stresses since M3.1, ADR-050; the temperature of a steady-state thermal run since M5.1).
- * Listed in packages/spec/schemas/view.schema.json, since a saved view keeps one (M3.6); the
- * temperature is not listed there yet, so a view of it is saved without its result display. */
-export type Quantity = ResultQuantity | "temperature";
+ * stresses since M3.1, ADR-050; the temperature of a steady-state thermal run since M5.1, and
+ * its heat flux since M5.3). Listed in packages/spec/schemas/view.schema.json, since a saved
+ * view keeps one (M3.6). */
+export type Quantity = ResultQuantity;
 
-export type QuantityGroup = "Displacement" | "Stress" | "Strain" | "Safety factor" | "Temperature";
+export type QuantityGroup = "Displacement" | "Stress" | "Strain" | "Safety factor" | "Temperature" | "Heat flux";
 
 /** True for a quantity a saved view can keep (view.schema.json's ResultQuantity). */
 export function isViewQuantity(quantity: Quantity): quantity is ResultQuantity {
@@ -134,7 +134,15 @@ export const QUANTITIES: Record<Quantity, QuantityInfo> = {
     smallestRed: true,
   },
   temperature: { label: "Temperature", kind: "temperature", group: "Temperature", field: "temperature", components: 1, component: null },
+  // The heat flux q = -k grad T (M5.3): heat flows along it, from hot to cold.
+  heatFlux: { label: "Heat flux magnitude", kind: "heatFlux", group: "Heat flux", field: "heatFlux", components: 3, component: null },
+  heatFluxX: { label: "Heat flux qx", kind: "heatFlux", group: "Heat flux", field: "heatFlux", components: 3, component: 0 },
+  heatFluxY: { label: "Heat flux qy", kind: "heatFlux", group: "Heat flux", field: "heatFlux", components: 3, component: 1 },
+  heatFluxZ: { label: "Heat flux qz", kind: "heatFlux", group: "Heat flux", field: "heatFlux", components: 3, component: 2 },
 };
+
+/** The quantities of a steady-state thermal run, in menu order (M5.1, M5.3). */
+const THERMAL_QUANTITIES: readonly Quantity[] = ["temperature", "heatFlux", "heatFluxX", "heatFluxY", "heatFluxZ"];
 
 /**
  * True for a run of a steady-state thermal analysis (M5.1, ADR-064): its only field is the
@@ -144,10 +152,11 @@ export function isThermalRun(run: Pick<RunView, "spec" | "result">): boolean {
   return run.spec.analysis === "steady_thermal" || run.result?.temperature !== undefined;
 }
 
-/** The quantities a run has fields for, in menu order: the temperature alone for a thermal run. */
+/** The quantities a run has fields for, in menu order: the temperature and heat flux for a
+ * thermal run (a thermal run solved before M5.3 has no heat flux; the view says so). */
 export function runQuantities(run: Pick<RunView, "spec" | "result">): Quantity[] {
   const all = Object.keys(QUANTITIES) as Quantity[];
-  return isThermalRun(run) ? ["temperature"] : all.filter((q) => q !== "temperature");
+  return isThermalRun(run) ? [...THERMAL_QUANTITIES] : all.filter((q) => !THERMAL_QUANTITIES.includes(q));
 }
 
 /**

@@ -3,13 +3,33 @@
 
 import type { SimulationSpec, SolveResult } from "@clearfea/spec";
 import { describe, expect, it } from "vitest";
-import { type ExportUnits, nodeCsv, reactionsCsv, VTK_NODE_ORDER, vtuParts } from "../src/viewer/resultExport";
+import { type ExportUnits, heatFlowsCsv, nodeCsv, reactionsCsv, VTK_NODE_ORDER, vtuParts } from "../src/viewer/resultExport";
 import type { ResultField, ResultFields } from "../src/viewer/resultFields";
 import { parseVolumeMesh, type VolumeMesh } from "../src/viewer/section";
 import { boxMesh } from "./volumeBox";
 
-const SI: ExportUnits = { length: "m", pressure: "Pa", force: "N", moment: "N·m", strain: "m/m", temperature: "K", ratio: "1" };
-const MM: ExportUnits = { length: "mm", pressure: "MPa", force: "kN", moment: "N·mm", strain: "µε", temperature: "°C", ratio: "1" };
+const SI: ExportUnits = {
+  length: "m",
+  pressure: "Pa",
+  force: "N",
+  moment: "N·m",
+  strain: "m/m",
+  temperature: "K",
+  heatFlux: "W/m²",
+  heatFlow: "W",
+  ratio: "1",
+};
+const MM: ExportUnits = {
+  length: "mm",
+  pressure: "MPa",
+  force: "kN",
+  moment: "N·mm",
+  strain: "µε",
+  temperature: "°C",
+  heatFlux: "kW/m²",
+  heatFlow: "BTU/h",
+  ratio: "1",
+};
 
 /** Fields with values made from the node number, so each cell can be checked. */
 function fieldsFor(mesh: VolumeMesh, withSafety = true): ResultFields {
@@ -233,5 +253,77 @@ describe("export of a steady-state thermal run (M5.1)", () => {
   it("writes an empty reactions file for a result with no reactions", () => {
     const result = { nodes: n, temperature: { min: {}, max: {} } } as unknown as SolveResult;
     expect(reactionsCsv(result, { supports: [], loads: [] } as unknown as SimulationSpec, SI).split("\r\n")).toHaveLength(2);
+  });
+});
+
+describe("export of heat fluxes and heat flows (M5.3)", () => {
+  const mesh = parseVolumeMesh(boxMesh(2, 2));
+  const n = mesh.nodeCount;
+  // Node index i at 293.15 + i K, with a heat flux of (1000 i, -2000, 0) W/m².
+  const nodes: ResultFields = {
+    vertexCount: n,
+    fields: new Map<string, ResultField>([
+      ["temperature", { kind: "temperature", components: 1, values: Float32Array.from({ length: n }, (_, i) => 293.15 + i) }],
+      [
+        "heatFlux",
+        {
+          kind: "heatFlux",
+          components: 3,
+          values: Float32Array.from({ length: 3 * n }, (_, k) => [1000 * Math.floor(k / 3), -2000, 0][k % 3] ?? 0),
+        },
+      ],
+    ]),
+  };
+
+  it("writes the heat flux components in the unit asked for", () => {
+    const lines = rows(nodeCsv(mesh, nodes, MM));
+    expect((lines[0] ?? "").slice(1).split(",")).toEqual([
+      "node",
+      "x (mm)",
+      "y (mm)",
+      "z (mm)",
+      "temperature (°C)",
+      "heat flux qx (kW/m²)",
+      "heat flux qy (kW/m²)",
+      "heat flux qz (kW/m²)",
+    ]);
+    // Index 3: 3 kW/m² along x, -2 kW/m² along y.
+    expect((lines[4] ?? "").split(",").map(Number).slice(-3)).toEqual([3, -2, 0]);
+  });
+
+  it("writes the heat flux to the VTK file in W/m² as a vector", async () => {
+    const { head, arrays } = await readVtu(vtuParts(mesh, nodes));
+    expect([...arrays.keys()].slice(0, 2)).toEqual(["temperature (K)", "heatFlux (W/m^2)"]);
+    expect(head).toContain('ComponentName0="X"');
+    expect(arrays.get("heatFlux (W/m^2)")?.data.getFloat32(12, true)).toBe(1000);
+  });
+
+  it("writes each load's heat flow with its direction and the balance", () => {
+    const result = {
+      nodes: n,
+      heatFlows: [
+        { loadId: "hot", heat: 10 },
+        { loadId: "cold", heat: -9.99 },
+      ],
+      heatBalance: { heatIn: 10, heatOut: 9.99, scale: 10, ratio: 0.001 },
+    } as unknown as SolveResult;
+    const spec = {
+      supports: [],
+      loads: [
+        { id: "hot", name: "Hot face" },
+        { id: "cold", name: "Cold face" },
+      ],
+    } as unknown as SimulationSpec;
+    const lines = heatFlowsCsv(result, spec, SI).slice(1).trim().split("\r\n");
+    expect(lines).toEqual([
+      "item,name,heat into the body (W)",
+      "heat flow,Hot face,10",
+      "heat flow,Cold face,-9.99",
+      "heat in,all loads,10",
+      "heat out,all loads,-9.99",
+      "out of balance (fraction),of 10 W,0.001",
+    ]);
+    // BTU/h: 10 W is 34.12 BTU/h.
+    expect(heatFlowsCsv(result, spec, MM)).toContain("heat flow,Hot face,34.12141633");
   });
 });

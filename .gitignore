@@ -49,3 +49,4 @@ Thumbs.db
 !worker/tests/fixtures/elastic-fixed/*.frd
 !worker/tests/fixtures/elastic-fixed/*.dat
 !worker/tests/fixtures/heat/*.frd
+!worker/tests/fixtures/heat/*.dat

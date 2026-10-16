@@ -13,7 +13,7 @@ import type { VolumeMesh } from "./section";
 
 /** The units an export writes, one per kind (the Run panel's result units, ADR-056). */
 export type ExportUnits = Readonly<
-  Record<"length" | "pressure" | "force" | "moment" | "strain" | "temperature" | "ratio", string>
+  Record<"length" | "pressure" | "force" | "moment" | "strain" | "temperature" | "heatFlux" | "heatFlow" | "ratio", string>
 >;
 
 /** A column group of the node CSV: one fields.bin field, its components' column names. */
@@ -30,8 +30,10 @@ const CSV_FIELDS: readonly CsvField[] = [
   // Tensor shear components (half the engineering shear strain), as stored (ADR-050).
   { name: "strain", kind: "strain", columns: TENSOR.map((c) => (c[0] === c[1] ? `strain ${c}` : `strain ${c} (tensor)`)) },
   { name: "safetyFactor", kind: "ratio", columns: ["safety factor"] },
-  // The only field of a steady-state thermal run (M5.1); absolute, converted with its offset.
+  // The fields of a steady-state thermal run (M5.1, M5.3); the temperature is absolute,
+  // converted with its offset.
   { name: "temperature", kind: "temperature", columns: ["temperature"] },
+  { name: "heatFlux", kind: "heatFlux", columns: ["heat flux qx", "heat flux qy", "heat flux qz"] },
 ];
 
 /** A column name with its unit in brackets; a ratio has none. */
@@ -143,6 +145,27 @@ export function reactionsCsv(result: SolveResult, spec: SimulationSpec, units: E
   return `${BOM}${rows.map((row) => row.map(cell).join(",")).join("\r\n")}\r\n`;
 }
 
+/**
+ * Each thermal load's heat flow from a steady-state thermal run's summary (M5.3), as one CSV: a
+ * row per load, named as in the run's own frozen setup, positive into the body and negative out
+ * of it, then the heat in, the heat out and the out-of-balance fraction of the heat balance.
+ */
+export function heatFlowsCsv(result: SolveResult, spec: SimulationSpec, units: ExportUnits): string {
+  const loadName = new Map(spec.loads.map((l) => [l.id, l.name]));
+  const w = (v: number) => position(fromSi(v, units.heatFlow, "heatFlow"));
+  const rows = [["item", "name", header("heat into the body", units.heatFlow)]];
+  for (const flow of result.heatFlows ?? []) {
+    rows.push(["heat flow", loadName.get(flow.loadId) ?? flow.loadId, w(flow.heat)]);
+  }
+  const balance = result.heatBalance;
+  if (balance) {
+    rows.push(["heat in", "all loads", w(balance.heatIn)]);
+    rows.push(["heat out", "all loads", w(-balance.heatOut)]);
+    rows.push(["out of balance (fraction)", `of ${w(balance.scale)} ${units.heatFlow}`, position(balance.ratio)]);
+  }
+  return `${BOM}${rows.map((row) => row.map(cell).join(",")).join("\r\n")}\r\n`;
+}
+
 /** VTK cell types (VTK's vtkCellType.h). */
 const VTK_TETRA = 10;
 const VTK_QUADRATIC_TETRA = 24;
@@ -158,11 +181,12 @@ export const VTK_NODE_ORDER: Readonly<Record<1 | 2, readonly number[]>> = {
 };
 
 /** The VTK array name of a fields.bin field: its name and its SI unit. */
-const VTK_UNITS: Record<string, string> = { length: "m", pressure: "Pa", strain: "m/m", temperature: "K" };
+const VTK_UNITS: Record<string, string> = { length: "m", pressure: "Pa", strain: "m/m", temperature: "K", heatFlux: "W/m^2" };
 
 /** VTK names the six components of a symmetric tensor XX, YY, ZZ, XY, YZ, XZ, CalculiX's order. */
 const COMPONENT_NAMES: Record<string, readonly string[]> = {
   displacement: ["X", "Y", "Z"],
+  heatFlux: ["X", "Y", "Z"],
   stress: ["XX", "YY", "ZZ", "XY", "YZ", "XZ"],
   strain: ["XX", "YY", "ZZ", "XY", "YZ", "XZ"],
   principalStress: ["1", "2", "3"],
