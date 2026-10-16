@@ -101,7 +101,7 @@ beforeEach(async () => {
 });
 
 /** A ready geometry of alice's, imported at scaling 0.5, with its topology.json stored. */
-async function geometryRow(): Promise<string> {
+async function geometryRow(topology: Topology = TOPOLOGY): Promise<string> {
   const id = crypto.randomUUID();
   await env.DB.prepare(
     `INSERT INTO geometries (id, owner_id, name, size_bytes, status, detected_unit, reading_factor,
@@ -110,15 +110,22 @@ async function geometryRow(): Promise<string> {
   )
     .bind(id, aliceId)
     .run();
-  await env.FILES.put(`owners/${aliceId}/geometries/${id}/topology.json`, JSON.stringify(TOPOLOGY));
+  await env.FILES.put(`owners/${aliceId}/geometries/${id}/topology.json`, JSON.stringify(topology));
   await env.FILES.put(`owners/${aliceId}/geometries/${id}/model.step`, "ISO-10303-21;");
   return id;
 }
 
-/** Alice's simulation with the fixture's spec, or with a different mesh size. */
-async function simulation(size: SimulationSpec["mesh"]["size"] = fixture.mesh.size): Promise<string> {
-  const geometryId = await geometryRow();
+/** Alice's simulation with the fixture's spec, or with a different mesh size or topology. */
+async function simulation(
+  size: SimulationSpec["mesh"]["size"] = fixture.mesh.size,
+  topology: Topology = TOPOLOGY,
+): Promise<string> {
+  const geometryId = await geometryRow(topology);
   const spec = { ...(JSON.parse(JSON.stringify(fixture)) as SimulationSpec), geometryId, mesh: { size } };
+  // A body of the topology that the fixture does not list gets the fixture's first material.
+  for (const body of topology.bodies) {
+    if (!spec.bodies.some((b) => b.tag === body.tag)) spec.bodies.push({ tag: body.tag, material: spec.materials[0]?.id ?? null });
+  }
   const response = await call("POST", "/api/simulations", {
     json: { geometryId, name: "Static structural", spec },
     cookie: alice,
@@ -287,6 +294,25 @@ describe("starting a run", () => {
     expect(jobsAfter?.n).toBe(jobsBefore?.n);
     const list = await call("GET", `/api/simulations/${id}/runs`, { cookie: alice });
     expect(((await list.json()) as { runs: unknown[] }).runs).toEqual([]);
+  });
+
+  it("freezes every bond of the geometry into a run of a spec saved without its bond list (M4.3)", async () => {
+    const bonded: Topology = {
+      ...TOPOLOGY,
+      bodies: [
+        { tag: 1, volume: 5e-5, faces: [1, 2] },
+        { tag: 2, volume: 5e-5, faces: [3] },
+      ],
+      faces: TOPOLOGY.faces.map((f) => ({ ...f, bodies: [f.tag === 3 ? 2 : 1] })),
+      bondTolerance: 1e-5,
+      bonds: [{ faces: [2, 3], bodies: [1, 2], area: 0.001, gap: 0 }],
+    };
+    const id = await simulation(fixture.mesh.size, bonded);
+    await requestMesh(id);
+    await runMesh();
+    expect((await startRun(id)).status).toBe(201);
+    const job = await claim("solve");
+    expect(job.params).toMatchObject({ spec: { bonds: [{ faces: [2, 3], status: "detected" }] } });
   });
 
   it("freezes the saved spec and queues a solve job on the current mesh", async () => {

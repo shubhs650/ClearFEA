@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [
+    { "tag": 1, "material": "steel" },
+    { "tag": 2, "material": "steel" }
+  ],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 29000, "unit": "ksi" },
+      "poissonsRatio": 0.3
+    }
+  ],
+  "supports": [{ "id": "fixed-1", "type": "fixed", "name": "Clamped end", "faces": ["clamped-end"] }],
+  "loads": [
+    {
+      "id": "force-1",
+      "type": "force",
+      "name": "End load",
+      "faces": ["end-patch"],
+      "x": { "value": 0, "unit": "kip" },
+      "y": { "value": -500, "unit": "lbf" },
+      "z": { "value": 0, "unit": "N" }
+    }
+  ],
+  "mesh": {
+    "size": { "value": 5, "unit": "mm" },
+    "local": [{ "id": "root", "name": "Root block", "scope": "bodies", "tags": [1], "size": { "value": 3.5, "unit": "mm" } }]
+  }
+}

@@ -65,6 +65,51 @@ class Hold:
         return (u[0], u[1], u[2])
 
 
+@dataclass(frozen=True)
+class Frame:
+    """The directions 1 to 3 of a node's degrees of freedom in the deck (global unit vectors)
+    and which of them supports hold (0-based). A held node off the global axes gets its own
+    directions through a *TRANSFORM (``transformed``); every other node uses x, y and z."""
+
+    axes: tuple[Vector, Vector, Vector]
+    held: frozenset[int]
+    transformed: bool
+
+
+#: The frame of a node no support holds.
+FREE = Frame(AXES, frozenset(), False)
+
+
+def perpendicular(a: Vector) -> Vector:
+    """A unit vector at right angles to unit vector ``a``, the same for the same ``a``."""
+    axis = min(range(3), key=lambda i: (abs(a[i]), i))
+    e = AXES[axis]
+    d = sum(a[i] * e[i] for i in range(3))
+    v = [e[i] - d * a[i] for i in range(3)]
+    length = sum(x * x for x in v) ** 0.5
+    return (v[0] / length, v[1] / length, v[2] / length)
+
+
+def hold_frame(h: "Hold") -> Frame:
+    """How the deck writes ``h``: in global axes when every constraint lies along an axis or
+    the node is held in all three directions, otherwise in the node's own directions (a
+    *TRANSFORM, TYPE=R through its first held direction and a second one at right angles,
+    the third their cross product), holding the first len(basis) of them."""
+    if h.on_axes or len(h.basis) == 3:
+        held = {0, 1, 2}
+        if len(h.basis) < 3:
+            held = {max(range(3), key=lambda i: abs(q[i])) for q in h.basis}
+        return Frame(AXES, frozenset(held), False)
+    a = h.basis[0]
+    b = h.basis[1] if len(h.basis) == 2 else perpendicular(a)
+    return Frame((a, b, cross(a, b)), frozenset(range(len(h.basis))), True)
+
+
+def node_frames(held: dict[int, "Hold"]) -> dict[int, Frame]:
+    """The Frame of every held node; nodes left out are FREE."""
+    return {n: hold_frame(h) for n, h in held.items()}
+
+
 def support_kind(
     support: FixedSupport | PrescribedDisplacement | FrictionlessSupport | ElasticSupport,
 ) -> str:
