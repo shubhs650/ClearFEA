@@ -67,9 +67,9 @@ Stress is checked away from supports and load application points unless the case
 | V-17 | Slab with internal heat generation | Centre temperature rise q‴L²/2k | M5 |
 | V-18 | Thick cylinder, radial temperature gradient | Closed-form thermal stress (Timoshenko and Goodier) | M5 |
 | V-19 | Wall with temperature-dependent conductivity, elasticity and expansion, held sideways between frictionless walls (M5.5) | Flux from conductivity at mean temperature (linear k(T)) and the exact profile; sideways stress −E(T) ε(T)/(1 − ν(T)) from mean expansion coefficients with their own reference temperature; growth of the free face | M5 |
-| V-20 | Cantilever beam frequencies | Euler-Bernoulli, first three bending modes | M6 |
-| V-21 | Fixed-fixed beam frequencies | Euler-Bernoulli, first two bending modes | M6 |
-| V-22 | Unrestrained body | Six rigid-body modes near zero, first elastic mode against reference | M6 |
+| V-20 | Cantilever beam frequencies | Euler-Bernoulli, first three bending modes in the stiff direction and first two in the other (800 × 16 × 8 mm steel bar, M6.1) | M6 |
+| V-21 | Fixed-fixed beam frequencies | Euler-Bernoulli, first two bending modes in one direction and the first in the other (the same bar, both ends fixed, M6.1) | M6 |
+| V-22 | Unrestrained body | Six rigid-body modes near zero (within 0.1 % of mode 7), first two elastic modes against the free-free beam (the same bar, no supports, SPOOLES, M6.1) | M6 |
 | V-23 | NAFEMS LE10, thick plate under pressure | Published target stress at point D; take the value from the NAFEMS document when implementing | M3 |
 | V-24 | Quarter bar stretched by prescribed end displacements on two symmetry planes | Uniform stress Eδ/L (von Mises, σxx, σ1), strains δ/L and −νδ/L, lateral contraction νεy, end reaction σA; safety factor against yield Sy/σ (M3.5) | M2 |
 | V-25 | V-09's quarter tube with its outside on an elastic support (a stiff sleeve) | Lamé with σr(b) = −k u(b): von Mises and radial displacement at the bore and the outside; the sleeve's and the cut planes' reactions | M2 |
@@ -105,7 +105,8 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Internal heat generation | V-17 |
 | Thermal stress | V-18 |
 | Temperature-dependent properties | V-19 (conductivity, Young's modulus, Poisson's ratio and expansion tables, M5.5); `worker/spikes/heat_check` checks a conductivity table at every node |
-| Modal | V-20, V-21, V-22 |
+| Modal | V-20, V-21, V-22 (M6.1; frequencies only, mode shapes with M6.2); `worker/spikes/modal_check` solves the same three bars at 4 mm and 2 mm |
+| Modal with no support (rigid-body modes) | V-22 |
 | Heat flux results | V-13, V-15, V-16, V-17 (heat flux along the wall, M5.3) |
 | Heat flows and heat balance check | V-13, V-15, V-16, V-17 (each load's heat flow), V-18; the run's own heat balance on every thermal case (M5.3) |
 | Reaction balance check | V-04, V-05, V-06, V-07, V-08, V-10, V-25, V-03, V-26; the run's own balance check, force and moment, on every case (M3.2) |
@@ -127,6 +128,7 @@ Besides its own reference values, every case asserts:
 
 - Reactions balance applied loads within 0.1 percent (structural), both as the harness integrates the loads over the run's surface and as the run's own balance check reports them, force and moment (M3.2, ADR-051).
 - Heat in equals heat out within 0.1 percent (thermal, since M5.3): the run's own heat balance, and, where the case has a heat flux or heat generation, the heat those bring in against the case's own integration over the run's surface (ADR-066). A steady-state thermal case has no force balance rows, since it has no forces; a thermal stress case (M5.4) gets both the heat and the force balance rows.
+- A modal case (M6.1) has no balance rows, since it has no loads; it checks that the run found the number of modes asked for.
 - The solver log contains no unexpected warnings.
 - Billable seconds were recorded and one ledger entry was written.
 

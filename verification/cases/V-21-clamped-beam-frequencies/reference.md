@@ -20,4 +20,4 @@ The next modes, the third bending mode in z (350.5 Hz) and the second in y (357.
 
 ## Tolerances
 
-0.5 percent on the coarse tier and 0.3 percent on the full tier, for the reasons V-20 gives: shear deformation and rotary inertia lower the frequencies (at most 0.15 percent here, mode 2) and the clamped faces' held Poisson contraction raises them (0.15 percent on mode 1), on both tiers alike. Measured with `worker/spikes/modal_check` (SPOOLES) at 4 mm: +0.15, −0.13 and +0.07 percent; at 2 mm: +0.12, −0.15 and +0.04 percent.
+0.5 percent on the coarse tier and 0.3 percent on the full tier (3 mm, as V-20), for the reasons V-20 gives: shear deformation and rotary inertia lower the frequencies (at most 0.15 percent here, mode 2) and the clamped faces' held Poisson contraction raises them (0.15 percent on mode 1), on both tiers alike. Measured with `worker/spikes/modal_check` (SPOOLES) at 4 mm: +0.15, −0.13 and +0.07 percent; at 2 mm: +0.12, −0.15 and +0.04 percent.

@@ -13,7 +13,7 @@ faces:
   right: { min: [800, 0, 0], max: [800, 16, 8] }
 mesh:
   coarse: { value: 4, unit: mm }
-  full: { value: 2, unit: mm }
+  full: { value: 3, unit: mm }
 # Euler-Bernoulli frequencies (reference.md): z1, y1, z2. Tolerances: reference.md.
 checks:
   - name: First bending mode in z, βL = 4.7300

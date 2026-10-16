@@ -13,7 +13,7 @@ faces:
 # Two and four elements through the 8 mm depth.
 mesh:
   coarse: { value: 4, unit: mm }
-  full: { value: 2, unit: mm }
+  full: { value: 3, unit: mm }
 # Euler-Bernoulli frequencies (reference.md): bending in z (8 mm deep) and in y (16 mm wide)
 # interleave as z1, y1, z2, y2, z3. Tolerances: reference.md, "Tolerances".
 checks:

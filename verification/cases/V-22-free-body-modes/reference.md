@@ -20,6 +20,8 @@ The second free-free bending mode in z is at 178.8 Hz and the first twisting mod
 
 ## Tolerances
 
+The case solves with SPOOLES: PaStiX cannot solve a body no support holds (ADR-070).
+
 Modes 1 to 6: within 0.1 percent of mode 7's frequency (about 0.065 Hz) on both tiers. Measured with `worker/spikes/modal_check` (SPOOLES), the largest was 0.0024 Hz at 4 mm and 0.0030 Hz at 2 mm, about 4e-5 of mode 7; the bound leaves room for another equation solver's rounding while a held degree of freedom would give a frequency of the order of the elastic modes.
 
 Modes 7 and 8: 0.5 percent on the coarse tier and 0.3 percent on the full tier, as in V-20 and V-21: shear deformation and rotary inertia lower them by up to 0.15 percent (mode 8), on both tiers alike. Measured: −0.04 and −0.14 percent at 4 mm, −0.04 and −0.14 percent at 2 mm. With no clamped face, nothing raises them.
