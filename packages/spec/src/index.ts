@@ -3,6 +3,8 @@ export * from "./generated";
 export { movesByDisplacement, preRunProblems } from "./prerun";
 export {
   bodyLabels,
+  bondIsTied,
+  bondKey,
   checkSimulationSpec,
   displacementAxes,
   elementOrder,
@@ -19,7 +21,9 @@ export {
   sameMeshSettings,
   type SpecProblem,
   simulationSpecProblems,
+  specBonds,
   supportKinds,
+  type TopologyBondTags,
   type TopologyTags,
 } from "./simulation";
 export { checkEstimatorTable, estimateMesh, estimatorTable, type MeshEstimate, memoryFits, powerLaw } from "./estimator";

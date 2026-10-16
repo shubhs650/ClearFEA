@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import {
   bodyLabels as labelBodies,
+  bondIsTied,
   type GeometryView,
   type IsotropicMaterial,
   type LocalMeshScope,
@@ -8,6 +9,7 @@ import {
   preRunProblems,
   type SessionUser,
   type SimulationSpec,
+  specBonds,
 } from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchSession, signOut } from "./api/session";
@@ -19,6 +21,7 @@ import { StatusBar } from "./layout/StatusBar";
 import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { BodiesPanel, BodyPanel } from "./setup/BodyPanels";
+import { BondsPanel } from "./setup/BondPanels";
 import { GroupPanel, LoadPanel, MaterialPanel, SupportPanel } from "./setup/ItemPanels";
 import { MaterialChooser } from "./setup/MaterialLibrary";
 import { LocalSizePanel, MeshPanel } from "./setup/MeshPanel";
@@ -177,12 +180,17 @@ export function App() {
 
   /**
    * Opens a tree item; a support, load or local size on faces also shows its faces as the viewer's
-   * selection, a local size on edges its edges, and a body or a local size on bodies the faces of
-   * its bodies.
+   * selection, a local size on edges its edges, a body or a local size on bodies the faces of
+   * its bodies, and Bonds the faces of every tied bond.
    */
   function select(id: string) {
     setSelected(id);
     if (spec === null) return;
+    if (id === "bonds" && setup.kind === "open") {
+      // Every tied bond's faces (M4.2), so the user sees where the bodies are joined.
+      setSelection(new Set(specBonds(spec, setup.topology).flatMap((b) => (bondIsTied(b.status) ? b.faces : []))));
+      return;
+    }
     const body = bodyOf(id);
     if (body !== null && setup.kind === "open") {
       setSelection(new Set(setup.topology.bodies.find((b) => b.tag === body)?.faces ?? []));
@@ -309,6 +317,19 @@ export function App() {
           onRun={(machineSize) => void runs.start(machineSize)}
           choice={resultChoice}
           onChoiceChange={setResultChoice}
+        />
+      );
+    }
+    if (selected === "bonds" && setup.kind === "open") {
+      return (
+        <BondsPanel
+          spec={spec}
+          topology={setup.topology}
+          labels={bodyLabels}
+          status={status}
+          selection={selection}
+          onChange={change}
+          onShow={(faces) => setSelection(new Set(faces))}
         />
       );
     }

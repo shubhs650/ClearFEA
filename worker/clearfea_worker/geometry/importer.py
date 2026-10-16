@@ -29,6 +29,7 @@ from ..spec.geometry_schema import (
     UnitReading,
 )
 from ..units import default_table, to_si
+from .bonds import bond_tolerance, detect_bonds
 from .display import FacePatch, write_display
 from .step_units import Detection, StepFormatError, detect_length_unit
 
@@ -294,6 +295,10 @@ def import_geometry(step: Path, out_dir: Path, confirmed_unit: str | None) -> Im
                 "Gmsh could not draw the faces of this part. The geometry may have faces "
                 "that are broken or too small; repair them in your CAD system.",
             ) from None
+        # Candidate bonds between touching bodies (M4.2, ADR-059), sampled on the tessellation.
+        tolerance = bond_tolerance(topo.size)
+        topo.bond_tolerance = tolerance
+        topo.bonds = detect_bonds(gmsh, topo.faces, patches, tolerance)
     topology_path = out_dir / "topology.json"
     document = topo.model_dump(mode="json", by_alias=True)
     for body in document["bodies"]:

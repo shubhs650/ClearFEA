@@ -15,6 +15,7 @@ import {
   runStatus,
   removeItem,
   sameSpec,
+  setBondStatus,
   setupStatus,
   updateLoad,
   updateLocalSize,
@@ -376,5 +377,47 @@ describe("sameSpec", () => {
     expect(sameSpec(spec, reordered)).toBe(true);
     expect(sameSpec(spec, { ...spec, mesh: { size: { value: 3, unit: "mm" } } })).toBe(false);
     expect(sameSpec(spec, { ...spec, bodies: [] })).toBe(false);
+  });
+});
+
+describe("bonds (M4.2)", () => {
+  const assembly = {
+    bodies: [{ tag: 1 }, { tag: 2 }, { tag: 3 }],
+    faces: [6, 9, 11, 14].map((tag) => ({ tag })),
+    bonds: [
+      { faces: [6, 11] as [number, number], bodies: [1, 2] as [number, number] },
+      { faces: [9, 14] as [number, number], bodies: [2, 3] as [number, number] },
+    ],
+  };
+
+  it("marks Bonds incomplete until every detected bond is reviewed", () => {
+    let spec = emptySimulationSpec("g1", assembly);
+    expect(setupStatus(spec, assembly).get("bonds")).toEqual({
+      mark: "incomplete",
+      notes: ["Review 2 detected bonds: accept or remove each. Bonds not removed are tied."],
+    });
+    spec = setBondStatus(spec, assembly, ["6-11"], "accepted");
+    expect(setupStatus(spec, assembly).get("bonds")?.notes).toEqual([
+      "Review the detected bond: accept or remove each. Bonds not removed are tied.",
+    ]);
+    spec = setBondStatus(spec, assembly, ["9-14"], "removed");
+    expect(spec.bonds).toEqual([
+      { faces: [6, 11], status: "accepted" },
+      { faces: [9, 14], status: "removed" },
+    ]);
+    expect(setupStatus(spec, assembly).get("bonds")).toEqual({ mark: "complete", notes: [] });
+  });
+
+  it("gives a spec saved before M4.2 its own bond list on the first review", () => {
+    const { bonds: _, ...older } = emptySimulationSpec("g1", assembly);
+    expect(setBondStatus(older, assembly, ["9-14"], "accepted").bonds).toEqual([
+      { faces: [6, 11], status: "detected" },
+      { faces: [9, 14], status: "accepted" },
+    ]);
+  });
+
+  it("does not block a run: detected bonds are tied", () => {
+    const spec = emptySimulationSpec("g1", assembly);
+    expect(preRunProblems(spec, assembly).some((p) => p.item === "bonds")).toBe(false);
   });
 });

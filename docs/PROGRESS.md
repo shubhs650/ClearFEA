@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M4 Assemblies, in progress under the maintainer's autodrive (M3 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M4.2
+- **Next task:** M4.3
 - **Blocked on:** nothing
 
 ## Milestones
@@ -85,7 +85,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M4 Assemblies
 
 - [x] M4.1 Multi-body import: bodies listed, per-body material assignment
-- [ ] M4.2 Bond detection between touching faces with a tolerance; bond list with accept and remove; highlight in the viewer
+- [x] M4.2 Bond detection between touching faces with a tolerance; bond list with accept and remove; highlight in the viewer
 - [ ] M4.3 Per-body meshing; tie constraints in the deck
 - [ ] M4.4 Validation: unbonded or unrestrained bodies reported before run
 - [ ] M4.5 Report text noting reduced stress accuracy at tied interfaces (stored for M7)
@@ -113,6 +113,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M4.2 (2026-10-16): bond detection and review (ADR-059, accepted under Shubham's autodrive, pending his review). No physics-critical module touched (deck, units, loads, results unchanged). The import job now writes `bondTolerance` (1e-4 of the model diagonal) and `bonds` (faces, bodies, contact area, largest gap) into `topology.json` (`worker/clearfea_worker/geometry/bonds.py`: box filter, OpenCASCADE distance, then each tessellation triangle counts when its vertices and centroid lie within the tolerance of the other face and the centroid lands inside its boundary; at least 1% of the smaller face). `SimulationSpec.bonds` lists every candidate as detected, accepted or removed; `specBonds` reads older specs as all detected; the spec check refuses non-candidates, missing candidates and repeats. Web: a Bonds group below Bodies (more than one body only) with Accept, Remove, Restore and "Accept all"; opening Bonds or a bond selects its faces in the viewer. Test models in `worker/tests/step_models.py` (`bond_model`): overhanging block, edge contact, 0.5 mm gap, rod on plate, pin in hole, pad on a curved shell. Surprise: Gmsh's `getClosestPoint` projects onto the untrimmed surface and `isInside` ignores the distance off the surface, so both are needed; a pad across a cylinder's seam is two faces and so two bonds. For M4.3: tie every bond whose status is not `removed` (`bondIsTied`); `gap` is there for the tie's position tolerance. Screenshots in the project's `m4.2/` folder. Next: M4.3.
 
 > M4.1 (2026-10-16): multi-body import with bodies listed and a material per body (ADR-058, accepted under Shubham's autodrive, pending his review). No physics-critical module touched. Import was already multi-body (each STEP solid a Gmsh volume, touching bodies keep separate faces, each meshed on its own with no shared nodes); what is new: `topology.json` bodies carry an optional `name` read from Gmsh's STEP label (last part of `Shapes/<assembly>/<n>/<part>`; OpenCASCADE's "Open CASCADE STEP translator …" placeholder and instance numbers are not names), `bodyLabels` in `packages/spec` (name, or "Body <tag>", tag added to shared names), a Bodies group in the tree (row per body, material list per body, opening a body selects its faces), labels in the material panel, viewer hide/show list and face hover, and pre-run messages pointing to Bodies. Test model: `two_blocks` in `worker/tests/step_models.py` (product names rewritten in the STEP text, since Gmsh writes only placeholders). Surprise: OpenCASCADE numbers its placeholder product names per process ("… 7.8 3.1" after earlier writes), so the test model finds them by pattern. Screenshots in the project's `m4.1/` folder. Next: M4.2 (bond detection); the solver thread "PaStiX default and 16 GB limits" runs alongside and owns solver, estimator and size caps.
 
@@ -222,6 +224,7 @@ Written by the last session for the next one. Replace, do not append.
 
 Ideas that came up during work and are outside the current milestone. Do not build these without a decision.
 
+- A user-set bond tolerance (ADR-059 item 3): the tolerance is fixed at 1e-4 of the model size; another would need a detection job run on request.
 - Shrink the worker image (about 990 MB): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use.
 - A rigid (kinematic) option for remote loads, which keeps the loaded faces' shape (ADR-041 item 2), and drawing a remote load's reference point in the viewer. Needs the maintainer's decision on the option.
 - Adopt PaStiX as the production solver (Shubham chose "adopt later", 2026-10-15, ADR-048 item 7): its own task after M2, a 64-bit-integer PaStiX4CalculiX build in the worker image (CUDA runtime libraries included) as a pinned version bump with a full verification run. Build recipe in `worker/benchmarks/solver/README.md`. 4 to 6 times faster than SPOOLES, no larger models.
@@ -232,6 +235,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M4.2: bonds between touching bodies found at import within a tolerance, listed in a Bonds group with accept, remove and restore, and shown in the viewer (ADR-059). Learned: Gmsh's `getClosestPoint` ignores a face's trimming and `isInside` ignores distance off the surface; sampling every triangle vertex keeps edge and line contacts out.
 - M4.1: bodies of an assembly listed by their STEP part names in a new Bodies group, each with its material (ADR-058). Learned: Gmsh keeps STEP product names as entity labels (`getEntityName`), so no STEP parsing of our own is needed.
 - ADR-054 to ADR-057 marked accepted by the maintainer (he reviewed them after the M3 close).
 - M3 closed: phase-end workflow run by hand on main df2a895 ([run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) green, `make verify` full tier 146 of 146 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26) and `make e2e` E-01. Next: M4, waiting on the maintainer's go.

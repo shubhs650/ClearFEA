@@ -133,6 +133,36 @@ export interface TopologyEdge {
   points: [number, number, number, number, number, number, ...number[]];
 }
 /**
+ * Two faces of different bodies that touch over an area (M4.2): a candidate bond, which M4.3 ties unless the user removes it. Found by the import job within the topology's bondTolerance.
+ *
+ * This interface was referenced by `Geometry`'s JSON-Schema
+ * via the `definition` "TopologyBond".
+ */
+export interface TopologyBond {
+  /**
+   * The two face tags, smaller first.
+   *
+   * @minItems 2
+   * @maxItems 2
+   */
+  faces: [number, number];
+  /**
+   * The body of each face, in the order of faces.
+   *
+   * @minItems 2
+   * @maxItems 2
+   */
+  bodies: [number, number];
+  /**
+   * Square metres over which the faces lie within the tolerance of each other.
+   */
+  area: number;
+  /**
+   * Largest distance between the faces over that area, in metres; at most bondTolerance.
+   */
+  gap: number;
+}
+/**
  * topology.json: the reference for face identity (ARCHITECTURE.md section 3). Written by the import job in metres, at the geometry's confirmed scale once the unit is confirmed.
  *
  * This interface was referenced by `Geometry`'s JSON-Schema
@@ -159,6 +189,14 @@ export interface Topology {
   };
   bodies: TopologyBody[];
   faces: TopologyFace[];
+  /**
+   * Metres: faces of different bodies closer than this over an area are candidate bonds (M4.2). Absent for geometries imported before M4.2.
+   */
+  bondTolerance?: number;
+  /**
+   * Candidate bonds between touching faces of different bodies (M4.2), sorted by face tags. Absent for geometries imported before M4.2, whose bonds cannot be detected until the file is uploaded again.
+   */
+  bonds?: TopologyBond[];
   /**
    * Every edge of the geometry (M2.8). Absent for geometries imported before M2.8, whose edges cannot be picked until the file is uploaded again.
    */
@@ -268,6 +306,7 @@ export const validateUnitReading = validator<UnitReading>(schema, "UnitReading")
 export const validateTopologyBody = validator<TopologyBody>(schema, "TopologyBody");
 export const validateTopologyFace = validator<TopologyFace>(schema, "TopologyFace");
 export const validateTopologyEdge = validator<TopologyEdge>(schema, "TopologyEdge");
+export const validateTopologyBond = validator<TopologyBond>(schema, "TopologyBond");
 export const validateTopology = validator<Topology>(schema, "Topology");
 export const validateImportParams = validator<ImportParams>(schema, "ImportParams");
 export const validateImportResult = validator<ImportResult>(schema, "ImportResult");

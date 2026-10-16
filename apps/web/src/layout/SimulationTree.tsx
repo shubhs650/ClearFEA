@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The simulation tree (M1.5): geometry, then its bodies (M4.1), materials, supports and loads with their items,
+// The simulation tree (M1.5): geometry, then its bodies (M4.1) and their bonds (M4.2), materials, supports and loads with their items,
 // then the mesh (M1.6) with its local sizes (M2.8) and the run (M1.8).
 // Each row carries a complete / incomplete / error mark; selecting a row opens its settings.
 
@@ -127,6 +127,11 @@ export function SimulationTree({
                 </li>
               ))}
             </ul>
+          </li>
+        )}
+        {setup.kind === "open" && setup.spec.bodies.length > 1 && (
+          <li>
+            <Row id="bonds" label="Bonds" status={statuses.get("bonds")} selected={selected} onSelect={onSelect} />
           </li>
         )}
         {setup.kind === "open" &&

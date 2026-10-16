@@ -426,6 +426,87 @@ describe("setup tree", () => {
     expect(settings().getByRole("checkbox", { name: /^Base plate/ })).toHaveProperty("checked", false);
   });
 
+  it("lists the bonds between touching bodies, shows them in the viewer and saves each review (M4.2)", async () => {
+    const assembly = {
+      ...topology,
+      bodies: [
+        { tag: 1, name: "Base plate", faces: [3], volume: 0.0001 },
+        { tag: 2, name: "Lug", faces: [7], volume: 0.0001 },
+      ],
+      faces: topology.faces.map((face) => ({ ...face, bodies: [face.tag === 3 ? 1 : 2] })),
+      bondTolerance: 0.00001,
+      bonds: [{ faces: [3, 7], bodies: [1, 2], area: 0.0004, gap: 0 }],
+    };
+    const spec: SimulationSpec = {
+      ...emptySpec,
+      bodies: [
+        { tag: 1, material: null },
+        { tag: 2, material: null },
+      ],
+      bonds: [{ faces: [3, 7], status: "detected" }],
+    };
+    const { sent, route } = saves();
+    serve(
+      routes([simulation(spec)], {
+        "GET /api/geometries": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
+        "GET /api/geometries/g1/topology": { status: 200, json: assembly },
+        "PUT /api/simulations/s1/spec": route,
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Bonds, incomplete" }));
+    // Opening Bonds selects the faces of every tied bond.
+    expect(scene.selections.at(-1)).toEqual([3, 7]);
+    expect(settings().getByText(/touch within 0.01 mm are bonded/)).toBeTruthy();
+    const bond = () => within(settings().getByRole("listitem", { name: "Base plate to Lug" }));
+    expect(bond().getByText("Faces 3 and 7, 400 mm². Detected, tied.")).toBeTruthy();
+
+    fireEvent.click(settings().getByRole("button", { name: "Accept the bond Base plate to Lug" }));
+    expect(tree().getByRole("button", { name: "Bonds, complete" })).toBeTruthy();
+    await waitFor(() => expect(sent.at(-1)?.bonds).toEqual([{ faces: [3, 7], status: "accepted" }]));
+
+    fireEvent.click(settings().getByRole("button", { name: "Remove the bond Base plate to Lug" }));
+    expect(bond().getByText("Faces 3 and 7, 400 mm². Removed, not tied.")).toBeTruthy();
+    await waitFor(() => expect(sent.at(-1)?.bonds).toEqual([{ faces: [3, 7], status: "removed" }]));
+    expect(settings().getByRole("button", { name: "Show every tied bond" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(settings().getByRole("button", { name: "Restore the bond Base plate to Lug" }));
+    await waitFor(() => expect(sent.at(-1)?.bonds).toEqual([{ faces: [3, 7], status: "accepted" }]));
+
+    // Showing a bond selects its two faces.
+    fireEvent.click(tree().getByRole("button", { name: "Base plate, incomplete" }));
+    expect(scene.selections.at(-1)).toEqual([3]);
+    fireEvent.click(tree().getByRole("button", { name: "Bonds, complete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Show the bond Base plate to Lug, faces 3 and 7" }));
+    expect(scene.selections.at(-1)).toEqual([3, 7]);
+  });
+
+  it("has no Bonds item for a single body, and says when a geometry predates bond detection", async () => {
+    serve(routes([simulation()]));
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "Materials, incomplete" })).toBeTruthy();
+    expect(tree().queryByRole("button", { name: /^Bonds/ })).toBeNull();
+    cleanup();
+
+    const older = {
+      ...topology,
+      bodies: [
+        { tag: 1, faces: [3], volume: 0.0001 },
+        { tag: 2, faces: [7], volume: 0.0001 },
+      ],
+    };
+    const spec: SimulationSpec = { ...emptySpec, bodies: [{ tag: 1, material: null }, { tag: 2, material: null }] };
+    serve(
+      routes([simulation(spec)], {
+        "GET /api/geometries": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
+        "GET /api/geometries/g1/topology": { status: 200, json: older },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Bonds, complete" }));
+    expect(settings().getByText(/imported before bonds were detected. Upload the STEP file again/)).toBeTruthy();
+  });
+
   it("gives a new support the faces selected in the viewer, and shows an item's faces when opened", async () => {
     const { sent, route } = saves();
     serve(routes([simulation()], { "PUT /api/simulations/s1/spec": route }));
