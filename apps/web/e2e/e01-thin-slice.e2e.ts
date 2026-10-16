@@ -227,7 +227,7 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
   });
 
   await test.step("show the safety factor against yield (M3.5)", async () => {
-    await page.getByLabel("Cut plane", { exact: true }).uncheck();
+    await page.getByRole("checkbox", { name: "Cut plane", exact: true }).uncheck();
     const quantity = settings.getByLabel("Quantity");
     const max = page.locator(".viewer-marker-max");
     const min = page.locator(".viewer-marker-min");

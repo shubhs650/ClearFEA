@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M3 Results tools (M2 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M3.5
+- **Next task:** M3.6
 - **Blocked on:** nothing
 
 ## Milestones
@@ -77,7 +77,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M3.2 Reaction forces and moments per support; applied-load totals; balance check shown on every result
 - [x] M3.3 Min/max markers and probe at a picked point
 - [x] M3.4 Cut planes. Settle the large-model approach by measurement and record an ADR
-- [ ] M3.5 Safety factor against yield
+- [x] M3.5 Safety factor against yield
 - [ ] M3.6 Hide/show bodies; saved views
 - [ ] M3.7 Display-unit switching for results without rerun
 - [ ] M3.8 CSV and VTK export
@@ -97,14 +97,16 @@ Things only the maintainer can do.
 | Tier | Last run | Result |
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
-| Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 145 of 145 checks (M3.4) |
+| Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 146 of 146 checks (M3.5) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4) |
-| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step |
+| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step and the M3.5 safety factor step |
 | Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main b355155, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635); closed M2) | Green: full tier 116 of 116 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M3.5 (2026-10-16): safety factor against yield (ADR-054, accepted under Shubham's standing M3 instruction, pending his review). Materials gain an optional `yieldStrength` (pressure); the deck ignores it. The worker (`results/safety.py`, physics-critical) writes field `safetyFactor` (kind `ratio`, new in `units.json` v4, shown without a unit) = Sy / σvm per node, capped at 15 (also where σvm = 0), smallest yield at nodes shared by bodies; only when every body's material has a yield strength. `SolveResult.safetyFactor.min` is the whole-mesh smallest; the job now dumps the summary with `exclude_none` (a null there made the API refuse every run without yield in the first `make verify`). Viewer: "Safety factor" group, bands reversed (smallest red), legend notes the cap; Run panel shows the smallest or says to enter yield strengths and run again. Library: each of the 24 metals has MIL-HDBK-5G's Fty for one named product/temper/thickness (A basis where printed, else S, smaller of L and LT), stated in its `source`; read from the scans (pages re-rendered with `pdftoppm` from archive.org's DTIC_ADA295150/ADA322636 PDFs). V-24 checks 36/14.5; E-01 enters 250 MPa and compares the min marker with 250 / max von Mises. Open for Shubham: the temper picked per library entry (ADR-054 item 7). Screenshot and verify table in the project's `m3.5/` folder. Next: M3.6.
 
 > M3.4 (2026-10-16): cut planes (ADR-053, accepted under Shubham's standing M3 instruction, pending his review). Settled by measurement: every model is cut in the browser, on the main thread, from the run's `mesh.bin` (`GET /api/runs/:id/mesh`) and a new `nodes.bin` (every field at every mesh node, `fields.bin` format, `GET /api/runs/:id/nodes?field=` serves one field by R2 range); at 2M elements a cut takes about 0.25 s and the first cut downloads about 150 MB (`apps/web/bench/section-bench.ts`). The viewer's "Cut plane" toggle opens a panel: across x/y/z, a position slider, "Keep the other side". The model is hidden beyond the plane by undeformed position (shader on a `reference` attribute), so the section meets it at any deformation scale; legend and min/max cover what is drawn (surface left standing plus section); probes stay on the surface. Physics-critical: the worker writes `nodes.bin` (`results/surface.py`); `solve_check` gained a row. Harness: `inside: true` checks (mesh nodes in a box) plus an automatic per-field-equals-whole check; V-10 checks σz inside at quarter height. E-01 cuts across x and y. Runs solved before M3.4 cannot be cut and say to run again. Next: M3.5.
 
@@ -212,6 +214,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M3.5: safety factor against yield, yield strengths in materials and the library (ADR-054). Learned: pydantic dumps an absent optional field as null, which the API's schema refuses; the scanned handbook tables are readable at 130 to 300 dpi but the OCR text is not trustworthy for numbers.
 - M3.4: cut planes in the result view, cut in the browser at every model size (ADR-053). Learned: a 2-million-element mesh cuts in about a quarter of a second in V8; the download (about 150 MB), not the cut, is what grows, so values are served a field at a time.
 - M3.3: min/max markers and node probes in the result view (ADR-052). Learned: nothing surprising; the markers stay a pure view of `fields.bin`.
 - M3.2: reaction forces and moments per support, load totals and the balance check on every result (ADR-051). Learned: CalculiX integrates a `*DLOAD` face pressure with a three-point rule (the seven-point rule is 3e-4 off on curved C3D10 faces); a balance ratio must be measured against the loads' gross size, or a self-cancelling pressure reads 100 percent.

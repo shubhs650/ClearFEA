@@ -387,6 +387,9 @@ def test_runs_a_solve_job_and_streams_the_solver_log(tmp_path: Path, no_calculix
         assert result.nodes == 14
         assert result.displacement.max.node == 4
         assert [r.support_id for r in result.reactions] == ["fixed-1"]
+        # No yield strength: the summary leaves the safety factor out rather than sending null,
+        # which the API's schema refuses (M3.5).
+        assert "safetyFactor" not in job["outcome"]["result"]
         assert job["log"] == "".join(lines)
         deck = api.uploads[("j1", "deck.inp")].decode()
         assert deck == (SNAPSHOTS / "fixture-c3d10.inp").read_text()

@@ -978,7 +978,7 @@ function finishedRun(beforeM32 = false): Record<string, Route> {
     "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
     "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
     "GET /api/runs/r1/surface": { status: 200, bytes: display },
-    "GET /api/runs/r1/fields": { status: 200, bytes: twoFacesFields() },
+    "GET /api/runs/r1/fields": { status: 200, bytes: twoFacesFields({ safety: !beforeM32 }) },
   };
 }
 
@@ -1122,8 +1122,11 @@ describe("run", () => {
     expect(figures.getByText("at (100, 50, 20) mm")).toBeTruthy();
     expect(figures.getByText("240 MPa")).toBeTruthy();
     expect(figures.getByText("0.0015 MPa")).toBeTruthy();
-    // The smallest safety factor against yield, a number without a unit (M3.5).
+    // The smallest safety factor against yield, a number without a unit (M3.5), and its contour.
     expect(figures.getByText("1.04")).toBeTruthy();
+    fireEvent.change(quantity, { target: { value: "safetyFactor" } });
+    await waitFor(() => expect(legend.textContent).toContain("Safety factor against yield"));
+    expect(legend.textContent).not.toContain("Safety factor against yield (");
     expect(figures.getByText("Reaction, Base")).toBeTruthy();
     expect(figures.getByText("(0, 0, -400) N")).toBeTruthy();
     // Moments in N·mm about the support's faces' centre; the load's total; the balance (M3.2).
