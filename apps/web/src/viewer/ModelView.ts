@@ -3,7 +3,9 @@
 // mouse, and reports which face is under the pointer and which face was clicked. React state
 // (selection, hover text) lives in Viewer.tsx; this class only draws what it is told. Given
 // band coordinates per vertex (M1.9), it colours the model in result bands instead of by face.
-// Given the geometry's edges (M2.8), it draws them and picks edges instead of faces.
+// Given the geometry's edges (M2.8), it draws them and picks edges instead of faces. While it
+// shows results, a click probes the surface vertex nearest the pointer, and labelled markers
+// (min/max and probes, M3.3) are drawn as an HTML layer over the canvas at their vertices.
 
 import {
   AmbientLight,
@@ -28,7 +30,7 @@ import {
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { type DisplayFace, type DisplayMesh, faceAtTriangle, faceOutlines, triangleEdges } from "./displayMesh";
 import { type EdgePolyline, type EdgeSegments, edgeSegments, nearestEdge } from "./edges";
-import { BAND_COLOURS } from "./resultFields";
+import { BAND_COLOURS, nearestCorner } from "./resultFields";
 
 const COLOURS = {
   background: new Color("#e9ecef"),
@@ -73,7 +75,12 @@ export type ModelViewEvents = {
   onHover: (tag: number | null) => void;
   /** A face (or edge, in edge mode) was clicked (not dragged). */
   onPick: (tag: number) => void;
+  /** While the model shows results, the surface was clicked: the vertex nearest the click. */
+  onProbe?: (vertex: number) => void;
 };
+
+/** A labelled point on the model: the smallest or largest value, or a probe (M3.3). */
+export type Marker = { vertex: number; kind: "min" | "max" | "probe"; text: string };
 
 export class ModelView {
   private readonly renderer: WebGLRenderer;
@@ -98,6 +105,8 @@ export class ModelView {
   private bands: DataTexture | null = null;
   /** Whether a click picks a face; off while the model shows results. */
   private picking = true;
+  private readonly markerLayer: HTMLDivElement;
+  private markers: { marker: Marker; element: HTMLDivElement }[] = [];
 
   /** Throws if the browser cannot create a WebGL context. */
   constructor(
@@ -108,6 +117,9 @@ export class ModelView {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setClearColor(COLOURS.background);
     container.appendChild(this.renderer.domElement);
+    this.markerLayer = document.createElement("div");
+    this.markerLayer.className = "viewer-markers";
+    container.appendChild(this.markerLayer);
 
     this.scene.add(new AmbientLight(0xffffff, 1.2));
     // The key light follows the camera, so the side the user looks at is always lit.
@@ -236,6 +248,24 @@ export class ModelView {
     this.requestRender();
   }
 
+  /**
+   * Draws labelled markers at surface vertices of the model last given to setMesh, replacing
+   * any drawn before. setMesh clears them, so call this after it.
+   */
+  setMarkers(markers: readonly Marker[]): void {
+    this.markerLayer.replaceChildren();
+    this.markers = markers.map((marker) => {
+      const element = document.createElement("div");
+      element.className = `viewer-marker viewer-marker-${marker.kind}`;
+      const label = document.createElement("span");
+      label.textContent = marker.text;
+      element.appendChild(label);
+      this.markerLayer.appendChild(element);
+      return { marker, element };
+    });
+    this.requestRender();
+  }
+
   dispose(): void {
     cancelAnimationFrame(this.frame);
     this.resize.disconnect();
@@ -244,6 +274,7 @@ export class ModelView {
     this.bands?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
+    this.markerLayer.remove();
   }
 
   private clearEdges(): void {
@@ -291,6 +322,8 @@ export class ModelView {
     }
     this.surface = null;
     this.outlines = null;
+    this.markerLayer.replaceChildren();
+    this.markers = [];
     this.mesh = null;
     this.facesByTag = new Map();
     this.hovered = null;
@@ -310,7 +343,23 @@ export class ModelView {
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
       this.renderer.render(this.scene, this.camera);
+      this.placeMarkers();
     });
+  }
+
+  /** Moves each marker's element over its vertex as drawn now; hides it behind the camera. */
+  private placeMarkers(): void {
+    const positions = this.surface?.geometry.getAttribute("position");
+    if (!positions || this.markers.length === 0) return;
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    const point = new Vector3();
+    for (const { marker, element } of this.markers) {
+      point.fromBufferAttribute(positions, marker.vertex).project(this.camera);
+      element.hidden = point.z > 1;
+      element.style.left = `${((point.x + 1) / 2) * width}px`;
+      element.style.top = `${((1 - point.y) / 2) * height}px`;
+    }
   }
 
   private colourOf(tag: number): Color {
@@ -421,8 +470,22 @@ export class ModelView {
       if (edge !== null && this.picking) this.events.onPick(edge);
       return;
     }
+    if (!this.picking) {
+      const vertex = this.vertexAt(event);
+      if (vertex !== null) this.events.onProbe?.(vertex);
+      return;
+    }
     const tag = this.faceAt(event);
     this.setHovered(tag);
-    if (tag !== null && this.picking) this.events.onPick(tag);
+    if (tag !== null) this.events.onPick(tag);
   };
+
+  /** The vertex of the drawn surface nearest the point under the pointer, or null. */
+  private vertexAt(event: PointerEvent): number | null {
+    const hit = this.surfaceHit(event);
+    const positions = this.surface?.geometry.getAttribute("position");
+    if (!this.mesh || hit?.faceIndex == null || !(positions instanceof BufferAttribute)) return null;
+    const { x, y, z } = hit.point;
+    return nearestCorner(positions.array as Float32Array, this.mesh.indices, hit.faceIndex, [x, y, z]);
+  }
 }

@@ -48,6 +48,7 @@ vi.mock("../src/viewer/ModelView", () => ({
     setEdgeSelection(tags: ReadonlySet<number>) {
       scene.edgeSelections.push([...tags].sort((a, b) => a - b));
     }
+    setMarkers() {}
     resetView() {}
     dispose() {}
   },

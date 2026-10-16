@@ -6,7 +6,9 @@
 // instead, with the element and node counts; faces stay pickable. Given a succeeded run (M1.9),
 // it draws the run's mesh surface coloured in bands of one result quantity, optionally on the
 // deformed shape, with a legend; faces are then not picked. While a local mesh size on edges is
-// open (M2.8), it draws the geometry's edges and a click adds or removes an edge instead.
+// open (M2.8), it draws the geometry's edges and a click adds or removes an edge instead. On
+// results (M3.3) it marks the smallest and largest value of the quantity shown, and a click
+// adds a probe at the nearest surface node, listed with its value and position.
 
 import type { GeometryStatus, GeometryView, MeshView, RunView, TopologyEdge, TopologyFace } from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +18,7 @@ import { fetchRunFields, fetchRunSurface } from "../api/runs";
 import { fromSi } from "../units/convert";
 import { useSystemUnit } from "../units/system";
 import { type DisplayMesh, DisplayMeshError, parseDisplayMesh } from "../viewer/displayMesh";
-import { ModelView } from "../viewer/ModelView";
+import { type Marker, ModelView } from "../viewer/ModelView";
 import {
   autoScale,
   BAND_COLOURS,
@@ -24,6 +26,7 @@ import {
   bandCoordinate,
   bandEdges,
   deformedPositions,
+  extremeVertices,
   QUANTITIES,
   type Quantity,
   type ResultFields,
@@ -106,6 +109,9 @@ function diagonal(positions: Float32Array): number {
 type Contour = {
   mesh: DisplayMesh;
   coordinates: Float32Array;
+  /** The quantity's value at each vertex, in SI. */
+  values: Float32Array;
+  kind: string;
   edges: number[];
   unit: string;
   label: string;
@@ -146,11 +152,71 @@ export function contourOf(
   return {
     mesh: { ...mesh, positions },
     coordinates,
+    values,
+    kind,
     edges: bandEdges(min, max).map((edge) => fromSi(edge, unit, kind)),
     unit,
     label,
     scale,
   };
+}
+
+/** A value of the contour's quantity in its display unit, to four significant figures. */
+function valueText(contour: Contour, vertex: number): string {
+  return `${shortNumber(fromSi(contour.values[vertex] ?? 0, contour.unit, contour.kind))} ${contour.unit}`;
+}
+
+/** The markers on the model: the smallest and largest value of the quantity shown (unless
+ * hidden) and each probe, numbered in the order they were placed (M3.3, ADR-052). */
+export function markersOf(contour: Contour, probes: readonly number[], extremes: boolean): Marker[] {
+  const markers: Marker[] = [];
+  const at = extremeVertices(contour.values);
+  if (extremes && at !== null) {
+    markers.push({ vertex: at.max, kind: "max", text: `Max ${valueText(contour, at.max)}` });
+    markers.push({ vertex: at.min, kind: "min", text: `Min ${valueText(contour, at.min)}` });
+  }
+  probes.forEach((vertex, k) => {
+    markers.push({ vertex, kind: "probe", text: `${k + 1}: ${valueText(contour, vertex)}` });
+  });
+  return markers;
+}
+
+function Probes({
+  contour,
+  probes,
+  positions,
+  lengthUnit,
+  onClear,
+}: {
+  contour: Contour;
+  probes: readonly number[];
+  /** Undeformed vertex positions, in metres. */
+  positions: Float32Array;
+  lengthUnit: string;
+  onClear: () => void;
+}) {
+  const where = (vertex: number) =>
+    [0, 1, 2].map((axis) => shortNumber(fromSi(positions[vertex * 3 + axis] ?? 0, lengthUnit, "length"))).join(", ");
+  return (
+    <section className="viewer-probes" aria-label="Probes">
+      {probes.length === 0 ? (
+        <span className="viewer-hint">Click the model to probe the value at the nearest node.</span>
+      ) : (
+        <>
+          <ol>
+            {probes.map((vertex, k) => (
+              <li key={vertex}>
+                {k + 1}: {valueText(contour, vertex)} at ({where(vertex)}) {lengthUnit}
+              </li>
+            ))}
+          </ol>
+          <button type="button" onClick={onClear}>
+            Clear probes
+          </button>
+        </>
+      )}
+    </section>
+  );
 }
 
 function Legend({ contour }: { contour: Contour }) {
@@ -208,6 +274,9 @@ export function Viewer({
   const [webgl, setWebgl] = useState(true);
   const [load, setLoad] = useState<Load>({ kind: "none" });
   const [hovered, setHovered] = useState<number | null>(null);
+  /** Probed surface vertices of the run shown, in the order they were placed. */
+  const [probes, setProbes] = useState<number[]>([]);
+  const [extremes, setExtremes] = useState(true);
   const areaUnit = useSystemUnit("area");
 
   // The pick handler must see the latest selection without recreating the scene.
@@ -226,6 +295,8 @@ export function Viewer({
           if (now.pickEdges) now.onEdgeSelectionChange(toggleFace(now.edgeSelection, tag));
           else now.onSelectionChange(toggleFace(now.selection, tag));
         },
+        // A second click on a probed node removes its probe.
+        onProbe: (vertex) => setProbes((was) => (was.includes(vertex) ? was.filter((v) => v !== vertex) : [...was, vertex])),
       });
     } catch {
       setWebgl(false);
@@ -246,6 +317,12 @@ export function Viewer({
     ? `${geometry.id}:${geometry.scaling}:${runId !== null ? `run:${runId}` : (analysis?.id ?? "geometry")}`
     : null;
   const id = geometry?.id;
+  // Probes belong to the run they were placed on.
+  const [probedRun, setProbedRun] = useState(runId);
+  if (probedRun !== runId) {
+    setProbedRun(runId);
+    setProbes([]);
+  }
   // The analysis mesh as of the key; read through a ref so its object identity does not reload.
   const analysisNow = useRef(analysis);
   analysisNow.current = analysis;
@@ -306,6 +383,12 @@ export function Viewer({
     }
     framed.current = id;
   }, [model, contour, id]);
+
+  // After setMesh, which clears them.
+  useEffect(() => {
+    if (!model?.results || contour === null || typeof contour === "string") return;
+    view.current?.setMarkers(markersOf(contour, probes, extremes));
+  }, [model, contour, probes, extremes]);
 
   // Edges are drawn over the geometry itself, never over a mesh or results; setMesh clears them.
   const edges = pickEdges && model !== null && model.analysis === null && model.results === null ? model.edges : null;
@@ -386,10 +469,25 @@ export function Viewer({
           )}
           {legend && <Legend contour={legend} />}
           <div className="viewer-toolbar">
+            {legend && (
+              <label>
+                <input type="checkbox" checked={extremes} onChange={(event) => setExtremes(event.target.checked)} />
+                Min and max
+              </label>
+            )}
             <button type="button" onClick={() => view.current?.resetView()}>
               Reset view
             </button>
           </div>
+          {legend && model && (
+            <Probes
+              contour={legend}
+              probes={probes}
+              positions={model.mesh.positions}
+              lengthUnit={units?.length ?? lengthUnit}
+              onClear={() => setProbes([])}
+            />
+          )}
           {!legend && (
             <section className="viewer-selection" aria-label={`Selected ${picking.many}`}>
               {sorted.length === 0 ? (

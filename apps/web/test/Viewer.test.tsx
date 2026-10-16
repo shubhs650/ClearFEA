@@ -5,7 +5,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Deformation, toggleFace, Viewer } from "../src/layout/Viewer";
 import type { DisplayMesh } from "../src/viewer/displayMesh";
-import type { ModelViewEvents } from "../src/viewer/ModelView";
+import type { Marker, ModelViewEvents } from "../src/viewer/ModelView";
 import type { Quantity } from "../src/viewer/resultFields";
 import { readFixture } from "./fixtures";
 import { twoFacesFields } from "./resultFiles";
@@ -20,6 +20,8 @@ type Recorded = {
   /** Each setEdges call: the edge tags drawn, or null for none. */
   edges: (number[] | null)[];
   edgeSelections: number[][];
+  /** Each setMarkers call. */
+  markers: Marker[][];
   disposed: boolean;
 };
 
@@ -30,7 +32,7 @@ vi.mock("../src/viewer/ModelView", () => ({
     record: Recorded;
     constructor(_host: HTMLElement, events: ModelViewEvents) {
       if (scene.failToStart) throw new Error("no WebGL");
-      this.record = { events, meshes: [], bands: [], selections: [], edges: [], edgeSelections: [], disposed: false };
+      this.record = { events, meshes: [], bands: [], selections: [], edges: [], edgeSelections: [], markers: [], disposed: false };
       scene.instances.push(this.record);
     }
     setMesh(mesh: DisplayMesh, _edges?: string, _keep?: boolean, bands?: Float32Array) {
@@ -45,6 +47,9 @@ vi.mock("../src/viewer/ModelView", () => ({
     }
     setEdgeSelection(tags: ReadonlySet<number>) {
       this.record.edgeSelections.push([...tags]);
+    }
+    setMarkers(markers: Marker[]) {
+      this.record.markers.push(markers);
     }
     resetView() {}
     dispose() {
@@ -360,6 +365,53 @@ describe("result view", () => {
     );
     rerender(<ResultHarness quantity="vonMises" deformation="auto" />);
     expect((await screen.findByLabelText("Legend")).textContent).toContain("Von Mises stress (MPa)");
+  });
+
+  it("marks the smallest and largest value of the quantity shown, and hides the marks on request", async () => {
+    serve(results);
+    const { rerender } = render(<ResultHarness quantity="vonMises" deformation="undeformed" />);
+    await screen.findByLabelText("Legend");
+    const view = scene.instances[0];
+    await vi.waitFor(() => expect(view?.markers.at(-1)).toHaveLength(2));
+    expect(view?.markers.at(-1)).toEqual([
+      { vertex: 6, kind: "max", text: "Max 90 MPa" },
+      { vertex: 0, kind: "min", text: "Min 0 MPa" },
+    ]);
+    // τxy falls with the vertex index, so its largest value is at vertex 0.
+    rerender(<ResultHarness quantity="stressXY" deformation="undeformed" />);
+    await vi.waitFor(() => expect(view?.markers.at(-1)?.[0]).toEqual({ vertex: 0, kind: "max", text: "Max 0 MPa" }));
+    expect(view?.markers.at(-1)?.[1]).toEqual({ vertex: 6, kind: "min", text: "Min -6 MPa" });
+    fireEvent.click(screen.getByLabelText("Min and max"));
+    await vi.waitFor(() => expect(view?.markers.at(-1)).toEqual([]));
+  });
+
+  it("probes the node clicked, lists it with its value and position, and clears the probes", async () => {
+    serve(results);
+    const { rerender } = render(<ResultHarness quantity="vonMises" deformation="auto" />);
+    await screen.findByLabelText("Legend");
+    const probes = screen.getByLabelText("Probes");
+    expect(probes.textContent).toBe("Click the model to probe the value at the nearest node.");
+    const view = scene.instances[0];
+    act(() => view?.events.onProbe?.(4));
+    act(() => view?.events.onProbe?.(2));
+    // Vertex v carries v * 15 MPa; the position is the undeformed one, in mm.
+    const where = (v: number) => readPositions().slice(v * 3, v * 3 + 3).map((x) => Number((x * 1000).toPrecision(4)));
+    const rows = () => [...probes.querySelectorAll("li")].map((li) => li.textContent);
+    expect(rows()).toEqual([`1: 60 MPa at (${where(4).join(", ")}) mm`, `2: 30 MPa at (${where(2).join(", ")}) mm`]);
+    await vi.waitFor(() => expect(view?.markers.at(-1)?.slice(2)).toEqual([
+      { vertex: 4, kind: "probe", text: "1: 60 MPa" },
+      { vertex: 2, kind: "probe", text: "2: 30 MPa" },
+    ]));
+    // The probes follow the quantity shown.
+    rerender(<ResultHarness quantity="stressXX" deformation="auto" />);
+    await vi.waitFor(() => expect(rows()[0]).toMatch(/^1: 40 MPa at/));
+    // A second click on a probed node removes its probe; Clear probes removes the rest.
+    act(() => view?.events.onProbe?.(4));
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatch(/^1: 20 MPa at/);
+    fireEvent.click(screen.getByRole("button", { name: "Clear probes" }));
+    expect(probes.textContent).toMatch(/^Click the model to probe/);
+    expect(probes.textContent).not.toMatch(/pass|fail|complian/i);
   });
 
   it("says the run's files do not match when their vertex counts differ", async () => {
