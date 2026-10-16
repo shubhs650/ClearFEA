@@ -65,6 +65,10 @@ class TopologyBody(BaseModel):
         populate_by_name=True,
     )
     tag: int
+    name: Annotated[str | None, Field(min_length=1)] = None
+    """
+    The body's name from the STEP file (its part's name), when the file gives one (M4.1, ADR-058). Absent for geometries imported before M4.1 and for unnamed bodies.
+    """
     volume: float
     """
     Cubic metres.

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import {
+  bodyLabels as labelBodies,
   type GeometryView,
   type IsotropicMaterial,
   type LocalMeshScope,
@@ -17,6 +18,7 @@ import { SimulationTree } from "./layout/SimulationTree";
 import { StatusBar } from "./layout/StatusBar";
 import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
+import { BodiesPanel, BodyPanel } from "./setup/BodyPanels";
 import { GroupPanel, LoadPanel, MaterialPanel, SupportPanel } from "./setup/ItemPanels";
 import { MaterialChooser } from "./setup/MaterialLibrary";
 import { LocalSizePanel, MeshPanel } from "./setup/MeshPanel";
@@ -28,6 +30,7 @@ import {
   addLocalSize,
   addMaterial,
   addSupport,
+  bodyOf,
   facesOf,
   type Group,
   type ItemStatus,
@@ -123,6 +126,11 @@ export function App() {
   // the results on every render.
   const displayUnits = useDisplayUnits(session.kind === "signedIn" ? session.user.id : null, unitSystem);
   const resultUnits = displayUnits.units;
+  // What each body is called (M4.1): its part name from the STEP file, or "Body <tag>".
+  const bodyLabels = useMemo(
+    () => (setup.kind === "open" ? labelBodies(setup.topology) : new Map<number, string>()),
+    [setup],
+  );
   const statuses = useMemo(() => {
     if (setup.kind !== "open") return new Map<string, ItemStatus>();
     const result = setupStatus(setup.spec, setup.topology);
@@ -140,7 +148,7 @@ export function App() {
     if (setup.kind !== "open") return [{ message: "Start the setup first.", item: null }];
     const blockers: RunBlocker[] = preRunProblems(setup.spec, setup.topology).map((problem) => ({
       message: problem.message,
-      item: problem.item === "bodies" ? "materials" : problem.item,
+      item: problem.item,
     }));
     if (simulation.save.kind !== "saved") blockers.push({ message: "Wait until all changes are saved.", item: null });
     // Without a mesh size the pre-run list already asks for one.
@@ -169,11 +177,17 @@ export function App() {
 
   /**
    * Opens a tree item; a support, load or local size on faces also shows its faces as the viewer's
-   * selection, a local size on edges its edges, and one on bodies the faces of its bodies.
+   * selection, a local size on edges its edges, and a body or a local size on bodies the faces of
+   * its bodies.
    */
   function select(id: string) {
     setSelected(id);
     if (spec === null) return;
+    const body = bodyOf(id);
+    if (body !== null && setup.kind === "open") {
+      setSelection(new Set(setup.topology.bodies.find((b) => b.tag === body)?.faces ?? []));
+      return;
+    }
     const local = localSizeOf(spec, id);
     if (local?.scope === "edges") setEdgeSelection(new Set(local.tags));
     else if (local?.scope === "bodies") setSelection(new Set(bodyFaces(local)));
@@ -298,6 +312,26 @@ export function App() {
         />
       );
     }
+    if (selected === "bodies") {
+      return <BodiesPanel spec={spec} labels={bodyLabels} status={status} onChange={change} onOpen={select} />;
+    }
+    const bodyTag = bodyOf(selected);
+    const body = setup.kind === "open" ? setup.topology.bodies.find((b) => b.tag === bodyTag) : undefined;
+    if (body !== undefined && spec.bodies.some((b) => b.tag === body.tag)) {
+      return (
+        <BodyPanel
+          key={selected}
+          spec={spec}
+          tag={body.tag}
+          name={body.name}
+          label={bodyLabels.get(body.tag) ?? `Body ${body.tag}`}
+          faces={body.faces.length}
+          status={status}
+          onChange={change}
+          onOpen={select}
+        />
+      );
+    }
     if (GROUPS.includes(selected)) {
       const group = selected as Group;
       return (
@@ -318,6 +352,7 @@ export function App() {
           status={status}
           onChange={change}
           onSave={materials.save}
+          bodyLabels={bodyLabels}
         />
       );
     }
@@ -376,6 +411,7 @@ export function App() {
         }
         geometry={geometry}
         setup={setup}
+        bodyLabels={bodyLabels}
         statuses={statuses}
         save={simulation.save}
         selected={showGeometry ? "geometry" : selected}

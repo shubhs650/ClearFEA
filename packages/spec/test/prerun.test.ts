@@ -42,12 +42,16 @@ describe("pre-run validation", () => {
   it("names bodies without a material", () => {
     const one = { ...spec(), bodies: [{ tag: 1, material: null }] };
     expect(preRunProblems(one, topology)).toEqual([
-      { item: "bodies", message: "Body 1 has no material. Assign one under Materials." },
+      { item: "bodies", message: "Body 1 has no material. Pick one for it under Bodies." },
     ]);
     const two = { ...spec(), bodies: [{ tag: 1, material: null }, { tag: 2, material: null }] };
     const twoBodies = { ...topology, bodies: [{ tag: 1 }, { tag: 2 }] };
     expect(preRunProblems(two, twoBodies).map((p) => p.message)).toEqual([
-      "Bodies 1, 2 have no material. Assign one under Materials.",
+      "Bodies 1, 2 have no material. Pick one for each under Bodies.",
+    ]);
+    const named = { ...topology, bodies: [{ tag: 1, name: "Base plate" }, { tag: 2 }] };
+    expect(preRunProblems(two, named).map((p) => p.message)).toEqual([
+      'Bodies "Base plate", 2 have no material. Pick one for each under Bodies.',
     ]);
   });
 

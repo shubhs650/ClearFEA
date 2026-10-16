@@ -20,9 +20,28 @@ import { unitsTable } from "./units";
  * known). Edges are absent for geometries imported before M2.8.
  */
 export interface TopologyTags {
-  bodies: readonly { tag: number }[];
+  /** name: the body's part name from the STEP file, when it has one (M4.1, ADR-058). */
+  bodies: readonly { tag: number; name?: string }[];
   faces: readonly { tag: number; type?: string }[];
   edges?: readonly { tag: number }[];
+}
+
+/**
+ * What the setup calls each body (M4.1, ADR-058): its part name from the STEP file, or "Body <tag>"
+ * when the file gives none. A name several bodies share (a part used twice) gets the tag added,
+ * "Bolt (body 3)", so every label is unique.
+ */
+export function bodyLabels(topology: TopologyTags): Map<number, string> {
+  const uses = new Map<string, number>();
+  for (const body of topology.bodies) {
+    if (body.name !== undefined) uses.set(body.name, (uses.get(body.name) ?? 0) + 1);
+  }
+  return new Map(
+    topology.bodies.map((body) => {
+      if (body.name === undefined) return [body.tag, `Body ${body.tag}`];
+      return [body.tag, (uses.get(body.name) ?? 0) > 1 ? `${body.name} (body ${body.tag})` : body.name];
+    }),
+  );
 }
 
 /** The kind of a support as the setup and its messages name it. */

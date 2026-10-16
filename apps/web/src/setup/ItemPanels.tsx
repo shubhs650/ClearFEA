@@ -130,9 +130,12 @@ export function MaterialPanel({
   status,
   onChange,
   onSave,
+  bodyLabels,
 }: {
   spec: SimulationSpec;
   material: IsotropicMaterial;
+  /** What each body is called (M4.1): its part name, or "Body <tag>". */
+  bodyLabels?: ReadonlyMap<number, string>;
   status: ItemStatus | undefined;
   onChange: (spec: SimulationSpec) => void;
   /** Keeps a copy among the user's own materials (M2.9). */
@@ -200,7 +203,7 @@ export function MaterialPanel({
                   onChange(assignMaterial(spec, body.tag, event.target.checked ? material.id : null))
                 }
               />
-              Body {body.tag}
+              {bodyLabels?.get(body.tag) ?? `Body ${body.tag}`}
               {other && otherName !== undefined && <span className="field-hint"> (now {otherName})</span>}
             </label>
           );

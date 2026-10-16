@@ -32,6 +32,10 @@ def _write(path: Path, build: str) -> Path:
             occ.cut([(3, box)], [(3, hole)])
         elif build == "plate_surface":
             occ.addRectangle(0, 0, 0, 100, 50)
+        elif build == "two_blocks":
+            # A 50 x 20 x 20 mm base and a 30 x 20 x 20 mm lug touching it at x = 50 mm.
+            occ.addBox(0, 0, 0, 50, 20, 20)
+            occ.addBox(50, 0, 0, 30, 20, 20)
         else:
             raise ValueError(build)
         occ.synchronize()
@@ -43,6 +47,25 @@ def _write(path: Path, build: str) -> Path:
 
 def block_with_hole(path: Path) -> Path:
     return _write(path, "block_with_hole")
+
+
+def two_blocks(path: Path, names: tuple[str, str, str] | None = None) -> Path:
+    """Two touching blocks as an assembly of two parts (M4.1), not fused.
+
+    OpenCASCADE names its products "Open CASCADE STEP translator 7.8 N" (the assembly), "... N.1"
+    and "... N.2" (the parts), N counting the files written in the process. ``names`` replaces
+    these with an assembly name and two part names, as a CAD system writes them.
+    """
+    _write(path, "two_blocks")
+    if names is not None:
+        text = path.read_text()
+        found = list(dict.fromkeys(re.findall(r"'Open CASCADE STEP translator [0-9.]+ [0-9.]+'", text)))
+        if len(found) != 3:
+            raise ValueError(f"expected three product names, found {found}")
+        for placeholder, name in zip(found, names, strict=True):
+            text = text.replace(placeholder, repr(name))
+        path.write_text(text)
+    return path
 
 
 def plate_surface(path: Path) -> Path:

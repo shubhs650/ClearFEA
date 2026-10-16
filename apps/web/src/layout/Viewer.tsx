@@ -26,6 +26,7 @@ import type {
   ViewCut,
   ViewSettings,
 } from "@clearfea/spec";
+import { bodyLabels as labelBodies } from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchDisplayMesh, fetchTopology } from "../api/geometries";
 import { fetchMeshDisplay } from "../api/meshes";
@@ -98,6 +99,8 @@ type Model = {
   edges: TopologyEdge[] | null;
   /** The geometry's body tags, ascending. */
   bodies: number[];
+  /** What each body is called (M4.1): its part name, or "Body <tag>". */
+  bodyLabels: Map<number, string>;
   analysis: MeshView | null;
   /** The run's result fields when the model is a run's surface. */
   results: ResultFields | null;
@@ -531,10 +534,12 @@ function CutPanel({
  * cannot be hidden, so the model never disappears. */
 function BodiesPanel({
   bodies,
+  labels,
   hidden,
   onChange,
 }: {
   bodies: readonly number[];
+  labels: ReadonlyMap<number, string>;
   hidden: ReadonlySet<number>;
   onChange: (next: Set<number>) => void;
 }) {
@@ -558,7 +563,7 @@ function BodiesPanel({
                     onChange(next);
                   }}
                 />
-                Body {tag}
+                {labels.get(tag) ?? `Body ${tag}`}
               </label>
             </li>
           );
@@ -768,7 +773,12 @@ export function Viewer({
         const faces = new Map(topology.value.faces.map((face) => [face.tag, face]));
         const edges = topology.value.edges ?? null;
         const bodies = topology.value.bodies.map((body) => body.tag).sort((a, b) => a - b);
-        setLoad({ kind: "shown", key, model: { mesh: parsed, faces, edges, bodies, analysis: shownMesh, results } });
+        const bodyLabels = labelBodies(topology.value);
+        setLoad({
+          kind: "shown",
+          key,
+          model: { mesh: parsed, faces, edges, bodies, bodyLabels, analysis: shownMesh, results },
+        });
       } catch (error) {
         if (!(error instanceof DisplayMeshError || error instanceof ResultFieldsError)) throw error;
         setLoad({ kind: "failed", problem: error.message });
@@ -962,7 +972,10 @@ export function Viewer({
     const face = model?.faces.get(tag);
     if (face === undefined) return `Face ${tag}`;
     const area = Number(fromSi(face.area, areaUnit, "area").toPrecision(4));
-    return `Face ${tag}, ${faceTypes[face.type]}, ${area} ${areaUnit}`;
+    const text = `Face ${tag}, ${faceTypes[face.type]}, ${area} ${areaUnit}`;
+    // In an assembly the hover also names the body the face belongs to (M4.1).
+    if (model === null || model.bodies.length < 2) return text;
+    return `${text}, ${face.bodies.map((body) => model.bodyLabels.get(body) ?? `Body ${body}`).join(" and ")}`;
   };
 
   let message: string | null = null;
@@ -1044,7 +1057,7 @@ export function Viewer({
           </div>
           <div className="viewer-panels">
           {panel === "bodies" && bodyList !== null && (
-            <BodiesPanel bodies={bodyList} hidden={hiddenBodies} onChange={setHiddenBodies} />
+            <BodiesPanel bodies={bodyList} labels={model?.bodyLabels ?? new Map()} hidden={hiddenBodies} onChange={setHiddenBodies} />
           )}
           {panel === "views" && simulationId !== null && (
             <ViewsPanel list={views.list} onApply={applyView} onSave={saveView} onDelete={deleteView} />

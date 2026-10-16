@@ -5,6 +5,7 @@
 // in packages/spec (M1.12).
 
 import {
+  bodyLabels,
   displacementAxes,
   hasBodyLoad,
   hasTemperatureChange,
@@ -48,6 +49,20 @@ export interface ItemStatus {
 /** The groups of the setup tree. Items are addressed by their spec id. */
 export type Group = "materials" | "supports" | "loads";
 
+/**
+ * The tree item of a body (M4.1). Bodies are not spec items with ids; a colon cannot appear in a
+ * spec id, so these never clash with one.
+ */
+export function bodyItem(tag: number): string {
+  return `body:${tag}`;
+}
+
+/** The body tag of a tree item from bodyItem, or null. */
+export function bodyOf(item: string): number | null {
+  const match = /^body:(\d+)$/.exec(item);
+  return match ? Number(match[1]) : null;
+}
+
 const rank: Record<Mark, number> = { complete: 0, incomplete: 1, error: 2 };
 
 function worst(statuses: readonly ItemStatus[]): ItemStatus {
@@ -85,17 +100,27 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
     result.set(m.id, s);
     return s;
   });
-  const unassigned = spec.bodies.filter((b) => b.material === null).map((b) => b.tag);
-  const bodies = status(
-    errorsOf("bodies"),
-    [
-      ...(spec.materials.length === 0 ? ["Add a material."] : []),
-      ...(spec.materials.length > 0 && unassigned.length > 0
-        ? [`Assign a material to body ${unassigned.join(", ")}.`]
-        : []),
-    ],
-  );
-  result.set("materials", worst([bodies, ...materials]));
+  // Bodies (M4.1): each body's row is incomplete until it has a material; problems with the body
+  // list (an unknown material, a body listed twice) mark the group.
+  const labels = topology ? bodyLabels(topology) : new Map<number, string>();
+  for (const b of spec.bodies) {
+    const missing =
+      b.material !== null
+        ? []
+        : spec.materials.length === 0
+          ? ["Add a material under Materials, then pick it here."]
+          : ["Pick its material."];
+    result.set(bodyItem(b.tag), status([], missing));
+  }
+  const unassigned = spec.bodies.filter((b) => b.material === null).map((b) => labels.get(b.tag) ?? `Body ${b.tag}`);
+  const bodiesMissing =
+    unassigned.length === 0
+      ? []
+      : spec.materials.length === 0
+        ? ["Add a material under Materials, then pick each body's material here."]
+        : [`Pick a material for ${unassigned.join(", ")}.`];
+  result.set("bodies", status(errorsOf("bodies"), bodiesMissing));
+  result.set("materials", worst([status([], spec.materials.length === 0 ? ["Add a material."] : []), ...materials]));
 
   const supports = spec.supports.map((s) => {
     const missing: string[] = [];
