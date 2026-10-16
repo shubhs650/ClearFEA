@@ -10,7 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from clearfea_worker.deck.applied import applied_nodal_loads, force_loads, load_resultants
+from clearfea_worker.deck.applied import (
+    NO_LOAD,
+    applied_nodal_loads,
+    force_loads,
+    load_resultants,
+)
 from clearfea_worker.deck.common import DeckError
 from clearfea_worker.deck.elements import CCX_NODE_ORDER, FACE_NODES
 from clearfea_worker.deck.loads import (
@@ -435,6 +440,8 @@ def test_pressure_nodal_loads_on_a_flat_face_push_into_the_body(order: int) -> N
     loads = pressure_nodal_loads(mesh, element_face_pressures(spec, mesh))
     force, _ = resultant(mesh, loads, (0.0, 0.0, 0.0))
     assert force == pytest.approx([2e6 * 5e-5, 0.0, 0.0], abs=1e-12)
+    # Its gross size is p A too: every nodal force points the same way.
+    assert load_resultants(spec, mesh)[0].gross == pytest.approx(100.0, rel=1e-12)
     # A flat six-node triangle's corners carry nothing, its mid-edge nodes a third each.
     corners = {0, 2, 3}
     for node, f in loads.items():
@@ -504,13 +511,14 @@ def test_load_totals_are_their_nodal_loads_added_up(mesh: VolumeMesh) -> None:
     omega2 = (3000 * 2 * math.pi / 60) ** 2
     turning = BodyLoad((0.0, 0.0, 0.0), omega2, (0.002, -0.001, 0.0), (0.6, 0.0, 0.8))
     expected.append(resultant(mesh, body_nodal_forces(mesh, rho, turning), origin))
-    for (f, m), (ef, em) in zip(totals, expected, strict=True):
+    for total, (ef, em) in zip(totals, expected, strict=True):
+        f, m = total.force, total.moment
         size = max(map(abs, ef), default=0.0) + 1e-30
         assert list(f) == pytest.approx(ef, abs=1e-12 * size)
         assert list(m) == pytest.approx(em, abs=1e-12 * size)
     # A force adds up to itself; a remote load has its moment about the origin, M + P × F.
-    assert list(totals[1][0]) == pytest.approx([1.0, 2.0, 3.0], abs=1e-12)
-    assert list(totals[2][1]) == pytest.approx([1.0, 2.0 + 0.04, 3.0], abs=1e-12)
+    assert list(totals[1].force) == pytest.approx([1.0, 2.0, 3.0], abs=1e-12)
+    assert list(totals[2].moment) == pytest.approx([1.0, 2.0 + 0.04, 3.0], abs=1e-12)
 
 
 def test_a_temperature_change_has_no_load_total() -> None:
@@ -520,4 +528,4 @@ def test_a_temperature_change_has_no_load_total() -> None:
             {"id": "t", "type": "temperature", "name": "T", "change": {"value": 50, "unit": "K"}}
         ]
     )
-    assert load_resultants(spec, mesh) == [((0.0, 0.0, 0.0), (0.0, 0.0, 0.0))]
+    assert load_resultants(spec, mesh) == [NO_LOAD]

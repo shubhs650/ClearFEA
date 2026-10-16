@@ -240,16 +240,18 @@ def body_nodal_forces(
 
 def body_load_resultant(
     mesh: VolumeMesh, density: dict[int, float], load: BodyLoad
-) -> tuple[Vector, Vector]:
+) -> tuple[Vector, Vector, float]:
     """Total force (N) and its moment about the origin (N·m) of ``load``: the sum of
     body_nodal_forces and of their moments, integrated directly (the shape functions add up
-    to one and interpolate the position, so the two are the same, with less work)."""
+    to one and interpolate the position, so the two are the same, with less work); and its
+    gross size, the sum of the sizes of the integration points' forces (N)."""
     npe = NODES_PER_ELEMENT[mesh.order]
     order = CCX_NODE_ORDER[mesh.order]
     rule = [(w, *shape(mesh.order, r, s, t)) for r, s, t, w in RULES[mesh.order]]
     p = mesh.positions
     force = [0.0, 0.0, 0.0]
     moment = [0.0, 0.0, 0.0]
+    gross = 0.0
     for tag, (first, count) in sorted(mesh.bodies.items()):
         rho = density.get(tag, 0.0)
         if rho == 0.0:
@@ -271,9 +273,10 @@ def body_load_resultant(
                 a = load.acceleration((x[0], x[1], x[2]))
                 scale = rho * weight * abs(det)
                 f = (scale * a[0], scale * a[1], scale * a[2])
+                gross += norm(f)
                 for i in range(3):
                     force[i] += f[i]
                 moment[0] += x[1] * f[2] - x[2] * f[1]
                 moment[1] += x[2] * f[0] - x[0] * f[2]
                 moment[2] += x[0] * f[1] - x[1] * f[0]
-    return (force[0], force[1], force[2]), (moment[0], moment[1], moment[2])
+    return (force[0], force[1], force[2]), (moment[0], moment[1], moment[2]), gross

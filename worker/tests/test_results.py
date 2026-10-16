@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from clearfea_worker.deck.applied import applied_nodal_loads
+from clearfea_worker.deck.applied import NO_LOAD, Resultant, applied_nodal_loads, load_resultants
 from clearfea_worker.deck.elements import FACE_NODES
 from clearfea_worker.results import (
     DatError,
@@ -146,7 +146,10 @@ def test_summary_names_the_extremes_and_the_reaction_of_each_support() -> None:
     balance = result.balance
     assert balance is not None
     assert balance.force_ratio < 1e-6 and balance.moment_ratio < 1e-6
-    assert balance.force_scale == pytest.approx(math.hypot(100.0, 50.0), rel=1e-6)
+    # Measured against the pressures' gross size, the sum of their nodal forces' sizes, which
+    # is more than the 111.8 N they add up to since the pressed faces lean different ways.
+    (gross,) = [total.gross for total in load_resultants(spec, mesh)]
+    assert balance.force_scale == gross > math.hypot(100.0, 50.0)
     assert result.nodes == 14
     assert result.software.calculix == "2.21"
 
@@ -353,10 +356,21 @@ def test_balance_without_applied_load_measures_reactions_against_each_other() ->
         Reaction((-5.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
         Reaction((5.0, 0.0, 0.001), (0.0, 0.0, 0.0), (0.01, 0.0, 0.0), (0.0, -1e-5, 0.0)),
     ]
-    got = balance(mesh, [((0.0, 0.0, 0.0), (0.0, 0.0, 0.0))], ends)
+    got = balance(mesh, [NO_LOAD], ends)
     assert got["forceScale"] == pytest.approx(10.0, rel=1e-6)
     assert got["forceRatio"] == pytest.approx(0.001 / got["forceScale"], rel=1e-9)
     # The moment is measured against the force times the mesh's diagonal (10 mm cube).
     assert got["momentScale"] == pytest.approx(got["forceScale"] * math.sqrt(3) * 0.01, rel=1e-9)
     assert got["momentRatio"] == pytest.approx(1e-5 / got["momentScale"], rel=1e-9)
     assert balance(mesh, [], [])["forceRatio"] == 0.0
+
+
+def test_balance_of_a_load_that_cancels_itself_is_measured_against_its_gross_size() -> None:
+    # A pressure all round a bore adds up to nothing, and so do the reactions; their tiny
+    # rounding must be measured against the pressure's size, not against itself (V-01).
+    mesh = two_tets(order=1)
+    bore = Resultant((1e-10, 0.0, 0.0), (0.0, 0.0, 0.0), 7.5e5)
+    end = [Reaction((-4e-4, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))]
+    got = balance(mesh, [bore], end)
+    assert got["forceScale"] == 7.5e5
+    assert got["forceRatio"] == pytest.approx(4e-4 / 7.5e5, rel=1e-6)

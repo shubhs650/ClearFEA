@@ -10,6 +10,7 @@ whole mesh, give each load's total force and moment for the balance check (M3.2,
 """
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from ..meshing.volume import VolumeMesh
 from ..spec.simulation_schema import (
@@ -22,7 +23,7 @@ from ..spec.simulation_schema import (
     SimulationSpec,
 )
 from .common import si
-from .linalg import Vector, cross
+from .linalg import Vector, cross, norm
 from .loads import (
     BodyLoad,
     body_load,
@@ -90,26 +91,40 @@ def applied_nodal_loads(
     return {n: (f[0], f[1], f[2]) for n, f in sorted(out.items())}
 
 
-Resultant = tuple[Vector, Vector]
+@dataclass(frozen=True)
+class Resultant:
+    """A load's total force (N), its moment about the origin (N·m), and its gross size (N):
+    the sum of the sizes of its nodal forces (of its integration points' forces for a body
+    load), which stays the load's size when the load cancels itself, as a pressure all
+    round a bore does."""
+
+    force: Vector
+    moment: Vector
+    gross: float
+
+
+NO_LOAD = Resultant((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), 0.0)
 
 
 def _nodal_resultant(mesh: VolumeMesh, loads: dict[int, Vector]) -> Resultant:
-    """The total of nodal forces (N) and their moment about the origin (N·m)."""
+    """The total of nodal forces, their moment about the origin and their gross size."""
     force = [0.0, 0.0, 0.0]
     moment = [0.0, 0.0, 0.0]
+    gross = 0.0
     p = mesh.positions
     for node, f in loads.items():
         m = cross((p[3 * node], p[3 * node + 1], p[3 * node + 2]), f)
         for i in range(3):
             force[i] += f[i]
             moment[i] += m[i]
-    return (force[0], force[1], force[2]), (moment[0], moment[1], moment[2])
+        gross += norm(f)
+    return Resultant((force[0], force[1], force[2]), (moment[0], moment[1], moment[2]), gross)
 
 
 def load_resultants(spec: SimulationSpec, mesh: VolumeMesh) -> list[Resultant]:
-    """Each load's total force (N) and its moment about the origin (N·m), in spec order, as
-    the solver applies it: the nodal loads above added up over the mesh. A temperature change
-    applies none. DeckError when a load lacks a value."""
+    """Each load's total force (N), its moment about the origin (N·m) and its gross size, in
+    spec order, as the solver applies it: the nodal loads above added up over the mesh. A
+    temperature change applies none. DeckError when a load lacks a value."""
     out: list[Resultant] = []
     rho: dict[int, float] | None = None
     for load in spec.loads:
@@ -133,7 +148,7 @@ def load_resultants(spec: SimulationSpec, mesh: VolumeMesh) -> list[Resultant]:
                 field = BodyLoad((0.0, 0.0, 0.0), r.omega**2, r.point, r.axis)
             if rho is None:
                 rho = densities(spec, mesh)
-            out.append(body_load_resultant(mesh, rho, field))
+            out.append(Resultant(*body_load_resultant(mesh, rho, field)))
         else:
-            out.append(((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)))
+            out.append(NO_LOAD)
     return out

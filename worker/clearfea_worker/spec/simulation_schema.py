@@ -698,7 +698,7 @@ class LoadTotal(BaseModel):
 
 class BalanceCheck(BaseModel):
     """
-    Applied loads against reactions, both about the origin (ADR-051). The imbalance is applied plus reactions; forceRatio is its size over forceScale, the larger of the applied force's size and the sum of the reactions' sizes, and momentRatio its moment's size over momentScale, the largest of the applied moment's size, the sum of the reactions' moment sizes about the origin and forceScale times the mesh's bounding-box diagonal. Numbers only; no verdict.
+    Applied loads against reactions, both about the origin (ADR-051). The imbalance is applied plus reactions; forceRatio is its size over forceScale, the larger of the loads' gross size (the sum of the sizes of their nodal forces, so a load that cancels itself is still measured against its size) and the sum of the reactions' sizes, and momentRatio its moment's size over momentScale, the largest of the applied moment's size, the sum of the reactions' moment sizes about the origin and forceScale times the mesh's bounding-box diagonal. Numbers only; no verdict.
     """
 
     model_config = ConfigDict(

@@ -62,17 +62,19 @@ def balance(
 ) -> dict[str, object]:
     """The balance check (ADR-051): applied loads against reactions, both about the origin.
 
-    The imbalance is measured against the larger of the applied force and the sum of the
-    reactions' sizes (a temperature change or a prescribed displacement applies no load, and
-    its reactions must balance each other, as in the verification harness, ADR-039), and its
-    moment also against that force times the model's size, so a load through the origin does
-    not leave the moment measured against nothing.
+    The imbalance is measured against the larger of the loads' gross size (the sum of the
+    sizes of their nodal forces, so a load that cancels itself, like a pressure all round a
+    bore, is still measured against its own size) and the sum of the reactions' sizes (a
+    temperature change or a prescribed displacement applies no load, and its reactions must
+    balance each other, as in the verification harness, ADR-039); its moment also against
+    that force times the model's size, so a load through the origin does not leave the
+    moment measured against nothing.
     """
-    applied_f = [sum(f[i] for f, _ in loads) for i in range(3)]
-    applied_m = [sum(m[i] for _, m in loads) for i in range(3)]
+    applied_f = [sum(load.force[i] for load in loads) for i in range(3)]
+    applied_m = [sum(load.moment[i] for load in loads) for i in range(3)]
     reaction_f = [sum(r.force[i] for r in reactions) for i in range(3)]
     reaction_m = [sum(r.origin_moment[i] for r in reactions) for i in range(3)]
-    force_scale = max(norm(applied_f), sum(norm(r.force) for r in reactions))
+    force_scale = max(sum(load.gross for load in loads), sum(norm(r.force) for r in reactions))
     moment_scale = max(
         norm(applied_m),
         sum(norm(r.origin_moment) for r in reactions),
@@ -121,8 +123,8 @@ def summarize(
                 for support, r in zip(spec.supports, reactions, strict=True)
             ],
             "loads": [
-                {"loadId": load.id, "force": list(f), "moment": list(m)}
-                for load, (f, m) in zip(spec.loads, loads, strict=True)
+                {"loadId": load.id, "force": list(total.force), "moment": list(total.moment)}
+                for load, total in zip(spec.loads, loads, strict=True)
             ],
             "balance": balance(mesh, loads, reactions),
             "software": {"calculix": calculix},
