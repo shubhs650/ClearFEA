@@ -4,7 +4,7 @@
 // them with a run's results and, from M7, the report prints them.
 
 import table from "../report-notes.json";
-import { type ReportNote, type ReportNotes, validateReportNotes } from "./generated/report-notes";
+import { type ReportNote, type ReportNoteCondition, type ReportNotes, validateReportNotes } from "./generated/report-notes";
 import type { SimulationSpec } from "./generated/simulation";
 import { bondIsTied } from "./simulation";
 
@@ -31,12 +31,12 @@ export function hasTiedBonds(spec: SimulationSpec): boolean {
   return (spec.bonds ?? []).some((bond) => bondIsTied(bond.status));
 }
 
+/** Whether a run with this frozen setup meets each condition a note can have. */
+const CONDITIONS: Record<ReportNoteCondition, (spec: SimulationSpec) => boolean> = {
+  tiedBonds: hasTiedBonds,
+};
+
 /** The notes a run with this frozen setup carries, in the order a report prints them. */
 export function runReportNotes(spec: SimulationSpec, notes: ReportNotes = reportNotes): ReportNote[] {
-  return notes.notes.filter((note) => {
-    switch (note.appliesWhen) {
-      case "tiedBonds":
-        return hasTiedBonds(spec);
-    }
-  });
+  return notes.notes.filter((note) => CONDITIONS[note.appliesWhen](spec));
 }
