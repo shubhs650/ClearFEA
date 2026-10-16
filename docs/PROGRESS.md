@@ -68,7 +68,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M2.8 Local mesh sizes on faces, edges and bodies; element order choice; quality summary
 - [x] M2.9 Material library (generic values with sources), custom materials saved per user
 - [x] M2.10 Mesh reuse across runs by settings hash
-- [x] M2.11 Benchmark: solver build (PaStiX measured in a follow-up PR; adopting it and the 2M target await the maintainer, ADR-048 item 7)
+- [x] M2.11 Benchmark: solver build (PaStiX measured in a follow-up PR; adopted as the default and the 2M target dropped for 16 GB limits per solver, ADR-063)
 - [x] M2.12 Estimator v1 fitted from the benchmark data; estimate shown before run; machine size recommendation
 
 ### M3 Results tools
@@ -105,14 +105,16 @@ Things only the maintainer can do.
 | Tier | Last run | Result |
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
-| Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 146 of 146 checks (M3.5) |
+| Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 15 cases, 169 of 169 checks with PaStiX as the default solver (ADR-063) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4) |
-| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step, the M3.5 safety factor step and the M3.6 saved view step |
+| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step, the M3.5 safety factor step and the M3.6 saved view step and the ADR-063 solver choice step |
 | Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main 6e722e0, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547); closed M4) | Green: full tier 169 of 169 checks in all 15 cases (V-01 to V-12, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> ADR-063 (2026-10-16): PaStiX is the default equation solver, with SPOOLES, iterative Cholesky and iterative scaling as user options, and runs are limited per solver and element order to what a 16 GB machine solves; the 2-million-element target is dropped (Shubham's decision before M4; ADR-063, pending his review of the details). Physics-critical module touched: the deck generator (every deck names its solver, deck format 4). `worker/ccx/build.sh` builds CalculiX 2.21 with a 32-bit PaStiX4CalculiX into the worker image (about 2.1 GB now). The worker sets `OMP_NUM_THREADS=1` as well as one solver thread: unset, OpenMP spun against PaStiX and cost 8 to 14 s a run. Limits on 16 GiB (10-node / 4-node elements): PaStiX 142,000 / 1,103,000; SPOOLES 161,000 / 461,000; both iterative 461,000 / 461,000 (capped at the largest mesh measured, as Shubham asked to stop the benchmark at 500,000 elements). `elementLimitProblem` in `packages/spec` refuses over-limit meshes in the setup and the API (409). The Run panel has an "Equation solver" list with each limit; picking an iterative solver shows an accuracy note, also in the run record and under results (Shubham chose "offer with warning"). `estimator.json` is version 2 with a law per solver. Runs made before keep `spooles` (their frozen spec has no solver). Surprising: the iterative solvers stop at a residual of 1e-4 fixed in ccx's source and miss 0.1% checks (iterative Cholesky 130 of 146, iterative scaling 139 of 146, worst 0.45%). Next: larger machines need a 64-bit PaStiX build (`Makefile_i8`) and their own benchmark, ADR-063 item 10.
 
 > M4 close (2026-10-16): M4 closed on a green manual phase-end run on main (see the Milestones table), after PR #59 fixed E-01's one-body check that M4.1's tree row had broken. The M4 exit (a three-body shell, nozzle and pad model runs with balanced reactions) was checked locally through `make verify` as a scratch case; its files and result table are in the project's `m4-close/` folder, not the repository. Next is M5 in PLAN.md order, which waits for the maintainer's go. Still waiting on the maintainer: review of ADR-058 to ADR-062 (M4, accepted under the autodrive). E-03 (multi-body upload, bonds, run; listed for M4 in VERIFICATION.md) is not written; E-01 is still one body.
 
@@ -233,9 +235,9 @@ Written by the last session for the next one. Replace, do not append.
 Ideas that came up during work and are outside the current milestone. Do not build these without a decision.
 
 - A user-set bond tolerance (ADR-059 item 3): the tolerance is fixed at 1e-4 of the model size; another would need a detection job run on request.
-- Shrink the worker image (about 990 MB): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use.
+- Shrink the worker image (about 2.1 GB since ADR-063): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use, and PaStiX needs the CUDA runtime libraries (no GPU is used).
 - A rigid (kinematic) option for remote loads, which keeps the loaded faces' shape (ADR-041 item 2), and drawing a remote load's reference point in the viewer. Needs the maintainer's decision on the option.
-- Adopt PaStiX as the production solver (Shubham chose "adopt later", 2026-10-15, ADR-048 item 7): its own task after M2, a 64-bit-integer PaStiX4CalculiX build in the worker image (CUDA runtime libraries included) as a pinned version bump with a full verification run. Build recipe in `worker/benchmarks/solver/README.md`. 4 to 6 times faster than SPOOLES, no larger models.
+- A 64-bit-integer PaStiX build and per-size limits for machines above 16 GB (ADR-063 item 10), when larger machines are benchmarked.
 
 ## Log
 
@@ -243,6 +245,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- ADR-063: PaStiX built into the worker image and made the default solver, SPOOLES and both iterative solvers offered with an accuracy note on the iterative ones, all four benchmarked to 500,000 elements and runs limited per solver and element order on 16 GB; the 2-million-element target dropped. `make verify` with PaStiX 169 of 169 checks in all 15 cases (coarse), `make e2e` E-01 green with a solver step. Learned: OpenMP left unset spins a thread per core against PaStiX's own.
 - M4 closed: phase-end workflow run by hand on main 6e722e0 ([run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) green, `make verify` full tier 169 of 169 checks in all 15 cases and `make e2e` E-01. Next: M5, waiting on the maintainer's go.
 - M4 close, part 1: the first phase-end run on main b4280bf ([run 38889867749](https://github.com/shubhs650/ClearFEA/actions/runs/38889867749)) failed in `make e2e`: E-01's M3.6 step expected no button named "Bodies…" on a one-body model, and M4.1's Bodies row in the simulation tree is one. The step now looks only in the 3D viewer, the check it meant. M4's exit (a three-body shell, nozzle and pad model runs with balanced reactions) was run locally through `make verify` as a scratch case, not committed: 65,881 elements, reactions balance the applied load to 0.0014 %, the run's own balance check to 1.2e-7 %, membrane stress away from the nozzle 48.48 MPa against Lamé's 48.51 MPa. Next: re-run the phase-end workflow on main.
 - M4.5: the report's note on stress accuracy near bonded faces is stored in `packages/spec/report-notes.json` and shown under the results of runs that tied bonds (ADR-062). Learned: the no-verdict test caught "pass through" in the first draft, so notes avoid the word in any sense.
