@@ -34,7 +34,8 @@ Version 1 holds, in this order:
 | `safetyFactor` | `ratio` | 1 | safety factor against yield: the yield strength of the node's material over its von Mises stress, at most 15 (15 where there is no stress); only when every material of the setup has a yield strength (ADR-054) | M3.5 |
 | `temperature` | `temperature` | 1 | nodal temperature, absolute, in kelvin; a field of a steady-state thermal and a thermal stress run (ADR-064, ADR-067) | M5.1 |
 | `heatFlux` | `heatFlux` | 3 | heat flux q = −k grad T, x, y, z, in W/m², extrapolated to the nodes and averaged by CalculiX like the stress; a field of a steady-state thermal and a thermal stress run (ADR-066, ADR-067) | M5.3 |
+| `mode1`, `mode2`, … | `ratio` | 3 | a modal run's shape of each mode, mode 1 first, one field per mode: x, y, z displacement scaled so the largest over the mesh is 1, and signed so the largest component of the node that moves most is positive (ADR-071) | M6.2 |
 
-A steady-state thermal run (M5.1) has `temperature` and, since M5.3, `heatFlux`, and none of the structural fields. A thermal stress run (M5.4) has the structural fields, then `temperature` and `heatFlux` (ADR-067). Runs solved before M3.1 have only `displacement` and `vonMises`; the viewer says so when asked for another quantity (ADR-050).
+A modal run (M6.2) has its `mode<N>` fields only, one per mode it found; one solved under M6.1 has none. A steady-state thermal run (M5.1) has `temperature` and, since M5.3, `heatFlux`, and none of the structural fields. A thermal stress run (M5.4) has the structural fields, then `temperature` and `heatFlux` (ADR-067). Runs solved before M3.1 have only `displacement` and `vonMises`; the viewer says so when asked for another quantity (ADR-050).
 
 Readers find fields by name, so a later version may add fields (principal stresses, temperature) to the table without changing the layout. A change to the layout bumps the version, and readers refuse versions they do not know.

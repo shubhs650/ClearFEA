@@ -67,7 +67,7 @@ Stress is checked away from supports and load application points unless the case
 | V-17 | Slab with internal heat generation | Centre temperature rise q‴L²/2k | M5 |
 | V-18 | Thick cylinder, radial temperature gradient | Closed-form thermal stress (Timoshenko and Goodier) | M5 |
 | V-19 | Wall with temperature-dependent conductivity, elasticity and expansion, held sideways between frictionless walls (M5.5) | Flux from conductivity at mean temperature (linear k(T)) and the exact profile; sideways stress −E(T) ε(T)/(1 − ν(T)) from mean expansion coefficients with their own reference temperature; growth of the free face | M5 |
-| V-20 | Cantilever beam frequencies | Euler-Bernoulli, first three bending modes in the stiff direction and first two in the other (800 × 16 × 8 mm steel bar, M6.1) | M6 |
+| V-20 | Cantilever beam frequencies | Euler-Bernoulli, first three bending modes in the stiff direction and first two in the other (800 × 16 × 8 mm steel bar, M6.1), and three mode shapes at mid-span (M6.2) | M6 |
 | V-21 | Fixed-fixed beam frequencies | Euler-Bernoulli, first two bending modes in one direction and the first in the other (the same bar, both ends fixed, M6.1) | M6 |
 | V-22 | Unrestrained body | Six rigid-body modes near zero (within 0.1 % of mode 7), first two elastic modes against the free-free beam (the same bar, no supports, SPOOLES, M6.1) | M6 |
 | V-23 | NAFEMS LE10, thick plate under pressure | Published target stress at point D; take the value from the NAFEMS document when implementing | M3 |
@@ -105,7 +105,8 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Internal heat generation | V-17 |
 | Thermal stress | V-18 |
 | Temperature-dependent properties | V-19 (conductivity, Young's modulus, Poisson's ratio and expansion tables, M5.5); `worker/spikes/heat_check` checks a conductivity table at every node |
-| Modal | V-20, V-21, V-22 (M6.1; frequencies only, mode shapes with M6.2); `worker/spikes/modal_check` solves the same three bars at 4 mm and 2 mm |
+| Modal | V-20, V-21, V-22 (M6.1); `worker/spikes/modal_check` solves the same three bars at 4 mm and 2 mm |
+| Mode shapes | V-20 (M6.2: first and second bending modes at mid-span, scaled and signed as ADR-071 says); `worker/spikes/modal_check` checks the same three |
 | Modal with no support (rigid-body modes) | V-22 |
 | Heat flux results | V-13, V-15, V-16, V-17 (heat flux along the wall, M5.3) |
 | Heat flows and heat balance check | V-13, V-15, V-16, V-17 (each load's heat flow), V-18; the run's own heat balance on every thermal case (M5.3) |
