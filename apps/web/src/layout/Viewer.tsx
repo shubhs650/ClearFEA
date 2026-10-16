@@ -883,7 +883,15 @@ export function Viewer({
   }, [model, contour, probes, extremes]);
 
   // Edges are drawn over the geometry itself, never over a mesh or results; setMesh clears them.
-  const edges = pickEdges && model !== null && model.analysis === null && model.results === null ? model.edges : null;
+  // Edges of hidden bodies only are left out with them (M3.6).
+  const allEdges = pickEdges && model !== null && model.analysis === null && model.results === null ? model.edges : null;
+  const edges = useMemo(
+    () =>
+      allEdges === null || hiddenFaces.size === 0
+        ? allEdges
+        : allEdges.filter((edge) => !edge.faces.every((face) => hiddenFaces.has(face))),
+    [allEdges, hiddenFaces],
+  );
   useEffect(() => {
     if (!model) return;
     view.current?.setEdges(edges);

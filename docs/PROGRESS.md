@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M3 Results tools (M2 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M3.6
+- **Next task:** M3.7
 - **Blocked on:** nothing
 
 ## Milestones
@@ -78,7 +78,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M3.3 Min/max markers and probe at a picked point
 - [x] M3.4 Cut planes. Settle the large-model approach by measurement and record an ADR
 - [x] M3.5 Safety factor against yield
-- [ ] M3.6 Hide/show bodies; saved views
+- [x] M3.6 Hide/show bodies; saved views
 - [ ] M3.7 Display-unit switching for results without rerun
 - [ ] M3.8 CSV and VTK export
 
@@ -99,12 +99,14 @@ Things only the maintainer can do.
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 146 of 146 checks (M3.5) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4) |
-| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step and the M3.5 safety factor step |
+| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step, the M3.5 safety factor step and the M3.6 saved view step |
 | Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main b355155, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635); closed M2) | Green: full tier 116 of 116 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M3.6 (2026-10-16): hide/show bodies and saved views (ADR-055, accepted under Shubham's standing M3 instruction, pending his review). Display only; no physics-critical module touched. Viewer: a "Bodies" toolbar button (only for more than one body) with a checkbox per body and "Show all"; the last body shown cannot be hidden. A face is hidden when all its bodies are (topology.json), works on geometry, mesh and results; `ModelView.setHiddenFaces` discards them in the shader (`shown` attribute), drops their outlines, skips them in picking and probing, and "Reset view" frames what is shown. On results the legend and min/max span the bodies shown, and a cut plane leaves hidden bodies out (`cutMesh` reads `mesh.bin`'s body runs). Saved views: `view.schema.json` (also now the single list of `ResultQuantity` and `Deformation`), migration 0014 `views` (unique name per simulation; saving a name again replaces it), `GET/POST /api/simulations/:id/views`, `DELETE /api/simulations/:id/views/:viewId`. A "Views" toolbar button lists them (loaded when opened), saves camera position and target, hidden bodies and, on results, quantity, deformation, markers and cut plane; clicking one brings it back (the result part only on results). Probes are not kept. E-01 saves a view on a cut σ1 result and brings it back. For M7: the report picks from these views. Screenshots in the project's `m3.6/` folder. Next: M3.7.
 
 > M3.5 (2026-10-16): safety factor against yield (ADR-054, accepted under Shubham's standing M3 instruction, pending his review). Materials gain an optional `yieldStrength` (pressure); the deck ignores it. The worker (`results/safety.py`, physics-critical) writes field `safetyFactor` (kind `ratio`, new in `units.json` v4, shown without a unit) = Sy / σvm per node, capped at 15 (also where σvm = 0), smallest yield at nodes shared by bodies; only when every body's material has a yield strength. `SolveResult.safetyFactor.min` is the whole-mesh smallest; the job now dumps the summary with `exclude_none` (a null there made the API refuse every run without yield in the first `make verify`). Viewer: "Safety factor" group, bands reversed (smallest red), legend notes the cap; Run panel shows the smallest or says to enter yield strengths and run again. Library: each of the 24 metals has MIL-HDBK-5G's Fty for one named product/temper/thickness (A basis where printed, else S, smaller of L and LT), stated in its `source`; read from the scans (pages re-rendered with `pdftoppm` from archive.org's DTIC_ADA295150/ADA322636 PDFs). V-24 checks 36/14.5; E-01 enters 250 MPa and compares the min marker with 250 / max von Mises. Open for Shubham: the temper picked per library entry (ADR-054 item 7). Screenshot and verify table in the project's `m3.5/` folder. Next: M3.6.
 
@@ -214,6 +216,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M3.6: hide/show bodies and saved views of a simulation (ADR-055). Learned: Playwright's role name match is a substring, so a "Delete the view X" button also matches X unless `exact: true`; the host needs Gmsh's system libraries (`apt-get install libglu1-mesa` and friends) before `make test`'s pytest passes.
 - M3.5: safety factor against yield, yield strengths in materials and the library (ADR-054). Learned: pydantic dumps an absent optional field as null, which the API's schema refuses; the scanned handbook tables are readable at 130 to 300 dpi but the OCR text is not trustworthy for numbers.
 - M3.4: cut planes in the result view, cut in the browser at every model size (ADR-053). Learned: a 2-million-element mesh cuts in about a quarter of a second in V8; the download (about 150 MB), not the cut, is what grows, so values are served a field at a time.
 - M3.3: min/max markers and node probes in the result view (ADR-052). Learned: nothing surprising; the markers stay a pure view of `fields.bin`.

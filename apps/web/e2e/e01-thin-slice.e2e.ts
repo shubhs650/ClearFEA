@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // E-01 (docs/VERIFICATION.md): upload, select faces, material, support, pressure, mesh, run, see
 // the contour and switch to other result quantities (M3.1), read reactions (M3.2), and read the
-// min/max markers and probe a node (M3.3), cut it with a plane (M3.4) and show the safety factor against
-// yield (M3.5), all through the UI. The model is a
+// min/max markers and probe a node (M3.3), cut it with a plane (M3.4), show the safety factor against
+// yield (M3.5) and save a view and bring it back (M3.6), all through the UI. The model is a
 // 40 × 20 × 10 mm block (e2e/block.py), fixed at its x = 40 mm end and pressed on its top face,
 // z = 10 mm. Both faces look towards the viewer's starting camera, so they can be clicked
 // without turning the model.
@@ -246,5 +246,40 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await expect(results).toContainText(/Smallest safety factor against yield[\d.]+ at \(.*\) mm/);
     await expect(page.locator("body")).not.toContainText(/\b(PASS|FAIL)\b|compliant/i);
     await page.screenshot({ path: `${OUT}/e01-safety.png` });
+  });
+
+  await test.step("save a view and bring it back (M3.6)", async () => {
+    // One body: nothing to hide.
+    await expect(page.getByRole("button", { name: /^Bodies/ })).toHaveCount(0);
+    const quantity = settings.getByLabel("Quantity");
+    const legend = page.getByRole("region", { name: "Legend", exact: true });
+    await quantity.selectOption("principal1");
+    await page.getByRole("checkbox", { name: "Cut plane", exact: true }).check();
+    const cut = page.getByRole("region", { name: "Cut plane", exact: true });
+    await expect(cut).toContainText(/Cuts [\d,]+ elements\./, { timeout: 60_000 });
+    await page.getByRole("button", { name: "Views", exact: true }).click();
+    const views = page.getByRole("region", { name: "Saved views", exact: true });
+    await expect(views).toContainText("No saved views yet.");
+    await views.getByLabel("View name").fill("σ1 cut at mid-length");
+    await views.getByRole("button", { name: "Save view" }).click();
+    await expect(views).toContainText('Saved the view "σ1 cut at mid-length".');
+    // Kept by the API, so it is there for the report and after a reload.
+    const list = await page.request.get("/api/simulations");
+    const { simulations } = (await list.json()) as { simulations: { id: string }[] };
+    const stored = await page.request.get(`/api/simulations/${simulations[0]?.id}/views`);
+    expect(((await stored.json()) as { views: { name: string }[] }).views.map((v) => v.name)).toEqual([
+      "σ1 cut at mid-length",
+    ]);
+
+    await page.getByRole("checkbox", { name: "Cut plane", exact: true }).uncheck();
+    await quantity.selectOption("displacement");
+    await page.getByRole("button", { name: "Reset view" }).click();
+    await expect(legend).toContainText("Displacement magnitude (mm)");
+    await views.getByRole("button", { name: "σ1 cut at mid-length", exact: true }).click();
+    await expect(legend).toContainText("Maximum principal stress σ1 (MPa)");
+    await expect(quantity).toHaveValue("principal1");
+    await expect(page.getByRole("checkbox", { name: "Cut plane", exact: true })).toBeChecked();
+    await expect(cut).toContainText("x = 20 mm");
+    await page.screenshot({ path: `${OUT}/e01-view.png` });
   });
 });
