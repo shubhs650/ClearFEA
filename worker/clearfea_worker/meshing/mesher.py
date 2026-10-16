@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 REIMPORT_TOLERANCE = 1e-9
 
 #: The most tetrahedra the mesher makes. What a run may solve is less, per solver and element
-#: order (packages/spec/estimator.json, ADR-058); the 2-million-element design target is dropped.
+#: order (packages/spec/estimator.json, ADR-063); the 2-million-element design target is dropped.
 MAX_ELEMENTS = 2_000_000
 
 #: Gmsh fills a body with about 4.5 tetrahedra per size**3 of volume (measured on the test

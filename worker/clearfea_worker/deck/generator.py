@@ -220,7 +220,7 @@ def _constraint_groups(held: dict[int, Hold], skip: set[int]) -> list[_Group]:
     return list(groups.values())
 
 
-#: CalculiX's name for each equation solver a spec may choose (ADR-058). Every deck names its
+#: CalculiX's name for each equation solver a spec may choose (ADR-063). Every deck names its
 #: solver on the ``*STATIC`` line, so the deck alone says what solved it, whatever the build's
 #: default.
 SOLVER_NAMES = {
@@ -229,7 +229,7 @@ SOLVER_NAMES = {
     "iterative_cholesky": "ITERATIVE CHOLESKY",
     "iterative_scaling": "ITERATIVE SCALING",
 }
-#: The solver of a spec saved before ADR-058, which has none.
+#: The solver of a spec saved before ADR-063, which has none.
 DEFAULT_SOLVER = "pastix"
 #: Equation solvers a deck may name (M2.11, ADR-048).
 SOLVERS = tuple(SOLVER_NAMES.values())
@@ -238,7 +238,7 @@ SOLVERS = tuple(SOLVER_NAMES.values())
 def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None = None) -> str:
     """CalculiX input for a linear static analysis of ``spec`` on ``mesh``.
 
-    The ``*STATIC`` line names the spec's equation solver (ADR-058); ``solver``, a CalculiX
+    The ``*STATIC`` line names the spec's equation solver (ADR-063); ``solver``, a CalculiX
     name from SOLVERS, replaces it for the solver benchmark (M2.11). Raises DeckError when the
     spec is incomplete or does not fit the mesh.
     """

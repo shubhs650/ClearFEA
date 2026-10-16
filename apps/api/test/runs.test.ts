@@ -539,7 +539,7 @@ describe("a finished solve job", () => {
   });
 });
 
-describe("the solver of a run (ADR-058)", () => {
+describe("the solver of a run (ADR-063)", () => {
   it("is frozen with the run, PaStiX when the spec names none", async () => {
     const id = await meshed();
     const started = await runOf(await startRun(id));
@@ -852,7 +852,7 @@ describe("estimates (ADR-049)", () => {
     ]);
   });
 
-  it("are for the spec's solver, or the one asked for, and refuse an unknown one (ADR-058)", async () => {
+  it("are for the spec's solver, or the one asked for, and refuse an unknown one (ADR-063)", async () => {
     const id = await meshed();
     const own = validateEstimateResponse(await (await estimate(id)).json());
     if (!own.ok) throw new Error(own.errors.join(" "));

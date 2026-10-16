@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Fits the run estimator (M2.12, ADR-049) to the job-step benchmark, per equation solver, and
-works out each solver's element limits on a 16 GiB machine (ADR-058); writes them to
+works out each solver's element limits on a 16 GiB machine (ADR-063); writes them to
 packages/spec/estimator.json, the file the API estimates from and the limits are read from.
 
     cd worker && uv run python benchmarks/solver/fit.py [--check]
@@ -29,7 +29,7 @@ MEMORY_MARGIN = 1.25
 #: Share of a machine size's memory the solver may use (the M2.11 benchmark stopped ccx at 85
 #: percent of the machine's limit; the rest is the system's and the worker's).
 USABLE_MEMORY_FRACTION = 0.85
-#: Memory of the machine the element limits are for (ADR-058): 16 GiB, the laptop class and the
+#: Memory of the machine the element limits are for (ADR-063): 16 GiB, the laptop class and the
 #: medium machine size. Larger machines get their own limits when they are benchmarked.
 LIMIT_MEMORY_BYTES = 16 * 2**30
 #: The most elements the mesher makes (ClearFEA's MAX_ELEMENTS, ADR-045 item 5); no limit is
@@ -90,7 +90,7 @@ def node_limit(memory: dict[str, float]) -> float:
 def element_limit(nodes: float, rows: list[dict]) -> int:
     """``nodes`` as an element count of one order: divided by the nodes per element of the
     measured mesh nearest that node count, rounded down to a thousand. Never more than the
-    largest mesh measured (the maintainer had the benchmark stop at 500,000 elements, ADR-058),
+    largest mesh measured (the maintainer had the benchmark stop at 500,000 elements, ADR-063),
     so a limit is never an extrapolation, nor more than the mesher makes."""
     nearest = min(rows, key=lambda row: abs(row["nodes"] - nodes))
     largest = max(row["elements"] for row in rows)

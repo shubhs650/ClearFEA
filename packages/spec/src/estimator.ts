@@ -2,13 +2,13 @@
 // The run estimator's coefficients (../estimator.json, ADR-049), checked against their
 // schema when first imported, and the memory and time they predict for a mesh with each
 // equation solver; and the element limits per solver and element order on a 16 GiB machine
-// (ADR-058). Pure: the cost per machine size is the API's (apps/api/src/billing/estimate.ts).
+// (ADR-063). Pure: the cost per machine size is the API's (apps/api/src/billing/estimate.ts).
 
 import table from "../estimator.json";
 import { type EstimatorTable, type PowerLaw, validateEstimatorTable } from "./generated/estimator";
 import type { ElementOrder, SimulationSpec, Solver } from "./generated/simulation";
 
-/** The solver of a spec that names none: specs saved before ADR-058. */
+/** The solver of a spec that names none: specs saved before ADR-063. */
 export const DEFAULT_SOLVER: Solver = "pastix";
 
 /** Every solver a run can use, in the order the setup offers them. */
@@ -22,12 +22,12 @@ export const SOLVER_LABELS: Record<Solver, string> = {
   iterative_scaling: "Iterative scaling",
 };
 
-/** The iterative solvers, which are not verified to the 0.1 percent checks (ADR-058). */
+/** The iterative solvers, which are not verified to the 0.1 percent checks (ADR-063). */
 export function isIterative(solver: Solver): boolean {
   return solver === "iterative_cholesky" || solver === "iterative_scaling";
 }
 
-/** The accuracy note shown wherever an iterative solver is chosen or was used (ADR-058). */
+/** The accuracy note shown wherever an iterative solver is chosen or was used (ADR-063). */
 export const ITERATIVE_ACCURACY_NOTE =
   "Iterative solvers stop at a fixed relative residual of 1e-4 in CalculiX 2.21. On the verification cases their results were up to about 0.5 percent off, while PaStiX and SPOOLES are verified to 0.1 percent.";
 
@@ -95,7 +95,7 @@ export function memoryFits(peakBytes: number, memoryBytes: number, estimator: Es
   return peakBytes * estimator.memoryMargin <= memoryBytes * estimator.usableMemoryFraction;
 }
 
-/** The most elements of `order` a run with `solver` may have on the limits' machine (ADR-058). */
+/** The most elements of `order` a run with `solver` may have on the limits' machine (ADR-063). */
 export function maxElements(solver: Solver, order: ElementOrder, estimator: EstimatorTable = estimatorTable): number {
   const limits = estimator.analyses.linear_static[solver].maxElements;
   return order === 1 ? limits.order1 : limits.order2;
@@ -110,7 +110,7 @@ const ORDER_WORDS: Record<ElementOrder, string> = { 1: "4-node", 2: "10-node" };
 
 /**
  * Why a mesh of `elements` elements of `order` is too large for `solver`, in plain language
- * with what to do; null when it is within the solver's limit (ADR-058). A run past the limit
+ * with what to do; null when it is within the solver's limit (ADR-063). A run past the limit
  * could run out of memory, so it is refused before any machine is used.
  */
 export function elementLimitProblem(

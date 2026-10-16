@@ -33,14 +33,14 @@
       "maximum": 1
     },
     "limitMemoryBytes": {
-      "description": "Memory of the machine the element limits are for (ADR-058): 16 GiB in Phase 0. A run whose mesh has more elements than its solver's limit is refused.",
+      "description": "Memory of the machine the element limits are for (ADR-063): 16 GiB in Phase 0. A run whose mesh has more elements than its solver's limit is refused.",
       "type": "integer",
       "minimum": 1
     }
   },
   "$defs": {
     "SolverModels": {
-      "description": "One model per equation solver a run can use (ADR-058), keyed as SimulationSpec's solver.",
+      "description": "One model per equation solver a run can use (ADR-063), keyed as SimulationSpec's solver.",
       "type": "object",
       "additionalProperties": false,
       "required": ["pastix", "spooles", "iterative_cholesky", "iterative_scaling"],

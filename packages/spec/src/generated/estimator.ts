@@ -32,12 +32,12 @@ export interface EstimatorTable {
    */
   usableMemoryFraction: number;
   /**
-   * Memory of the machine the element limits are for (ADR-058): 16 GiB in Phase 0. A run whose mesh has more elements than its solver's limit is refused.
+   * Memory of the machine the element limits are for (ADR-063): 16 GiB in Phase 0. A run whose mesh has more elements than its solver's limit is refused.
    */
   limitMemoryBytes: number;
 }
 /**
- * One model per equation solver a run can use (ADR-058), keyed as SimulationSpec's solver.
+ * One model per equation solver a run can use (ADR-063), keyed as SimulationSpec's solver.
  *
  * This interface was referenced by `EstimatorTable`'s JSON-Schema
  * via the `definition` "SolverModels".

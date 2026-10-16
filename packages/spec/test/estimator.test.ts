@@ -72,7 +72,7 @@ describe("the solvers", () => {
       expect(maxElements(solver, 1)).toBeGreaterThanOrEqual(maxElements(solver, 2));
     }
     expect(maxElements("pastix", 1)).toBeGreaterThan(maxElements("pastix", 2));
-    // PaStiX needs more memory than SPOOLES, and the iterative solvers far less (ADR-058).
+    // PaStiX needs more memory than SPOOLES, and the iterative solvers far less (ADR-063).
     expect(maxElements("pastix", 2)).toBeLessThan(maxElements("spooles", 2));
     expect(maxElements("spooles", 2)).toBeLessThan(maxElements("iterative_cholesky", 2));
   });

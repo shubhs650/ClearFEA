@@ -22,7 +22,7 @@ TERMINATE_SECONDS = 5.0
 
 def solver_environment(base: dict[str, str] | None = None) -> dict[str, str]:
     """CalculiX's environment: one thread for everything, whatever else is set (ADR-048,
-    ADR-058).
+    ADR-063).
 
     ccx 2.21's multithreaded SPOOLES (CCX_NPROC_EQUATION_SOLVER, or OMP_NUM_THREADS when that
     is unset) now and then returns a wrong solution: solved 20 times on 4 threads, two of the
@@ -30,7 +30,7 @@ def solver_environment(base: dict[str, str] | None = None) -> dict[str, str]:
     percent of their largest value, and V-07 and V-24 once failed make verify by up to 200
     percent, while every single-threaded solve was identical (M2.11). PaStiX's own OpenMP loops
     follow OMP_NUM_THREADS; left unset, OpenMP starts a thread per core that spins against
-    PaStiX's single worker, which cost 8 to 14 s on a 3,000-element mesh (ADR-058). So
+    PaStiX's single worker, which cost 8 to 14 s on a 3,000-element mesh (ADR-063). So
     OMP_NUM_THREADS is 1 too: a run takes the same time on every machine size (ADR-049).
     """
     env = dict(os.environ if base is None else base)

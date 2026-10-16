@@ -24,7 +24,7 @@ export interface MachineSize {
 }
 
 /**
- * The estimate for solving a mesh of `nodes` nodes with `solver` (ADR-058). The solver runs on
+ * The estimate for solving a mesh of `nodes` nodes with `solver` (ADR-063). The solver runs on
  * one thread on every size (ADR-048 item 3), so the time is the same on each and only the rate
  * differs. The recommended size is the cheapest whose memory fits, conservatively
  * (estimator.json's margin); null when none does.

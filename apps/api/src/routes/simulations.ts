@@ -266,7 +266,7 @@ async function runnableMesh(
   return { mesh };
 }
 
-/** The estimate for a ready mesh with a solver on every machine size (M2.12, ADR-049, ADR-058). */
+/** The estimate for a ready mesh with a solver on every machine size (M2.12, ADR-049, ADR-063). */
 async function meshEstimate(db: D1Database, mesh: Mesh, solver: Solver): Promise<RunEstimate> {
   if (mesh.nodeCount === null) throw new Error("A ready mesh has no node count.");
   return estimateRun(mesh.nodeCount, await listMachineSizes(db), solver);
@@ -275,7 +275,7 @@ async function meshEstimate(db: D1Database, mesh: Mesh, solver: Solver): Promise
 /**
  * Memory, time and cost estimated for solving the simulation on its current mesh, per machine
  * size, with the size recommended (M2.12, ADR-049). `?solver=` asks for another solver than
- * the saved spec's, so the setup can show the estimate of a choice before it is saved (ADR-058).
+ * the saved spec's, so the setup can show the estimate of a choice before it is saved (ADR-063).
  */
 simulations.get("/:id/estimate", async (c) => {
   const asked = c.req.query("solver");
@@ -297,7 +297,7 @@ simulations.get("/:id/estimate", async (c) => {
  * the deck generator still refuses anything that slips past. The run goes on the machine size
  * the body names, or on the recommended one, and keeps the estimate made now (M2.12, ADR-049).
  * A mesh with more elements than the spec's solver may solve on a 16 GB machine is refused
- * before any machine is used (ADR-058).
+ * before any machine is used (ADR-063).
  */
 simulations.post("/:id/runs", async (c) => {
   let request: CreateRunRequest = {};
@@ -339,7 +339,7 @@ simulations.post("/:id/runs", async (c) => {
     simulationId: simulation.id,
     meshId: mesh.id,
     // The run's frozen spec always names its solver, so a later default cannot change what a
-    // run says it was solved with (ADR-058).
+    // run says it was solved with (ADR-063).
     spec: { ...simulation.spec, solver },
     machineSize: size.size,
     estimate,

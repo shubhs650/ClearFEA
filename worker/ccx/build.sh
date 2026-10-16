@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Builds CalculiX 2.21 with PaStiX, SPOOLES, ARPACK and the iterative solvers into $PREFIX/bin/ccx
-# (ADR-058). Run by the worker image's ccx build stage on Ubuntu 24.04; also runs on a host with
+# (ADR-063). Run by the worker image's ccx build stage on Ubuntu 24.04; also runs on a host with
 # the packages the Dockerfile installs. Everything is pinned (CLAUDE.md): changing a commit,
 # tag or package version here is its own pull request with a full verification run.
 #

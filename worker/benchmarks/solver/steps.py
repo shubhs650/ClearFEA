@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """M2.12 job-step benchmark: wall time of each step of a solve job, and the solver's peak memory,
 on the M2.11 block meshed at several sizes with both element orders (ADR-049), for each equation
-solver a run can use (ADR-058).
+solver a run can use (ADR-063).
 
 Script only, not part of the worker package or its tests. It runs the steps the worker's solve
 job runs (``clearfea_worker.jobs.run_solve``) in the same order and with the same functions,
@@ -111,7 +111,7 @@ def save_row(path: Path, row: dict[str, object]) -> None:
         json.loads(path.read_text())
         if path.exists()
         else {
-            "description": "Job-step benchmark (ADR-049, ADR-058). How it is measured: steps.py.",
+            "description": "Job-step benchmark (ADR-049, ADR-063). How it is measured: steps.py.",
             "runs": [],
         }
     )

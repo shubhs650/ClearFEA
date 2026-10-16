@@ -157,7 +157,7 @@ export function App() {
       } else if (mesh.status === "meshing") {
         blockers.push({ message: "The mesh is still being made. Wait for it to finish.", item: "mesh" });
       } else if (mesh.elementCount !== null) {
-        // The API refuses the same run (ADR-058): it could run out of memory.
+        // The API refuses the same run (ADR-063): it could run out of memory.
         const tooLarge = elementLimitProblem(solver, mesh.order, mesh.elementCount);
         if (tooLarge !== null) blockers.push({ message: tooLarge, item: "mesh" });
       }

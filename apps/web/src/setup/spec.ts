@@ -421,7 +421,7 @@ function canonical(value: unknown): string {
 
 /**
  * Whether the setup is still the one a run froze (M1.10). A run's spec without a solver was
- * solved with SPOOLES, a setup without one would be solved with PaStiX (ADR-058).
+ * solved with SPOOLES, a setup without one would be solved with PaStiX (ADR-063).
  */
 export function sameSpec(run: SimulationSpec, current: SimulationSpec): boolean {
   return (

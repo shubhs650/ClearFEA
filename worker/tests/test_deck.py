@@ -924,11 +924,11 @@ def test_refuses_temperature_changes_it_cannot_translate(change, message: str) -
         deck(thermal_load_spec(change), two_tets(order=2, bodies=2))
 
 
-# --- Equation solver name (M2.11, ADR-048; ADR-058) ---
+# --- Equation solver name (M2.11, ADR-048; ADR-063) ---
 
 
 def test_a_spec_without_a_solver_is_solved_with_pastix() -> None:
-    """Specs saved before ADR-058 name no solver; the deck still names one."""
+    """Specs saved before ADR-063 name no solver; the deck still names one."""
     lines = deck(fixture_spec(), two_tets(order=2)).splitlines()
     assert "*STATIC, SOLVER=PASTIX" in lines
     assert "*STATIC" not in lines

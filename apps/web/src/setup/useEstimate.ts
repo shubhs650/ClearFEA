@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The estimate before a run (M2.12, ADR-049): read from the API for the simulation's current
-// mesh whenever that mesh becomes ready, and again when it or the solver changes (ADR-058).
+// mesh whenever that mesh becomes ready, and again when it or the solver changes (ADR-063).
 
 import type { RunEstimate, Solver } from "@clearfea/spec";
 import { useEffect, useState } from "react";

@@ -47,7 +47,7 @@ def test_fit_recovers_a_power_law_with_a_constant() -> None:
 @pytest.mark.parametrize("solver", ["pastix", "spooles", "iterative_cholesky", "iterative_scaling"])
 def test_every_measured_mesh_under_a_limit_fits_16_gib_with_the_margin(solver: str) -> None:
     """The element limits keep every benchmarked mesh within the rule they are made from: its
-    measured peak memory, times the margin, fits in the usable share of 16 GiB (ADR-058). This
+    measured peak memory, times the margin, fits in the usable share of 16 GiB (ADR-063). This
     replaces M2.11's cross-check against the packaged ccx, which no longer solves runs."""
     table = EstimatorTable.model_validate_json(ESTIMATOR.read_text())
     model = getattr(table.analyses.linear_static, solver)

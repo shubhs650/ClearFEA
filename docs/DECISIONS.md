@@ -28,7 +28,7 @@ Product decisions for ClearFEA, from the interview of 2026-10-13, followed by a 
 | Report | PDF and Word. Sections: project and revision, geometry and units, materials, mesh statistics, each load and support with a picture, solver settings and versions, result plots, reaction check, min/max tables, run warnings. User selects sections and saved views; title block, company name, logo |
 | Solver input | Generated input file, solver log, solver version and mesh are viewable and downloadable. Not editable |
 | Interface | SimScale-style workbench: simulation tree, central 3D viewer, settings panel. Status mark per tree item. Run disabled with a plain list of what is missing |
-| Model size | Phase 0 supports what a 16 GB machine solves: a run is refused above its solver's measured element limit for the element order, so it cannot run out of memory (ADR-058). The 2-million-element target is dropped; larger machines (Phase 1, on AWS) get their own limits when they are benchmarked. Viewer shows outer surface and cut planes, never the full volume mesh |
+| Model size | Phase 0 supports what a 16 GB machine solves: a run is refused above its solver's measured element limit for the element order, so it cannot run out of memory (ADR-063). The 2-million-element target is dropped; larger machines (Phase 1, on AWS) get their own limits when they are benchmarked. Viewer shows outer surface and cut planes, never the full volume mesh |
 
 ## Platform decisions
 
@@ -70,7 +70,7 @@ Product decisions for ClearFEA, from the interview of 2026-10-13, followed by a 
 1. Both acceptance cases are completed entirely through the UI on the laptop (i5 10th gen class, 16 GB RAM), with reactions balanced, results within tolerance of hand checks and the FreeCAD run, and a report fit to hand to a reviewer.
 2. The full verification suite is green, with every gate load and support type covered.
 3. Cost estimates are within the agreed margin of measured cost on the benchmark set, and the wallet ledger reconciles exactly.
-4. A model at each solver's element limit (ADR-058) is run on the laptop, with a responsive viewer.
+4. A model at each solver's element limit (ADR-063) is run on the laptop, with a responsive viewer.
 5. A fresh clone starts the whole system with one documented command.
 6. Data isolation between test users is proven by automated tests.
 7. A short user guide covers the main flow.
@@ -172,7 +172,7 @@ Gmsh has a first-class Python API, and Python has mature libraries for numerical
 ### ADR-010: Start with the distribution CalculiX build; choose the production solver build by benchmark
 2026-10-13 · accepted 2026-10-14
 
-Milestone M1 uses a packaged `ccx` (SPOOLES). A benchmark task in M2 compares SPOOLES, PaStiX and the iterative solver for speed and memory, then fixes the build for the 2-million-element target. Building CalculiX with PaStiX is known to be fiddly, so it is isolated as its own task. (ADR-058 replaced the packaged build with one including PaStiX, the default solver, and dropped the 2-million-element target.)
+Milestone M1 uses a packaged `ccx` (SPOOLES). A benchmark task in M2 compares SPOOLES, PaStiX and the iterative solver for speed and memory, then fixes the build for the 2-million-element target. Building CalculiX with PaStiX is known to be fiddly, so it is isolated as its own task. (ADR-063 replaced the packaged build with one including PaStiX, the default solver, and dropped the 2-million-element target.)
 
 ### ADR-011: Report figures are captured in the browser
 2026-10-13 · accepted 2026-10-14
@@ -561,7 +561,7 @@ M2.10 makes meshes reusable across runs when the mesh settings are unchanged (DE
 
 
 ### ADR-048: The production solver stays the packaged CalculiX 2.21-1 with single-threaded SPOOLES; iterative solvers are not used for runs; PaStiX is measured but not adopted yet
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16). Item 7 updated the same day with PaStiX's results (his choice (a)); adopting PaStiX is parked as its own task after M2 (his choice), and the 2-million-element target is still open.
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16). Item 7 updated the same day with PaStiX's results (his choice (a)); adopting PaStiX is parked as its own task after M2 (his choice), and the 2-million-element target is still open. Items 2, 4 and 7 were superseded by ADR-063: PaStiX is now the default, the iterative solvers are options with a warning, and the 2-million-element target is dropped.
 
 M2.11 benchmarks CalculiX's equation solvers for the production build (ADR-010). Script, raw data and method: `worker/benchmarks/solver/` (`results.json` is what M2.12 fits). Measured in the Claude Code sandbox: 4 cores (Intel Xeon, 2.8 GHz), 15.7 GiB RAM, 13.4 GiB memory limit for the process group. Model: a 100 × 100 × 50 mm steel block held at one end and pressed at the other, second-order tetrahedra, meshes and decks made by the worker's own mesher and deck generator. Choices it needed:
 
@@ -598,7 +598,7 @@ M2.11 benchmarks CalculiX's equation solvers for the production build (ADR-010).
 
 
 ### ADR-049: Estimator v1 is two power laws in the node count, fitted to timed solve jobs; machine sizes are listed by memory and recommended by memory alone
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16).
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16). ADR-063 refitted it per solver (estimator version 2) and replaced item 8.
 
 M2.12 adds the estimate before a run and the machine-size recommendation that DECISIONS asks for (Estimate, Size recommendation) and ARCHITECTURE describes (Estimator). Choices it needed:
 
@@ -721,3 +721,39 @@ M3.8 adds CSV and VTK export (DECISIONS product table, Results row "CSV and VTK 
 5. **Node order.** VTK lists a quadratic tetrahedron's mid-edge nodes on edges (0,1), (1,2), (2,0), (0,3), (1,3), (2,3); `mesh.bin` (Gmsh) on (0,1), (1,2), (2,0), (3,0), (3,2), (3,1), so the last two swap; corners are unchanged, keeping the positive volume CalculiX needs. A unit test checks every mid-edge node of a box mesh lies at the middle of its VTK edge, and VTK 9.5.2's own reader (run by hand, not in CI) read box meshes of both orders with every cell volume positive and the total equal to the box's, and read E-01's exported block (451 quadratic tetrahedra) with every cell volume positive, a total of 8.000e-6 m³ (40 × 20 × 10 mm), every mid-edge node at the middle of its VTK edge, and von Mises values matching the node CSV to 1.4e-7.
 6. **Large models.** Measured in Node on a box mesh of 10-node elements with every field: 162,000 elements (227,000 nodes) write a 59 MB CSV in 2.6 s and a 32 MB VTK file in 0.02 s; 2 million elements (2.7 million nodes) a 705 MB CSV in 28.5 s and a 376 MB VTK file in 0.45 s, plus the download of `mesh.bin` and the whole `nodes.bin`. The CSV is written in chunks of 20,000 rows, letting the page redraw between them, so the button reads "Preparing…" instead of the page freezing. Text is the slow part; for large models the VTK file is the one to use, and the panel's hint says what each holds.
 7. **Verification.** No physics-critical module is touched: the values are the stored ones, converted only through `convert.ts`. Web unit tests cover the columns, units and conversions of both CSV files, a field the run lacks, a mismatched node count, the VTK file read back by its own offsets, the node order and both element orders; a panel test covers a run without `nodes.bin`. E-01 downloads all three files: the node CSV has a row per node and its largest von Mises stress equals the panel's, the reactions CSV's support and load balance in z, and the VTK file names the run's node count.
+
+### ADR-063: PaStiX is the default equation solver, with SPOOLES and both iterative solvers as user options; runs are limited per solver and element order to what a 16 GB machine solves; the 2-million-element target is dropped
+2026-10-16 · Accepted (Shubham's decision of 2026-10-16, made before M4, including offering the iterative solvers with an accuracy warning and stopping the benchmark at 500,000 elements; the details below await his review of the pull request).
+
+Shubham decided two things before M4: make PaStiX the default solver, with SPOOLES, iterative scaling and iterative Cholesky as options; and drop the 2-million-element target in favour of conservative element limits per solver, element order and node count that a 16 GB machine solves without crashing, leaving larger machines (on AWS) for later. This replaces ADR-048 items 2, 4 and 7 and ADR-049 item 8, and the DECISIONS Model size row and Phase 0 condition 4. Choices it needed:
+
+1. **The build.** `worker/ccx/build.sh` builds CalculiX 2.21 from Ubuntu's `calculix-ccx` 2.21-1 source package (the same source and Debian patches as the packaged `ccx` before it) with `-DPASTIX`, linked to PaStiX4CalculiX at `d6b493b` (32-bit integers, mixed precision) with `worker/ccx/pastix4calculix.patch`, PaRSEC at tag `pastix-6.0.2` (shared, installed beside `ccx`), and Ubuntu's SPOOLES, ARPACK, Scotch and OpenBLAS. It runs in a build stage of the worker image; the runtime stage gets `ccx`, `libparsec.so.2` and the runtime libraries, CUDA's included (the fork includes CUDA headers unconditionally; no GPU is used). The patch over M2.11's also drops the code generator's `import imp`, so Python 3.12 builds it and no other Python is needed. The image grew to 2.06 GB on disk. All commits, the tag and the source package version are pinned; a change is its own pull request with a full verification run (CLAUDE.md).
+2. **Every deck names its solver.** `SimulationSpec` gains an optional `solver`: `pastix`, `spooles`, `iterative_cholesky` or `iterative_scaling`. Absent (specs saved before) means `pastix`; new specs start with it. The deck generator writes `*STATIC, SOLVER=<name>` on every deck, so the deck alone says what solved it; deck format 4. The API freezes the run's spec with its solver named, so runs made before this ADR, whose frozen spec has none, are known to have been solved with SPOOLES (the packaged build's default). The Run panel says which solver a run used.
+3. **One thread for everything.** The worker now also sets `OMP_NUM_THREADS=1`. Left unset, OpenMP started a thread per core inside PaStiX that spun against PaStiX's single worker: 8 to 14 s were lost even on a 3,000-element mesh, where the whole run then takes under 2 s. One thread keeps a run's time the same on every machine size (ADR-049 item 5), and SPOOLES stays on one thread (ADR-048 item 3). Threaded PaStiX can come with larger machines.
+4. **Benchmark.** `steps.py` gained `--solver`; `steps.json` now holds the solve job's steps for all four solvers with this build, on the M2.11 block, first and second order, in the sandbox (4 cores, 13.4 GiB memory limit). Shubham had runs above 500,000 elements skipped, so PaStiX's 4-node rows (to 1.1 million elements, measured before that) are the only ones above it. Selected rows (job time, solver peak memory):
+
+   | Mesh | PaStiX | SPOOLES | Iterative Cholesky | Iterative scaling |
+   | --- | --- | --- | --- | --- |
+   | 97,439 10-node (140,275 nodes) | 170 s, 6.7 GiB | 749 s, 5.4 GiB | 72 s, 0.6 GiB | 126 s, 0.6 GiB |
+   | 145,471 10-node (207,025 nodes) | 345 s, 11.1 GiB | 1,518 s, 8.9 GiB | | |
+   | 168,077 10-node (238,391 nodes) | | 2,388 s, 11.4 GiB | | |
+   | 461,993 10-node (641,997 nodes) | | | 604 s, 2.5 GiB | 1,993 s, 2.5 GiB |
+   | 461,993 4-node (81,920 nodes) | | 289 s, 2.7 GiB | 32 s, 0.5 GiB | 42 s, 0.5 GiB |
+   | 1,103,073 4-node (190,580 nodes) | 343 s, 9.4 GiB | | | |
+
+   PaStiX is 4.4 times faster than SPOOLES at 145,471 10-node elements for 1.25 times the memory, as in M2.11.
+5. **Limits: from the sandbox to 16 GB.** The limits are for a 16 GiB machine, the laptop class and the `medium` machine size. A mesh is within a solver's limit when its fitted peak memory, raised by the fit's worst shortfall on the measurements (`largestRatio`, up to 1.12) and times the estimator's margin of 1.25, fits in the usable 85 percent of 16 GiB: a fitted peak of about 9.7 to 10.9 GiB. The sandbox's limit is 13.4 GiB, so every measurement that sets a limit was made with room to spare, and the limit is the node count where that holds, turned into elements with the nodes per element of the nearest measured mesh of the order, rounded down to a thousand. No limit is above the largest mesh measured for its solver and order, so none is extrapolated. `fit.py` computes them into `packages/spec/estimator.json` (`limitMemoryBytes`, and `maxElements` per solver), and a test checks every benchmarked mesh under a limit kept to the rule. The limits:
+
+   | Solver | 10-node elements | 4-node elements |
+   | --- | --- | --- |
+   | PaStiX (default) | 142,000 | 1,103,000 |
+   | SPOOLES | 161,000 | 461,000 |
+   | Iterative Cholesky | 461,000 | 461,000 |
+   | Iterative scaling | 461,000 | 461,000 |
+
+   The measured 145,471-element PaStiX mesh and the 168,077-element SPOOLES mesh are just over their limits by this rule, which is why the limits sit below them. SPOOLES's 4-node and the iterative solvers' limits are the 500,000-element stop, not memory: by memory the iterative solvers would take millions of elements, SPOOLES about 1.3 million 4-node ones. A stocky block is the hard case for a direct solver, so slender parts at a limit need less memory. Within every limit the PaStiX build stays below the 331,000 nodes where its 32-bit integers overflowed in M2.11.
+6. **Enforced before a run.** `elementLimitProblem` in `packages/spec` says, in plain language, that a mesh is over its solver's limit, with what to do (a coarser mesh, 4-node elements, or a solver that takes it). The API refuses such a run with it before a job is queued, and the Run panel lists it with the other blockers. The mesher keeps its own 2,000,000-element cap on what it makes; the run limits are separate, since the mesh does not depend on the solver.
+7. **Choosing a solver.** The Run panel has an "Equation solver" list above the estimate, PaStiX first, each with its limit for the mesh's element order. Picking one saves it to the spec. The estimate is fetched for it (`GET /api/simulations/{id}/estimate?solver=`, which defaults to the spec's).
+8. **The iterative solvers carry a warning (Shubham's choice: offer with warning).** Both stop at a relative residual of 1e-4 fixed in ccx 2.21's source and were 0.11 to 0.45 percent off the 0.1 percent verification checks in M2.11 (ADR-048 item 4). Wherever one is chosen or was used, the app says: "Iterative solvers stop at a fixed relative residual of 1e-4 in CalculiX 2.21. On the verification cases their results were up to about 0.5 percent off, while PaStiX and SPOOLES are verified to 0.1 percent." That is the Run panel, the result figures and the run record. The report (M7) must print the solver and this note; the run's frozen spec holds what it needs. Rechecked with this build (`make verify`, coarse tier, every case forced onto the solver, a local experiment): PaStiX 146 of 146, SPOOLES 146 of 146, iterative Cholesky 130 of 146 (V-02, V-03, V-04, V-08, V-24 and V-26, 0.11 to 0.43 percent against 0.1), iterative scaling 139 of 146 (V-08 and V-24, 0.16 to 0.41 percent). The verification suite runs with the default solver; the iterative solvers are not verified to 0.1 percent and are not claimed to be.
+9. **The estimator per solver.** `estimator.json` version 2 holds a memory and a time law per solver (both element orders fitted together, as in ADR-049). The estimate a run freezes names its solver; older estimates without one were for SPOOLES. Fitted memory is within 5 percent of every PaStiX and SPOOLES row and within 12 percent for the iterative solvers, whose small runs are dominated by a fixed 100 MB.
+10. **Later, on larger machines.** Larger machine sizes get their own limits when benchmarked on such machines (`limitMemoryBytes` is per table; a table per memory size is the likely shape). For PaStiX that needs a 64-bit-integer build first: ccx's `Makefile_i8` recipe with 64-bit SPOOLES, ARPACK, Scotch and BLAS. Until then the larger sizes are still listed and priced (ADR-049), but every run is held to the 16 GiB limits.

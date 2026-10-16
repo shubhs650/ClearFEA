@@ -66,7 +66,7 @@ export type Load =
  */
 export type LocalMeshScope = "faces" | "edges" | "bodies";
 /**
- * CalculiX's equation solver for a run (ADR-058). pastix, the default, and spooles are direct solvers, verified to the 0.1 percent checks. iterative_cholesky and iterative_scaling need far less memory but stop at CalculiX 2.21's fixed relative residual of 1e-4, which left verification results up to about 0.5 percent off.
+ * CalculiX's equation solver for a run (ADR-063). pastix, the default, and spooles are direct solvers, verified to the 0.1 percent checks. iterative_cholesky and iterative_scaling need far less memory but stop at CalculiX 2.21's fixed relative residual of 1e-4, which left verification results up to about 0.5 percent off.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "Solver".
@@ -533,7 +533,7 @@ export interface MeshSettings {
   local?: LocalMeshSize[];
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the equation solver (ADR-058). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -551,7 +551,7 @@ export interface SimulationSpec {
   loads: Load[];
   mesh: MeshSettings;
   /**
-   * The equation solver (ADR-058). Absent in specs saved before ADR-058, which means pastix. A run's frozen spec always names it, except for runs made before ADR-058, which were solved with spooles.
+   * The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
    */
   solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
 }
@@ -971,7 +971,7 @@ export interface RunEstimate {
   sizes: SizeEstimate[];
   recommended: string | null;
   /**
-   * The solver the estimate is for (ADR-058); absent in estimates made before it, which were for spooles.
+   * The solver the estimate is for (ADR-063); absent in estimates made before it, which were for spooles.
    */
   solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
 }
@@ -1036,7 +1036,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the equation solver (ADR-058). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -1051,7 +1051,7 @@ export interface SimulationSpec1 {
   loads: Load[];
   mesh: MeshSettings;
   /**
-   * The equation solver (ADR-058). Absent in specs saved before ADR-058, which means pastix. A run's frozen spec always names it, except for runs made before ADR-058, which were solved with spooles.
+   * The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
    */
   solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
 }

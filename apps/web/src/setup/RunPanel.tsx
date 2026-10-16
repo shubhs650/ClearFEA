@@ -13,7 +13,7 @@
 // reaction force and moment, each load's total and the balance of loads against reactions
 // (ADR-051), named as in the run's own frozen setup. From M3.7 the result can be shown in units
 // of its own, picked per kind, instead of the unit system's (ADR-056). From M3.8 a succeeded run
-// can be exported as CSV and VTK files (ADR-057). Since ADR-058 the panel chooses the equation
+// can be exported as CSV and VTK files (ADR-057). Since ADR-063 the panel chooses the equation
 // solver (PaStiX by default), shows each solver's element limit on a 16 GB machine, warns that
 // the iterative solvers are less exact, and the record says which solver a run used.
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
@@ -141,7 +141,7 @@ const SOLVER_KINDS: Record<Solver, string> = {
 };
 
 /**
- * The equation solver (ADR-058): PaStiX by default, SPOOLES, or one of the iterative solvers,
+ * The equation solver (ADR-063): PaStiX by default, SPOOLES, or one of the iterative solvers,
  * each with the most elements it may solve on a 16 GB machine for the mesh's element order.
  */
 function SolverChoice({
@@ -180,7 +180,7 @@ function SolverChoice({
   );
 }
 
-/** The solver a run used: its frozen spec's, or SPOOLES for runs made before ADR-058. */
+/** The solver a run used: its frozen spec's, or SPOOLES for runs made before ADR-063. */
 function runSolver(run: RunView): Solver {
   return run.spec.solver ?? "spooles";
 }
@@ -507,7 +507,7 @@ export function RunPanel({
   onUnitReset: () => void;
   /** The estimate for the current mesh, shown before a run. */
   estimate: EstimateState;
-  /** The equation solver the setup asks for (ADR-058). */
+  /** The equation solver the setup asks for (ADR-063). */
   solver: Solver;
   /** The element order the limits are shown for: the mesh's, or the mesh settings'. */
   meshOrder: ElementOrder;

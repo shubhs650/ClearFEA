@@ -13,12 +13,12 @@
 # request with a full verification run:
 #   - base image: Ubuntu 24.04 by digest, which provides Python 3.12
 #   - CalculiX:   2.21 from Ubuntu's calculix-ccx 2.21-1 source package, built with PaStiX
-#                 (PaStiX4CalculiX and PaRSEC at pinned commits) by ccx/build.sh (ADR-058)
+#                 (PaStiX4CalculiX and PaRSEC at pinned commits) by ccx/build.sh (ADR-063)
 #   - Gmsh:       gmsh 4.15.2 from PyPI (bundles its own OpenCASCADE), locked in uv.lock
 
 ARG BASE=mirror.gcr.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
 
-# CalculiX with PaStiX, SPOOLES, ARPACK and the iterative solvers (ADR-058). PaStiX4CalculiX
+# CalculiX with PaStiX, SPOOLES, ARPACK and the iterative solvers (ADR-063). PaStiX4CalculiX
 # includes CUDA headers unconditionally, so the CUDA toolkit is needed here, and its runtime
 # libraries below, though no GPU is used.
 FROM ${BASE} AS ccx
@@ -58,7 +58,7 @@ RUN --mount=type=secret,id=extra_ca,required=false \
 FROM ${BASE}
 ENV DEBIAN_FRONTEND=noninteractive
 # Gmsh's wheel links against these system libraries even when run headless.
-# CalculiX's runtime libraries (ADR-058): the solvers' and CUDA's, which the PaStiX build links.
+# CalculiX's runtime libraries (ADR-063): the solvers' and CUDA's, which the PaStiX build links.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       python3.12 \
