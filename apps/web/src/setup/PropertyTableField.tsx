@@ -95,7 +95,7 @@ export function PropertyTableField<T extends PropertyTable | ExpansionTable>({
             onChange(fresh as T);
           }}
         >
-          Vary {label.charAt(0).toLowerCase() + label.slice(1)} with temperature
+          Vary {/^(Young|Poisson)/.test(label) ? label : label.charAt(0).toLowerCase() + label.slice(1)} with temperature
         </button>
       </div>
     );

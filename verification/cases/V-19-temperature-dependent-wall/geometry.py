@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """V-19 geometry: a flat wall, written as a STEP file in mm.
 
-    uv run --directory worker python ../verification/cases/V-19-temperature-dependent-wall/geometry.py OUT.step
+    cd worker && uv run python \
+        ../verification/cases/V-19-temperature-dependent-wall/geometry.py OUT.step
 
 40 mm thick along x and 20 mm by 20 mm along y and z, from the origin.
 """

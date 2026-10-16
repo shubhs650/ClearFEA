@@ -124,7 +124,8 @@ test("E-04: a thermal stress analysis from upload to results", async ({ page }) 
   await test.step("conductivity and Young's modulus against temperature (M5.5)", async () => {
     const material = page.getByRole("region", { name: "Material", exact: true });
     const rows = async (property: string, values: [string, string][]) => {
-      await material.getByRole("button", { name: `Vary ${property.charAt(0).toLowerCase()}${property.slice(1)} with temperature` }).click();
+      const noun = property.startsWith("Young") ? property : property.charAt(0).toLowerCase() + property.slice(1);
+      await material.getByRole("button", { name: `Vary ${noun} with temperature` }).click();
       const table = material.getByRole("group", { name: `${property} against temperature` });
       for (const [k, [temperature, value]] of values.entries()) {
         await table.getByLabel(`Row ${k + 1} temperature`).fill(temperature);

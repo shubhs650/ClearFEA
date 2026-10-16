@@ -811,9 +811,7 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
             out.extend(_table_comment("Poisson's ratio", material.poissons_ratio_table))
         else:
             if material.poissons_ratio is None:
-                raise DeckError(
-                    f"{what}: Poisson's ratio has no value. Enter one before running."
-                )
+                raise DeckError(f"{what}: Poisson's ratio has no value. Enter one before running.")
             ratio = material.poissons_ratio
         out.append("*ELASTIC")
         # One line per temperature of either table, both interpolated there (deck/materials.py).
