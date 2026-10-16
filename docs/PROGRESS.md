@@ -5,18 +5,18 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M0 Bootstrap
-- **Next task:** close M0 (all tasks done; M0 exit checked in M0.9), then M1.1
+- **Current milestone:** M3 Results tools (M2 closed 2026-10-16 on a green phase-end run on main)
+- **Next task:** M3.1
 - **Blocked on:** nothing
 
 ## Milestones
 
 | # | Milestone | Status | Closed on |
 | --- | --- | --- | --- |
-| M0 | Bootstrap | In progress | |
+| M0 | Bootstrap | Done (all tasks merged; exit checked in M0.9) | 2026-10-14 |
 | M1 | Thin slice | Done (phase-end run on main green, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); maintainer waived the hand exit check) | 2026-10-15 |
-| M2 | Structural setup | In progress | |
-| M3 | Results tools | Not started | |
+| M2 | Structural setup | Done (phase-end run on main green, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) | 2026-10-16 |
+| M3 | Results tools | In progress | |
 | M4 | Assemblies | Not started | |
 | M5 | Thermal | Not started | |
 | M6 | Modal | Not started | |
@@ -89,12 +89,14 @@ Things only the maintainer can do.
 | Nightly coarse | 2026-10-15 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-01 to V-10, V-24, V-25 and V-26, 116 of 116 checks (M2.8) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8) |
 | Browser end-to-end | 2026-10-15 (`make e2e`, run locally) | Green, E-01 (M1.14) |
-| Phase end (CI) | 2026-10-15 (`phase-end.yml` by hand on main 4e42c8d, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); closed M1) | Green: full tier V-01 and V-02, 15 of 15 checks; E-01 |
+| Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main b355155, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635); closed M2) | Green: full tier 116 of 116 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
 
+> M2 close (2026-10-16): M2 closed on a green manual phase-end run on main (see the Milestones table). Next is M3 in PLAN.md order, under the maintainer's M3 autodrive. Still waiting on the maintainer: review of ADR-038 to ADR-049 (except ADR-045, which he accepted), and how to reach the 2-million-element target (ADR-048 item 7). A 16 GB machine holds about 150,000 to 170,000 stocky second-order elements, not the 300,000 to 500,000 in DECISIONS' Model size row (ADR-048 item 2, ADR-049 item 8); that row is unchanged. The `Setup.test.tsx` `getByText` race from the Phase-end CI note was not reproduced or changed here.
+>
 > M0.1 to M0.6 are done; start with M0.7. ADR-001 to ADR-011 were accepted unchanged on 2026-10-14.
 >
 > Environment check (2026-10-14, Claude Code cloud): pnpm 12.11.2, uv 0.11.32, wrangler 4.151.0, Node 22.22.0, Python 3.13 default with 3.12 present. CalculiX `ccx` 2.21 (Debian `calculix-ccx`) runs. Gmsh pip package 4.15.2 is installed but fails to load because `libGLU.so.1` is missing.
@@ -188,6 +190,10 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 ## Log
 
 Newest first. One entry per session: date, what was done, what was learned.
+
+### 2026-10-16
+
+- M2 closed: phase-end workflow run by hand on main b355155 ([run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) green, `make verify` full tier 116 of 116 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26) and `make e2e` E-01. "Now" header brought up to date (it still said M0). Next: M3.
 
 ### 2026-10-15
 
