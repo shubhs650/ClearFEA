@@ -2,8 +2,8 @@
 // E-01 (docs/VERIFICATION.md): upload, select faces, material, support, pressure, mesh, run, see
 // the contour and switch to other result quantities (M3.1), read reactions (M3.2), and read the
 // min/max markers and probe a node (M3.3), cut it with a plane (M3.4), show the safety factor against
-// yield (M3.5), save a view and bring it back (M3.6) and show the result in other units (M3.7),
-// all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its
+// yield (M3.5), save a view and bring it back (M3.6), show the result in other units (M3.7) and
+// export it as CSV and VTK files (M3.8), all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its
 // x = 40 mm end and pressed on its top face, z = 10 mm. Both faces look towards the viewer's
 // starting camera, so they can be clicked without turning the model.
 import { readFileSync } from "node:fs";
@@ -326,5 +326,54 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await settings.getByRole("button", { name: "Show all in the unit system" }).click();
     await expect(legend).toContainText("Von Mises stress (MPa)");
     await expect(page.locator("body")).not.toContainText(/\b(PASS|FAIL)\b|compliant/i);
+  });
+
+  await test.step("export the results as CSV and VTK files (M3.8)", async () => {
+    const exports = settings.getByRole("region", { name: "Export", exact: true });
+    const download = async (name: string) => {
+      const [file] = await Promise.all([
+        page.waitForEvent("download"),
+        exports.getByRole("button", { name, exact: true }).click(),
+      ]);
+      const path = `${OUT}/${file.suggestedFilename()}`;
+      await file.saveAs(path);
+      return { name: file.suggestedFilename(), bytes: readFileSync(path) };
+    };
+    const record = settings.getByLabel("Run record");
+    const nodeCount = Number(/elements, ([\d,]+) nodes/.exec((await record.textContent()) ?? "")?.[1]?.replaceAll(",", ""));
+    expect(nodeCount).toBeGreaterThan(0);
+    const results = settings.getByLabel("Run results");
+    const largest = Number(/Largest von Mises stress([\d.e+-]+) MPa/.exec((await results.textContent()) ?? "")?.[1]);
+
+    // A row per node in the units shown; its largest von Mises stress is the run's.
+    const nodes = await download("Results at every node (CSV)");
+    expect(nodes.name).toMatch(/^clearfea-run-[0-9a-f]{8}-nodes\.csv$/);
+    const lines = nodes.bytes.toString("utf8").replace(/^\uFEFF/, "").trimEnd().split("\r\n");
+    expect(lines).toHaveLength(nodeCount + 1);
+    const header = (lines[0] ?? "").split(",");
+    expect(header.slice(0, 4)).toEqual(["node", "x (mm)", "y (mm)", "z (mm)"]);
+    const column = header.indexOf("von Mises stress (MPa)");
+    expect(column).toBeGreaterThan(0);
+    expect(header).toContain("safety factor");
+    const vonMises = lines.slice(1).map((line) => Number(line.split(",")[column]));
+    expect(Math.abs(Math.max(...vonMises) / largest - 1)).toBeLessThan(1e-3);
+
+    // The support's reaction and the pressure's total, which balance.
+    const reactions = await download("Reactions and loads (CSV)");
+    const rows = reactions.bytes.toString("utf8").replace(/^\uFEFF/, "").trimEnd().split("\r\n");
+    expect(rows[0]).toMatch(/^item,name,Fx \(N\),Fy \(N\),Fz \(N\),Mx \(N·mm\)/);
+    expect(rows.map((r) => r.split(",")[0])).toEqual(["item", "reaction", "applied load"]);
+    const fz = rows.slice(1).map((r) => Number(r.split(",")[4]));
+    expect(Math.abs((fz[0] ?? 0) + (fz[1] ?? 0))).toBeLessThan(1e-3 * Math.abs(fz[1] ?? 1));
+
+    // The mesh and every field, kept with the other outputs for a look in ParaView.
+    const vtk = await download("Mesh and results (VTK)");
+    expect(vtk.name).toMatch(/^clearfea-run-[0-9a-f]{8}\.vtu$/);
+    const head = vtk.bytes.subarray(0, 4000).toString("latin1");
+    expect(head).toMatch(/^<\?xml version="1.0"\?>\n<VTKFile type="UnstructuredGrid"/);
+    expect(head).toContain(`NumberOfPoints="${nodeCount}"`);
+    expect(head).toContain('Name="vonMises (Pa)"');
+    await exports.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${OUT}/e01-export.png` });
   });
 });

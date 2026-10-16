@@ -226,6 +226,7 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 3. Extract the outer surface of each body. Write per-field binary arrays for surface nodes only. This is what the viewer loads first, and it stays small even for the 2-million-element target. Since M1.9 these are `surface.bin` (display mesh format) and `fields.bin` (`packages/spec/result-fields.md`, ADR-031).
 4. Write volume data in a chunked binary form for cut planes and probes. Since M3.4 this is `nodes.bin`: every field at every mesh node in the `fields.bin` layout, one block per field, served whole or one field at a time; the mesh itself is the run's `mesh.bin` (ADR-053).
 5. Write a summary JSON: min and max per field with locations, reaction table, applied-load totals and the balance check, mode frequencies, solver warnings.
+6. Export (since M3.8, ADR-057): the browser builds CSV files (results at every node, reactions and loads, in the units shown) and a VTK XML file (`.vtu`, the mesh and every field, in SI) from `mesh.bin`, `nodes.bin` and the summary; nothing more is stored per run.
 
 **Cut planes on large models (settled in M3.4, ADR-053).** Every model is cut in the browser, on the main thread, from the run's `mesh.bin` and the fields drawn, fetched one field at a time. Measured on a 2-million-element mesh: a cut takes about a quarter of a second and the first cut downloads about 150 MB (the mesh and one scalar field); there is no server-side slice.
 

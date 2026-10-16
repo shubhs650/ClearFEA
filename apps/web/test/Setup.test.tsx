@@ -1352,6 +1352,18 @@ describe("unit system", () => {
     window.localStorage.clear();
   });
 
+  it("offers the export of a succeeded run, the node files only when the run kept its node values", async () => {
+    serve(routes([simulation(supported)], finishedRun()));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const exports = within(await settings().findByRole("region", { name: "Export" }));
+    // This run has no nodes.bin (solved before M3.4): only the reactions can be exported.
+    expect(exports.getByRole("button", { name: "Results at every node (CSV)" })).toHaveProperty("disabled", true);
+    expect(exports.getByRole("button", { name: "Mesh and results (VTK)" })).toHaveProperty("disabled", true);
+    expect(exports.getByRole("button", { name: "Reactions and loads (CSV)" })).toHaveProperty("disabled", false);
+    expect(exports.getByText(/Run again to export the results at every node/)).toBeTruthy();
+  });
+
   it("shows strain in microstrain when picked", async () => {
     window.localStorage.clear();
     serve(routes([simulation(supported)], finishedRun()));
