@@ -220,11 +220,11 @@ function supportProblems(spec: SimulationSpec, add: (item: string, message: stri
 
 /**
  * What a modal setup still needs (M6.1, ADR-070), after the materials and bodies: the number of
- * modes, a direct equation solver, each material's stiffness and density (the mass), the
+ * modes, SPOOLES as the equation solver (ADR-072), each material's stiffness and density (the mass), the
  * supports' own values, and no load. A body no support holds is not a problem: it vibrates
  * freely, and its six rigid-body modes come out at or near zero.
  */
-function modalProblems(spec: SimulationSpec, topology: TopologyTags | undefined, add: (item: string, message: string) => void) {
+function modalProblems(spec: SimulationSpec, add: (item: string, message: string) => void) {
   if ((spec.modes ?? null) === null) {
     add("analysis", "There is no number of modes. Enter how many natural frequencies to find under Analysis.");
   }
@@ -232,15 +232,16 @@ function modalProblems(spec: SimulationSpec, topology: TopologyTags | undefined,
   if (isIterative(solver)) {
     add(
       "run",
-      `${SOLVER_LABELS[solver]} cannot find natural frequencies: CalculiX's iterative solvers do not work in a modal analysis. Choose PaStiX or SPOOLES as the equation solver.`,
+      `${SOLVER_LABELS[solver]} cannot find natural frequencies: CalculiX's iterative solvers do not work in a modal analysis. Choose SPOOLES as the equation solver.`,
     );
   }
-  // CalculiX factors K - 1·M, which a free body makes indefinite; PaStiX then gives wrong
-  // frequencies or stops (ADR-070). The worker's deck check also catches partly held bodies.
-  if (solver === "pastix" && (spec.supports.length === 0 || unheldBodies(spec, topology).length > 0)) {
+  // CalculiX's PaStiX interface corrupts memory on a frequency step and stopped on about one
+  // run in three in the M6.3 benchmark (ADR-072); on a free body it also gave wrong
+  // frequencies (ADR-070). SPOOLES solves both.
+  if (solver === "pastix") {
     add(
       "run",
-      "PaStiX cannot find the natural frequencies of a body no support holds: it gives wrong frequencies or stops. Choose SPOOLES as the equation solver, or add supports that hold every body.",
+      "PaStiX is not used for modal analysis: in ClearFEA's solver benchmark it stopped with a memory error on about one modal run in three. Choose SPOOLES as the equation solver.",
     );
   }
   for (const material of spec.materials) {
@@ -312,7 +313,7 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
     }
   }
   if (isModal(spec)) {
-    modalProblems(spec, topology, add);
+    modalProblems(spec, add);
     meshProblems(spec, add);
     return problems;
   }

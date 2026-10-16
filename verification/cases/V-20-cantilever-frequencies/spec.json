@@ -16,5 +16,6 @@
   "supports": [{ "id": "root", "type": "fixed", "name": "Clamped root", "faces": ["root"] }],
   "loads": [],
   "mesh": { "size": { "value": 4, "unit": "mm" } },
-  "modes": 5
+  "modes": 5,
+  "solver": "spooles"
 }

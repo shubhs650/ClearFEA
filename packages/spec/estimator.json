@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "source": "worker/benchmarks/solver/steps.json, fitted by worker/benchmarks/solver/fit.py",
   "analyses": {
     "linear_static": {
@@ -93,6 +93,47 @@
         "maxElements": {
           "order1": 461000,
           "order2": 461000
+        }
+      }
+    },
+    "modal": {
+      "spooles": {
+        "solver": "SPOOLES on one thread (ADR-048), CalculiX 2.21",
+        "peakMemoryBytes": {
+          "constant": 107323000.0,
+          "coefficient": 413.098,
+          "exponent": 1.38887,
+          "largestRatio": 1.04921
+        },
+        "peakMemoryBytesPerMode": {
+          "constant": 0.0,
+          "coefficient": 80.4481,
+          "exponent": 1.02765,
+          "largestRatio": 1.1023
+        },
+        "jobSeconds": {
+          "constant": 0.420225,
+          "coefficient": 8.01742e-08,
+          "exponent": 1.92949,
+          "largestRatio": 1.20399
+        },
+        "jobSecondsPerMode": {
+          "constant": 0.125903,
+          "coefficient": 3.29079e-08,
+          "exponent": 1.79051,
+          "largestRatio": 1.08743
+        },
+        "fittedNodes": [
+          5212,
+          140275
+        ],
+        "fittedModes": [
+          1,
+          100
+        ],
+        "maxElements": {
+          "order1": 461000,
+          "order2": 97000
         }
       }
     }

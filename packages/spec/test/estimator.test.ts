@@ -23,7 +23,7 @@ describe("the estimator table", () => {
   it("is refused when its fitted range is the wrong way round", () => {
     const models = estimatorTable.analyses.linear_static;
     const linear = { ...models, spooles: { ...models.spooles, fittedNodes: [9, 1] } };
-    expect(() => checkEstimatorTable({ ...estimatorTable, analyses: { linear_static: linear } })).toThrow(
+    expect(() => checkEstimatorTable({ ...estimatorTable, analyses: { ...estimatorTable.analyses, linear_static: linear } })).toThrow(
       /spooles's fittedNodes/,
     );
   });
