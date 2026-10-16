@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M3 Results tools (M2 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M3.2
+- **Next task:** M3.3
 - **Blocked on:** nothing
 
 ## Milestones
@@ -74,7 +74,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M3 Results tools
 
 - [x] M3.1 Principal stresses, stress and strain components
-- [ ] M3.2 Reaction forces and moments per support; applied-load totals; balance check shown on every result
+- [x] M3.2 Reaction forces and moments per support; applied-load totals; balance check shown on every result
 - [ ] M3.3 Min/max markers and probe at a picked point
 - [ ] M3.4 Cut planes. Settle the large-model approach by measurement and record an ADR
 - [ ] M3.5 Safety factor against yield
@@ -97,15 +97,17 @@ Things only the maintainer can do.
 | Tier | Last run | Result |
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
-| Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 128 of 128 checks (M3.1) |
+| Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 143 of 143 checks (M3.2) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1) |
-| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps |
+| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps and the M3.2 reaction and balance step |
 | Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main b355155, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635); closed M2) | Green: full tier 116 of 116 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
 
+> M3.2 (2026-10-16): reaction moments, load totals and the balance check (ADR-051, accepted under Shubham's standing M3 instruction, pending his review). The deck prints every held node's RF (`RALL`) for every setup (deck format 3; fixed-only snapshots gained the set and print, all changed their first line; `solve` and `elastic-fixed` `.dat` fixtures re-run). The reader now takes uniform pressure on held nodes out of reactions with CalculiX's own three-point face rule (found by solving; `spikes/load_check` pressed ring), so reactions on pressed faces touching supports changed (M1 fixture: (100, 0, −33.3) → (100, 0, −50) N). `SolveResult` gains `reactions[].moment`/`point` (about the support faces' area centroid), `loads[]` and `balance` (ratios against the loads' gross size, since V-01's bore pressure cancels itself). Run panel shows them; old runs say to run again. Harness: `moment.x/y/z` quantities, V-04 clamp torque and bending moment, and the run's balance row on every case. Next: M3.3.
+>
 > M3.1 (2026-10-16): stress components, principal stresses and total strain components (ADR-050, accepted under Shubham's standing M3 instruction, pending his review). The deck asks for `S, E` (deck format 2; every snapshot changed by that line and the format number only; the solver-output fixtures were re-run and gained only the TOSTRAIN block). `fields.bin` gains `stress`, `principalStress` and `strain` (still version 1); `units.json` version 3 adds the `strain` kind. Strain is CalculiX's total strain with tensor shear components (γ/2), labelled so. Runs solved before M3.1 show only displacement and von Mises and say to run again for the rest. Harness quantities `stress.<c>`, `principal.<k>`, `strain.<c>`; new checks on V-01, V-08, V-24. V-01's σ3 = −p at the bore was left out on purpose (extrapolated nodal radial stress 4.9 % coarse, 1.7 % full short, converging; V-01 reference.md). E-01 now also switches to σ3 and εzz. Next: M3.2.
 >
 > M2 close (2026-10-16): M2 closed on a green manual phase-end run on main (see the Milestones table). Next is M3 in PLAN.md order, under the maintainer's M3 autodrive. Still waiting on the maintainer: review of ADR-038 to ADR-049 (except ADR-045, which he accepted), and how to reach the 2-million-element target (ADR-048 item 7). A 16 GB machine holds about 150,000 to 170,000 stocky second-order elements, not the 300,000 to 500,000 in DECISIONS' Model size row (ADR-048 item 2, ADR-049 item 8); that row is unchanged. The `Setup.test.tsx` `getByText` race from the Phase-end CI note was not reproduced or changed here.
@@ -206,6 +208,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M3.2: reaction forces and moments per support, load totals and the balance check on every result (ADR-051). Learned: CalculiX integrates a `*DLOAD` face pressure with a three-point rule (the seven-point rule is 3e-4 off on curved C3D10 faces); a balance ratio must be measured against the loads' gross size, or a self-cancelling pressure reads 100 percent.
 - M3.1: principal stresses, stress and strain components in the result view (ADR-050). Learned: CalculiX's `E` is total strain (elastic plus thermal) with tensor shear components; the nodal radial stress at a pressed bore converges slowly (V-01).
 - M2 closed: phase-end workflow run by hand on main b355155 ([run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) green, `make verify` full tier 116 of 116 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26) and `make e2e` E-01. "Now" header brought up to date (it still said M0). Next: M3.
 
