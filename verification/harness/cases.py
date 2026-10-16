@@ -55,6 +55,8 @@ class Check:
     support: str | None = None  # the spec support id of a reaction check
     inside: bool = False  # read at the mesh nodes in the box, not on a face (M3.4)
     load: str | None = None  # the spec load id of a heat flow check (M5.3)
+    mode: int | None = None  # the mode number of a frequency check, from 1 (M6.1)
+    relative_to: int | None = None  # a frequency check measured against this mode's frequency
 
 
 @dataclass(frozen=True)
@@ -80,8 +82,10 @@ TENSOR = ("xx", "yy", "zz", "xy", "yz", "zx")
 #: shear strains are tensor components, half of γ. The safety factor against yield is the
 #: run's field (M3.5, ADR-054). The temperature is a steady-state thermal run's field, absolute,
 #: in kelvin (M5.1, ADR-064), and so is its heat flux, q = -k grad T, in W/m² (M5.3). A heat
-#: flow is one thermal load's net heat into the body in the run's result, in watts (M5.3).
+#: flow is one thermal load's net heat into the body in the run's result, in watts (M5.3). A
+#: frequency is one mode's natural frequency in a modal run's result, in hertz (M6.1).
 QUANTITIES = {
+    "frequency": "frequency",
     "temperature": "temperature",
     "heatFlux": "heatFlux",
     "heatFlux.x": "heatFlux",
@@ -121,6 +125,18 @@ def _box(raw: Any, unit: str, where: str) -> Box:
     return Box(lo, hi)  # type: ignore[arg-type]
 
 
+def _mode(item: dict[str, Any], key: str, folder: Path) -> int | None:
+    """A mode number a frequency check gives under ``key`` (1 is the lowest), or None."""
+    value = item.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise CaseError(
+            f"{folder.name}: check {item['name']!r}: {key} must be a mode number from 1."
+        )
+    return value
+
+
 def load_case(folder: Path) -> Case:
     raw = yaml.safe_load((folder / "case.yaml").read_text())
     spec = json.loads((folder / "spec.json").read_text())
@@ -146,8 +162,17 @@ def load_case(folder: Path) -> Case:
             raise CaseError(
                 f"{folder.name}: unknown quantity {quantity}; use one of {list(QUANTITIES)}."
             )
-        support = load = None
-        if quantity == "heatFlow":
+        support = load = mode = relative_to = None
+        if quantity == "frequency":
+            mode, relative_to = _mode(item, "mode", folder), _mode(item, "relativeTo", folder)
+            if mode is None:
+                raise CaseError(f"{folder.name}: check {item['name']!r} must name its mode.")
+            if relative_to is None and float(item["reference"]["value"]) == 0.0:
+                raise CaseError(
+                    f"{folder.name}: check {item['name']!r} has a zero reference; give relativeTo, "
+                    "the mode its error is measured against."
+                )
+        elif quantity == "heatFlow":
             load = item.get("load")
             if load not in {x["id"] for x in spec["loads"]}:
                 raise CaseError(
@@ -181,6 +206,8 @@ def load_case(folder: Path) -> Case:
                 support=support,
                 inside=bool(item.get("inside", False)),
                 load=load,
+                mode=mode,
+                relative_to=relative_to,
             )
         )
     allowed = [re.compile(p) for p in raw.get("allowedWarnings", [])]
@@ -309,6 +336,20 @@ def reaction(check: Check, reactions: list[dict[str, Any]]) -> float:
     if key not in found:
         raise CaseError(f"The run's result has no reaction {key} for support {check.support}.")
     return float(found[key]["xyz".index(check.quantity[-1])])
+
+
+def frequency_error(check: Check, frequencies: list[float]) -> tuple[float, float]:
+    """A frequency check's mode's frequency (Hz) in the run's result and its error: relative to
+    the reference, or with ``relative_to`` (a rigid-body mode near zero, M6.1) the difference
+    from the reference over that mode's frequency."""
+    assert check.mode is not None
+    wanted = max(check.mode, check.relative_to or 0)
+    if len(frequencies) < wanted:
+        raise CaseError(f"The run found {len(frequencies)} modes; {check.name!r} needs {wanted}.")
+    value = frequencies[check.mode - 1]
+    if check.relative_to is None:
+        return value, value / check.reference - 1
+    return value, (value - check.reference) / frequencies[check.relative_to - 1]
 
 
 def heat_flow(check: Check, flows: list[dict[str, Any]]) -> float:

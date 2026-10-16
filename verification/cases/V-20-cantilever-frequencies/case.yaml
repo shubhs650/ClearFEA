@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-20: natural frequencies of a cantilever (M6.1).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-20
+title: Cantilever beam frequencies
+analysis: modal
+features: [modal analysis, fixed support, density, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  root: { min: [0, 0, 0], max: [0, 16, 8] }
+# Two and four elements through the 8 mm depth.
+mesh:
+  coarse: { value: 4, unit: mm }
+  full: { value: 2, unit: mm }
+# Euler-Bernoulli frequencies (reference.md): bending in z (8 mm deep) and in y (16 mm wide)
+# interleave as z1, y1, z2, y2, z3. Tolerances: reference.md, "Tolerances".
+checks:
+  - name: First bending mode in z, βL = 1.8751
+    quantity: frequency
+    mode: 1
+    reference: { value: 10.192259, unit: Hz }
+    tolerance: { coarse: 0.005, full: 0.003 }
+  - name: First bending mode in y, βL = 1.8751
+    quantity: frequency
+    mode: 2
+    reference: { value: 20.384518, unit: Hz }
+    tolerance: { coarse: 0.005, full: 0.003 }
+  - name: Second bending mode in z, βL = 4.6941
+    quantity: frequency
+    mode: 3
+    reference: { value: 3832.42776, unit: cpm }
+    tolerance: { coarse: 0.005, full: 0.003 }
+  - name: Second bending mode in y, βL = 4.6941
+    quantity: frequency
+    mode: 4
+    reference: { value: 127.747591, unit: Hz }
+    tolerance: { coarse: 0.005, full: 0.003 }
+  - name: Third bending mode in z, βL = 7.8548
+    quantity: frequency
+    mode: 5
+    reference: { value: 178.848477, unit: Hz }
+    tolerance: { coarse: 0.005, full: 0.003 }

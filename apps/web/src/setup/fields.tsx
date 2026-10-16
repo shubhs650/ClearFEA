@@ -22,9 +22,10 @@ function inside(value: number, range: Bounds): boolean {
 }
 
 /** The value a field's text stands for, or the problem with it. Empty text is null. */
-function check(text: string, range?: Bounds): { value: number | null } | { problem: string } {
+function check(text: string, range?: Bounds, whole = false): { value: number | null } | { problem: string } {
   const parsed = parse(text);
   if (parsed === undefined) return { problem: NOT_A_NUMBER };
+  if (whole && parsed !== null && !Number.isInteger(parsed)) return { problem: "Enter a whole number, for example 10." };
   if (parsed !== null && range && !inside(parsed, range)) {
     return {
       problem:
@@ -48,6 +49,7 @@ export function NumberField({
   onChange,
   hint,
   range,
+  whole = false,
 }: {
   label: string;
   value: number | null;
@@ -55,9 +57,11 @@ export function NumberField({
   hint?: string;
   /** Exclusive bounds; a value outside them is shown as a problem and not reported. */
   range?: Bounds;
+  /** Whole numbers only (M6.1: the number of modes). */
+  whole?: boolean;
 }) {
   const [text, setText] = useState(show(value));
-  const checked = check(text, range);
+  const checked = check(text, range, whole);
   const problem = "problem" in checked ? checked.problem : undefined;
   const hintId = useId();
   return (
@@ -65,13 +69,13 @@ export function NumberField({
       <label htmlFor={`${hintId}-value`}>{label}</label>
       <input
         id={`${hintId}-value`}
-        inputMode="decimal"
+        inputMode={whole ? "numeric" : "decimal"}
         value={text}
         aria-invalid={problem !== undefined}
         aria-describedby={hint || problem ? hintId : undefined}
         onChange={(event) => {
           setText(event.target.value);
-          const next = check(event.target.value, range);
+          const next = check(event.target.value, range, whole);
           if ("value" in next) onChange(next.value);
         }}
       />

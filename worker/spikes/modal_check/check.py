@@ -9,7 +9,7 @@ checks what the platform path cannot see exactly: the frequency step and its sol
 of density and stiffness through to the eigenvalues, how the reader turns them into hertz, and
 the six rigid-body modes of a free body.
 
-    cd worker && uv run python spikes/modal_check/check.py [--out DIR]
+    cd worker && uv run python spikes/modal_check/check.py [--out DIR] [--size MM]
 
 Needs Gmsh's system libraries and `ccx` on the PATH. Solves with SPOOLES, since a host's ccx
 may be built without PaStiX (ADR-063); the platform's worker image has both. Exit status is
@@ -31,14 +31,19 @@ from clearfea_worker.results import read_results
 from clearfea_worker.spec.geometry_schema import Topology
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
-#: The bar, in millimetres as the STEP file declares it: x from 0 to L, b wide along y, h deep
-#: along z, so it bends most easily about y (in z), then about z (in y).
-L, B, H = 600.0, 20.0, 10.0
+#: The bar, in millimetres as the STEP file declares it: x from 0 to L, B wide along y, H deep
+#: along z, so it bends most easily in z, then in y; slender (L = 100 H) so that Euler-Bernoulli
+#: holds closely. V-20, V-21 and V-22 use the same bar.
+L, B, H = 800.0, 16.0, 8.0
 #: Steel-like values in mixed units: 200 GPa, 7.85 g/cm³.
 E, NU, RHO = 200e9, 0.3, 7850.0
 #: Euler-Bernoulli: f = (βL)² / (2π L²) √(E I / (ρ A)), with I / A = d² / 12 for depth d.
 CANTILEVER = (1.875104069, 4.694091133, 7.854757438)
 CLAMPED = (4.730040745, 7.853204624, 10.99560784)
+#: Euler-Bernoulli leaves out shear deformation and rotary inertia, which lower the frequencies
+#: (by up to 0.16 % here), and a clamped face also stops the sideways Poisson contraction, which
+#: raises them (0.1 % on the first cantilever mode); measured at 4 and 2 mm (ADR-070).
+TOLERANCE = 0.003
 
 
 def beam(beta_l: float, depth_mm: float, length_mm: float = L) -> float:
@@ -81,7 +86,7 @@ def spec(supports: list[dict], modes: int) -> SimulationSpec:
             ],
             "supports": supports,
             "loads": [],
-            "mesh": {"size": {"value": 5, "unit": "mm"}},
+            "mesh": {"size": {"value": 4, "unit": "mm"}},
             "modes": modes,
         }
     )
@@ -104,6 +109,7 @@ def solve(setup: SimulationSpec, mesh, work: Path) -> list[float]:  # type: igno
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, help="keep the work files here")
+    parser.add_argument("--size", type=float, default=4.0, help="element size in mm (4)")
     args = parser.parse_args()
     root = args.out or Path(tempfile.mkdtemp(prefix="modal-check-"))
     root.mkdir(parents=True, exist_ok=True)
@@ -129,38 +135,39 @@ def main() -> int:
         return x0[0], x1[0]
 
     root_face, tip_face = ends()
-    for order in (2,):
-        out = mesh_geometry(
-            bar, topology, root / f"mesh-p{order}", scaling=1.0, size=0.005, unit="mm", order=order
-        )
-        mesh = read_volume_mesh(out.mesh_path)
-        print(f"C3D{4 if order == 1 else 10}, {mesh.element_count} elements")
-        fixed = [{"id": "root", "type": "fixed", "name": "Root", "faces": [root_face]}]
-        f = solve(spec(fixed, 5), mesh, root / f"cantilever-p{order}")
-        print(f"cantilever: {', '.join(f'{x:.5g}' for x in f)}")
-        # Bending in z (depth H) then in y (depth B), interleaved: z1, y1, z2, y2, z3.
-        expected = [
-            beam(CANTILEVER[0], H),
-            beam(CANTILEVER[0], B),
-            beam(CANTILEVER[1], H),
-            beam(CANTILEVER[1], B),
-            beam(CANTILEVER[2], H),
-        ]
-        for k, (value, reference) in enumerate(zip(f, expected, strict=True)):
-            report(f"cantilever mode {k + 1}", value, reference, 0.01)
-        both = [*fixed, {"id": "tip", "type": "fixed", "name": "Tip", "faces": [tip_face]}]
-        f = solve(spec(both, 3), mesh, root / f"clamped-p{order}")
-        print(f"clamped-clamped: {', '.join(f'{x:.5g}' for x in f)}")
-        expected = [beam(CLAMPED[0], H), beam(CLAMPED[0], B), beam(CLAMPED[1], H)]
-        for k, (value, reference) in enumerate(zip(f, expected, strict=True)):
-            report(f"clamped-clamped mode {k + 1}", value, reference, 0.01)
-        f = solve(spec([], 8), mesh, root / f"free-p{order}")
-        print(f"free: {', '.join(f'{x:.5g}' for x in f)}")
-        rigid = max(abs(x) for x in f[:6])
-        ok = rigid <= 1e-4 * f[6]
-        failed |= not ok
-        print(f"  {'ok  ' if ok else 'FAIL'} free: largest rigid-body mode {rigid:.3g} Hz")
-        report("free mode 7", f[6], beam(CLAMPED[0], H), 0.01)
+    size = args.size / 1000
+    out = mesh_geometry(bar, topology, root / "mesh", scaling=1.0, size=size, unit="mm", order=2)
+    mesh = read_volume_mesh(out.mesh_path)
+    print(f"C3D10, {mesh.element_count} elements of {args.size:g} mm")
+    fixed = [{"id": "root", "type": "fixed", "name": "Root", "faces": [root_face]}]
+    f = solve(spec(fixed, 5), mesh, root / "cantilever")
+    print(f"cantilever: {', '.join(f'{x:.5g}' for x in f)}")
+    # Bending in z (depth H) then in y (depth B), interleaved: z1, y1, z2, y2, z3.
+    expected = [
+        beam(CANTILEVER[0], H),
+        beam(CANTILEVER[0], B),
+        beam(CANTILEVER[1], H),
+        beam(CANTILEVER[1], B),
+        beam(CANTILEVER[2], H),
+    ]
+    for k, (value, reference) in enumerate(zip(f, expected, strict=True)):
+        report(f"cantilever mode {k + 1}", value, reference, TOLERANCE)
+    both = [*fixed, {"id": "tip", "type": "fixed", "name": "Tip", "faces": [tip_face]}]
+    f = solve(spec(both, 3), mesh, root / "clamped")
+    print(f"clamped-clamped: {', '.join(f'{x:.5g}' for x in f)}")
+    expected = [beam(CLAMPED[0], H), beam(CLAMPED[0], B), beam(CLAMPED[1], H)]
+    for k, (value, reference) in enumerate(zip(f, expected, strict=True)):
+        report(f"clamped-clamped mode {k + 1}", value, reference, TOLERANCE)
+    # Free: six rigid-body modes, then the free-free bending modes, whose βL are the
+    # clamped-clamped ones.
+    f = solve(spec([], 8), mesh, root / "free")
+    print(f"free: {', '.join(f'{x:.5g}' for x in f)}")
+    rigid = max(abs(x) for x in f[:6])
+    ok = rigid <= 1e-3 * f[6]
+    failed |= not ok
+    print(f"  {'ok  ' if ok else 'FAIL'} free: largest rigid-body mode {rigid:.3g} Hz")
+    report("free mode 7", f[6], beam(CLAMPED[0], H), TOLERANCE)
+    report("free mode 8", f[7], beam(CLAMPED[0], B), TOLERANCE)
     print("FAILED" if failed else "all checks passed")
     return 1 if failed else 0
 

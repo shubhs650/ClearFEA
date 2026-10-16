@@ -11,6 +11,7 @@ import struct
 from pathlib import Path
 
 import pytest
+from clearfea_worker.units import to_si
 
 from harness.binfiles import Patch, Surface, read_fields, read_mesh_positions, read_surface
 from harness.cases import (
@@ -25,6 +26,7 @@ from harness.cases import (
     distance_integral,
     evaluate,
     evaluate_inside,
+    frequency_error,
     heat_flow,
     load_case,
     name_faces,
@@ -768,3 +770,100 @@ def test_thermal_cases_check_heat_flux_and_heat_flows_against_closed_forms() -> 
         -1e7 * 0.04 * 0.0036, rel=1e-12
     )
     assert checks["Heat flux at the left face, − q‴ L"].reference == -1e7 * 0.02
+
+
+# --- Modal cases (M6.1, ADR-070) ---
+
+
+def _root(equation, lo: float, hi: float) -> float:  # type: ignore[no-untyped-def]
+    """The root of ``equation`` between lo and hi, by bisection to the last bit."""
+    for _ in range(200):
+        mid = (lo + hi) / 2
+        if (equation(lo) > 0) == (equation(mid) > 0):
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
+def _beam_roots(free_end: bool) -> list[float]:
+    """βL of a cantilever (cos cosh = -1) or a clamped-clamped beam (cos cosh = 1)."""
+    sign = 1.0 if free_end else -1.0
+
+    def equation(x: float) -> float:
+        return math.cos(x) * math.cosh(x) + sign
+
+    starts = (1.0, 4.0, 7.0) if free_end else (4.0, 7.0, 10.0)
+    return [_root(equation, a, a + 2.5) for a in starts]
+
+
+def _bar_frequency(beta_l: float, depth: float, spec: dict) -> float:
+    """Euler-Bernoulli frequency (Hz) of the 800 mm bar bending across ``depth`` (m)."""
+    material = spec["materials"][0]
+    e = to_si(material["youngsModulus"]["value"], material["youngsModulus"]["unit"], "pressure")
+    rho = to_si(material["density"]["value"], material["density"]["unit"], "density")
+    length = 0.8
+    return beta_l**2 / (2 * math.pi * length**2) * math.sqrt(e * depth**2 / (12 * rho))
+
+
+def test_modal_references_are_euler_bernoulli_beam_frequencies() -> None:
+    cantilever, clamped = _beam_roots(True), _beam_roots(False)
+    z, y = 0.008, 0.016
+    expected = {
+        "V-20-cantilever-frequencies": [
+            (cantilever[0], z),
+            (cantilever[0], y),
+            (cantilever[1], z),
+            (cantilever[1], y),
+            (cantilever[2], z),
+        ],
+        "V-21-clamped-beam-frequencies": [(clamped[0], z), (clamped[0], y), (clamped[1], z)],
+        # Free-free bending has the clamped-clamped roots; modes 1 to 6 are rigid-body modes.
+        "V-22-free-body-modes": [*[None] * 6, (clamped[0], z), (clamped[0], y)],
+    }
+    for folder, modes in expected.items():
+        case = load_case(CASES / folder)
+        assert case.spec["analysis"] == "modal" and case.spec["modes"] == len(modes)
+        checks = sorted(case.checks, key=lambda c: c.mode or 0)
+        assert [c.mode for c in checks] == list(range(1, len(modes) + 1))
+        for check, mode in zip(checks, modes, strict=True):
+            if mode is None:
+                assert check.reference == 0.0 and check.relative_to == 7
+                continue
+            assert check.reference == pytest.approx(_bar_frequency(*mode, case.spec), rel=2e-8)
+
+
+def test_frequency_error_is_relative_or_against_another_mode() -> None:
+    plain = Check("f", "frequency", None, None, 100.0, "Hz", {"coarse": 0.01}, mode=2)
+    assert frequency_error(plain, [0.0, 101.0]) == (101.0, pytest.approx(0.01))
+    rigid = Check("r", "frequency", None, None, 0.0, "Hz", {"coarse": 0.01}, mode=1, relative_to=2)
+    assert frequency_error(rigid, [-0.5, 50.0]) == (-0.5, -0.01)
+    with pytest.raises(CaseError, match="found 1 modes"):
+        frequency_error(rigid, [0.0])
+
+
+@pytest.mark.parametrize(
+    ("check", "message"),
+    [
+        ("{name: f, quantity: frequency, reference: {value: 1, unit: Hz}}", "must name its mode"),
+        (
+            "{name: f, quantity: frequency, mode: 0, reference: {value: 1, unit: Hz}}",
+            "mode number from 1",
+        ),
+        (
+            "{name: f, quantity: frequency, mode: 1, reference: {value: 0, unit: Hz}}",
+            "give relativeTo",
+        ),
+    ],
+)
+def test_a_frequency_check_names_its_mode(tmp_path: Path, check: str, message: str) -> None:
+    folder = tmp_path / "V-99"
+    folder.mkdir()
+    (folder / "spec.json").write_text(json.dumps({"loads": [], "supports": []}))
+    (folder / "case.yaml").write_text(
+        "id: V-99\ntitle: t\ngeometry: {unit: mm}\nfaces: {}\n"
+        "mesh: {coarse: {value: 1, unit: mm}, full: {value: 1, unit: mm}}\n"
+        f"checks:\n  - {check[:-1]}, tolerance: {{coarse: 0.1, full: 0.1}}}}\n"
+    )
+    with pytest.raises(CaseError, match=message):
+        load_case(folder)

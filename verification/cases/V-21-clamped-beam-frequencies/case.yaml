@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-21: natural frequencies of a beam clamped at both ends (M6.1).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-21
+title: Fixed-fixed beam frequencies
+analysis: modal
+features: [modal analysis, fixed support, density, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  left: { min: [0, 0, 0], max: [0, 16, 8] }
+  right: { min: [800, 0, 0], max: [800, 16, 8] }
+mesh:
+  coarse: { value: 4, unit: mm }
+  full: { value: 2, unit: mm }
+# Euler-Bernoulli frequencies (reference.md): z1, y1, z2. Tolerances: reference.md.
+checks:
+  - name: First bending mode in z, βL = 4.7300
+    quantity: frequency
+    mode: 1
+    reference: { value: 3891.3537, unit: cpm }
+    tolerance: { coarse: 0.005, full: 0.003 }
+  - name: First bending mode in y, βL = 4.7300
+    quantity: frequency
+    mode: 2
+    reference: { value: 129.711789, unit: Hz }
+    tolerance: { coarse: 0.005, full: 0.003 }
+  - name: Second bending mode in z, βL = 7.8532
+    quantity: frequency
+    mode: 3
+    reference: { value: 178.777771, unit: Hz }
+    tolerance: { coarse: 0.005, full: 0.003 }

@@ -801,7 +801,8 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
         if transform is not None:
             out.append(f"*TRANSFORM, NSET=C{k + 1}, TYPE=R")
             out.append(transform)
-    if held:
+    # A modal analysis prints no reactions (M6.1), so it needs neither node set.
+    if held and not modal:
         out.append(f"*NSET, NSET={REACTION_SET}")
         out.extend(_lines(n + 1 for n in held))
 
@@ -859,7 +860,7 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
             for equation in tie.equations:
                 out.extend(_equation_lines(equation))
         tied.extend(dict.fromkeys(e[0].node for e in tie.equations))
-    if tied:
+    if tied and not modal:
         out.append(f"*NSET, NSET={TIE_SET}")
         out.extend(_lines(n + 1 for n in tied))
 

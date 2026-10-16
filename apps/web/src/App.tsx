@@ -464,7 +464,8 @@ export function App() {
         geometry={geometry}
         mesh={!showGeometry && selected === "mesh" ? mesh : null}
         result={
-          !showGeometry && selected === "run" && run?.status === "succeeded"
+          // A modal run has no fields to draw until its mode shapes (M6.2); the geometry stays.
+          !showGeometry && selected === "run" && run?.status === "succeeded" && run.spec.analysis !== "modal"
             ? { run, ...shownChoice, units: resultUnits }
             : null
         }

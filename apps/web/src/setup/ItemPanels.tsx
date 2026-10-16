@@ -78,6 +78,8 @@ const analysisHints: Record<AnalysisType, string> = {
     "Steady-state heat conduction: temperatures from fixed temperatures, heat fluxes, convection and radiation on faces and heat generated in bodies; faces with none of them are insulated.",
   thermal_stress:
     "Steady-state heat conduction, then linear static on the temperatures it solves: temperatures, and the displacements, stresses and reactions they cause with the supports and structural loads.",
+  modal:
+    "Natural frequencies of the bodies as the supports hold them, lowest first, with no loads. A body no support holds vibrates freely: its six rigid-body modes come out at or near zero.",
 };
 
 /**
@@ -124,6 +126,16 @@ export function AnalysisPanel({
           onChange={(stressFreeTemperature) => onChange({ ...spec, stressFreeTemperature })}
         />
       )}
+      {spec.analysis === "modal" && (
+        <NumberField
+          label="Number of modes"
+          value={spec.modes ?? null}
+          whole
+          range={{ above: 0, below: 100, orEqual: true }}
+          hint="How many natural frequencies to find, the lowest first: 1 to 100."
+          onChange={(modes) => onChange({ ...spec, modes })}
+        />
+      )}
     </section>
   );
 }
@@ -157,6 +169,7 @@ export function GroupPanel({
 }) {
   const thermal = analysis === "steady_thermal";
   const thermalStress = analysis === "thermal_stress";
+  const modal = analysis === "modal";
   // Supports belong to the analyses with a static step (ADR-064, ADR-067).
   const adds =
     group === "supports"
@@ -176,11 +189,21 @@ export function GroupPanel({
             Supports have no effect in a steady-state thermal analysis. Delete them, or set the analysis type to linear
             static.
           </p>
+        ) : modal ? (
+          <p className="field-hint">
+            Select faces in the viewer first to give the new item those faces. A body no support holds vibrates freely:
+            its six rigid-body modes come out at or near zero.
+          </p>
         ) : (
           <p className="field-hint">Select faces in the viewer first to give the new item those faces.</p>
         ))}
       {group === "loads" &&
-        (thermalStress ? (
+        (modal ? (
+          <p className="field-hint">
+            Loads have no effect in a modal analysis, which finds the natural frequencies of the bodies as they are held.
+            Delete them, or set the analysis type to linear static.
+          </p>
+        ) : thermalStress ? (
           <p className="field-hint">
             Select faces in the viewer first to give a new load those faces. The thermal loads set the temperatures; the
             structural loads act with them in the static step. Gravity and a centrifugal load act on every body; heat
@@ -283,7 +306,7 @@ export function MaterialPanel({
         positive
         kind="density"
         value={material.density ?? null}
-        hint="Needed for gravity and centrifugal loads."
+        hint="Needed for gravity and centrifugal loads and for a modal analysis."
         onChange={(density) => set({ density })}
       />
       <QuantityInput
