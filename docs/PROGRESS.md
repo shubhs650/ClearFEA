@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M3 Results tools (M2 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M3.7
+- **Next task:** M3.8
 - **Blocked on:** nothing
 
 ## Milestones
@@ -79,7 +79,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M3.4 Cut planes. Settle the large-model approach by measurement and record an ADR
 - [x] M3.5 Safety factor against yield
 - [x] M3.6 Hide/show bodies; saved views
-- [ ] M3.7 Display-unit switching for results without rerun
+- [x] M3.7 Display-unit switching for results without rerun
 - [ ] M3.8 CSV and VTK export
 
 ## Maintainer to-do
@@ -105,6 +105,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M3.7 (2026-10-16): result display units without a rerun (ADR-056, accepted under Shubham's standing M3 instruction, pending his review). Web only; no worker, schema, `units.json` or `convert.ts` change, so no physics-critical module touched. The Run panel's new "Units shown" (under "Show on the model") has a list per kind: length, stress, force, moment and strain, each "As the unit system (<unit>)" then every unit `units.json` has for the kind (strain in µε or %, ADR-050's open point). The picks go over the system's units in the one result-units object App already gave the viewer and the panel (`apps/web/src/setup/displayUnits.ts`), so figures, reactions, balance, legend, markers, probes and the cut plane's position all follow; "Show all in the unit system" clears them. Input fields still offer the system's unit. The picks are kept in the browser's local storage per user (`clearfea.resultUnits.<user id>`), not in the API or saved views (the report prints in its own system, M7.6). E-01 switches stress to ksi (checked against the MPa marker through `units.json`), length to in (cut plane reads x = 0.7874 in) and strain to µε, reloads, and clears. E-02 (mixed-unit entry and display-unit switch, listed for M2 in VERIFICATION.md) is still not written; E-01 now covers the display-unit switch. Screenshot in the project's `m3.7/` folder. Next: M3.8.
 
 > M3.6 (2026-10-16): hide/show bodies and saved views (ADR-055, accepted under Shubham's standing M3 instruction, pending his review). Display only; no physics-critical module touched. Viewer: a "Bodies" toolbar button (only for more than one body) with a checkbox per body and "Show all"; the last body shown cannot be hidden. A face is hidden when all its bodies are (topology.json), works on geometry, mesh and results; `ModelView.setHiddenFaces` discards them in the shader (`shown` attribute), drops their outlines, skips them in picking and probing, and "Reset view" frames what is shown. On results the legend and min/max span the bodies shown, and a cut plane leaves hidden bodies out (`cutMesh` reads `mesh.bin`'s body runs). Saved views: `view.schema.json` (also now the single list of `ResultQuantity` and `Deformation`), migration 0014 `views` (unique name per simulation; saving a name again replaces it), `GET/POST /api/simulations/:id/views`, `DELETE /api/simulations/:id/views/:viewId`. A "Views" toolbar button lists them (loaded when opened), saves camera position and target, hidden bodies and, on results, quantity, deformation, markers and cut plane; clicking one brings it back (the result part only on results). Probes are not kept. E-01 saves a view on a cut σ1 result and brings it back. For M7: the report picks from these views. Screenshots in the project's `m3.6/` folder. Next: M3.7.
 
@@ -216,6 +218,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M3.7: result display units picked per kind in the Run panel, over the unit system, kept per user in the browser (ADR-056).
 - M3.6: hide/show bodies and saved views of a simulation (ADR-055). Learned: Playwright's role name match is a substring, so a "Delete the view X" button also matches X unless `exact: true`; the host needs Gmsh's system libraries (`apt-get install libglu1-mesa` and friends) before `make test`'s pytest passes.
 - M3.5: safety factor against yield, yield strengths in materials and the library (ADR-054). Learned: pydantic dumps an absent optional field as null, which the API's schema refuses; the scanned handbook tables are readable at 130 to 300 dpi but the OCR text is not trustworthy for numbers.
 - M3.4: cut planes in the result view, cut in the browser at every model size (ADR-053). Learned: a 2-million-element mesh cuts in about a quarter of a second in V8; the download (about 150 MB), not the cut, is what grows, so values are served a field at a time.

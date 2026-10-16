@@ -114,7 +114,7 @@ A run stores a frozen copy of the spec. Editing a simulation never changes an ex
 - **Unit systems:** the same table names unit systems (`metric-mm`, `si`, `us-in`), each giving one unit per kind (ADR-038). The project's system is the unit every quantity field offers first and the unit results are shown in. Values are stored as typed whatever the system.
 - **Conversion to SI for solving** happens in exactly one place, the Python deck generator. The frontend converts only for display.
 - **Temperature:** stored in kelvin. Temperature differences and absolute temperatures are distinct quantity kinds, so that a 50 °C rise is never converted with an offset.
-- **Results** are stored in SI and converted on display, which is why display units can change without a rerun.
+- **Results** are stored in SI and converted on display, which is why display units can change without a rerun. The Run panel can pick a unit per kind over the system's for results only (ADR-056), kept per user in the browser.
 - A shared fixture file of known conversions is tested in both languages.
 
 ## 6. Jobs

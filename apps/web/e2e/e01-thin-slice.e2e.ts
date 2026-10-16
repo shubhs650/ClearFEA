@@ -3,9 +3,9 @@
 // the contour and switch to other result quantities (M3.1), read reactions (M3.2), and read the
 // min/max markers and probe a node (M3.3), cut it with a plane (M3.4), show the safety factor against
 // yield (M3.5), save a view and bring it back (M3.6) and show the result in other units (M3.7),
-// all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its x = 40 mm end and pressed on its top face,
-// z = 10 mm. Both faces look towards the viewer's starting camera, so they can be clicked
-// without turning the model.
+// all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its
+// x = 40 mm end and pressed on its top face, z = 10 mm. Both faces look towards the viewer's
+// starting camera, so they can be clicked without turning the model.
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
