@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "kinds": {
     "length": {
       "description": "Lengths and coordinates.",
@@ -298,6 +298,32 @@
           "definition": "1 µin/(in·°F) = 1e-6 x 1.8/K = 1.8e-6/K exactly"
         }
       }
+    },
+    "strain": {
+      "description": "Strains: change of length per unit of length, dimensionless.",
+      "si": "m/m",
+      "units": {
+        "m/m": {
+          "factor": 1,
+          "definition": "SI coherent unit, 1 (dimensionless)"
+        },
+        "mm/mm": {
+          "factor": 1,
+          "definition": "1 mm/mm = 1 m/m exactly"
+        },
+        "in/in": {
+          "factor": 1,
+          "definition": "1 in/in = 1 m/m exactly"
+        },
+        "µε": {
+          "factor": 1e-06,
+          "definition": "1 microstrain = 1e-6 m/m exactly"
+        },
+        "%": {
+          "factor": 0.01,
+          "definition": "1 % = 0.01 m/m exactly"
+        }
+      }
     }
   },
   "systems": {
@@ -315,7 +341,8 @@
         "foundationStiffness": "N/mm³",
         "temperature": "°C",
         "temperatureDifference": "°C",
-        "thermalExpansion": "1/°C"
+        "thermalExpansion": "1/°C",
+        "strain": "mm/mm"
       }
     },
     "si": {
@@ -332,7 +359,8 @@
         "foundationStiffness": "N/m³",
         "temperature": "K",
         "temperatureDifference": "K",
-        "thermalExpansion": "1/K"
+        "thermalExpansion": "1/K",
+        "strain": "m/m"
       }
     },
     "us-in": {
@@ -349,7 +377,8 @@
         "foundationStiffness": "lbf/in³",
         "temperature": "°F",
         "temperatureDifference": "°F",
-        "thermalExpansion": "1/°F"
+        "thermalExpansion": "1/°F",
+        "strain": "in/in"
       }
     }
   },

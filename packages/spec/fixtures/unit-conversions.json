@@ -53,7 +53,11 @@
     { "kind": "thermalExpansion", "value": 1.2e-5, "unit": "1/°C", "si": 1.2e-5 },
     { "kind": "thermalExpansion", "value": 6.5e-6, "unit": "1/°F", "si": 1.17e-5 },
     { "kind": "thermalExpansion", "value": 12, "unit": "µm/(m·K)", "si": 1.2e-5 },
-    { "kind": "thermalExpansion", "value": 6.5, "unit": "µin/(in·°F)", "si": 1.17e-5 }
+    { "kind": "thermalExpansion", "value": 6.5, "unit": "µin/(in·°F)", "si": 1.17e-5 },
+    { "kind": "strain", "value": 0.0012, "unit": "mm/mm", "si": 0.0012 },
+    { "kind": "strain", "value": 0.0012, "unit": "in/in", "si": 0.0012 },
+    { "kind": "strain", "value": 1200, "unit": "µε", "si": 0.0012 },
+    { "kind": "strain", "value": 0.12, "unit": "%", "si": 0.0012 }
   ],
   "errors": [
     { "kind": "pressure", "unit": "mm", "reason": "a length unit is not a pressure unit" },

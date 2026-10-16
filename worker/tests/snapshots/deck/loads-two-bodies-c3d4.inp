@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 1. Generated from the simulation's
+** ClearFEA solver input, deck format 2. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
 ** Geometry 00000000-0000-4000-8000-000000000001
 *HEADING
@@ -61,7 +61,7 @@ B2, CENTRIF, 98696.04401089359, 0.005, 0.0, 0.0, 0.0, 0.6, 0.8
 *NODE FILE
 U
 *EL FILE
-S
+S, E
 *NODE PRINT, NSET=S1, TOTALS=ONLY
 RF
 *END STEP

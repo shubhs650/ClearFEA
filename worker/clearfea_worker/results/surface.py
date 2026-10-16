@@ -9,10 +9,12 @@ results pipeline step 3. Two files per run:
   as four triangles through its mid-edge nodes, so every surface node of the mesh is a vertex
   and curved faces stay curved.
 - ``fields.bin`` (packages/spec/result-fields.md): the value of each field at each vertex of
-  surface.bin, in SI, as float32. Version 1 holds displacement (x, y, z) and von Mises stress.
+  surface.bin, in SI, as float32: displacement (x, y, z), von Mises stress, and since M3.1 the
+  stress components, the principal stresses and the total strain components (ADR-050).
 
 No value is computed here: each vertex takes its node's value from the result reader, so the
-viewer shows exactly the nodal values CalculiX wrote (and von Mises derived from them).
+viewer shows exactly the nodal values CalculiX wrote (and von Mises and the principal stresses
+derived from them).
 """
 
 import struct
@@ -24,7 +26,7 @@ from pathlib import Path
 from ..deck.elements import GMSH_EDGES
 from ..geometry.display import FacePatch, write_display
 from ..meshing.volume import NODES_PER_ELEMENT, TET_FACES, VolumeMesh
-from .fields import NodalFields, von_mises_field
+from .fields import NodalFields, principal_field, von_mises_field
 
 MAGIC = b"CFRF"
 VERSION = 1
@@ -100,17 +102,17 @@ def extract_surface(mesh: VolumeMesh) -> Surface:
 
 
 def surface_fields(surface: Surface, fields: NodalFields) -> list[SurfaceField]:
-    """Displacement and von Mises stress at every vertex of ``surface``."""
-    d = fields.displacement
-    mises = von_mises_field(fields)
+    """Every result field at every vertex of ``surface``, in the order of result-fields.md."""
+
+    def at(values: array, width: int) -> array:
+        return array("f", (values[width * n + i] for n in surface.nodes for i in range(width)))
+
     return [
-        SurfaceField(
-            "displacement",
-            "length",
-            3,
-            array("f", (d[3 * n + i] for n in surface.nodes for i in range(3))),
-        ),
-        SurfaceField("vonMises", "pressure", 1, array("f", (mises[n] for n in surface.nodes))),
+        SurfaceField("displacement", "length", 3, at(fields.displacement, 3)),
+        SurfaceField("vonMises", "pressure", 1, at(von_mises_field(fields), 1)),
+        SurfaceField("stress", "pressure", 6, at(fields.stress, 6)),
+        SurfaceField("principalStress", "pressure", 3, at(principal_field(fields), 3)),
+        SurfaceField("strain", "strain", 6, at(fields.strain, 6)),
     ]
 
 
