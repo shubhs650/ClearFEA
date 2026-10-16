@@ -17,14 +17,25 @@
 // the report's note on stresses near bonded faces under its results (ADR-062). From M5.1 a
 // steady-state thermal run shows its highest and lowest temperature instead of displacement,
 // stress and reactions, and offers only the temperature to show on the undeformed model.
+// Since ADR-063 the panel chooses the equation solver (PaStiX by default), shows each solver's
+// element limit on a 16 GB machine, warns that the iterative solvers are less exact, and the
+// record says which solver a run used.
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import {
+  type ElementOrder,
+  ITERATIVE_ACCURACY_NOTE,
+  isIterative,
+  limitMemoryText,
+  maxElements,
   type RunEstimate,
   type RunFileName,
   type RunView,
+  SOLVER_LABELS,
+  SOLVERS,
   runReportNotes,
   type SimulationSpec,
+  type Solver,
   type SolveResult,
   systemUnit,
 } from "@clearfea/spec";
@@ -142,6 +153,59 @@ function Blockers({ blockers, onOpen }: { blockers: readonly RunBlocker[]; onOpe
       </ul>
     </section>
   );
+}
+
+/** What each solver is, in a few words, after its name in the list. */
+const SOLVER_KINDS: Record<Solver, string> = {
+  pastix: "direct, fastest",
+  spooles: "direct",
+  iterative_cholesky: "iterative, least memory, less exact",
+  iterative_scaling: "iterative, least memory, less exact",
+};
+
+/**
+ * The equation solver (ADR-063): PaStiX by default, SPOOLES, or one of the iterative solvers,
+ * each with the most elements it may solve on a 16 GB machine for the mesh's element order.
+ */
+function SolverChoice({
+  solver,
+  order,
+  onChange,
+}: {
+  solver: Solver;
+  order: ElementOrder;
+  onChange: (solver: Solver) => void;
+}) {
+  const count = (n: number) => n.toLocaleString("en-US");
+  const words = order === 1 ? "4-node" : "10-node";
+  return (
+    <section aria-label="Solver">
+      <label className="field">
+        Equation solver
+        <select value={solver} onChange={(event) => onChange(event.target.value as Solver)}>
+          {SOLVERS.map((s) => (
+            <option key={s} value={s}>
+              {SOLVER_LABELS[s]} ({SOLVER_KINDS[s]}), up to {count(maxElements(s, order))} elements
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="field-hint">
+        Element limits are for {words} elements on a {limitMemoryText()} machine, from the solver benchmark of a stocky
+        block; a larger mesh is refused so the run cannot run out of memory.
+      </p>
+      {isIterative(solver) && (
+        <p className="field-hint" role="note">
+          {ITERATIVE_ACCURACY_NOTE}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** The solver a run used: its frozen spec's, or SPOOLES for runs made before ADR-063. */
+function runSolver(run: RunView): Solver {
+  return run.spec.solver ?? "spooles";
 }
 
 /** One machine size as an option: its cores and memory, and whether it is the recommended one. */
@@ -398,6 +462,11 @@ function RunRecord({ run, currentSpec }: { run: RunView; currentSpec: Simulation
           {mesh.size.value} {mesh.size.unit}, {ORDERS[mesh.order]}; {count(mesh.elementCount)} elements,{" "}
           {count(mesh.nodeCount)} nodes
         </dd>
+        <dt>Solver</dt>
+        <dd>
+          {SOLVER_LABELS[runSolver(run)]}
+          {isIterative(runSolver(run)) && <span className="field-hint"> ({ITERATIVE_ACCURACY_NOTE})</span>}
+        </dd>
         <dt>ClearFEA</dt>
         <dd>{version(software.clearfea)}</dd>
         <dt>CalculiX</dt>
@@ -464,6 +533,9 @@ export function RunPanel({
   onUnitChange,
   onUnitReset,
   estimate,
+  solver,
+  meshOrder,
+  onSolverChange,
   requesting,
   requestProblem,
   onRun,
@@ -487,6 +559,11 @@ export function RunPanel({
   onUnitReset: () => void;
   /** The estimate for the current mesh, shown before a run. */
   estimate: EstimateState;
+  /** The equation solver the setup asks for (ADR-063). */
+  solver: Solver;
+  /** The element order the limits are shown for: the mesh's, or the mesh settings'. */
+  meshOrder: ElementOrder;
+  onSolverChange: (solver: Solver) => void;
   requesting: boolean;
   requestProblem?: string;
   /** Starts a run on the machine size chosen. */
@@ -516,6 +593,7 @@ export function RunPanel({
     <section className="setup-panel" aria-label="Run">
       <h2 className="pane-title">Run</h2>
       <Notes status={status} />
+      {!solving && <SolverChoice solver={solver} order={meshOrder} onChange={onSolverChange} />}
       {!solving && <Estimate state={estimate} size={size} onSizeChange={setSize} />}
       <button
         type="button"
@@ -582,6 +660,11 @@ export function RunPanel({
           onChange={onUnitChange}
           onReset={onUnitReset}
         />
+      )}
+      {result && run !== null && isIterative(runSolver(run)) && (
+        <p className="field-hint" role="note">
+          Solved with {SOLVER_LABELS[runSolver(run)]}. {ITERATIVE_ACCURACY_NOTE}
+        </p>
       )}
       {result && thermal && <ThermalFigures result={result} units={units} />}
       {result && !thermal && (

@@ -1,265 +1,1166 @@
 {
-  "description": "M2.12 job-step benchmark (ADR-049). How it is measured: steps.py.",
+  "description": "Job-step benchmark (ADR-049, ADR-063). How it is measured: steps.py.",
   "runs": [
     {
       "targetElements": 25000,
       "order": 1,
+      "solver": "iterative_cholesky",
       "elements": 24989,
       "nodes": 5212,
       "stepSeconds": {
         "readMesh": 0.02,
-        "deck": 0.12,
+        "deck": 0.09,
         "writeDeck": 0.0,
-        "solver": 1.83,
-        "readResults": 0.09,
-        "viewerFiles": 0.03
+        "solver": 0.97,
+        "readResults": 0.3,
+        "viewerFiles": 0.08
       },
-      "jobSeconds": 2.09,
-      "peakMemoryBytes": 70885376,
-      "frdBytes": 2931016,
+      "jobSeconds": 1.46,
+      "peakMemoryBytes": 129806336,
+      "frdBytes": 3379627,
       "ccxVersion": "2.21",
       "machine": {
         "cores": 4,
         "ramBytes": 16874930176,
-        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-        "kernel": "6.18.44-fc-v114",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
         "memoryLimitBytes": 14343688192
       },
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "targetElements": 100000,
       "order": 1,
+      "solver": "iterative_cholesky",
       "elements": 97439,
       "nodes": 18546,
       "stepSeconds": {
-        "readMesh": 0.07,
-        "deck": 0.31,
+        "readMesh": 0.09,
+        "deck": 0.37,
         "writeDeck": 0.01,
-        "solver": 12.28,
-        "readResults": 0.23,
-        "viewerFiles": 0.15
+        "solver": 4.27,
+        "readResults": 0.7,
+        "viewerFiles": 0.25
       },
-      "jobSeconds": 13.05,
-      "peakMemoryBytes": 355766272,
-      "frdBytes": 11046674,
+      "jobSeconds": 5.69,
+      "peakMemoryBytes": 187174912,
+      "frdBytes": 12642009,
       "ccxVersion": "2.21",
       "machine": {
         "cores": 4,
         "ramBytes": 16874930176,
-        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-        "kernel": "6.18.44-fc-v114",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
         "memoryLimitBytes": 14343688192
       },
-      "date": "2026-10-15"
-    },
-    {
-      "targetElements": 200000,
-      "order": 1,
-      "elements": 193615,
-      "nodes": 35580,
-      "stepSeconds": {
-        "readMesh": 0.12,
-        "deck": 0.65,
-        "writeDeck": 0.02,
-        "solver": 48.82,
-        "readResults": 0.84,
-        "viewerFiles": 0.28
-      },
-      "jobSeconds": 50.73,
-      "peakMemoryBytes": 873066496,
-      "frdBytes": 21678730,
-      "ccxVersion": "2.21",
-      "machine": {
-        "cores": 4,
-        "ramBytes": 16874930176,
-        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-        "kernel": "6.18.44-fc-v114",
-        "memoryLimitBytes": 14343688192
-      },
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "targetElements": 400000,
       "order": 1,
+      "solver": "iterative_cholesky",
       "elements": 375446,
       "nodes": 67155,
       "stepSeconds": {
-        "readMesh": 0.28,
-        "deck": 1.26,
-        "writeDeck": 0.08,
-        "solver": 154.92,
-        "readResults": 0.86,
-        "viewerFiles": 0.23
+        "readMesh": 0.23,
+        "deck": 1.66,
+        "writeDeck": 0.03,
+        "solver": 18.95,
+        "readResults": 2.4,
+        "viewerFiles": 0.8
       },
-      "jobSeconds": 157.63,
-      "peakMemoryBytes": 2038534144,
-      "frdBytes": 41646293,
+      "jobSeconds": 24.07,
+      "peakMemoryBytes": 431218688,
+      "frdBytes": 47422002,
       "ccxVersion": "2.21",
       "machine": {
         "cores": 4,
         "ramBytes": 16874930176,
-        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-        "kernel": "6.18.44-fc-v114",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
         "memoryLimitBytes": 14343688192
       },
-      "date": "2026-10-15"
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 500000,
+      "order": 1,
+      "solver": "iterative_cholesky",
+      "elements": 461993,
+      "nodes": 81920,
+      "stepSeconds": {
+        "readMesh": 0.33,
+        "deck": 2.17,
+        "writeDeck": 0.18,
+        "solver": 25.81,
+        "readResults": 2.67,
+        "viewerFiles": 1.14
+      },
+      "jobSeconds": 32.3,
+      "peakMemoryBytes": 507531264,
+      "frdBytes": 58139903,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
     },
     {
       "targetElements": 3000,
       "order": 2,
+      "solver": "iterative_cholesky",
       "elements": 3356,
       "nodes": 5693,
       "stepSeconds": {
-        "readMesh": 0.0,
-        "deck": 0.04,
+        "readMesh": 0.01,
+        "deck": 0.07,
         "writeDeck": 0.0,
-        "solver": 1.47,
-        "readResults": 0.05,
-        "viewerFiles": 0.02
+        "solver": 1.5,
+        "readResults": 0.22,
+        "viewerFiles": 0.06
       },
-      "jobSeconds": 1.58,
-      "peakMemoryBytes": 80920576,
-      "frdBytes": 1655139,
+      "jobSeconds": 1.86,
+      "peakMemoryBytes": 129626112,
+      "frdBytes": 2145116,
       "ccxVersion": "2.21",
       "machine": {
         "cores": 4,
         "ramBytes": 16874930176,
-        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-        "kernel": "6.18.44-fc-v114",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
         "memoryLimitBytes": 14343688192
       },
-      "date": "2026-10-15"
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 25000,
+      "order": 2,
+      "solver": "iterative_cholesky",
+      "elements": 24989,
+      "nodes": 37725,
+      "stepSeconds": {
+        "readMesh": 0.04,
+        "deck": 0.33,
+        "writeDeck": 0.02,
+        "solver": 13.91,
+        "readResults": 0.83,
+        "viewerFiles": 0.32
+      },
+      "jobSeconds": 15.45,
+      "peakMemoryBytes": 238030848,
+      "frdBytes": 14567841,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 100000,
+      "order": 2,
+      "solver": "iterative_cholesky",
+      "elements": 97439,
+      "nodes": 140275,
+      "stepSeconds": {
+        "readMesh": 0.17,
+        "deck": 1.25,
+        "writeDeck": 0.04,
+        "solver": 65.49,
+        "readResults": 4.03,
+        "viewerFiles": 1.43
+      },
+      "jobSeconds": 72.41,
+      "peakMemoryBytes": 634896384,
+      "frdBytes": 54763591,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 250000,
+      "order": 2,
+      "solver": "iterative_cholesky",
+      "elements": 235197,
+      "nodes": 331105,
+      "stepSeconds": {
+        "readMesh": 0.54,
+        "deck": 4.09,
+        "writeDeck": 0.4,
+        "solver": 200.4,
+        "readResults": 6.25,
+        "viewerFiles": 2.31
+      },
+      "jobSeconds": 213.99,
+      "peakMemoryBytes": 1394413568,
+      "frdBytes": 129952745,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 500000,
+      "order": 2,
+      "solver": "iterative_cholesky",
+      "elements": 461993,
+      "nodes": 641997,
+      "stepSeconds": {
+        "readMesh": 0.65,
+        "deck": 7.23,
+        "writeDeck": 0.87,
+        "solver": 576.72,
+        "readResults": 12.89,
+        "viewerFiles": 5.17
+      },
+      "jobSeconds": 603.53,
+      "peakMemoryBytes": 2646872064,
+      "frdBytes": 252762429,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 25000,
+      "order": 1,
+      "solver": "iterative_scaling",
+      "elements": 24989,
+      "nodes": 5212,
+      "stepSeconds": {
+        "readMesh": 0.02,
+        "deck": 0.1,
+        "writeDeck": 0.0,
+        "solver": 1.01,
+        "readResults": 0.3,
+        "viewerFiles": 0.09
+      },
+      "jobSeconds": 1.52,
+      "peakMemoryBytes": 129642496,
+      "frdBytes": 3379627,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 100000,
+      "order": 1,
+      "solver": "iterative_scaling",
+      "elements": 97439,
+      "nodes": 18546,
+      "stepSeconds": {
+        "readMesh": 0.07,
+        "deck": 0.37,
+        "writeDeck": 0.01,
+        "solver": 4.12,
+        "readResults": 0.7,
+        "viewerFiles": 0.26
+      },
+      "jobSeconds": 5.53,
+      "peakMemoryBytes": 187236352,
+      "frdBytes": 12642009,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 400000,
+      "order": 1,
+      "solver": "iterative_scaling",
+      "elements": 375446,
+      "nodes": 67155,
+      "stepSeconds": {
+        "readMesh": 0.31,
+        "deck": 1.35,
+        "writeDeck": 0.03,
+        "solver": 27.9,
+        "readResults": 2.46,
+        "viewerFiles": 0.63
+      },
+      "jobSeconds": 32.68,
+      "peakMemoryBytes": 431280128,
+      "frdBytes": 47422002,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 500000,
+      "order": 1,
+      "solver": "iterative_scaling",
+      "elements": 461993,
+      "nodes": 81920,
+      "stepSeconds": {
+        "readMesh": 0.31,
+        "deck": 1.84,
+        "writeDeck": 0.05,
+        "solver": 36.11,
+        "readResults": 2.49,
+        "viewerFiles": 0.76
+      },
+      "jobSeconds": 41.56,
+      "peakMemoryBytes": 507461632,
+      "frdBytes": 58139903,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 3000,
+      "order": 2,
+      "solver": "iterative_scaling",
+      "elements": 3356,
+      "nodes": 5693,
+      "stepSeconds": {
+        "readMesh": 0.0,
+        "deck": 0.05,
+        "writeDeck": 0.0,
+        "solver": 1.32,
+        "readResults": 0.25,
+        "viewerFiles": 0.07
+      },
+      "jobSeconds": 1.69,
+      "peakMemoryBytes": 129777664,
+      "frdBytes": 2145116,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 25000,
+      "order": 2,
+      "solver": "iterative_scaling",
+      "elements": 24989,
+      "nodes": 37725,
+      "stepSeconds": {
+        "readMesh": 0.04,
+        "deck": 0.42,
+        "writeDeck": 0.01,
+        "solver": 21.02,
+        "readResults": 0.88,
+        "viewerFiles": 0.4
+      },
+      "jobSeconds": 22.77,
+      "peakMemoryBytes": 238252032,
+      "frdBytes": 14567841,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 100000,
+      "order": 2,
+      "solver": "iterative_scaling",
+      "elements": 97439,
+      "nodes": 140275,
+      "stepSeconds": {
+        "readMesh": 0.2,
+        "deck": 1.55,
+        "writeDeck": 0.04,
+        "solver": 120.24,
+        "readResults": 2.91,
+        "viewerFiles": 1.09
+      },
+      "jobSeconds": 126.03,
+      "peakMemoryBytes": 635260928,
+      "frdBytes": 54763591,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 250000,
+      "order": 2,
+      "solver": "iterative_scaling",
+      "elements": 235197,
+      "nodes": 331105,
+      "stepSeconds": {
+        "readMesh": 0.42,
+        "deck": 3.35,
+        "writeDeck": 0.13,
+        "solver": 595.07,
+        "readResults": 6.24,
+        "viewerFiles": 2.33
+      },
+      "jobSeconds": 607.54,
+      "peakMemoryBytes": 1394421760,
+      "frdBytes": 129952745,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 500000,
+      "order": 2,
+      "solver": "iterative_scaling",
+      "elements": 461993,
+      "nodes": 641997,
+      "stepSeconds": {
+        "readMesh": 0.82,
+        "deck": 7.1,
+        "writeDeck": 0.25,
+        "solver": 1967.15,
+        "readResults": 12.76,
+        "viewerFiles": 4.98
+      },
+      "jobSeconds": 1993.06,
+      "peakMemoryBytes": 2646884352,
+      "frdBytes": 252762429,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 25000,
+      "order": 1,
+      "solver": "pastix",
+      "elements": 24989,
+      "nodes": 5212,
+      "stepSeconds": {
+        "readMesh": 0.01,
+        "deck": 0.08,
+        "writeDeck": 0.0,
+        "solver": 1.17,
+        "readResults": 0.28,
+        "viewerFiles": 0.08
+      },
+      "jobSeconds": 1.62,
+      "peakMemoryBytes": 210169856,
+      "frdBytes": 3379627,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 100000,
+      "order": 1,
+      "solver": "pastix",
+      "elements": 97439,
+      "nodes": 18546,
+      "stepSeconds": {
+        "readMesh": 0.09,
+        "deck": 0.39,
+        "writeDeck": 0.0,
+        "solver": 7.12,
+        "readResults": 0.79,
+        "viewerFiles": 0.24
+      },
+      "jobSeconds": 8.63,
+      "peakMemoryBytes": 592580608,
+      "frdBytes": 12642009,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 200000,
+      "order": 1,
+      "solver": "pastix",
+      "elements": 193615,
+      "nodes": 35580,
+      "stepSeconds": {
+        "readMesh": 0.09,
+        "deck": 0.76,
+        "writeDeck": 0.07,
+        "solver": 15.74,
+        "readResults": 1.18,
+        "viewerFiles": 0.57
+      },
+      "jobSeconds": 18.41,
+      "peakMemoryBytes": 1234841600,
+      "frdBytes": 24738989,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 400000,
+      "order": 1,
+      "solver": "pastix",
+      "elements": 375446,
+      "nodes": 67155,
+      "stepSeconds": {
+        "readMesh": 0.22,
+        "deck": 1.48,
+        "writeDeck": 0.25,
+        "solver": 43.01,
+        "readResults": 2.0,
+        "viewerFiles": 0.67
+      },
+      "jobSeconds": 47.63,
+      "peakMemoryBytes": 2677526528,
+      "frdBytes": 47422002,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 800000,
+      "order": 1,
+      "solver": "pastix",
+      "elements": 738297,
+      "nodes": 128973,
+      "stepSeconds": {
+        "readMesh": 0.4,
+        "deck": 3.09,
+        "writeDeck": 0.34,
+        "solver": 138.1,
+        "readResults": 4.27,
+        "viewerFiles": 1.38
+      },
+      "jobSeconds": 147.58,
+      "peakMemoryBytes": 6106939392,
+      "frdBytes": 92331889,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 1000000,
+      "order": 1,
+      "solver": "pastix",
+      "elements": 944955,
+      "nodes": 163996,
+      "stepSeconds": {
+        "readMesh": 0.56,
+        "deck": 3.57,
+        "writeDeck": 0.39,
+        "solver": 216.34,
+        "readResults": 5.6,
+        "viewerFiles": 1.73
+      },
+      "jobSeconds": 228.19,
+      "peakMemoryBytes": 8263655424,
+      "frdBytes": 117854777,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 1200000,
+      "order": 1,
+      "solver": "pastix",
+      "elements": 1103073,
+      "nodes": 190580,
+      "stepSeconds": {
+        "readMesh": 0.56,
+        "deck": 4.87,
+        "writeDeck": 0.54,
+        "solver": 327.19,
+        "readResults": 6.96,
+        "viewerFiles": 3.27
+      },
+      "jobSeconds": 343.39,
+      "peakMemoryBytes": 10088620032,
+      "frdBytes": 137319423,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 3000,
+      "order": 2,
+      "solver": "pastix",
+      "elements": 3356,
+      "nodes": 5693,
+      "stepSeconds": {
+        "readMesh": 0.01,
+        "deck": 0.05,
+        "writeDeck": 0.0,
+        "solver": 1.5,
+        "readResults": 0.2,
+        "viewerFiles": 0.06
+      },
+      "jobSeconds": 1.82,
+      "peakMemoryBytes": 235696128,
+      "frdBytes": 2145116,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
     },
     {
       "targetElements": 12000,
       "order": 2,
+      "solver": "pastix",
+      "elements": 12065,
+      "nodes": 18866,
+      "stepSeconds": {
+        "readMesh": 0.02,
+        "deck": 0.17,
+        "writeDeck": 0.01,
+        "solver": 5.77,
+        "readResults": 0.47,
+        "viewerFiles": 0.19
+      },
+      "jobSeconds": 6.63,
+      "peakMemoryBytes": 657354752,
+      "frdBytes": 7228967,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 25000,
+      "order": 2,
+      "solver": "pastix",
+      "elements": 24989,
+      "nodes": 37725,
+      "stepSeconds": {
+        "readMesh": 0.05,
+        "deck": 0.35,
+        "writeDeck": 0.04,
+        "solver": 15.08,
+        "readResults": 0.87,
+        "viewerFiles": 0.33
+      },
+      "jobSeconds": 16.72,
+      "peakMemoryBytes": 1422458880,
+      "frdBytes": 14567841,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 50000,
+      "order": 2,
+      "solver": "pastix",
+      "elements": 50229,
+      "nodes": 73717,
+      "stepSeconds": {
+        "readMesh": 0.08,
+        "deck": 0.62,
+        "writeDeck": 0.07,
+        "solver": 57.02,
+        "readResults": 1.74,
+        "viewerFiles": 0.62
+      },
+      "jobSeconds": 60.15,
+      "peakMemoryBytes": 3240284160,
+      "frdBytes": 28650377,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 100000,
+      "order": 2,
+      "solver": "pastix",
+      "elements": 97439,
+      "nodes": 140275,
+      "stepSeconds": {
+        "readMesh": 0.2,
+        "deck": 1.36,
+        "writeDeck": 0.15,
+        "solver": 164.57,
+        "readResults": 2.84,
+        "viewerFiles": 1.09
+      },
+      "jobSeconds": 170.21,
+      "peakMemoryBytes": 7224254464,
+      "frdBytes": 54763591,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 150000,
+      "order": 2,
+      "solver": "pastix",
+      "elements": 145471,
+      "nodes": 207025,
+      "stepSeconds": {
+        "readMesh": 0.31,
+        "deck": 2.13,
+        "writeDeck": 0.4,
+        "solver": 337.09,
+        "readResults": 3.96,
+        "viewerFiles": 1.49
+      },
+      "jobSeconds": 345.38,
+      "peakMemoryBytes": 11931238400,
+      "frdBytes": 81043347,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 25000,
+      "order": 1,
+      "solver": "spooles",
+      "elements": 24989,
+      "nodes": 5212,
+      "stepSeconds": {
+        "readMesh": 0.01,
+        "deck": 0.11,
+        "writeDeck": 0.0,
+        "solver": 1.72,
+        "readResults": 0.35,
+        "viewerFiles": 0.07
+      },
+      "jobSeconds": 2.26,
+      "peakMemoryBytes": 174796800,
+      "frdBytes": 3379627,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 100000,
+      "order": 1,
+      "solver": "spooles",
+      "elements": 97439,
+      "nodes": 18546,
+      "stepSeconds": {
+        "readMesh": 0.07,
+        "deck": 0.32,
+        "writeDeck": 0.01,
+        "solver": 14.73,
+        "readResults": 0.74,
+        "viewerFiles": 0.19
+      },
+      "jobSeconds": 16.06,
+      "peakMemoryBytes": 452206592,
+      "frdBytes": 12642009,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 200000,
+      "order": 1,
+      "solver": "spooles",
+      "elements": 193615,
+      "nodes": 35580,
+      "stepSeconds": {
+        "readMesh": 0.12,
+        "deck": 0.68,
+        "writeDeck": 0.02,
+        "solver": 50.71,
+        "readResults": 1.36,
+        "viewerFiles": 0.35
+      },
+      "jobSeconds": 53.24,
+      "peakMemoryBytes": 969478144,
+      "frdBytes": 24738989,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 400000,
+      "order": 1,
+      "solver": "spooles",
+      "elements": 375446,
+      "nodes": 67155,
+      "stepSeconds": {
+        "readMesh": 0.27,
+        "deck": 1.65,
+        "writeDeck": 0.04,
+        "solver": 160.05,
+        "readResults": 2.42,
+        "viewerFiles": 0.67
+      },
+      "jobSeconds": 165.1,
+      "peakMemoryBytes": 2135273472,
+      "frdBytes": 47422002,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 500000,
+      "order": 1,
+      "solver": "spooles",
+      "elements": 461993,
+      "nodes": 81920,
+      "stepSeconds": {
+        "readMesh": 0.4,
+        "deck": 1.82,
+        "writeDeck": 0.06,
+        "solver": 284.04,
+        "readResults": 2.39,
+        "viewerFiles": 0.75
+      },
+      "jobSeconds": 289.46,
+      "peakMemoryBytes": 2906988544,
+      "frdBytes": 58139903,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 3000,
+      "order": 2,
+      "solver": "spooles",
+      "elements": 3356,
+      "nodes": 5693,
+      "stepSeconds": {
+        "readMesh": 0.01,
+        "deck": 0.11,
+        "writeDeck": 0.0,
+        "solver": 1.72,
+        "readResults": 0.24,
+        "viewerFiles": 0.06
+      },
+      "jobSeconds": 2.14,
+      "peakMemoryBytes": 182513664,
+      "frdBytes": 2145116,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 12000,
+      "order": 2,
+      "solver": "spooles",
       "elements": 12065,
       "nodes": 18866,
       "stepSeconds": {
         "readMesh": 0.02,
         "deck": 0.16,
-        "writeDeck": 0.0,
-        "solver": 11.43,
-        "readResults": 0.19,
-        "viewerFiles": 0.07
+        "writeDeck": 0.01,
+        "solver": 13.28,
+        "readResults": 0.53,
+        "viewerFiles": 0.2
       },
-      "jobSeconds": 11.87,
-      "peakMemoryBytes": 377712640,
-      "frdBytes": 5606112,
+      "jobSeconds": 14.2,
+      "peakMemoryBytes": 474390528,
+      "frdBytes": 7228967,
       "ccxVersion": "2.21",
       "machine": {
         "cores": 4,
         "ramBytes": 16874930176,
-        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-        "kernel": "6.18.44-fc-v114",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
         "memoryLimitBytes": 14343688192
       },
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "targetElements": 25000,
       "order": 2,
+      "solver": "spooles",
       "elements": 24989,
       "nodes": 37725,
       "stepSeconds": {
-        "readMesh": 0.06,
-        "deck": 0.48,
-        "writeDeck": 0.02,
-        "solver": 45.66,
-        "readResults": 0.38,
-        "viewerFiles": 0.14
+        "readMesh": 0.04,
+        "deck": 0.41,
+        "writeDeck": 0.01,
+        "solver": 48.31,
+        "readResults": 1.0,
+        "viewerFiles": 0.32
       },
-      "jobSeconds": 46.74,
-      "peakMemoryBytes": 939356160,
-      "frdBytes": 11323112,
+      "jobSeconds": 50.09,
+      "peakMemoryBytes": 1035468800,
+      "frdBytes": 14567841,
       "ccxVersion": "2.21",
       "machine": {
         "cores": 4,
         "ramBytes": 16874930176,
-        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-        "kernel": "6.18.44-fc-v114",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
         "memoryLimitBytes": 14343688192
       },
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "targetElements": 50000,
       "order": 2,
+      "solver": "spooles",
       "elements": 50229,
       "nodes": 73717,
       "stepSeconds": {
-        "readMesh": 0.07,
-        "deck": 0.61,
+        "readMesh": 0.08,
+        "deck": 0.6,
         "writeDeck": 0.02,
-        "solver": 165.37,
-        "readResults": 0.66,
-        "viewerFiles": 0.16
+        "solver": 174.79,
+        "readResults": 1.54,
+        "viewerFiles": 0.61
       },
-      "jobSeconds": 166.89,
-      "peakMemoryBytes": 2322063360,
-      "frdBytes": 22310336,
+      "jobSeconds": 177.64,
+      "peakMemoryBytes": 2418892800,
+      "frdBytes": 28650377,
       "ccxVersion": "2.21",
       "machine": {
         "cores": 4,
         "ramBytes": 16874930176,
-        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-        "kernel": "6.18.44-fc-v114",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
         "memoryLimitBytes": 14343688192
       },
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "targetElements": 100000,
       "order": 2,
+      "solver": "spooles",
       "elements": 97439,
       "nodes": 140275,
       "stepSeconds": {
-        "readMesh": 0.19,
-        "deck": 1.5,
-        "writeDeck": 0.1,
-        "solver": 695.44,
-        "readResults": 1.31,
-        "viewerFiles": 0.24
+        "readMesh": 0.21,
+        "deck": 1.31,
+        "writeDeck": 0.04,
+        "solver": 742.49,
+        "readResults": 3.63,
+        "viewerFiles": 1.3
       },
-      "jobSeconds": 698.78,
-      "peakMemoryBytes": 5708124160,
-      "frdBytes": 42699562,
+      "jobSeconds": 748.98,
+      "peakMemoryBytes": 5804748800,
+      "frdBytes": 54763591,
       "ccxVersion": "2.21",
       "machine": {
         "cores": 4,
         "ramBytes": 16874930176,
-        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-        "kernel": "6.18.44-fc-v114",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
         "memoryLimitBytes": 14343688192
       },
-      "date": "2026-10-15"
+      "date": "2026-10-16"
     },
     {
       "targetElements": 150000,
       "order": 2,
+      "solver": "spooles",
       "elements": 145471,
       "nodes": 207025,
       "stepSeconds": {
-        "readMesh": 0.16,
-        "deck": 1.28,
-        "writeDeck": 0.14,
-        "solver": 1256.84,
-        "readResults": 2.21,
-        "viewerFiles": 0.49
+        "readMesh": 0.27,
+        "deck": 2.07,
+        "writeDeck": 0.06,
+        "solver": 1510.12,
+        "readResults": 4.0,
+        "viewerFiles": 1.51
       },
-      "jobSeconds": 1261.12,
-      "peakMemoryBytes": 9490210816,
-      "frdBytes": 63238818,
+      "jobSeconds": 1518.03,
+      "peakMemoryBytes": 9587032064,
+      "frdBytes": 81043347,
       "ccxVersion": "2.21",
       "machine": {
         "cores": 4,
         "ramBytes": 16874930176,
-        "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
-        "kernel": "6.18.44-fc-v114",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
         "memoryLimitBytes": 14343688192
       },
-      "date": "2026-10-15"
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 170000,
+      "order": 2,
+      "solver": "spooles",
+      "elements": 168077,
+      "nodes": 238391,
+      "stepSeconds": {
+        "readMesh": 0.26,
+        "deck": 2.17,
+        "writeDeck": 0.23,
+        "solver": 2377.79,
+        "readResults": 5.56,
+        "viewerFiles": 2.3
+      },
+      "jobSeconds": 2388.31,
+      "peakMemoryBytes": 12194848768,
+      "frdBytes": 93397013,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": 14343688192
+      },
+      "date": "2026-10-16"
     }
   ]
 }

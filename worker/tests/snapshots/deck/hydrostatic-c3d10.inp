@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 3. Generated from the simulation's
+** ClearFEA solver input, deck format 4. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
 ** Geometry 00000000-0000-4000-8000-000000000001
 *HEADING
@@ -38,7 +38,7 @@ ClearFEA linear static analysis
 ** gravity (0.0 g, -32.17404855643045 ft/s², 0.0 m/s²) = (0.0, -9.806650000000001, 0.0) m/s^2
 ** free surface through (3.0 in, 0.6 cm, 0.0 mm) = (0.07619999999999999, 0.006, 0.0) m, pressure written as nodal loads
 *STEP
-*STATIC
+*STATIC, SOLVER=PASTIX
 *BOUNDARY
 S1, 1, 3
 *DLOAD

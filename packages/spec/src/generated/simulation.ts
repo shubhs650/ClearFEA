@@ -84,6 +84,13 @@ export type Load =
  */
 export type LocalMeshScope = "faces" | "edges" | "bodies";
 /**
+ * CalculiX's equation solver for a run (ADR-063). pastix, the default, and spooles are direct solvers, verified to the 0.1 percent checks. iterative_cholesky and iterative_scaling need far less memory but stop at CalculiX 2.21's fixed relative residual of 1e-4, which left verification results up to about 0.5 percent off.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "Solver".
+ */
+export type Solver = "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
+/**
  * 1: four-node tetrahedra (CalculiX C3D4). 2: ten-node tetrahedra with curved edges on curved faces (C3D10), the default (ADR-028, ADR-045).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -631,7 +638,7 @@ export interface MeshSettings {
   local?: LocalMeshSize[];
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), and the mesh settings: a global size, the element order and local sizes (M2.8), and the review of the bonds between touching bodies (M4.2). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -648,6 +655,10 @@ export interface SimulationSpec {
   supports: Support[];
   loads: Load[];
   mesh: MeshSettings;
+  /**
+   * The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
+   */
+  solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
   /**
    * Every candidate bond of the geometry with the user's review of it (M4.2), in the order of topology.json. Absent in specs saved before M4.2, where every candidate counts as detected.
    */
@@ -1075,6 +1086,10 @@ export interface RunEstimate {
   extrapolated: boolean;
   sizes: SizeEstimate[];
   recommended: string | null;
+  /**
+   * The solver the estimate is for (ADR-063); absent in estimates made before it, which were for spooles.
+   */
+  solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
 }
 /**
  * Answer to GET /api/simulations/{id}/estimate: the estimate for the simulation's current ready mesh.
@@ -1137,7 +1152,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), and the mesh settings: a global size, the element order and local sizes (M2.8), and the review of the bonds between touching bodies (M4.2). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -1151,6 +1166,10 @@ export interface SimulationSpec1 {
   supports: Support[];
   loads: Load[];
   mesh: MeshSettings;
+  /**
+   * The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
+   */
+  solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
   /**
    * Every candidate bond of the geometry with the user's review of it (M4.2), in the order of topology.json. Absent in specs saved before M4.2, where every candidate counts as detected.
    */
@@ -1228,6 +1247,8 @@ export const LocalMeshScopeValues = ["faces", "edges", "bodies"] as const satisf
 export const validateLocalMeshScope = validator<LocalMeshScope>(schema, "LocalMeshScope");
 export const validateLocalMeshSize = validator<LocalMeshSize>(schema, "LocalMeshSize");
 export const validateMeshSettings = validator<MeshSettings>(schema, "MeshSettings");
+export const SolverValues = ["pastix", "spooles", "iterative_cholesky", "iterative_scaling"] as const satisfies readonly Solver[];
+export const validateSolver = validator<Solver>(schema, "Solver");
 export const validateSimulationSpec = validator<SimulationSpec>(schema, "SimulationSpec");
 export const validateSimulationView = validator<SimulationView>(schema, "SimulationView");
 export const validateCreateSimulationRequest = validator<CreateSimulationRequest>(schema, "CreateSimulationRequest");

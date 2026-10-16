@@ -49,10 +49,18 @@ index 5921fe1..40cbebe 100644
      return data;
  
 diff --git a/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py b/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
-index 4e6cccf..e220221 100755
+index 4e6cccf..50da86f 100755
 --- a/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
 +++ b/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
-@@ -118,7 +118,7 @@ class GenConversion:
+@@ -19,7 +19,6 @@ import re;
+ import shlex;
+ import os;
+ import shutil;
+-import imp;
+ from os import path;
+ from optparse import OptionParser,OptionGroup;
+ from datetime import datetime;
+@@ -118,7 +117,7 @@ class GenConversion:
            replace = replace.replace('\)',')');
          data = re.sub(search, replace, data);
        except:
@@ -103,10 +111,18 @@ index 5921fe1..40cbebe 100644
      return data;
  
 diff --git a/spm/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py b/spm/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
-index 4e6cccf..e220221 100755
+index 4e6cccf..50da86f 100755
 --- a/spm/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
 +++ b/spm/cmake_modules/morse_cmake/modules/precision_generator/genDependencies.py
-@@ -118,7 +118,7 @@ class GenConversion:
+@@ -19,7 +19,6 @@ import re;
+ import shlex;
+ import os;
+ import shutil;
+-import imp;
+ from os import path;
+ from optparse import OptionParser,OptionGroup;
+ from datetime import datetime;
+@@ -118,7 +117,7 @@ class GenConversion:
            replace = replace.replace('\)',')');
          data = re.sub(search, replace, data);
        except:

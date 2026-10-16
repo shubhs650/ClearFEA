@@ -8,8 +8,8 @@
       "id": "ceramic",
       "name": "Ceramic (case values)",
       "model": "isotropic_elastic",
-      "youngsModulus": null,
-      "poissonsRatio": null,
+      "youngsModulus": { "value": 300, "unit": "GPa" },
+      "poissonsRatio": 0.22,
       "thermalConductivity": { "value": 1.5, "unit": "W/(m·K)" }
     }
   ],

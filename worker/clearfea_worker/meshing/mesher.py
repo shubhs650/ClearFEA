@@ -32,7 +32,8 @@ log = logging.getLogger(__name__)
 #: the M1.1 spike's tolerance, relative to the face area and to the model size.
 REIMPORT_TOLERANCE = 1e-9
 
-#: The most tetrahedra a Phase 0 mesh may have: the design target in DECISIONS.md.
+#: The most tetrahedra the mesher makes. What a run may solve is less, per solver and element
+#: order (packages/spec/estimator.json, ADR-063); the 2-million-element design target is dropped.
 MAX_ELEMENTS = 2_000_000
 
 #: Gmsh fills a body with about 4.5 tetrahedra per size**3 of volume (measured on the test
@@ -459,7 +460,7 @@ def mesh_geometry(
                 "user_fault",
                 "mesh_too_large",
                 f"The mesh has {elements:,} elements, more than the {MAX_ELEMENTS:,} ClearFEA "
-                "can solve. Make the mesh sizes larger.",
+                "can mesh. Make the mesh sizes larger.",
             )
         summary = quality(gmsh)
         mesh, patches = _volume_mesh(gmsh, order)

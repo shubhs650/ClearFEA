@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 3. Generated from the simulation's
+** ClearFEA solver input, deck format 4. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa, K, W).
 ** Geometry 00000000-0000-4000-8000-000000000005
 *HEADING
@@ -36,7 +36,7 @@ ClearFEA steady-state thermal analysis
 44.99910132565617
 *SOLID SECTION, ELSET=B1, MATERIAL=M2
 *STEP
-*HEAT TRANSFER, STEADY STATE
+*HEAT TRANSFER, STEADY STATE, SOLVER=PASTIX
 1.0, 1.0
 *BOUNDARY
 T1, 11, 11, 373.15

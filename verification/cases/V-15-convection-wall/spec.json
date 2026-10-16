@@ -8,8 +8,8 @@
       "id": "concrete",
       "name": "Concrete (case values)",
       "model": "isotropic_elastic",
-      "youngsModulus": null,
-      "poissonsRatio": null,
+      "youngsModulus": { "value": 30, "unit": "GPa" },
+      "poissonsRatio": 0.2,
       "thermalConductivity": { "value": 0.0015, "unit": "W/(mm·K)" }
     }
   ],

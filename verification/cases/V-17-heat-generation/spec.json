@@ -8,8 +8,8 @@
       "id": "steel",
       "name": "Stainless steel (case values)",
       "model": "isotropic_elastic",
-      "youngsModulus": null,
-      "poissonsRatio": null,
+      "youngsModulus": { "value": 193, "unit": "GPa" },
+      "poissonsRatio": 0.29,
       "thermalConductivity": { "value": 15, "unit": "W/(m·°C)" }
     }
   ],

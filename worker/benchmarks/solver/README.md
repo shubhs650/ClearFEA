@@ -1,6 +1,16 @@
-# Solver benchmark (M2.11)
+# Solver benchmark (M2.11) and job-step benchmark (M2.12, ADR-063)
 
-Wall time and peak memory of CalculiX's equation solvers on one part, meshed from about 100,000 elements to the finest mesh ClearFEA makes. Decision and reasoning: ADR-048 in `docs/DECISIONS.md`. M2.12's run-time estimator is fitted from `results.json`.
+Wall time and peak memory of CalculiX's equation solvers on one part, meshed from about 100,000 elements to the finest mesh ClearFEA makes. Decision and reasoning: ADR-048 in `docs/DECISIONS.md`. The run estimator and the element limits per solver are fitted from `steps.json` (`steps.py`, `fit.py`; ADR-049, ADR-063); `results.json` is M2.11's record of the packaged build and the hand-built PaStiX.
+
+## Job steps per solver (ADR-063)
+
+```
+export PATH=<dir with the worker image's ccx>:$PATH    # built by worker/ccx/build.sh
+cd worker && uv run python benchmarks/solver/steps.py --out DIR --solver pastix 3000:2 25000:1 ...
+uv run python benchmarks/solver/fit.py                  # rewrites packages/spec/estimator.json
+```
+
+`steps.json` holds the solve job's steps for `pastix`, `spooles`, `iterative_cholesky` and `iterative_scaling`, measured with `worker/ccx/build.sh`'s build on the host (the image's build script, same source and pins), the worker's solver environment (one thread), up to 500,000 elements (PaStiX 4-node to 1.1 million). `fit.py` writes a memory and time law per solver and each solver's `maxElements` per element order on 16 GiB; see ADR-063 item 5 for how the sandbox's 13.4 GiB measurements give 16 GB limits. Run the larger meshes one solver at a time: the largest SPOOLES mesh takes 40 minutes.
 
 ```
 cd worker && uv run python benchmarks/solver/bench.py --out /tmp/bench [--targets 100000 250000]
@@ -61,11 +71,13 @@ So PaStiX is 4 to 6 times faster than single-threaded SPOOLES for about 1.25 tim
 
 ### How the PaStiX build was made
 
+Since ADR-063 the worker image builds it with `worker/ccx/build.sh` (from Ubuntu's ccx source package, shared PaRSEC, Python 3.12, `worker/ccx/pastix4calculix.patch`); the steps below are M2.11's by-hand build, kept as the record of what was measured then.
+
 Done by hand in the Claude Code sandbox (Ubuntu 24.04, gcc 13); not a script, and not in the worker image.
 
 1. Packages: `gfortran libopenblas-dev liblapacke-dev libhwloc-dev libscotch-dev libspooles-dev libarpack2-dev pkg-config nvidia-cuda-toolkit g++-12`. The fork includes CUDA and PaRSEC headers unconditionally, so CUDA is needed to compile and link even without a GPU.
 2. PaRSEC: `git clone https://bitbucket.org/mfaverge/parsec.git`, tag `pastix-6.0.2` (`b580d208`); `cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DPARSEC_DIST_WITH_MPI=OFF -DPARSEC_GPU_WITH_CUDA=ON -DPARSEC_GPU_WITH_OPENCL=OFF -DPARSEC_WITH_DEVEL_HEADERS=ON -DSUPPORT_FORTRAN=OFF -DCMAKE_C_FLAGS=-fcommon`.
-3. PaStiX4CalculiX: `git clone https://github.com/Dhondtguido/PaStiX4CalculiX` at `d6b493b`, then `git apply pastix4calculix.patch` (beside this file: drops `-march=native`, targets `sm_52` because CUDA 12 has no `sm_35`, accepts CMake's `Threads::Threads` target, and sends the code generator's warnings to stderr, where they no longer corrupt the generated Makefiles). Configure with `SCRIPT_OUT="-fcommon -O2" cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DPASTIX_INT64=OFF -DPASTIX_WITH_PARSEC=ON -DPARSEC_DIR=<parsec> -DPASTIX_WITH_CUDA=ON -DCUDA_HOST_COMPILER=/usr/bin/gcc-12 -DPASTIX_WITH_MPI=OFF -DPASTIX_ORDERING_SCOTCH=ON -DPASTIX_WITH_FORTRAN=OFF -DBLA_VENDOR=OpenBLAS -DPYTHON_EXECUTABLE=/usr/bin/python3.11` (its generator uses Python's `imp`, gone in 3.12).
+3. PaStiX4CalculiX: `git clone https://github.com/Dhondtguido/PaStiX4CalculiX` at `d6b493b`, then `git apply` the patch now at `worker/ccx/pastix4calculix.patch` minus its `import imp` change (then beside this file: drops `-march=native`, targets `sm_52` because CUDA 12 has no `sm_35`, accepts CMake's `Threads::Threads` target, and sends the code generator's warnings to stderr, where they no longer corrupt the generated Makefiles). Configure with `SCRIPT_OUT="-fcommon -O2" cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DPASTIX_INT64=OFF -DPASTIX_WITH_PARSEC=ON -DPARSEC_DIR=<parsec> -DPASTIX_WITH_CUDA=ON -DCUDA_HOST_COMPILER=/usr/bin/gcc-12 -DPASTIX_WITH_MPI=OFF -DPASTIX_ORDERING_SCOTCH=ON -DPASTIX_WITH_FORTRAN=OFF -DBLA_VENDOR=OpenBLAS -DPYTHON_EXECUTABLE=/usr/bin/python3.11` (its generator uses Python's `imp`, gone in 3.12).
 4. CalculiX 2.21 from `http://www.dhondt.de/ccx_2.21.src.tar.bz2`, built with CalculiX's `Makefile` plus `-fcommon -DPASTIX` and the PaStiX and PaRSEC include paths, `-fallow-argument-mismatch` for gfortran, and linked against the PaStiX static libraries, `-lparsec -lscotch -lscotcherrexit -lhwloc -llapacke -lopenblas -lcublas -lcudart -lcusparse -lstdc++`.
 
 Then `bench.py --ccx <that ccx> --build ccx-2.21-pastix4calculix --solvers PASTIX --threads 4`; the SPOOLES comparison is taken from the single-threaded SPOOLES rows already in `results.json`.

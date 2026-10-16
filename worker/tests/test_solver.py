@@ -69,12 +69,15 @@ def test_a_cancel_stops_the_solver(tmp_path: Path) -> None:
     assert time.monotonic() - started < 10
 
 
-def test_spooles_runs_on_one_thread_whatever_the_environment_says(tmp_path: Path) -> None:
+def test_the_solver_runs_on_one_thread_whatever_the_environment_says(tmp_path: Path) -> None:
     ccx = fake_solver(
-        tmp_path, 'import os\nprint(os.environ.get("CCX_NPROC_EQUATION_SOLVER"), flush=True)'
+        tmp_path,
+        "import os\n"
+        'print(os.environ.get("CCX_NPROC_EQUATION_SOLVER"), os.environ.get("OMP_NUM_THREADS"), '
+        "flush=True)",
     )
     lines: list[str] = []
     run_calculix(deck(tmp_path), lines.append, threading.Event(), executable=ccx)
-    assert lines == ["1\n"]
+    assert lines == ["1 1\n"]
     env = solver_environment({"CCX_NPROC_EQUATION_SOLVER": "4", "OMP_NUM_THREADS": "4"})
-    assert env == {"CCX_NPROC_EQUATION_SOLVER": "1", "OMP_NUM_THREADS": "4"}
+    assert env == {"CCX_NPROC_EQUATION_SOLVER": "1", "OMP_NUM_THREADS": "1"}

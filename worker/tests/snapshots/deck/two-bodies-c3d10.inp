@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 3. Generated from the simulation's
+** ClearFEA solver input, deck format 4. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
 ** Geometry 00000000-0000-4000-8000-000000000002
 *HEADING
@@ -46,7 +46,7 @@ ClearFEA linear static analysis
 ** Pressure pressure-1 "Inside", faces 2, 3: 150.0 psi = 1034213.5939752542 Pa
 ** Pressure pressure-2 "Suction", faces 3: -0.5 MPa = -500000.0 Pa
 *STEP
-*STATIC
+*STATIC, SOLVER=PASTIX
 *BOUNDARY
 S1, 1, 3
 S2, 1, 3

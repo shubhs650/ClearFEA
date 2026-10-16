@@ -6,16 +6,28 @@ import { estimateRun, type MachineSize, runSize } from "../src/billing/estimate"
 const GiB = 2 ** 30;
 
 /** Round numbers, so the expected values can be worked out by hand. */
+const MODEL: EstimatorTable["analyses"]["linear_static"]["pastix"] = {
+  solver: "test",
+  // 1,000 bytes per node; 10 s plus 1 ms per node.
+  peakMemoryBytes: { constant: 0, coefficient: 1000, exponent: 1, largestRatio: 1 },
+  jobSeconds: { constant: 10, coefficient: 0.001, exponent: 1, largestRatio: 1 },
+  fittedNodes: [1000, 1_000_000],
+  maxElements: { order1: 1_000_000, order2: 100_000 },
+};
+
 const TABLE: EstimatorTable = {
   ...estimatorTable,
   version: 7,
   analyses: {
     linear_static: {
-      solver: "test",
-      // 1,000 bytes per node; 10 s plus 1 ms per node.
-      peakMemoryBytes: { constant: 0, coefficient: 1000, exponent: 1, largestRatio: 1 },
-      jobSeconds: { constant: 10, coefficient: 0.001, exponent: 1, largestRatio: 1 },
-      fittedNodes: [1000, 1_000_000],
+      pastix: MODEL,
+      spooles: MODEL,
+      iterative_cholesky: MODEL,
+      // Half the memory of the others, for telling the solvers apart.
+      iterative_scaling: {
+        ...MODEL,
+        peakMemoryBytes: { constant: 0, coefficient: 500, exponent: 1, largestRatio: 1 },
+      },
     },
   },
   memoryMargin: 1.25,
@@ -30,7 +42,7 @@ const SIZES: MachineSize[] = [
 describe("the run estimate", () => {
   it("prices the fitted time on every size, cheapest first, and recommends the cheapest that fits", () => {
     // 500,000 nodes: 0.5 GB peak, needing 0.625 GB of the 0.8 GiB usable on tiny; 510 s.
-    const estimate = estimateRun(500_000, SIZES, TABLE);
+    const estimate = estimateRun(500_000, SIZES, "pastix", TABLE);
     expect(estimate).toEqual({
       estimator: 7,
       nodes: 500_000,
@@ -42,25 +54,32 @@ describe("the run estimate", () => {
         { size: "big", cores: 8, memoryBytes: 10 * GiB, ratePerHour: 3_600_000, cost: 510_000, fits: true },
       ],
       recommended: "tiny",
+      solver: "pastix",
     });
+  });
+
+  it("is for the solver asked for", () => {
+    const estimate = estimateRun(500_000, SIZES, "iterative_scaling", TABLE);
+    expect(estimate.solver).toBe("iterative_scaling");
+    expect(estimate.memoryBytes).toBe(250_000_000);
   });
 
   it("is conservative on memory: the margin decides when a size stops fitting", () => {
     // tiny holds 0.8 GiB = 858,993,459 bytes for the solver; with the 1.25 margin a peak of up to
     // 687,194,767 bytes fits.
-    expect(estimateRun(687_194, SIZES, TABLE).recommended).toBe("tiny");
-    expect(estimateRun(687_195, SIZES, TABLE).recommended).toBe("big");
+    expect(estimateRun(687_194, SIZES, "pastix", TABLE).recommended).toBe("tiny");
+    expect(estimateRun(687_195, SIZES, "pastix", TABLE).recommended).toBe("big");
   });
 
   it("recommends nothing when no size fits, and says when the mesh is past the fitted range", () => {
-    const estimate = estimateRun(7_000_000, SIZES, TABLE);
+    const estimate = estimateRun(7_000_000, SIZES, "pastix", TABLE);
     expect(estimate.recommended).toBeNull();
     expect(estimate.extrapolated).toBe(true);
     expect(estimate.sizes.every((s) => !s.fits)).toBe(true);
   });
 
   it("rounds memory and time up", () => {
-    const estimate = estimateRun(1001, SIZES, TABLE);
+    const estimate = estimateRun(1001, SIZES, "pastix", TABLE);
     expect(estimate.seconds).toBe(12); // 11.001 s
     expect(estimate.memoryBytes).toBe(1_001_000);
   });
@@ -68,10 +87,10 @@ describe("the run estimate", () => {
 
 describe("the size a run goes on", () => {
   it("is the one asked for, else the recommended one, else the one with the most memory", () => {
-    const fits = estimateRun(500_000, SIZES, TABLE);
+    const fits = estimateRun(500_000, SIZES, "pastix", TABLE);
     expect(runSize(fits, "big")?.size).toBe("big");
     expect(runSize(fits)?.size).toBe("tiny");
-    expect(runSize(estimateRun(7_000_000, SIZES, TABLE))?.size).toBe("big");
+    expect(runSize(estimateRun(7_000_000, SIZES, "pastix", TABLE))?.size).toBe("big");
     expect(runSize(fits, "nope")).toBeUndefined();
   });
 });
@@ -83,7 +102,7 @@ describe("the fitted coefficients", () => {
       { name: "8", cores: 2, memoryBytes: 8 * GiB, ratePerHour: 1 },
       { name: "16", cores: 4, memoryBytes: 16 * GiB, ratePerHour: 2 },
     ];
-    const estimate = estimateRun(207_025, sizes);
+    const estimate = estimateRun(207_025, sizes, "spooles");
     expect(estimate.memoryBytes / GiB).toBeGreaterThan(8.5);
     expect(estimate.memoryBytes / GiB).toBeLessThan(9.5);
     expect(estimate.recommended).toBe("16");

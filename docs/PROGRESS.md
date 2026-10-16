@@ -68,7 +68,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M2.8 Local mesh sizes on faces, edges and bodies; element order choice; quality summary
 - [x] M2.9 Material library (generic values with sources), custom materials saved per user
 - [x] M2.10 Mesh reuse across runs by settings hash
-- [x] M2.11 Benchmark: solver build (PaStiX measured in a follow-up PR; adopting it and the 2M target await the maintainer, ADR-048 item 7)
+- [x] M2.11 Benchmark: solver build (PaStiX measured in a follow-up PR; adopted as the default and the 2M target dropped for 16 GB limits per solver, ADR-063)
 - [x] M2.12 Estimator v1 fitted from the benchmark data; estimate shown before run; machine size recommendation
 
 ### M3 Results tools
@@ -115,14 +115,16 @@ Things only the maintainer can do.
 | Tier | Last run | Result |
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
-| Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 146 of 146 checks (M3.5) |
+| Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 15 cases, 169 of 169 checks with PaStiX as the default solver (ADR-063) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4) |
-| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 (one body, every result step to M3.8) and E-03 (two bonded bodies) |
+| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 (one body, every result step to M3.8) and E-03 (two bonded bodies); E-01 also checks the ADR-063 solver choice |
 | Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main 6e722e0, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547); closed M4) | Green: full tier 169 of 169 checks in all 15 cases (V-01 to V-12, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> ADR-063 (2026-10-16): PaStiX is the default equation solver, with SPOOLES, iterative Cholesky and iterative scaling as user options, and runs are limited per solver and element order to what a 16 GB machine solves; the 2-million-element target is dropped (Shubham's decision before M4; ADR-063, pending his review of the details). Physics-critical module touched: the deck generator (every deck names its solver, deck format 4). `worker/ccx/build.sh` builds CalculiX 2.21 with a 32-bit PaStiX4CalculiX into the worker image (about 2.1 GB now). The worker sets `OMP_NUM_THREADS=1` as well as one solver thread: unset, OpenMP spun against PaStiX and cost 8 to 14 s a run. Limits on 16 GiB (10-node / 4-node elements): PaStiX 142,000 / 1,103,000; SPOOLES 161,000 / 461,000; both iterative 461,000 / 461,000 (capped at the largest mesh measured, as Shubham asked to stop the benchmark at 500,000 elements). `elementLimitProblem` in `packages/spec` refuses over-limit meshes in the setup and the API (409). The Run panel has an "Equation solver" list with each limit; picking an iterative solver shows an accuracy note, also in the run record and under results (Shubham chose "offer with warning"). `estimator.json` is version 2 with a law per solver. Runs made before keep `spooles` (their frozen spec has no solver). Surprising: the iterative solvers stop at a residual of 1e-4 fixed in ccx's source and miss 0.1% checks (iterative Cholesky 130 of 146, iterative scaling 139 of 146, worst 0.45%). Next: larger machines need a 64-bit PaStiX build (`Makefile_i8`) and their own benchmark, ADR-063 item 10.
 
 > M5.1 (2026-10-16): steady-state thermal analysis (ADR-064, accepted under Shubham's M5 autodrive, pending his review). Physics-critical modules touched: units table (`units.json` v5, kind `thermalConductivity`), the deck generator (`deck/generator.py` `_heat_transfer_deck`, new `deck/loads/heat.py`) and the result reader (`results/fields.py` `read_thermal_fields`, `results/summary.py` `summarize_thermal`, `results/surface.py`). Spec: `analysis` takes `steady_thermal`; materials gain `thermalConductivity`; new load `fixed_temperature` (faces, absolute temperature), pulled forward from M5.2 because a thermal run needs one to be solvable and verified; `SolveResult`'s displacement, vonMises and reactions are now optional and a thermal run has `temperature` min/max; `view.schema.json` `ResultQuantity` gains `temperature`. `analysisLoads`, `isThermal`, `wrongAnalysisMessage`, `thermalBodyMessages` in `packages/spec`; `preRunProblems` has a thermal branch. Deck: `*HEAT TRANSFER, STEADY STATE` with data line `1.0, 1.0` (without it ccx warns about a nonlinear analysis), `*CONDUCTIVITY`, `*BOUNDARY` DOF 11 in K, `*NODE FILE` NT; static decks unchanged (DECK_FORMAT 3; new snapshots `heat-c3d10`, `heat-two-bodies-c3d4`). Refused: supports or structural loads in a thermal setup (and a fixed temperature in a static one), tied bonds between bodies (until M5.6), a body without a fixed temperature, two fixed temperatures meeting at a node with different values, ≤ 0 K. Results: fields.bin/nodes.bin hold `temperature` (K) only. Web: Analysis row in the tree, thermal marks, "Add a fixed temperature", conductivity on the material panel, temperature figures, contour (undeformed), cut planes, probes, units shown, CSV/VTK with a temperature column, saved views. Harness: `temperature` quantity; thermal cases skip the force balance rows. New V-13 plane wall (temperatures at faces and three depths, 0.01 %); `worker/spikes/heat_check` (every node of a bar against the linear profile, C3D4 and C3D10). The estimator uses the linear static law for thermal runs (high, the safe side; the solver thread owns it). For M5.2: add the other thermal loads to `analysisLoads` and `_heat_transfer_deck`; with radiation the deck needs `*PHYSICAL CONSTANTS`. For M5.3: add `HFL`/`RFL` output, V-13's flux check and the heat balance automatic check (VERIFICATION.md). Parked: conductivities in the material library. Screenshots in the project's `m5.1/` folder.
 
@@ -247,9 +249,9 @@ Written by the last session for the next one. Replace, do not append.
 Ideas that came up during work and are outside the current milestone. Do not build these without a decision.
 
 - A user-set bond tolerance (ADR-059 item 3): the tolerance is fixed at 1e-4 of the model size; another would need a detection job run on request.
-- Shrink the worker image (about 990 MB): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use.
+- Shrink the worker image (about 2.1 GB since ADR-063): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use, and PaStiX needs the CUDA runtime libraries (no GPU is used).
 - A rigid (kinematic) option for remote loads, which keeps the loaded faces' shape (ADR-041 item 2), and drawing a remote load's reference point in the viewer. Needs the maintainer's decision on the option.
-- Adopt PaStiX as the production solver (Shubham chose "adopt later", 2026-10-15, ADR-048 item 7): its own task after M2, a 64-bit-integer PaStiX4CalculiX build in the worker image (CUDA runtime libraries included) as a pinned version bump with a full verification run. Build recipe in `worker/benchmarks/solver/README.md`. 4 to 6 times faster than SPOOLES, no larger models.
+- A 64-bit-integer PaStiX build and per-size limits for machines above 16 GB (ADR-063 item 10), when larger machines are benchmarked.
 
 ## Log
 
@@ -257,6 +259,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- ADR-063: PaStiX built into the worker image and made the default solver, SPOOLES and both iterative solvers offered with an accuracy note on the iterative ones, all four benchmarked to 500,000 elements and runs limited per solver and element order on 16 GB; the 2-million-element target dropped. `make verify` with PaStiX 169 of 169 checks in all 15 cases (coarse), `make e2e` E-01 green with a solver step. Learned: OpenMP left unset spins a thread per core against PaStiX's own.
 - M5.1: steady-state thermal analysis type, thermal conductivity and fixed temperatures (ADR-064); V-13 plane wall added; `make verify` coarse 177 of 177 checks in 16 cases.
 - E-03: browser test of a two-body bonded model from upload to results, part of `make e2e` (both E-01 and E-03 pass locally).
 - ADR-058 to ADR-062 marked accepted by the maintainer (he reviewed them after the M4 close).

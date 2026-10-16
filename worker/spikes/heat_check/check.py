@@ -232,7 +232,9 @@ def main() -> int:
             setup = spec(loads)
             work = root / f"solve-p{order}-{k}"
             work.mkdir(exist_ok=True)
-            (work / "job.inp").write_text(generate_deck(setup, mesh))
+            # SPOOLES: the host's ccx may be built without PaStiX, the platform's default
+            # (ADR-063). The loads' translation, which this checks, is the same for both.
+            (work / "job.inp").write_text(generate_deck(setup, mesh, solver="SPOOLES"))
             run = subprocess.run(["ccx", "-i", "job"], cwd=work, capture_output=True, text=True)
             if run.returncode != 0 or "*ERROR" in run.stdout:
                 print(f"CalculiX failed on {name}:\n{run.stdout[-2000:]}")

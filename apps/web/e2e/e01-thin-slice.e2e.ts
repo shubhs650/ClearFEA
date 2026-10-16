@@ -154,9 +154,21 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await expect(estimate).toContainText(/about [\d.]+ (MiB|GiB) at its peak/);
     await expect(estimate.getByLabel("Machine size")).toHaveValue("small");
     await page.screenshot({ path: `${OUT}/e01-estimate.png` });
+    // The equation solver (ADR-063): PaStiX by default; an iterative one shows its accuracy note.
+    const solver = run.getByRole("region", { name: "Solver", exact: true });
+    const choice = solver.getByLabel("Equation solver");
+    await expect(choice).toHaveValue("pastix");
+    await choice.selectOption("iterative_cholesky");
+    await expect(solver).toContainText("Iterative solvers stop at a fixed relative residual");
+    await page.screenshot({ path: `${OUT}/e01-solver-iterative.png` });
+    await choice.selectOption("pastix");
+    await expect(solver).not.toContainText("Iterative solvers stop");
+    await page.screenshot({ path: `${OUT}/e01-solver.png` });
+    await expect(run.getByRole("button", { name: "Run", exact: true })).toBeEnabled({ timeout: 10_000 });
     await run.getByRole("button", { name: "Run", exact: true }).click();
     await expect(run.getByLabel("Run results")).toContainText("Largest von Mises stress", { timeout: 180_000 });
     await expect(run.getByLabel("Run record")).toContainText(/Estimate.*about \d+ s/);
+    await expect(run.getByLabel("Run record")).toContainText(/Solver\s*PaStiX/);
 
     const legend = page.getByRole("region", { name: "Legend", exact: true });
     await expect(legend).toContainText("Von Mises stress (MPa)", { timeout: 60_000 });

@@ -6,6 +6,7 @@ import {
   type CreateRunRequest,
   type CreateSimulationRequest,
   checkSimulationSpec,
+  elementLimitProblem,
   elementOrder,
   type EstimateResponse,
   localScopes,
@@ -21,6 +22,9 @@ import {
   type SimulationResponse,
   type SimulationSpec,
   type SimulationView,
+  type Solver,
+  SolverValues,
+  specSolver,
   type ViewListResponse,
   type ViewResponse,
   sameMeshSettings,
@@ -263,22 +267,28 @@ async function runnableMesh(
   return { mesh };
 }
 
-/** The estimate for a ready mesh on every machine size (M2.12, ADR-049). */
-async function meshEstimate(db: D1Database, mesh: Mesh): Promise<RunEstimate> {
+/** The estimate for a ready mesh with a solver on every machine size (M2.12, ADR-049, ADR-063). */
+async function meshEstimate(db: D1Database, mesh: Mesh, solver: Solver): Promise<RunEstimate> {
   if (mesh.nodeCount === null) throw new Error("A ready mesh has no node count.");
-  return estimateRun(mesh.nodeCount, await listMachineSizes(db));
+  return estimateRun(mesh.nodeCount, await listMachineSizes(db), solver);
 }
 
 /**
  * Memory, time and cost estimated for solving the simulation on its current mesh, per machine
- * size, with the size recommended (M2.12, ADR-049).
+ * size, with the size recommended (M2.12, ADR-049). `?solver=` asks for another solver than
+ * the saved spec's, so the setup can show the estimate of a choice before it is saved (ADR-063).
  */
 simulations.get("/:id/estimate", async (c) => {
+  const asked = c.req.query("solver");
+  if (asked !== undefined && !(SolverValues as readonly string[]).includes(asked)) {
+    return c.json({ error: `There is no solver called ${asked}. Choose one of: ${SolverValues.join(", ")}.` }, 400);
+  }
   const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
   if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
   const found = await runnableMesh(c.env.DB, c.var.userId, simulation);
   if ("error" in found) return c.json({ error: found.error }, 409);
-  return c.json({ estimate: await meshEstimate(c.env.DB, found.mesh) } satisfies EstimateResponse);
+  const solver = (asked as Solver | undefined) ?? specSolver(simulation.spec);
+  return c.json({ estimate: await meshEstimate(c.env.DB, found.mesh, solver) } satisfies EstimateResponse);
 });
 
 /**
@@ -289,6 +299,8 @@ simulations.get("/:id/estimate", async (c) => {
  * the body names, or on the recommended one, and keeps the estimate made now (M2.12, ADR-049).
  * The run's copy lists every bond of the geometry, so a spec saved before M4.2 is tied the way
  * the setup shows it (every candidate detected, ADR-059); the deck ties what the list says (M4.3).
+ * A mesh with more elements than the spec's solver may solve on a 16 GB machine is refused
+ * before any machine is used (ADR-063).
  */
 simulations.post("/:id/runs", async (c) => {
   let request: CreateRunRequest = {};
@@ -312,7 +324,11 @@ simulations.post("/:id/runs", async (c) => {
   const found = await runnableMesh(c.env.DB, c.var.userId, simulation);
   if ("error" in found) return c.json({ error: found.error }, 409);
   const { mesh } = found;
-  const estimate = await meshEstimate(c.env.DB, mesh);
+  const solver = specSolver(simulation.spec);
+  if (mesh.elementCount === null) throw new Error("A ready mesh has no element count.");
+  const tooLarge = elementLimitProblem(solver, mesh.order, mesh.elementCount);
+  if (tooLarge !== null) return c.json({ error: tooLarge }, 409);
+  const estimate = await meshEstimate(c.env.DB, mesh, solver);
   const size = runSize(estimate, request.machineSize);
   if (size === undefined) {
     const names = estimate.sizes.map((s) => s.size).join(", ");
@@ -325,7 +341,9 @@ simulations.post("/:id/runs", async (c) => {
   const created = await createRun(c.env.DB, c.var.userId, {
     simulationId: simulation.id,
     meshId: mesh.id,
-    spec: { ...simulation.spec, bonds: specBonds(simulation.spec, read.topology) },
+    // The run's frozen spec always names its solver, so a later default cannot change what a
+    // run says it was solved with (ADR-063).
+    spec: { ...simulation.spec, solver, bonds: specBonds(simulation.spec, read.topology) },
     machineSize: size.size,
     estimate,
   });

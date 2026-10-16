@@ -298,6 +298,7 @@ export function emptySimulationSpec(geometryId: string, topology: TopologyTags):
     supports: [],
     loads: [],
     mesh: { size: null, order: 2, local: [] },
+    solver: "pastix",
     // Every candidate bond starts tied and unreviewed (M4.2); geometries imported before M4.2 have none.
     ...(topology.bonds === undefined
       ? {}

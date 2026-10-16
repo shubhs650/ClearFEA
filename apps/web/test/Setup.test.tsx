@@ -7,7 +7,10 @@ import {
   type IsotropicMaterial,
   type MeshQuality,
   type MeshView,
+  elementLimitProblem,
+  ITERATIVE_ACCURACY_NOTE,
   materialLibrary,
+  maxElements,
   type RunEstimate,
   type RunView,
   type SimulationSpec,
@@ -179,7 +182,7 @@ function routes(simulations: SimulationView[], extra: Record<string, Route> = {}
     "GET /api/simulations?geometryId=g1": { status: 200, json: { simulations } },
     "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: null } },
     "GET /api/simulations/s1/runs": { status: 200, json: { runs: [] } },
-    "GET /api/simulations/s1/estimate": { status: 200, json: { estimate: ESTIMATE } },
+    "GET /api/simulations/s1/estimate?solver=pastix": { status: 200, json: { estimate: ESTIMATE } },
     "GET /api/project": { status: 200, json: { project: { id: "p1", name: "My project", unitSystem: "metric-mm" } } },
     "GET /api/materials": { status: 200, json: { library: materialLibrary.materials, custom: [] } },
     ...extra,
@@ -1038,7 +1041,8 @@ function run(overrides: Partial<RunView> = {}): RunView {
     id: "r1",
     simulationId: "s1",
     meshId: "m1",
-    spec: supported,
+    // Runs made since ADR-063 always name their solver.
+    spec: { ...supported, solver: "pastix" },
     mesh: { size: { value: 5, unit: "mm" }, order: 2, nodeCount: 7108, elementCount: 4000 },
     software: { clearfea: "0.0.0+d9d394b", deckFormat: 1, calculix: "2.21", gmsh: "4.15.2", occt: "7.9.0" },
     files: [],
@@ -1200,7 +1204,7 @@ describe("run", () => {
     const fetchMock = serve(
       routes([simulation(supported)], {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
-        "GET /api/simulations/s1/estimate": { status: 200, json: { estimate: tight } },
+        "GET /api/simulations/s1/estimate?solver=pastix": { status: 200, json: { estimate: tight } },
         "POST /api/simulations/s1/runs": { status: 201, json: { run: run() } },
         "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
       }),
@@ -1224,6 +1228,70 @@ describe("run", () => {
     expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
     const post = fetchMock.mock.calls.find(([path, init]) => path === "/api/simulations/s1/runs" && init?.method === "POST");
     expect(JSON.parse(String(post?.[1]?.body))).toEqual({ machineSize: "small" });
+  });
+
+  it("chooses the solver, PaStiX first, saves it and estimates for it, warning about the iterative ones", async () => {
+    const { sent, route } = saves();
+    const fetchMock = serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "PUT /api/simulations/s1/spec": route,
+        "GET /api/simulations/s1/estimate?solver=iterative_cholesky": {
+          status: 200,
+          json: { estimate: { ...ESTIMATE, solver: "iterative_cholesky" } },
+        },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    const solver = (await settings().findByRole("combobox", { name: "Equation solver" })) as HTMLSelectElement;
+    expect(solver.value).toBe("pastix");
+    expect([...solver.options].map((o) => o.value)).toEqual(["pastix", "spooles", "iterative_cholesky", "iterative_scaling"]);
+    expect(solver.options[0]?.text).toBe(
+      `PaStiX (direct, fastest), up to ${maxElements("pastix", 2).toLocaleString("en-US")} elements`,
+    );
+    expect(settings().queryByText(/Iterative solvers stop at a fixed relative residual/)).toBeNull();
+    fireEvent.change(solver, { target: { value: "iterative_cholesky" } });
+    expect(settings().getByText(ITERATIVE_ACCURACY_NOTE)).toBeTruthy();
+    await waitFor(() => expect(sent.at(-1)?.solver).toBe("iterative_cholesky"));
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([path]) => path === "/api/simulations/s1/estimate?solver=iterative_cholesky")).toBe(
+        true,
+      ),
+    );
+  });
+
+  it("refuses a mesh above the solver's element limit before running", async () => {
+    const elements = maxElements("pastix", 2) + 1;
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh({ elementCount: elements }) } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    const problem = elementLimitProblem("pastix", 2, elements) ?? "";
+    expect(await settings().findByText(problem)).toBeTruthy();
+    expect(settings().getByRole("button", { name: "Run" })).toHaveProperty("disabled", true);
+  });
+
+  it("names the solver in the run record: SPOOLES for runs made before the choice", async () => {
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": {
+          status: 200,
+          json: { runs: [run({ spec: supported, status: "failed", stage: null, problem: "x", finishedAt: "2026-10-15T12:01:00.000Z" })] },
+        },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, has a problem" }));
+    const record = within(settings().getByLabelText("Run record"));
+    expect(record.getByText("SPOOLES")).toBeTruthy();
+    // A new run would use PaStiX, so the setup counts as changed.
+    expect(record.getByText(/The setup has changed/)).toBeTruthy();
   });
 
   it("shows a finished run's figures in display units, with numbers only", async () => {

@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 3. Generated from the simulation's
+** ClearFEA solver input, deck format 4. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
 ** Geometry 00000000-0000-4000-8000-000000000002
 *HEADING
@@ -55,7 +55,7 @@ ClearFEA linear static analysis
 *INITIAL CONDITIONS, TYPE=TEMPERATURE
 NALL, 0.0
 *STEP
-*STATIC
+*STATIC, SOLVER=PASTIX
 *BOUNDARY
 S1, 1, 3
 S2, 1, 3
