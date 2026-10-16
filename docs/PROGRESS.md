@@ -5,9 +5,9 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M3 Results tools (M2 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M3 close (phase-end run on main)
-- **Blocked on:** nothing
+- **Current milestone:** M4 Assemblies, not started (M3 closed 2026-10-16 on a green phase-end run on main)
+- **Next task:** M4.1, once the maintainer gives the go for M4 (the autodrive covered M1 to M3)
+- **Blocked on:** the maintainer's go for M4
 
 ## Milestones
 
@@ -16,7 +16,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M0 | Bootstrap | Done (all tasks merged; exit checked in M0.9) | 2026-10-14 |
 | M1 | Thin slice | Done (phase-end run on main green, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); maintainer waived the hand exit check) | 2026-10-15 |
 | M2 | Structural setup | Done (phase-end run on main green, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) | 2026-10-16 |
-| M3 | Results tools | In progress | |
+| M3 | Results tools | Done (phase-end run on main green, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) | 2026-10-16 |
 | M4 | Assemblies | Not started | |
 | M5 | Thermal | Not started | |
 | M6 | Modal | Not started | |
@@ -100,11 +100,13 @@ Things only the maintainer can do.
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 146 of 146 checks (M3.5) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4) |
 | Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step, the M3.5 safety factor step and the M3.6 saved view step |
-| Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main b355155, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635); closed M2) | Green: full tier 116 of 116 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26); E-01 |
+| Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main df2a895, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035); closed M3) | Green: full tier 146 of 146 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M3 close (2026-10-16): M3 closed on a green manual phase-end run on main (see the Milestones table). Next is M4 in PLAN.md order, which waits for the maintainer's go: his autodrive covered M1 to M3. Still waiting on the maintainer: review of ADR-054 to ADR-057 (M3, accepted under the autodrive), the temper picked per library metal (ADR-054 item 7), and how to reach the 2-million-element target (ADR-048 item 7).
 
 > M3.8 (2026-10-16): CSV and VTK export (ADR-057, accepted under Shubham's standing M3 instruction, pending his review). Web only; no API, worker, schema, `units.json` or `convert.ts` change, so no physics-critical module touched. The Run panel's new "Export" section (after the run figures) offers "Results at every node (CSV)" (node number as in the deck, undeformed x, y, z, every field, in the units shown, UTF-8 with a byte order mark), "Reactions and loads (CSV)" (the summary's reactions, moments and load totals) and "Mesh and results (VTK)" (`.vtu`, raw appended data, SI, mid-edge nodes reordered for VTK's quadratic tetrahedron, body tag as cell data). Built from `mesh.bin` and the whole `nodes.bin` (`GET /api/runs/:id/nodes`, already there since M3.4) in `apps/web/src/viewer/resultExport.ts`; runs before M3.4 export only reactions. Files are named `clearfea-run-<first 8 of run id>…`. Large models: the node CSV of 2.7 million nodes takes about 28 s and 705 MB (written in chunks so the page keeps drawing); the VTK file under half a second. E-01 downloads all three and checks them. VTK files were also read back with VTK 9.5.2's own reader by hand (not in CI). Screenshot in the project's `m3.8/` folder. Next: close M3 with a green manual phase-end run on main, and give Shubham the ADR list from ADR-054 on.
 
@@ -220,6 +222,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M3 closed: phase-end workflow run by hand on main df2a895 ([run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) green, `make verify` full tier 146 of 146 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26) and `make e2e` E-01. Next: M4, waiting on the maintainer's go.
 - M3.8: CSV and VTK export of a run's results, built in the browser from its stored files (ADR-057). Learned: writing text is the slow part (28 s for 2.7 million nodes), not the VTK file (under half a second).
 - M3.7: result display units picked per kind in the Run panel, over the unit system, kept per user in the browser (ADR-056).
 - M3.6: hide/show bodies and saved views of a simulation (ADR-055). Learned: Playwright's role name match is a substring, so a "Delete the view X" button also matches X unless `exact: true`; the host needs Gmsh's system libraries (`apt-get install libglu1-mesa` and friends) before `make test`'s pytest passes.
