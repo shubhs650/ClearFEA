@@ -67,9 +67,11 @@ describe("the solvers", () => {
   it("each take a limited number of elements per order on 16 GiB", () => {
     expect(estimatorTable.limitMemoryBytes).toBe(16 * 2 ** 30);
     for (const solver of SOLVERS) {
-      // Per node both orders cost about the same, and a 4-node mesh has far fewer nodes.
-      expect(maxElements(solver, 1)).toBeGreaterThan(maxElements(solver, 2));
+      // Per node both orders cost about the same, and a 4-node mesh has far fewer nodes; no
+      // limit is above the largest mesh measured (461,993 elements for most solvers).
+      expect(maxElements(solver, 1)).toBeGreaterThanOrEqual(maxElements(solver, 2));
     }
+    expect(maxElements("pastix", 1)).toBeGreaterThan(maxElements("pastix", 2));
     // PaStiX needs more memory than SPOOLES, and the iterative solvers far less (ADR-058).
     expect(maxElements("pastix", 2)).toBeLessThan(maxElements("spooles", 2));
     expect(maxElements("spooles", 2)).toBeLessThan(maxElements("iterative_cholesky", 2));

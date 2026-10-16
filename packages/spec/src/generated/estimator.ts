@@ -67,7 +67,7 @@ export interface AnalysisModel {
    */
   fittedNodes: [number, number];
   /**
-   * Largest element count a run with this solver may have, per element order, on a machine of limitMemoryBytes: the node count whose fitted peak memory times memoryMargin fits in usableMemoryFraction of it, turned into elements with the most nodes per element measured for that order, rounded down to a thousand.
+   * Largest element count a run with this solver may have, per element order, on a machine of limitMemoryBytes: the node count whose fitted peak memory times memoryMargin fits in usableMemoryFraction of it, turned into elements with the nodes per element of the measured mesh nearest it, at most the largest mesh measured, rounded down to a thousand.
    */
   maxElements: {
     /**

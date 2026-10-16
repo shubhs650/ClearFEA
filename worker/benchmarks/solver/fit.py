@@ -77,18 +77,24 @@ SOLVER_LABELS = {
 
 
 def node_limit(memory: dict[str, float]) -> float:
-    """The node count whose fitted peak memory, times the margin, fills the usable share of a
-    LIMIT_MEMORY_BYTES machine."""
-    room = LIMIT_MEMORY_BYTES * USABLE_MEMORY_FRACTION / MEMORY_MARGIN - memory["constant"]
+    """The node count whose fitted peak memory, raised by the fit's worst shortfall
+    (largestRatio) and times the margin, fills the usable share of a LIMIT_MEMORY_BYTES
+    machine. The shortfall keeps every measured mesh under the limit within its own rule."""
+    room = (
+        LIMIT_MEMORY_BYTES * USABLE_MEMORY_FRACTION / MEMORY_MARGIN / memory["largestRatio"]
+        - memory["constant"]
+    )
     return (room / memory["coefficient"]) ** (1 / memory["exponent"])
 
 
 def element_limit(nodes: float, rows: list[dict]) -> int:
     """``nodes`` as an element count of one order: divided by the nodes per element of the
-    measured mesh nearest that node count, at most the mesher's own limit, rounded down to a
-    thousand."""
+    measured mesh nearest that node count, rounded down to a thousand. Never more than the
+    largest mesh measured (the maintainer had the benchmark stop at 500,000 elements, ADR-058),
+    so a limit is never an extrapolation, nor more than the mesher makes."""
     nearest = min(rows, key=lambda row: abs(row["nodes"] - nodes))
-    elements = min(nodes * nearest["elements"] / nearest["nodes"], MESHER_LIMIT)
+    largest = max(row["elements"] for row in rows)
+    elements = min(nodes * nearest["elements"] / nearest["nodes"], largest, MESHER_LIMIT)
     return int(elements // 1000 * 1000)
 
 
@@ -99,7 +105,9 @@ def fit(steps: dict) -> dict:
     for solver, label in SOLVER_LABELS.items():
         rows = [row for row in steps["runs"] if row["solver"] == solver]
         if len(rows) < 3:
-            raise SystemExit(f"steps.json needs at least three {solver} rows to fit three coefficients.")
+            raise SystemExit(
+                f"steps.json needs at least three {solver} rows to fit three coefficients."
+            )
         nodes = [row["nodes"] for row in rows]
         memory = fit_power_law([(row["nodes"], row["peakMemoryBytes"]) for row in rows])
         limit = node_limit(memory)

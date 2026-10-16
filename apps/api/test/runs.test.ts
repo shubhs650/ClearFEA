@@ -7,8 +7,10 @@ import {
   type SolveResult,
   type Topology,
   type WorkerSoftware,
+  elementLimitProblem,
   estimateMesh,
   estimatorTable,
+  maxElements,
   validateClaimResponse,
   validateEstimateResponse,
   validateRunListResponse,
@@ -537,6 +539,24 @@ describe("a finished solve job", () => {
   });
 });
 
+describe("the solver of a run (ADR-058)", () => {
+  it("is frozen with the run, PaStiX when the spec names none", async () => {
+    const id = await meshed();
+    const started = await runOf(await startRun(id));
+    expect(started.spec.solver).toBe("pastix");
+    expect(started.estimate?.solver).toBe("pastix");
+  });
+
+  it("refuses a mesh with more elements than the solver may solve on 16 GB", async () => {
+    const id = await meshed();
+    const elements = maxElements("pastix", 2) + 1;
+    await env.DB.prepare("UPDATE meshes SET element_count = ?").bind(elements).run();
+    const response = await startRun(id);
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as { error: string }).error).toBe(elementLimitProblem("pastix", 2, elements));
+  });
+});
+
 describe("the run record", () => {
   it("holds the frozen spec, the mesh and the versions that produced the run", async () => {
     const id = await meshed();
@@ -830,6 +850,21 @@ describe("estimates (ADR-049)", () => {
       ["large", 8, 32, 2_000_000, true],
       ["xlarge", 16, 64, 4_000_000, true],
     ]);
+  });
+
+  it("are for the spec's solver, or the one asked for, and refuse an unknown one (ADR-058)", async () => {
+    const id = await meshed();
+    const own = validateEstimateResponse(await (await estimate(id)).json());
+    if (!own.ok) throw new Error(own.errors.join(" "));
+    expect(own.value.estimate.solver).toBe("pastix");
+    const asked = await call("GET", `/api/simulations/${id}/estimate?solver=iterative_scaling`, { cookie: alice });
+    const body = validateEstimateResponse(await asked.json());
+    if (!body.ok) throw new Error(body.errors.join(" "));
+    expect(body.value.estimate.solver).toBe("iterative_scaling");
+    expect(body.value.estimate.memoryBytes).toBe(estimateMesh(7108, "iterative_scaling").memoryBytes);
+    const bad = await call("GET", `/api/simulations/${id}/estimate?solver=pardiso`, { cookie: alice });
+    expect(bad.status).toBe(400);
+    expect(((await bad.json()) as { error: string }).error).toContain("There is no solver called pardiso");
   });
 
   it("are refused, saying what to do, until the mesh is ready", async () => {

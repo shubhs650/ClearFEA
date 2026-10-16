@@ -56,7 +56,7 @@ describe("SimulationSpec schema", () => {
 
   it("refuses an unknown version, field or item type", () => {
     expect(validateSimulationSpec({ ...spec(), version: 2 }).ok).toBe(false);
-    expect(validateSimulationSpec({ ...spec(), solver: "pastix" }).ok).toBe(false);
+    expect(validateSimulationSpec({ ...spec(), solver: "pardiso" }).ok).toBe(false);
     const load = { ...spec().loads[0], type: "force" };
     expect(validateSimulationSpec({ ...spec(), loads: [load] }).ok).toBe(false);
   });

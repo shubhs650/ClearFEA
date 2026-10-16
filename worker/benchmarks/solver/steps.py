@@ -10,7 +10,7 @@ thread), so the times are what a run's billable phase spends apart from download
 The estimator and the element limits are fitted from the rows (``fit.py``). The ``ccx`` on PATH
 must be the worker image's build (``worker/ccx/build.sh``).
 
-    cd worker && uv run python benchmarks/solver/steps.py --out DIR --solver pastix 3000:2 25000:1 ...
+    cd worker && uv run python benchmarks/solver/steps.py --out DIR --solver pastix 3000:2 ...
         [--results benchmarks/solver/steps.json]
 
 Each argument is a target element count and an element order. One mesh is solved per process
@@ -115,6 +115,7 @@ def save_row(path: Path, row: dict[str, object]) -> None:
             "runs": [],
         }
     )
+
     def key(r: dict[str, object]) -> tuple[object, ...]:
         return (r["targetElements"], r["order"], r["solver"])
 
@@ -144,7 +145,16 @@ def main() -> int:
     for case in args.cases:
         # A fresh process per solve, so the peak memory of its children is this solve's.
         found = subprocess.run(
-            [sys.executable, __file__, "--out", str(args.out), "--solver", args.solver, "--one", case],
+            [
+                sys.executable,
+                __file__,
+                "--out",
+                str(args.out),
+                "--solver",
+                args.solver,
+                "--one",
+                case,
+            ],
             check=True,
             capture_output=True,
             text=True,
