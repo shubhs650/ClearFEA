@@ -20,8 +20,10 @@ Steady radial conduction between two fixed temperatures (Incropera and DeWitt, *
 
 ## Where the results are read
 
-On the cut y = 0 the radial direction is x; the temperatures and the flux are read on the vertices of that face along its edges at x = 45, 50 and 55 mm. The heat flows are those of the two fixed-temperature loads.
+On the cut y = 0 the radial direction is x; the temperatures and the flux are read on that face's edge z = 0 at x = 45, 50 and 55 mm, where both tiers put nodes. The heat flows are those of the two fixed-temperature loads.
 
 ## Tolerances
 
-To be set from the measured coarse and full runs.
+Temperatures 0.1 percent on both tiers, the radial heat flux 2 percent coarse and 1 percent full (extrapolated from the integration points), the heat flows 0.5 percent coarse and 0.2 percent full.
+
+Measured while the case was written (2026-10-16, CalculiX 2.21, Gmsh 4.15.2, OpenCASCADE 7.8.1). Coarse (5 mm): temperatures within 0.005 %, heat flux −0.03 %, heat flows below 0.01 %. Full (2.5 mm): temperatures below 0.005 %, heat flux +0.02 %, heat flows below 0.01 %.

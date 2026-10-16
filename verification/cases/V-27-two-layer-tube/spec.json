@@ -43,6 +43,6 @@
   ],
   "mesh": {
     "size": { "value": 5, "unit": "mm" },
-    "local": [{ "id": "outer", "name": "Outer layer", "scope": "bodies", "tags": [2], "size": { "value": 2, "unit": "mm" } }]
+    "local": [{ "id": "outer-mesh", "name": "Outer layer", "scope": "bodies", "tags": [2], "size": { "value": 2, "unit": "mm" } }]
   }
 }

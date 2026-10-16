@@ -26,8 +26,10 @@ The heat that leaves through the outside equals the heat in at the bore: all of 
 
 ## Where the results are read
 
-On the cut y = 0 the radial direction is x. Each cut face belongs to one body, so the bond temperature is read on both sides, on the vertices of each cut face along its edge at x = 50 mm. The other temperatures and the radial flux are read along the cut faces' edges at x = 45 mm (the inner layer's middle) and x = 54 mm (in the outer layer, where both tiers' element sizes put nodes on the edge). The heat flows are those of the two fixed-temperature loads.
+On the cut y = 0 the radial direction is x. Each cut face belongs to one body, so the bond temperature is read on both sides, on the nodes of each cut face's edge z = 0 at x = 50 mm. The other temperatures and the radial flux are read on the cut faces' edge z = 0 at x = 45 mm (the inner layer's middle) and x = 54 mm (in the outer layer, where both tiers' element sizes put nodes on the edge). The heat flows are those of the two fixed-temperature loads.
 
 ## Tolerances
 
-To be set from the measured coarse and full runs, as for V-19.
+Temperatures 0.1 percent (of the kelvin value) on both tiers, the radial heat flux 2 percent coarse and 1 percent full (it is extrapolated from the integration points), the heat flows 0.5 percent coarse and 0.2 percent full, as for V-14 and close to V-18.
+
+Measured while the case was written (2026-10-16, CalculiX 2.21, Gmsh 4.15.2, OpenCASCADE 7.8.1). Coarse (5 mm, outer layer 2 mm): temperatures within 0.01 % (the bond +0.01 % on both sides, 0.02 K and 0.04 °F), heat flux −0.10 % (inner) and 0.00 % (outer), heat flows below 0.01 %, heat balance 0.0000 %. Full (2.5 mm, outer layer 1 mm): temperatures within 0.005 %, heat flux −0.01 % and 0.00 %, heat flows below 0.01 %.

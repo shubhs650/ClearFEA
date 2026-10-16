@@ -20,46 +20,48 @@ mesh:
   full: { value: 2.5, unit: mm }
   # The outer layer is meshed finer, so the bond's two faces have different nodes.
   local:
-    outer:
+    outer-mesh:
       coarse: { value: 2, unit: mm }
       full: { value: 1, unit: mm }
-# The cut faces' edges along x get nodes at every element size, so the boxes at r = 45 and
-# 54 mm find nodes on both tiers. On the cut y = 0 the radial direction is x.
+# The checks read the cut faces' edge at z = 0, whose nodes fall at every element size along x
+# (r = 45 and 54 mm on both tiers); the face's inside nodes lie anywhere, and the outer layer's
+# 11 K/mm gradient would make a box around them read its nodes' spread. On the cut y = 0 the
+# radial direction is x.
 checks:
   - name: Inner layer halfway through, r = 45 mm
     quantity: temperature
     face: cut-y-1
-    box: { min: [44.9, 0, 0], max: [45.1, 0, 20] }
+    box: { min: [44.9, 0, 0], max: [45.1, 0, 0] }
     reference: { value: 178.736507, unit: °C }
     tolerance: { coarse: 0.001, full: 0.001 }
   - name: Bond, inner layer's side, r = 50 mm
     quantity: temperature
     face: cut-y-1
-    box: { min: [49.9, 0, 0], max: [50.1, 0, 20] }
+    box: { min: [49.9, 0, 0], max: [50.1, 0, 0] }
     reference: { value: 432.865664, unit: K }
     tolerance: { coarse: 0.001, full: 0.001 }
   - name: Bond, outer layer's side, r = 50 mm
     quantity: temperature
     face: cut-y-2
-    box: { min: [49.9, 0, 0], max: [50.1, 0, 20] }
+    box: { min: [49.9, 0, 0], max: [50.1, 0, 0] }
     reference: { value: 319.488195, unit: °F }
     tolerance: { coarse: 0.001, full: 0.001 }
   - name: Outer layer, r = 54 mm
     quantity: temperature
     face: cut-y-2
-    box: { min: [53.9, 0, 0], max: [54.1, 0, 20] }
+    box: { min: [53.9, 0, 0], max: [54.1, 0, 0] }
     reference: { value: 113.402809, unit: °C }
     tolerance: { coarse: 0.001, full: 0.001 }
   - name: Radial heat flux in the inner layer, r = 45 mm, Q / ((π/2) r L)
     quantity: heatFlux.x
     face: cut-y-1
-    box: { min: [44.9, 0, 0], max: [45.1, 0, 20] }
+    box: { min: [44.9, 0, 0], max: [45.1, 0, 0] }
     reference: { value: 200590.04, unit: W/m² }
     tolerance: { coarse: 0.02, full: 0.01 }
   - name: Radial heat flux in the outer layer, r = 54 mm
     quantity: heatFlux.x
     face: cut-y-2
-    box: { min: [53.9, 0, 0], max: [54.1, 0, 20] }
+    box: { min: [53.9, 0, 0], max: [54.1, 0, 0] }
     reference: { value: 167158.36, unit: W/m² }
     tolerance: { coarse: 0.02, full: 0.01 }
   - name: Heat in through the bore, (π/2) L ΔT / (ln(r1/a)/k1 + ln(b/r1)/k2)

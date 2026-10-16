@@ -16,31 +16,31 @@ faces:
 mesh:
   coarse: { value: 5, unit: mm } # four quadratic elements through the wall
   full: { value: 2.5, unit: mm }
-# Both sizes divide the 20 mm wall, so the cut face's edges along x have nodes at r = 45, 50
-# and 55 mm, where the checks read the profile. On the cut y = 0 the radial direction is x.
+# Both sizes divide the 20 mm wall, so the cut face's edge at z = 0 has nodes at r = 45, 50
+# and 55 mm, where the checks read the profile (the face's inside nodes lie anywhere). On the cut y = 0 the radial direction is x.
 checks:
   - name: A quarter of the way through, r = 45 mm
     quantity: temperature
     face: cut-y
-    box: { min: [44.9, 0, 0], max: [45.1, 0, 20] }
+    box: { min: [44.9, 0, 0], max: [45.1, 0, 0] }
     reference: { value: 349.910903, unit: K }
     tolerance: { coarse: 0.001, full: 0.001 }
   - name: Halfway through, r = 50 mm
     quantity: temperature
     face: cut-y
-    box: { min: [49.9, 0, 0], max: [50.1, 0, 20] }
+    box: { min: [49.9, 0, 0], max: [50.1, 0, 0] }
     reference: { value: 55.972823, unit: °C }
     tolerance: { coarse: 0.001, full: 0.001 }
   - name: Three quarters of the way through, r = 55 mm
     quantity: temperature
     face: cut-y
-    box: { min: [54.9, 0, 0], max: [55.1, 0, 20] }
+    box: { min: [54.9, 0, 0], max: [55.1, 0, 0] }
     reference: { value: 98.90189, unit: °F }
     tolerance: { coarse: 0.001, full: 0.001 }
   - name: Radial heat flux halfway through, Q / ((π/2) r L)
     quantity: heatFlux.x
     face: cut-y
-    box: { min: [49.9, 0, 0], max: [50.1, 0, 20] }
+    box: { min: [49.9, 0, 0], max: [50.1, 0, 0] }
     reference: { value: 56289.49, unit: BTU/(h·ft²) }
     tolerance: { coarse: 0.02, full: 0.01 }
   - name: Heat in through the bore, (π/2) k L ΔT / ln(b/a)
