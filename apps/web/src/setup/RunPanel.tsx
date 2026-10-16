@@ -13,13 +13,15 @@
 // reaction force and moment, each load's total and the balance of loads against reactions
 // (ADR-051), named as in the run's own frozen setup. From M3.7 the result can be shown in units
 // of its own, picked per kind, instead of the unit system's (ADR-056). From M3.8 a succeeded run
-// can be exported as CSV and VTK files (ADR-057).
+// can be exported as CSV and VTK files (ADR-057). From M4.5 a run whose setup ties bonds shows
+// the report's note on stresses near bonded faces under its results (ADR-062).
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import {
   type RunEstimate,
   type RunFileName,
   type RunView,
+  runReportNotes,
   type SimulationSpec,
   type SolveResult,
   systemUnit,
@@ -549,6 +551,13 @@ export function RunPanel({
           {run !== null && <Reactions result={result} spec={run.spec} units={units} />}
         </dl>
       )}
+      {run !== null &&
+        result &&
+        runReportNotes(run.spec).map((note) => (
+          <p key={note.id} className="field-hint" role="note" aria-label={note.title}>
+            <strong>{note.title}.</strong> {note.text}
+          </p>
+        ))}
       {run !== null && result && <RunExport run={run} result={result} units={units} />}
       {run !== null && <RunRecord run={run} currentSpec={currentSpec} />}
       {run !== null && (

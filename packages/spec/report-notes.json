@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "notes": [
+    {
+      "id": "tiedInterfaces",
+      "appliesWhen": "tiedBonds",
+      "title": "Stresses near bonded faces",
+      "text": "The bodies of this model are meshed separately and joined at their bonded faces by tie constraints: each node of one face follows the other face, whose mesh does not match it. Displacements and forces are carried across each bond, but stresses within one or two elements of a bonded face are less accurate than elsewhere in the model. In a test of a bar in uniform tension made of two blocks bonded end to end, with 5 mm elements on one side and 3 mm on the other, the stress at the bonded nodes was 13% below to 12% above the exact value with 10-node elements, and 7% below to 4.5% above with 4-node elements; from 8 mm away it was within 0.1% and 0.6%. Read stresses at a bonded face with this in mind. Away from the bonds, the verification cases with bonded bodies (V-11, V-12) match their references within the same tolerances as single-body cases.",
+      "source": "DECISIONS.md ADR-060 item 9 (two-block bar, nu = 0.3, 5 mm against 3 mm elements); docs/VERIFICATION.md V-11, V-12"
+    }
+  ]
+}

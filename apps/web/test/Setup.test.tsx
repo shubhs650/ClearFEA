@@ -1074,7 +1074,7 @@ const supported: SimulationSpec = {
 
 /** Routes of a setup whose run has succeeded, with its result files; ``beforeM32`` leaves out
  * what runs solved before M3.2 lack (reaction moments, load totals, the balance check). */
-function finishedRun(beforeM32 = false): Record<string, Route> {
+function finishedRun(beforeM32 = false, spec: SimulationSpec = supported): Record<string, Route> {
   const full: SolveResult = {
     nodes: 7108,
     displacement: { max: { value: 1.2e-4, node: 17, position: [0.1, 0.05, 0.02] } },
@@ -1108,6 +1108,7 @@ function finishedRun(beforeM32 = false): Record<string, Route> {
       json: {
         runs: [
           run({
+            spec,
             status: "succeeded",
             stage: null,
             result,
@@ -1293,6 +1294,26 @@ describe("run", () => {
     expect(figures.getByText("Run again to see reaction moments and the balance of loads and reactions.")).toBeTruthy();
     // Nor has it a safety factor (M3.5).
     expect(figures.getByText("None: it needs a yield strength for every material. Enter them under Materials and run again.")).toBeTruthy();
+  });
+
+  it("notes that stresses near bonded faces are less accurate on a run that tied bonds (M4.5)", async () => {
+    const tied: SimulationSpec = { ...supported, bonds: [{ faces: [3, 7], status: "accepted" }] };
+    serve(routes([simulation(supported)], finishedRun(false, tied)));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const note = await settings().findByRole("note", { name: "Stresses near bonded faces" });
+    expect(note.textContent).toMatch(/^Stresses near bonded faces\. The bodies of this model are meshed separately/);
+    expect(note.textContent).toContain("13% below to 12% above the exact value with 10-node elements");
+    expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
+  });
+
+  it("leaves the note out when every bond was removed or there were none", async () => {
+    const removed: SimulationSpec = { ...supported, bonds: [{ faces: [3, 7], status: "removed" }] };
+    serve(routes([simulation(supported)], finishedRun(false, removed)));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    await settings().findByLabelText("Run results");
+    expect(settings().queryByRole("note", { name: "Stresses near bonded faces" })).toBeNull();
   });
 
   it("shows the run record with its versions and links to view and download the deck and log", async () => {
