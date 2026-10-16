@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-12: a quarter of a bar of two materials bonded end to end, pulled along x, on three
+# frictionless planes that cross the bond, meshed differently on each side of the bond.
+# Reference values and their derivation: reference.md.
+id: V-12
+title: Bi-material bar in tension
+analysis: linear_static
+features: [bonded interface, multi-body, material per body, local mesh refinement, force, frictionless support, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  start: { min: [0, 0, 0], max: [0, 10, 10] }
+  end: { min: [160, 0, 0], max: [160, 10, 10] }
+  sym-y-1: { min: [0, 0, 0], max: [100, 0, 10] }
+  sym-y-2: { min: [100, 0, 0], max: [160, 0, 10] }
+  sym-z-1: { min: [0, 0, 0], max: [100, 10, 0] }
+  sym-z-2: { min: [100, 0, 0], max: [160, 10, 0] }
+  side-y-1: { min: [0, 10, 0], max: [100, 10, 10] }
+  side-y-2: { min: [100, 10, 0], max: [160, 10, 10] }
+  side-z-1: { min: [0, 0, 10], max: [100, 10, 10] }
+  side-z-2: { min: [100, 0, 10], max: [160, 10, 10] }
+mesh:
+  coarse: { value: 5, unit: mm }
+  full: { value: 2.5, unit: mm }
+  # Body 2 is meshed finer than body 1, so the two sides of the bond have different nodes.
+  local:
+    body-2:
+      coarse: { value: 3, unit: mm }
+      full: { value: 1.5, unit: mm }
+# The two materials have the same ν/E, so both pieces contract sideways alike and the exact
+# field is uniform stress in each, displacement linear in each: every element and the tie
+# reproduce it, and the tolerances only allow for the six digits of the solver's result file.
+checks:
+  - name: Normal stress σxx along body 1 (F / A)
+    quantity: stress.xx
+    face: side-y-1
+    reference: { value: 50, unit: MPa }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Normal stress σxx along body 2 (F / A)
+    quantity: stress.xx
+    face: side-y-2
+    reference: { value: 50, unit: MPa }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: von Mises stress along body 2, top
+    quantity: vonMises
+    face: side-z-2
+    reference: { value: 7.25189, unit: ksi }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Axial strain in body 1 (σ / E1)
+    quantity: strain.xx
+    face: side-y-1
+    reference: { value: 250, unit: µε }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Axial strain in body 2 (σ / E2)
+    quantity: strain.xx
+    face: side-y-2
+    reference: { value: 714.2857, unit: µε }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: End moved by σ (L1 / E1 + L2 / E2)
+    quantity: displacement.x
+    face: end
+    reference: { value: 0.0678571, unit: mm }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Body 1 side contracts (−ν1 σ / E1 · 10 mm)
+    quantity: displacement.y
+    face: side-y-1
+    reference: { value: -0.00075, unit: mm }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Body 2 side contracts alike (−ν2 σ / E2 · 10 mm)
+    quantity: displacement.y
+    face: side-y-2
+    reference: { value: -0.00075, unit: mm }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Start holds the end load
+    quantity: reaction.x
+    support: start
+    reference: { value: -5, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }

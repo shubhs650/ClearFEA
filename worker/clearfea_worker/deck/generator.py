@@ -29,11 +29,13 @@ from ..spec.simulation_schema import (
 from .applied import force_loads
 from .common import DeckError, si
 from .constraints import (
-    AXES,
     Hold,
     check_held,
     frictionless_normals,
+    hold_frame,
     holds,
+    node_frames,
+    perpendicular,
     support_kind,
 )
 from .elements import CCX_NODE_ORDER, ELEMENT_TYPE
@@ -52,6 +54,7 @@ from .loads import (
 )
 from .loads.body import gravity_vector, rotation
 from .loads.thermal import expansions, temperature_change
+from .loads.tie import Equation, ties
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
 DECK_FORMAT = 3
@@ -63,10 +66,15 @@ _PER_LINE = 16
 #: reader shares them between supports (constraints.py) and takes their moments (M3.2).
 REACTION_SET = "RALL"
 
+#: The node set of every tied slave node (M4.3), whose nodal forces are printed too: the result
+#: reader passes their tie forces on to held master nodes (loads/tie.py, ADR-060).
+TIE_SET = "TIED"
+
 __all__ = [
     "DECK_FORMAT",
     "DeckError",
     "REACTION_SET",
+    "TIE_SET",
     "generate_deck",
     "support_set_names",
 ]
@@ -163,16 +171,6 @@ def _elastic_springs(spec: SimulationSpec, mesh: VolumeMesh) -> list[tuple[int, 
     ]
 
 
-def _perpendicular(a: tuple[float, float, float]) -> tuple[float, float, float]:
-    """A unit vector at right angles to unit vector ``a``, the same for the same ``a``."""
-    axis = min(range(3), key=lambda i: (abs(a[i]), i))
-    e = AXES[axis]
-    d = sum(a[i] * e[i] for i in range(3))
-    v = [e[i] - d * a[i] for i in range(3)]
-    length = sum(x * x for x in v) ** 0.5
-    return (v[0] / length, v[1] / length, v[2] / length)
-
-
 def _vector(v: Iterable[float]) -> str:
     return ", ".join(_number(x + 0.0) for x in v)
 
@@ -184,22 +182,26 @@ def _entered(*quantities: Quantity | None) -> str:
 
 def _hold_lines(h: Hold) -> tuple[str | None, "_Dofs"]:
     """How a node's Hold is written: the *TRANSFORM data line or None (global axes), and the
-    (degree of freedom, value or None for zero) to hold in that system. Values below 1e-12 of
-    the node's largest are rounding left by the solve and written as zero."""
+    (degree of freedom, value or None for zero) to hold in that system (hold_frame). Values
+    below 1e-12 of the node's largest are rounding left by the solve and written as zero."""
     size = max((abs(v) for v in h.values), default=0.0)
 
     def value(v: float) -> str | None:
         return None if abs(v) <= 1e-12 * size else _number(v)
 
-    if h.on_axes or len(h.basis) == 3:
+    frame = hold_frame(h)
+    if not frame.transformed:
         u = h.displacement()
-        held = [0, 1, 2]
-        if len(h.basis) < 3:
-            held = sorted({max(range(3), key=lambda i: abs(q[i])) for q in h.basis})
-        return None, [(i + 1, value(u[i])) for i in held]
-    a = h.basis[0]
-    b = h.basis[1] if len(h.basis) == 2 else _perpendicular(a)
+        return None, [(i + 1, value(u[i])) for i in sorted(frame.held)]
+    a, b, _ = frame.axes
     return f"{_vector(a)}, {_vector(b)}", [(k + 1, value(v)) for k, v in enumerate(h.values)]
+
+
+def _equation_lines(equation: Equation) -> list[str]:
+    """An *EQUATION entry: the number of terms, then the terms, at most four to a line (12
+    entries), each node (1-based), degree of freedom (1 to 3) and coefficient."""
+    entries = [f"{t.node + 1}, {t.direction + 1}, {_number(t.coefficient)}" for t in equation]
+    return [str(len(equation))] + [", ".join(entries[k : k + 4]) for k in range(0, len(entries), 4)]
 
 
 _Dofs = list[tuple[int, str | None]]
@@ -259,6 +261,7 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
     springs = _elastic_springs(spec, mesh)
     check_held(mesh, held, [s for _, group in springs for s in group])
     fixed_only = only_fixed_supports(spec)
+    tie_list = ties(spec, mesh, node_frames(held))
     normals = {} if fixed_only else frictionless_normals(spec, mesh)
 
     out = [
@@ -365,7 +368,33 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
     for key, (name, _, d) in directions.items():
         if name is not None:
             out.append(f"*ORIENTATION, NAME={name}, SYSTEM=RECTANGULAR")
-            out.append(f"{key}, {_vector(_perpendicular(d))}")
+            out.append(f"{key}, {_vector(perpendicular(d))}")
+
+    tied: list[int] = []
+    if tie_list:
+        out.append(
+            "** Bonds (M4.3): the nodes of one face of each bond follow the other face, each"
+        )
+        out.append("** node as the point of the other face closest to it (*EQUATION in the node's")
+        out.append("** own directions; loads/tie.py)")
+    for tie in tie_list:
+        out.append(
+            f"** Bond of faces {tie.bond[0]} and {tie.bond[1]}: face {tie.slave} (body "
+            f"{tie.slave_body}) follows face {tie.master} (body {tie.master_body}); "
+            f"{tie.tied} of {tie.nodes} nodes tied,"
+        )
+        out.append(
+            f"** {tie.held} held by supports, {tie.off} off face {tie.master}, "
+            f"{tie.shared} tied by another bond"
+        )
+        if tie.equations:
+            out.append("*EQUATION")
+            for equation in tie.equations:
+                out.extend(_equation_lines(equation))
+        tied.extend(dict.fromkeys(e[0].node for e in tie.equations))
+    if tied:
+        out.append(f"*NSET, NSET={TIE_SET}")
+        out.extend(_lines(n + 1 for n in tied))
 
     for k, material in enumerate(spec.materials):
         if not any(index == k for _, index, _ in bodies):
@@ -529,6 +558,9 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
         # its own axes; checked with ccx 2.21), for reaction moments and so that a node two
         # supports share is counted once (M3.2, ADR-051).
         out.append(f"*NODE PRINT, NSET={REACTION_SET}, GLOBAL=YES")
+        out.append("RF")
+    if tied:
+        out.append(f"*NODE PRINT, NSET={TIE_SET}, GLOBAL=YES")
         out.append("RF")
     out.append("*END STEP")
     return "\n".join(out) + "\n"

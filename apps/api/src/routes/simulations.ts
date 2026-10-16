@@ -24,6 +24,7 @@ import {
   type ViewListResponse,
   type ViewResponse,
   sameMeshSettings,
+  specBonds,
   type Topology,
   validateCreateRunRequest,
   validateCreateSimulationRequest,
@@ -286,6 +287,8 @@ simulations.get("/:id/estimate", async (c) => {
  * validation (M1.12, ADR-034) finds incomplete is refused here, so no job is queued or charged;
  * the deck generator still refuses anything that slips past. The run goes on the machine size
  * the body names, or on the recommended one, and keeps the estimate made now (M2.12, ADR-049).
+ * The run's copy lists every bond of the geometry, so a spec saved before M4.2 is tied the way
+ * the setup shows it (every candidate detected, ADR-059); the deck ties what the list says (M4.3).
  */
 simulations.post("/:id/runs", async (c) => {
   let request: CreateRunRequest = {};
@@ -322,7 +325,7 @@ simulations.post("/:id/runs", async (c) => {
   const created = await createRun(c.env.DB, c.var.userId, {
     simulationId: simulation.id,
     meshId: mesh.id,
-    spec: simulation.spec,
+    spec: { ...simulation.spec, bonds: specBonds(simulation.spec, read.topology) },
     machineSize: size.size,
     estimate,
   });

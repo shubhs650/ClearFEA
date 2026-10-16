@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-11: V-02's cantilever as two bonded bodies cut across at x = 3 in, meshed differently on
+# each side of the bond, against V-02's single-body reference values. Derivation: reference.md.
+id: V-11
+title: Two bonded blocks against one block (cantilever)
+analysis: linear_static
+features: [bonded interface, multi-body, local mesh refinement, fixed support, force, mixed input units]
+geometry:
+  unit: in # declared in the STEP file and confirmed after upload
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  clamped-end: { min: [0, 0, 0], max: [0, 1, 1] }
+  free-end: { min: [10, 0, 0], max: [10, 1, 1] }
+  top: { min: [3, 1, 0], max: [9, 1, 1] }
+  end-patch: { min: [9, 1, 0], max: [10, 1, 1] }
+  bottom: { min: [3, 0, 0], max: [10, 0, 1] }
+mesh:
+  coarse: { value: 5, unit: mm }
+  full: { value: 2.5, unit: mm }
+  # The root block is meshed finer than the outer block, so the two sides of the bond have
+  # different nodes and the tie, not shared nodes, carries the load across it.
+  local:
+    root:
+      coarse: { value: 3.5, unit: mm }
+      full: { value: 1.75, unit: mm }
+checks:
+  - name: Tip deflection (mean over the free end)
+    quantity: displacement.y
+    face: free-end
+    reference: { value: -0.0643128, unit: in }
+    # V-02's tolerances: its full clamp makes the solid about 0.7 percent stiffer than the
+    # beam (V-02 reference.md). Not loosened for the bond.
+    tolerance: { coarse: 0.02, full: 0.015 }
+  - name: Bending stress on top at mid-length, 2 in past the bond
+    quantity: vonMises
+    face: top
+    box: { min: [4.75, 1, 0], max: [5.25, 1, 1] }
+    reference: { value: 13500, unit: psi }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Bending stress underneath at mid-length, 2 in past the bond
+    quantity: vonMises
+    face: bottom
+    box: { min: [4.75, 0, 0], max: [5.25, 0, 1] }
+    reference: { value: 13500, unit: psi }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Clamp carries the end load through the bond
+    quantity: reaction.y
+    support: fixed-1
+    reference: { value: 500, unit: lbf }
+    tolerance: { coarse: 0.001, full: 0.001 }
