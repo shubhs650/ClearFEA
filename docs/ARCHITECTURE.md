@@ -210,7 +210,7 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 | Radiation to ambient | `*RADIATE` with the absolute-zero and Stefan-Boltzmann constants set for SI |
 | Thermal stress | Heat transfer step followed by a static step in one deck |
 | Modal | `*FREQUENCY` step |
-| Reactions | Reaction force totals per support node set when all supports are fixed; otherwise the force at each held node, shared between the supports holding it along their own directions (ADR-039). Force, remote, hydrostatic and body loads applied at held nodes are taken out first, since CalculiX counts them in RF (ADR-040). An elastic support's reaction is its springs' force from the displacements (ADR-043) |
+| Reactions | The force at each held node (printed node by node for every setup since M3.2), shared between the supports holding it along their own directions (ADR-039). Every load applied at held nodes, uniform pressures included, is taken out first, since CalculiX counts it in RF (ADR-040, ADR-051). An elastic support's reaction is its springs' force from the displacements (ADR-043). Each support's moment is taken about the area centroid of its faces; each load's total force and moment and the balance of loads against reactions go in the run's summary (ADR-051) |
 
 ### Solver configuration
 

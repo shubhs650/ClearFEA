@@ -51,7 +51,7 @@ Stress is checked away from supports and load application points unless the case
 | V-01 | Thick cylinder, internal pressure, one end fixed and one open | Lamé (open ends): von Mises stress and radial displacement at the bore and the outside; hoop stress as σ1, shear stress and tensor shear strain at 45° (M3.1) | M1 |
 | V-02 | Cantilever, end load: a force on an end patch of the top face (a pressure until M2.3) | Timoshenko beam: tip deflection under the patch load, bending stress at mid-length; clamp reaction | M1 |
 | V-03 | Plate with central hole in tension: an eighth on three symmetry planes (ν = 0), d/W = 0.1, a local mesh size on the hole | Kirsch factor 3 for a wide plate, with Howland's finite-width correction (Ktg = 3.025): peak stress at the side of the hole; uniform stress at the pulled end | M2 |
-| V-04 | Remote force and moment on a round stub: an axial force through a point off the axis, a torque and a bending moment | Saint-Venant extension, bending and torsion: von Mises on top, underneath and on the side along the middle, which carry the remote point's lever; clamp reaction equals the force (reaction moments with M3.2) | M2 |
+| V-04 | Remote force and moment on a round stub: an axial force through a point off the axis, a torque and a bending moment | Saint-Venant extension, bending and torsion: von Mises on top, underneath and on the side along the middle, which carry the remote point's lever; clamp reaction equals the force; the clamp's reaction moment about its centre (torque and bending with the point's lever, M3.2) | M2 |
 | V-05 | Tank wall strip clamped at its base, water against one side up to 100 mm below its top (ν = 0) | Base reaction ρ g b H²/2 (ρg × depth-weighted area); bending stress from the cubic moment ρ g b (H − z)³/6 at two depths; top deflection of a cantilever under a triangular load | M2 |
 | V-06 | Thin rotating ring: a quarter on three symmetry planes | Plane stress rotating disc (hoop stress ρω²r² in the thin limit): hoop stress and radial growth on both faces; hoop force ρω²t(b³ − a³)/3 across each cut | M2 |
 | V-07 | Block on an elastic support, pressed by a force on its top, sliding stopped by two symmetry planes | Base settlement F/(k·A), top displacement adding F·H/(E·A), uniform stress F/A, foundation reaction F | M2 |
@@ -104,7 +104,8 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Thermal stress | V-18 |
 | Temperature-dependent properties | V-19 |
 | Modal | V-20, V-21, V-22 |
-| Reaction balance check | V-04, V-05, V-06, V-07, V-08, V-10, V-25, V-03, V-26 |
+| Reaction balance check | V-04, V-05, V-06, V-07, V-08, V-10, V-25, V-03, V-26; the run's own balance check, force and moment, on every case (M3.2) |
+| Reaction moments | V-04 |
 | Local mesh refinement | V-03 |
 | First-order elements | V-26 |
 | Stress components | V-01, V-08, V-24 |
@@ -116,7 +117,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 
 Besides its own reference values, every case asserts:
 
-- Reactions balance applied loads within 0.1 percent (structural).
+- Reactions balance applied loads within 0.1 percent (structural), both as the harness integrates the loads over the run's surface and as the run's own balance check reports them, force and moment (M3.2, ADR-051).
 - Heat in equals heat out within 0.1 percent (thermal).
 - The solver log contains no unexpected warnings.
 - Billable seconds were recorded and one ledger entry was written.
@@ -131,7 +132,7 @@ Playwright drives the real UI against the local system on tiny models. `make e2e
 
 | Test | Covers | Added in |
 | --- | --- | --- |
-| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
+| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
 | E-02 | Unit entry in mixed units and display-unit switch | M2 |
 | E-03 | Multi-body upload, review bonds, run | M4 |
 | E-04 | Thermal stress setup and result | M5 |
