@@ -93,7 +93,9 @@ def test_meshes_each_body_of_an_assembly_on_its_own(tmp_path: Path) -> None:
     step = two_blocks(tmp_path / "pair.step", ("Bracket assembly", "Base plate", "Lug"))
     import_geometry(step, tmp_path / "import", None)
     topology = Topology.model_validate_json((tmp_path / "import" / "topology.json").read_bytes())
-    output = mesh_geometry(step, topology, tmp_path / "mesh", scaling=1.0, size=0.01, unit="mm", order=2)
+    output = mesh_geometry(
+        step, topology, tmp_path / "mesh", scaling=1.0, size=0.01, unit="mm", order=2
+    )
     mesh = read_volume_mesh(output.mesh_path)
     (first, base), (second, lug) = mesh.bodies[1], mesh.bodies[2]
     assert (first, second, base + lug) == (0, base, mesh.element_count)
@@ -101,7 +103,9 @@ def test_meshes_each_body_of_an_assembly_on_its_own(tmp_path: Path) -> None:
     assert sorted(mesh.faces) == list(range(1, 13))
     # No element joins the bodies: their nodes are separate until M4.3 ties them.
     n = NODES_PER_ELEMENT[2]
-    nodes_of = [set(mesh.elements[a * n : (a + count) * n]) for a, count in (mesh.bodies[1], mesh.bodies[2])]
+    nodes_of = [
+        set(mesh.elements[a * n : (a + count) * n]) for a, count in (mesh.bodies[1], mesh.bodies[2])
+    ]
     assert nodes_of[0].isdisjoint(nodes_of[1])
 
 

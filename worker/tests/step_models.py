@@ -59,7 +59,9 @@ def two_blocks(path: Path, names: tuple[str, str, str] | None = None) -> Path:
     _write(path, "two_blocks")
     if names is not None:
         text = path.read_text()
-        found = list(dict.fromkeys(re.findall(r"'Open CASCADE STEP translator [0-9.]+ [0-9.]+'", text)))
+        found = list(
+            dict.fromkeys(re.findall(r"'Open CASCADE STEP translator [0-9.]+ [0-9.]+'", text))
+        )
         if len(found) != 3:
             raise ValueError(f"expected three product names, found {found}")
         for placeholder, name in zip(found, names, strict=True):
