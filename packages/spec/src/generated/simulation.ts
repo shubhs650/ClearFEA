@@ -116,7 +116,8 @@ export type RunStatus = "solving" | "succeeded" | "failed";
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "RunFileName".
  */
-export type RunFileName = "deck.inp" | "solver.log" | "results.frd" | "results.dat" | "surface.bin" | "fields.bin";
+export type RunFileName =
+  "deck.inp" | "solver.log" | "results.frd" | "results.dat" | "surface.bin" | "fields.bin" | "nodes.bin";
 
 /**
  * The SimulationSpec, the one document that describes a simulation's setup (docs/ARCHITECTURE.md section 4, ADR-006, ADR-026), and the wire shapes of /api/simulations. Physical quantities are stored as the user typed them, { value, unit }, and converted to SI only by the deck generator. A spec may be incomplete (null values, items without faces) so the setup can be saved as it is built; pre-run validation (M1.12) lists what is missing. Each message is a definition under $defs.
@@ -1116,7 +1117,7 @@ export const RunStatusValues = ["solving", "succeeded", "failed"] as const satis
 export const validateRunStatus = validator<RunStatus>(schema, "RunStatus");
 export const validateRunSoftware = validator<RunSoftware>(schema, "RunSoftware");
 export const validateRunMesh = validator<RunMesh>(schema, "RunMesh");
-export const RunFileNameValues = ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin"] as const satisfies readonly RunFileName[];
+export const RunFileNameValues = ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin", "nodes.bin"] as const satisfies readonly RunFileName[];
 export const validateRunFileName = validator<RunFileName>(schema, "RunFileName");
 export const validateRunMachine = validator<RunMachine>(schema, "RunMachine");
 export const validateRunCost = validator<RunCost>(schema, "RunCost");

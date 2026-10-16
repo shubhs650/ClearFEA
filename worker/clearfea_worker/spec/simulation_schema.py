@@ -829,7 +829,7 @@ class RunMesh(BaseModel):
 
 
 type RunFileName = Literal[
-    "deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin"
+    "deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin", "nodes.bin"
 ]
 """
 A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}.

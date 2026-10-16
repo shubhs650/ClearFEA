@@ -184,7 +184,7 @@ const SOLVED: SolveResult = {
   software: { calculix: "2.21" },
 };
 
-const RUN_FILES = ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin"];
+const RUN_FILES = ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin", "nodes.bin"];
 
 /** Alice's simulation with a ready mesh of its saved size. */
 async function meshed(): Promise<string> {
@@ -413,6 +413,76 @@ describe("a finished solve job", () => {
       // Another user's run answers like a missing one.
       expect((await call("GET", `/api/runs/${run.id}/${file}`, { cookie: bob })).status).toBe(404);
     }
+  });
+
+  it("serves the run's mesh and its values at every node, whole or one field at a time", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    for (const file of ["mesh", "nodes"]) {
+      const early = await call("GET", `/api/runs/${run.id}/${file}`, { cookie: alice });
+      expect(early.status).toBe(409);
+    }
+    // A result-fields file of two nodes: displacement (3 components), then von Mises.
+    const nodes = new ArrayBuffer(16 + 2 * 36 + 4 * (2 * 3 + 2));
+    const view = new DataView(nodes);
+    const bytes = new Uint8Array(nodes);
+    bytes.set(new TextEncoder().encode("CFRF"), 0);
+    view.setUint32(4, 1, true);
+    view.setUint32(8, 2, true);
+    view.setUint32(12, 2, true);
+    for (const [k, name, kind, components] of [
+      [0, "displacement", "length", 3],
+      [1, "vonMises", "pressure", 1],
+    ] as const) {
+      bytes.set(new TextEncoder().encode(name), 16 + k * 36);
+      bytes.set(new TextEncoder().encode(kind), 16 + k * 36 + 16);
+      view.setUint32(16 + k * 36 + 32, components, true);
+    }
+    new Float32Array(nodes, 88, 8).set([1, 2, 3, 4, 5, 6, 7.5, 8.5]);
+    await upload(
+      job,
+      RUN_FILES.filter((name) => name !== "nodes.bin"),
+    );
+    const put = await call("PUT", transferPath(job, "nodes.bin", "upload"), { raw: nodes, token: TOKEN });
+    expect(put.status).toBe(200);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+
+    const mesh = await call("GET", `/api/runs/${run.id}/mesh`, { cookie: alice });
+    expect(mesh.status).toBe(200);
+    expect(new TextDecoder().decode(await mesh.arrayBuffer())).toBe("mesh.bin content");
+    const whole = await call("GET", `/api/runs/${run.id}/nodes`, { cookie: alice });
+    expect(new Uint8Array(await whole.arrayBuffer())).toEqual(bytes);
+
+    const one = await call("GET", `/api/runs/${run.id}/nodes?field=vonMises`, { cookie: alice });
+    expect(one.status).toBe(200);
+    expect(one.headers.get("Content-Length")).toBe(String(16 + 36 + 8));
+    const got = await one.arrayBuffer();
+    const head = new DataView(got);
+    expect([head.getUint32(8, true), head.getUint32(12, true)]).toEqual([2, 1]);
+    expect(new Uint8Array(got, 16, 36)).toEqual(bytes.subarray(16 + 36, 16 + 72));
+    expect([...new Float32Array(got.slice(52))]).toEqual([7.5, 8.5]);
+
+    const unknown = await call("GET", `/api/runs/${run.id}/nodes?field=temperature`, { cookie: alice });
+    expect(unknown.status).toBe(404);
+    for (const file of ["mesh", "nodes", "nodes?field=vonMises"]) {
+      expect((await call("GET", `/api/runs/${run.id}/${file}`, { cookie: bob })).status).toBe(404);
+    }
+  });
+
+  it("says to run again when a run was solved before node values were kept", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    // Runs from before M3.4 recorded no nodes.bin.
+    await env.DB.prepare("UPDATE runs SET files = ? WHERE id = ?")
+      .bind(JSON.stringify(RUN_FILES.filter((name) => name !== "nodes.bin")), run.id)
+      .run();
+    const response = await call("GET", `/api/runs/${run.id}/nodes?field=vonMises`, { cookie: alice });
+    expect(response.status).toBe(404);
+    expect(((await response.json()) as { error: string }).error).toContain("Run the simulation again");
   });
 
   it("has no result files for a failed run", async () => {

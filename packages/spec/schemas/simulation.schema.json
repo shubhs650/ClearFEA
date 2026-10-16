@@ -689,7 +689,7 @@
     },
     "RunFileName": {
       "description": "A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}.",
-      "enum": ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin"]
+      "enum": ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin", "nodes.bin"]
     },
     "RunMachine": {
       "description": "The machine size a run was billed on and its rate, fixed when the run started (ADR-033). Money is in whole micro-credits: 1,000,000 is one credit.",
