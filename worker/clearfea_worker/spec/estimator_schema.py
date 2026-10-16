@@ -11,6 +11,25 @@ from pydantic import BaseModel, ConfigDict, Field
 type FittedNode = Annotated[int, Field(ge=1)]
 
 
+class MaxElements(BaseModel):
+    """
+    Largest element count a run with this solver may have, per element order, on a machine of limitMemoryBytes: the node count whose fitted peak memory times memoryMargin fits in usableMemoryFraction of it, turned into elements with the most nodes per element measured for that order, rounded down to a thousand.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    order1: Annotated[int, Field(ge=1)]
+    """
+    Four-node tetrahedra.
+    """
+    order2: Annotated[int, Field(ge=1)]
+    """
+    Ten-node tetrahedra.
+    """
+
+
 class PowerLaw(BaseModel):
     """
     constant + coefficient * nodes ^ exponent, where nodes is the mesh's node count.
@@ -52,6 +71,25 @@ class AnalysisModel(BaseModel):
     """
     Smallest and largest node count among the measurements; outside this range the estimate is an extrapolation.
     """
+    max_elements: Annotated[MaxElements, Field(alias="maxElements")]
+    """
+    Largest element count a run with this solver may have, per element order, on a machine of limitMemoryBytes: the node count whose fitted peak memory times memoryMargin fits in usableMemoryFraction of it, turned into elements with the most nodes per element measured for that order, rounded down to a thousand.
+    """
+
+
+class SolverModels(BaseModel):
+    """
+    One model per equation solver a run can use (ADR-058), keyed as SimulationSpec's solver.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    pastix: AnalysisModel
+    spooles: AnalysisModel
+    iterative_cholesky: AnalysisModel
+    iterative_scaling: AnalysisModel
 
 
 class Analyses(BaseModel):
@@ -63,7 +101,7 @@ class Analyses(BaseModel):
         extra="forbid",
         populate_by_name=True,
     )
-    linear_static: AnalysisModel
+    linear_static: SolverModels
 
 
 class EstimatorTable(BaseModel):
@@ -94,4 +132,8 @@ class EstimatorTable(BaseModel):
     usable_memory_fraction: Annotated[float, Field(alias="usableMemoryFraction", gt=0.0, le=1.0)]
     """
     Share of a machine size's memory the solver may use; the rest is left to the system and the worker.
+    """
+    limit_memory_bytes: Annotated[int, Field(alias="limitMemoryBytes", ge=1)]
+    """
+    Memory of the machine the element limits are for (ADR-058): 16 GiB in Phase 0. A run whose mesh has more elements than its solver's limit is refused.
     """

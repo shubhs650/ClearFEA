@@ -4,7 +4,10 @@ import {
   type IsotropicMaterial,
   type LocalMeshScope,
   type LocalMeshSize,
+  DEFAULT_SOLVER,
+  elementLimitProblem,
   preRunProblems,
+  specSolver,
   type SessionUser,
   type SimulationSpec,
 } from "@clearfea/spec";
@@ -110,9 +113,11 @@ export function App() {
   const meshes = useMesh(setup.kind === "open" ? setup.id : null, signedOut);
   const { mesh } = meshes;
   const runs = useRun(setup.kind === "open" ? setup.id : null, signedOut);
+  const solver = spec === null ? DEFAULT_SOLVER : specSolver(spec);
   const estimate = useEstimate(
     setup.kind === "open" ? setup.id : null,
     setup.kind === "open" && mesh?.status === "ready" && meshIsCurrent(setup.spec, mesh) ? mesh.id : null,
+    solver,
     signedOut,
   );
   const { run } = runs;
@@ -151,6 +156,10 @@ export function App() {
         blockers.push({ message: "The mesh settings changed after the mesh was made. Generate the mesh again.", item: "mesh" });
       } else if (mesh.status === "meshing") {
         blockers.push({ message: "The mesh is still being made. Wait for it to finish.", item: "mesh" });
+      } else if (mesh.elementCount !== null) {
+        // The API refuses the same run (ADR-058): it could run out of memory.
+        const tooLarge = elementLimitProblem(solver, mesh.order, mesh.elementCount);
+        if (tooLarge !== null) blockers.push({ message: tooLarge, item: "mesh" });
       }
     }
     return blockers;
@@ -290,6 +299,9 @@ export function App() {
           onUnitChange={displayUnits.change}
           onUnitReset={displayUnits.reset}
           estimate={estimate}
+          solver={solver}
+          meshOrder={mesh?.order ?? spec.mesh.order ?? 2}
+          onSolverChange={(next) => change({ ...spec, solver: next })}
           requesting={runs.requesting}
           requestProblem={runs.requestProblem}
           onRun={(machineSize) => void runs.start(machineSize)}

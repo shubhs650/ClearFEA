@@ -12,10 +12,31 @@
 # Pinned on purpose (CLAUDE.md, ADR-015). Changing any of these is its own pull
 # request with a full verification run:
 #   - base image: Ubuntu 24.04 by digest, which provides Python 3.12
-#   - CalculiX:   calculix-ccx 2.21-1 from the Ubuntu noble release pocket
+#   - CalculiX:   2.21 from Ubuntu's calculix-ccx 2.21-1 source package, built with PaStiX
+#                 (PaStiX4CalculiX and PaRSEC at pinned commits) by ccx/build.sh (ADR-058)
 #   - Gmsh:       gmsh 4.15.2 from PyPI (bundles its own OpenCASCADE), locked in uv.lock
 
 ARG BASE=mirror.gcr.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+
+# CalculiX with PaStiX, SPOOLES, ARPACK and the iterative solvers (ADR-058). PaStiX4CalculiX
+# includes CUDA headers unconditionally, so the CUDA toolkit is needed here, and its runtime
+# libraries below, though no GPU is used.
+FROM ${BASE} AS ccx
+ENV DEBIAN_FRONTEND=noninteractive
+RUN sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential gfortran cmake git pkg-config ca-certificates python3 bison flex dpkg-dev \
+      libopenblas-dev liblapacke-dev libhwloc-dev libscotch-dev libspooles-dev libarpack2-dev \
+      nvidia-cuda-toolkit g++-12 \
+ && rm -rf /var/lib/apt/lists/*
+COPY ccx /src/ccx
+RUN --mount=type=secret,id=extra_ca,required=false \
+    set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export GIT_SSL_CAINFO=/run/secrets/extra_ca; fi; \
+    apt-get update; \
+    PREFIX=/opt/ccx WORK=/tmp/ccx-build /src/ccx/build.sh; \
+    rm -rf /tmp/ccx-build /var/lib/apt/lists/*
 
 FROM ${BASE} AS build
 ENV DEBIAN_FRONTEND=noninteractive
@@ -37,12 +58,16 @@ RUN --mount=type=secret,id=extra_ca,required=false \
 FROM ${BASE}
 ENV DEBIAN_FRONTEND=noninteractive
 # Gmsh's wheel links against these system libraries even when run headless.
+# CalculiX's runtime libraries (ADR-058): the solvers' and CUDA's, which the PaStiX build links.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       python3.12 \
-      calculix-ccx=2.21-1 \
+      libarpack2t64 libspooles2.2t64 libscotch-7.0 libhwloc15 liblapacke libopenblas0-pthread \
+      libgfortran5 libcublas12 libcudart12 \
       libgl1 libglu1-mesa libgomp1 libxrender1 libxcursor1 libxft2 libxinerama1 \
  && rm -rf /var/lib/apt/lists/*
+COPY --from=ccx /opt/ccx/bin/ccx /usr/local/bin/ccx
+COPY --from=ccx /opt/ccx/lib/libparsec.so.2 /opt/ccx/lib/libparsec.so.2
 COPY --from=build /opt/venv /opt/venv
 # The package itself is pure Python with no build step, so it is copied, not
 # installed: installing would pull an unlocked build backend from PyPI.

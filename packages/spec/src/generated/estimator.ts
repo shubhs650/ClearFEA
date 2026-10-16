@@ -21,7 +21,7 @@ export interface EstimatorTable {
    * One model per analysis type a run can have.
    */
   analyses: {
-    linear_static: AnalysisModel;
+    linear_static: SolverModels;
   };
   /**
    * Factor on the fitted peak memory that a machine size must hold before it is recommended. Recommendations are conservative on memory, because the platform pays when its recommendation is too small (ARCHITECTURE.md).
@@ -31,6 +31,22 @@ export interface EstimatorTable {
    * Share of a machine size's memory the solver may use; the rest is left to the system and the worker.
    */
   usableMemoryFraction: number;
+  /**
+   * Memory of the machine the element limits are for (ADR-058): 16 GiB in Phase 0. A run whose mesh has more elements than its solver's limit is refused.
+   */
+  limitMemoryBytes: number;
+}
+/**
+ * One model per equation solver a run can use (ADR-058), keyed as SimulationSpec's solver.
+ *
+ * This interface was referenced by `EstimatorTable`'s JSON-Schema
+ * via the `definition` "SolverModels".
+ */
+export interface SolverModels {
+  pastix: AnalysisModel;
+  spooles: AnalysisModel;
+  iterative_cholesky: AnalysisModel;
+  iterative_scaling: AnalysisModel;
 }
 /**
  * This interface was referenced by `EstimatorTable`'s JSON-Schema
@@ -50,6 +66,19 @@ export interface AnalysisModel {
    * @maxItems 2
    */
   fittedNodes: [number, number];
+  /**
+   * Largest element count a run with this solver may have, per element order, on a machine of limitMemoryBytes: the node count whose fitted peak memory times memoryMargin fits in usableMemoryFraction of it, turned into elements with the most nodes per element measured for that order, rounded down to a thousand.
+   */
+  maxElements: {
+    /**
+     * Four-node tetrahedra.
+     */
+    order1: number;
+    /**
+     * Ten-node tetrahedra.
+     */
+    order2: number;
+  };
 }
 /**
  * Peak resident memory of the solver process.
@@ -92,5 +121,6 @@ export interface PowerLaw2 {
 }
 
 export const validateEstimatorTable = validator<EstimatorTable>(schema);
+export const validateSolverModels = validator<SolverModels>(schema, "SolverModels");
 export const validateAnalysisModel = validator<AnalysisModel>(schema, "AnalysisModel");
 export const validatePowerLaw = validator<PowerLaw>(schema, "PowerLaw");

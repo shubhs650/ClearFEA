@@ -399,8 +399,12 @@
         }
       }
     },
+    "Solver": {
+      "description": "CalculiX's equation solver for a run (ADR-058). pastix, the default, and spooles are direct solvers, verified to the 0.1 percent checks. iterative_cholesky and iterative_scaling need far less memory but stop at CalculiX 2.21's fixed relative residual of 1e-4, which left verification results up to about 0.5 percent off.",
+      "enum": ["pastix", "spooles", "iterative_cholesky", "iterative_scaling"]
+    },
     "SimulationSpec": {
-      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
+      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the equation solver (ADR-058). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
       "type": "object",
       "additionalProperties": false,
       "required": ["version", "analysis", "geometryId", "bodies", "materials", "supports", "loads", "mesh"],
@@ -412,7 +416,11 @@
         "materials": { "type": "array", "items": { "$ref": "#/$defs/IsotropicMaterial" } },
         "supports": { "type": "array", "items": { "$ref": "#/$defs/Support" } },
         "loads": { "type": "array", "items": { "$ref": "#/$defs/Load" } },
-        "mesh": { "$ref": "#/$defs/MeshSettings" }
+        "mesh": { "$ref": "#/$defs/MeshSettings" },
+        "solver": {
+          "description": "The equation solver (ADR-058). Absent in specs saved before ADR-058, which means pastix. A run's frozen spec always names it, except for runs made before ADR-058, which were solved with spooles.",
+          "$ref": "#/$defs/Solver"
+        }
       }
     },
     "SimulationView": {
@@ -755,7 +763,11 @@
           "type": "boolean"
         },
         "sizes": { "type": "array", "items": { "$ref": "#/$defs/SizeEstimate" } },
-        "recommended": { "type": ["string", "null"] }
+        "recommended": { "type": ["string", "null"] },
+        "solver": {
+          "description": "The solver the estimate is for (ADR-058); absent in estimates made before it, which were for spooles.",
+          "$ref": "#/$defs/Solver"
+        }
       }
     },
     "EstimateResponse": {

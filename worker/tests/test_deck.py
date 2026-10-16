@@ -924,24 +924,44 @@ def test_refuses_temperature_changes_it_cannot_translate(change, message: str) -
         deck(thermal_load_spec(change), two_tets(order=2, bodies=2))
 
 
-# --- Equation solver name (M2.11, ADR-048) ---
+# --- Equation solver name (M2.11, ADR-048; ADR-058) ---
 
 
-def test_without_a_solver_name_the_static_line_leaves_the_choice_to_the_build() -> None:
+def test_a_spec_without_a_solver_is_solved_with_pastix() -> None:
+    """Specs saved before ADR-058 name no solver; the deck still names one."""
     lines = deck(fixture_spec(), two_tets(order=2)).splitlines()
-    assert "*STATIC" in lines
-    assert not any("SOLVER=" in line for line in lines)
+    assert "*STATIC, SOLVER=PASTIX" in lines
+    assert "*STATIC" not in lines
 
 
-@pytest.mark.parametrize("solver", ["SPOOLES", "PASTIX", "ITERATIVE SCALING", "ITERATIVE CHOLESKY"])
-def test_a_solver_name_goes_on_the_static_line_and_nothing_else_changes(solver: str) -> None:
-    spec, mesh = SimulationSpec.model_validate(fixture_spec()), two_tets(order=2)
-    named = generate_deck(spec, mesh, solver=solver).splitlines()
-    plain = generate_deck(spec, mesh).splitlines()
-    assert [k for k, (a, b) in enumerate(zip(named, plain, strict=True)) if a != b] == [
-        plain.index("*STATIC")
-    ]
-    assert f"*STATIC, SOLVER={solver}" in named
+@pytest.mark.parametrize(
+    ("solver", "name"),
+    [
+        ("pastix", "PASTIX"),
+        ("spooles", "SPOOLES"),
+        ("iterative_cholesky", "ITERATIVE CHOLESKY"),
+        ("iterative_scaling", "ITERATIVE SCALING"),
+    ],
+)
+def test_the_spec_solver_goes_on_the_static_line_and_nothing_else_changes(
+    solver: str, name: str
+) -> None:
+    mesh = two_tets(order=2)
+    chosen = generate_deck(
+        SimulationSpec.model_validate({**fixture_spec(), "solver": solver}), mesh
+    ).splitlines()
+    default = generate_deck(SimulationSpec.model_validate(fixture_spec()), mesh).splitlines()
+    static = default.index("*STATIC, SOLVER=PASTIX")
+    assert [k for k, (a, b) in enumerate(zip(chosen, default, strict=True)) if a != b] == (
+        [] if solver == "pastix" else [static]
+    )
+    assert chosen[static] == f"*STATIC, SOLVER={name}"
+
+
+def test_the_benchmark_can_name_a_solver_over_the_spec() -> None:
+    spec = SimulationSpec.model_validate({**fixture_spec(), "solver": "spooles"})
+    lines = generate_deck(spec, two_tets(order=2), solver="ITERATIVE CHOLESKY").splitlines()
+    assert "*STATIC, SOLVER=ITERATIVE CHOLESKY" in lines
 
 
 def test_refuses_an_unknown_solver_name() -> None:

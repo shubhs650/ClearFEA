@@ -37,7 +37,7 @@ def test_round_trip_keeps_wire_names() -> None:
     "change",
     [
         lambda s: s.update(version=2),
-        lambda s: s.update(solver="pastix"),
+        lambda s: s.update(solver="pardiso"),
         lambda s: s["materials"][0].update(poissonsRatio=0.5),
         lambda s: s["loads"][0].update(type="force"),
     ],
