@@ -12,7 +12,8 @@
 // the estimate the run started with (ADR-049). From M3.2 the result figures give each support's
 // reaction force and moment, each load's total and the balance of loads against reactions
 // (ADR-051), named as in the run's own frozen setup. From M3.7 the result can be shown in units
-// of its own, picked per kind, instead of the unit system's (ADR-056).
+// of its own, picked per kind, instead of the unit system's (ADR-056). From M3.8 a succeeded run
+// can be exported as CSV and VTK files (ADR-057).
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import {
@@ -33,6 +34,7 @@ import { useUnitSystem } from "../units/system";
 import { DISPLAY_KINDS, type DisplayKind, type DisplayUnitChoice, type ResultUnits, unitsOf } from "./displayUnits";
 import { QUANTITIES, type Quantity, type QuantityGroup, SAFETY_FACTOR_CAP } from "../viewer/resultFields";
 import { Notes } from "./ItemPanels";
+import { RunExport } from "./RunExport";
 import { type ItemStatus, sameSpec } from "./spec";
 import type { EstimateState } from "./useEstimate";
 
@@ -547,6 +549,7 @@ export function RunPanel({
           {run !== null && <Reactions result={result} spec={run.spec} units={units} />}
         </dl>
       )}
+      {run !== null && result && <RunExport run={run} result={result} units={units} />}
       {run !== null && <RunRecord run={run} currentSpec={currentSpec} />}
       {run !== null && (
         <details className="run-log" open={solving}>

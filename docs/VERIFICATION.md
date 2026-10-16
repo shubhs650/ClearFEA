@@ -114,6 +114,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Strain components (total strain, tensor shear) | V-01, V-08, V-24 |
 | Safety factor against yield | V-24; E-01 shows it |
 | Hidden bodies and saved views (display only) | E-01 saves a view and brings it back; viewer unit tests hide bodies |
+| CSV and VTK export (stored values, no new physics) | E-01 downloads the node and reaction CSV and the VTK file and checks them against the run's figures; web unit tests check columns, units and the VTK node order |
 | Mixed input units | all |
 
 ### Automatic checks on every case
@@ -135,7 +136,7 @@ Playwright drives the real UI against the local system on tiny models. `make e2e
 
 | Test | Covers | Added in |
 | --- | --- | --- |
-| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance, read the min/max markers and probe a node, cut it across x and y with a cut plane, show the safety factor against yield, save a view and bring it back, show the result in other units after a reload (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
+| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance, read the min/max markers and probe a node, cut it across x and y with a cut plane, show the safety factor against yield, save a view and bring it back, show the result in other units after a reload, export CSV and VTK files (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
 | E-02 | Unit entry in mixed units and display-unit switch | M2 |
 | E-03 | Multi-body upload, review bonds, run | M4 |
 | E-04 | Thermal stress setup and result | M5 |

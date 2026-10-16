@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M3 Results tools (M2 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M3.8
+- **Next task:** M3 close (phase-end run on main)
 - **Blocked on:** nothing
 
 ## Milestones
@@ -80,7 +80,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M3.5 Safety factor against yield
 - [x] M3.6 Hide/show bodies; saved views
 - [x] M3.7 Display-unit switching for results without rerun
-- [ ] M3.8 CSV and VTK export
+- [x] M3.8 CSV and VTK export
 
 ## Maintainer to-do
 
@@ -105,6 +105,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M3.8 (2026-10-16): CSV and VTK export (ADR-057, accepted under Shubham's standing M3 instruction, pending his review). Web only; no API, worker, schema, `units.json` or `convert.ts` change, so no physics-critical module touched. The Run panel's new "Export" section (after the run figures) offers "Results at every node (CSV)" (node number as in the deck, undeformed x, y, z, every field, in the units shown, UTF-8 with a byte order mark), "Reactions and loads (CSV)" (the summary's reactions, moments and load totals) and "Mesh and results (VTK)" (`.vtu`, raw appended data, SI, mid-edge nodes reordered for VTK's quadratic tetrahedron, body tag as cell data). Built from `mesh.bin` and the whole `nodes.bin` (`GET /api/runs/:id/nodes`, already there since M3.4) in `apps/web/src/viewer/resultExport.ts`; runs before M3.4 export only reactions. Files are named `clearfea-run-<first 8 of run id>…`. Large models: the node CSV of 2.7 million nodes takes about 28 s and 705 MB (written in chunks so the page keeps drawing); the VTK file under half a second. E-01 downloads all three and checks them. VTK files were also read back with VTK 9.5.2's own reader by hand (not in CI). Screenshot in the project's `m3.8/` folder. Next: close M3 with a green manual phase-end run on main, and give Shubham the ADR list from ADR-054 on.
 
 > M3.7 (2026-10-16): result display units without a rerun (ADR-056, accepted under Shubham's standing M3 instruction, pending his review). Web only; no worker, schema, `units.json` or `convert.ts` change, so no physics-critical module touched. The Run panel's new "Units shown" (under "Show on the model") has a list per kind: length, stress, force, moment and strain, each "As the unit system (<unit>)" then every unit `units.json` has for the kind (strain in µε or %, ADR-050's open point). The picks go over the system's units in the one result-units object App already gave the viewer and the panel (`apps/web/src/setup/displayUnits.ts`), so figures, reactions, balance, legend, markers, probes and the cut plane's position all follow; "Show all in the unit system" clears them. Input fields still offer the system's unit. The picks are kept in the browser's local storage per user (`clearfea.resultUnits.<user id>`), not in the API or saved views (the report prints in its own system, M7.6). E-01 switches stress to ksi (checked against the MPa marker through `units.json`), length to in (cut plane reads x = 0.7874 in) and strain to µε, reloads, and clears. E-02 (mixed-unit entry and display-unit switch, listed for M2 in VERIFICATION.md) is still not written; E-01 now covers the display-unit switch. Screenshot in the project's `m3.7/` folder. Next: M3.8.
 
@@ -218,6 +220,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M3.8: CSV and VTK export of a run's results, built in the browser from its stored files (ADR-057). Learned: writing text is the slow part (28 s for 2.7 million nodes), not the VTK file (under half a second).
 - M3.7: result display units picked per kind in the Run panel, over the unit system, kept per user in the browser (ADR-056).
 - M3.6: hide/show bodies and saved views of a simulation (ADR-055). Learned: Playwright's role name match is a substring, so a "Delete the view X" button also matches X unless `exact: true`; the host needs Gmsh's system libraries (`apt-get install libglu1-mesa` and friends) before `make test`'s pytest passes.
 - M3.5: safety factor against yield, yield strengths in materials and the library (ADR-054). Learned: pydantic dumps an absent optional field as null, which the API's schema refuses; the scanned handbook tables are readable at 130 to 300 dpi but the OCR text is not trustworthy for numbers.
