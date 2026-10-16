@@ -38,6 +38,7 @@ import {
   type TopologyTags,
   thermalBodyMessages,
   unheldBodies,
+  unreachedBodies,
   unheldBodyMessages,
   wrongAnalysisMessage,
   materialTables,
@@ -160,6 +161,11 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   const labels = topology ? bodyLabels(topology) : new Map<number, string>();
   // A thermal analysis has no supports, so no body is "unheld"; its body messages are its own.
   const unheld = new Set(thermal ? [] : unheldBodies(spec, topology).flat());
+  // A body no load sets the temperature of, directly or through bonds (M5.6), in an analysis
+  // that solves temperatures.
+  const unset = new Set(
+    solvesTemperature(spec) ? unreachedBodies(spec, topology, spec.loads.filter(setsTemperature).flatMap((l) => l.faces)).flat() : [],
+  );
   for (const b of spec.bodies) {
     const missing =
       b.material !== null
@@ -169,6 +175,11 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
           : ["Pick its material."];
     if (unheld.has(b.tag)) {
       missing.push("No support holds it and no bond joins it to a held body. Add a support on one of its faces.");
+    }
+    if (unset.has(b.tag)) {
+      missing.push(
+        "No fixed temperature, convection or radiation sets its temperature and no bond joins it to a body that has one. Add one on one of its faces.",
+      );
     }
     result.set(bodyItem(b.tag), status([], missing));
   }

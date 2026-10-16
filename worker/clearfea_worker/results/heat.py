@@ -15,7 +15,11 @@ printed digits):
   temperature supplies plus every load's heat applied there (an edge it shares with a heat flux
   or a convection, a heat generation in the elements around it), so those are taken back out,
   as for a structural reaction (ADR-051). A node two fixed temperatures hold (at the same
-  temperature, loads/heat.py) counts for the first of them in spec order.
+  temperature, loads/heat.py) counts for the first of them in spec order. Where bonds carry
+  heat (M5.6), a held node that tied nodes follow also passes on the heat that reaches it
+  through the ties, which CalculiX leaves out of its RFL and the reader adds back
+  (deck.loads.tie.tie_heat): checked with ccx 2.21 on two bonded blocks, a fixed temperature
+  on the master body's face next to the bond read 20 % out of balance without it, 1e-8 with it.
 
 The convection and radiation use the temperatures CalculiX prints to seven digits for their
 nodes (deck EXCHANGE_SET); the .frd file keeps five, which is 0.005 K at 1000 K and would show
@@ -34,7 +38,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..deck import EXCHANGE_SET, HEAT_SET
+from ..deck import EXCHANGE_SET, HEAT_SET, HEAT_TIE_SET
 from ..deck.common import si
 from ..deck.generator import STEFAN_BOLTZMANN
 from ..deck.linalg import cross, norm
@@ -43,6 +47,7 @@ from ..deck.loads.body import BodyLoad, body_load_resultant, body_nodal_forces
 from ..deck.loads.force import _triangle_nodes, _triangle_shape
 from ..deck.loads.heat import conductivities, convections, fixed_temperatures, radiations
 from ..deck.loads.pressure import _LOCAL_FACE, _RULE
+from ..deck.loads.tie import tie_heat, ties
 from ..deck.materials import Table
 from ..meshing.volume import NODES_PER_ELEMENT, VolumeMesh
 from ..spec.simulation_schema import (
@@ -129,7 +134,7 @@ def read_heat_flows(
     """The heat flow of each thermal load of ``spec``, in spec order, from the solved nodal
     temperatures (``temperature[n]``, K, from the .frd file) and the .dat file of a deck made
     from ``spec`` and ``mesh``. The nodal heat of a heat generation is given only at the nodes
-    fixed temperatures hold, which is all the balance needs."""
+    fixed temperatures hold and the nodes bonds tie, which is all the balance needs."""
     loads = [x for x in spec.loads if isinstance(x, THERMAL_LOADS)]
     held = fixed_temperatures(spec, mesh)
     films = {id(x.load): x for x in convections(spec, mesh)}
@@ -141,6 +146,8 @@ def read_heat_flows(
         return value if value is not None else temperature[node]
 
     held_nodes = {n for item in held for n in item.nodes}
+    heat_ties = [t for t in ties(spec, mesh, {}, temperature=held_nodes) if t.equations]
+    tied = {e[0].node for t in heat_ties for e in t.equations}
     flows: dict[int, HeatFlow] = {}
     for k, load in enumerate(loads):
         if isinstance(load, HeatFluxLoad):
@@ -168,7 +175,7 @@ def read_heat_flows(
         elif isinstance(load, HeatGenerationLoad):
             value = si(load.power, "heatGeneration", f'Heat generation "{load.name}"')
             power = {tag: value for tag in load.bodies}
-            flows[k] = _generation(mesh, power, held_nodes)
+            flows[k] = _generation(mesh, power, held_nodes | tied)
 
     reactions: dict[int, dict[int, float]] = {}
     if held:
@@ -183,10 +190,23 @@ def read_heat_flows(
             index = next(k for k, x in enumerate(loads) if x is item.load)
             for node in item.nodes:
                 owner.setdefault(node, index)
+        through: dict[int, float] = {}
+        if tied:
+            residual = read_node_heat_flows(dat, HEAT_TIE_SET)
+            missing = sorted(tied - residual.keys())
+            if missing:
+                raise ValueError(f"The solver gave no heat flow for node {missing[0] + 1}.")
+            for flow in flows.values():
+                for node, q in flow.nodal.items():
+                    if node in residual:
+                        residual[node] -= q
+            through = tie_heat(heat_ties, residual)
         for node, index in owner.items():
             if node not in rfl:
                 raise ValueError(f"The solver gave no heat flow for node {node + 1}.")
-            reactions.setdefault(index, {})[node] = rfl[node] - applied.get(node, 0.0)
+            reactions.setdefault(index, {})[node] = (
+                rfl[node] - applied.get(node, 0.0) + through.get(node, 0.0)
+            )
         for item in held:
             index = next(k for k, x in enumerate(loads) if x is item.load)
             nodal = reactions.get(index, {})

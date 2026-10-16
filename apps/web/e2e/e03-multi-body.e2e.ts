@@ -3,7 +3,9 @@
 // bodies are listed by their part names (M4.1), each gets its own material, the bond the import
 // found between them is reviewed (M4.2), a body held only through a removed bond stops the run
 // (M4.4), the bond ties the bodies in the solve so the reactions balance the load (M4.3), and the
-// results carry the note on stresses near bonded faces (M4.5).
+// results carry the note on stresses near bonded faces (M4.5). Since M5.6 the same setup is then
+// run as a thermal stress analysis, Lug's top hot and Base's end cooled by convection, so all the
+// heat crosses the bond (ADR-069).
 //
 // The model (e2e/assembly.py) is "Base", a 40 × 20 × 10 mm block, and "Lug", a 30 × 20 × 10 mm
 // block touching its x = 0 end. Base is fixed at its x = 40 mm end and Lug is pressed on its top
@@ -262,5 +264,69 @@ test("E-03: a model of two bonded bodies from upload to results", async ({ page 
     await page.screenshot({ path: `${OUT}/e03-base-only.png` });
     await list.getByRole("button", { name: "Show all" }).click();
     await expect(viewer.getByRole("button", { name: "Bodies", exact: true })).toBeVisible();
+  });
+
+  await test.step("heat crosses the bond in a thermal stress analysis (M5.6)", async () => {
+    await treeRow(page, "Analysis").click();
+    const analysis = settings.getByRole("region", { name: "Analysis", exact: true });
+    await analysis.getByRole("radio", { name: "Thermal stress" }).check();
+    await analysis.getByLabel("Stress-free temperature", { exact: true }).fill("20");
+    await saved(page);
+
+    const material = page.getByRole("region", { name: "Material", exact: true });
+    for (const [name, alpha, k] of [
+      ["Steel", "12", "45"],
+      ["Aluminium", "23", "160"],
+    ] as const) {
+      await treeRow(page, name).click();
+      await material.getByLabel("Thermal expansion", { exact: true }).fill(alpha);
+      await material.getByLabel("Thermal expansion unit").selectOption("µm/(m·K)");
+      await material.getByLabel("Thermal conductivity", { exact: true }).fill(k);
+      await material.getByLabel("Thermal conductivity unit").selectOption("W/(m·K)");
+      await saved(page);
+    }
+
+    // Lug is heated on its top, Base cooled at its end: neither body's temperature needs the
+    // bond to be set, but every watt the top takes in reaches the end only through it. Nothing is
+    // selected after the run, so the first face is picked straight away.
+    await clickFace(page, lugTop);
+    await treeRow(page, "Loads").click();
+    await page.getByRole("button", { name: "Add a fixed temperature" }).click();
+    const fixed = page.getByRole("region", { name: "Fixed temperature", exact: true });
+    await fixed.getByLabel("Name", { exact: true }).fill("Hot top");
+    await fixed.getByLabel("Temperature", { exact: true }).fill("120");
+    await saved(page);
+    await selection.getByRole("button", { name: "Clear" }).click();
+    await clickFace(page, end);
+    await treeRow(page, "Loads").click();
+    await page.getByRole("button", { name: "Add convection" }).click();
+    const convection = page.getByRole("region", { name: "Convection", exact: true });
+    await convection.getByLabel("Name", { exact: true }).fill("Cooled end");
+    await convection.getByLabel("Convection coefficient", { exact: true }).fill("1000");
+    await convection.getByLabel("Convection coefficient unit").selectOption("W/(m²·K)");
+    await convection.getByLabel("Ambient temperature", { exact: true }).fill("20");
+    await saved(page);
+
+    await treeRow(page, "Run").click();
+    await expect(blockers).toHaveCount(0);
+    // The structural run above is still shown, so the button reads "Run again".
+    await run.getByRole("button", { name: "Run again", exact: true }).click();
+    const thermal = run.getByLabel("Thermal results");
+    await expect(thermal).toContainText(/Highest temperature\s*120 °C/, { timeout: 180_000 });
+    const flows = /Heat flow, Hot top\s*([\d.]+) W in.*Heat flow, Cooled end\s*([\d.]+) W out/;
+    await expect(thermal).toContainText(flows);
+    const [, into, out] = flows.exec((await thermal.textContent()) ?? "") ?? [];
+    expect(Number(into)).toBeGreaterThan(0);
+    expect(Math.abs(Number(out) - Number(into)) / Number(into)).toBeLessThan(0.001);
+    const balance = /Out of balance\s*([\d.e+-]+) %/;
+    await expect(thermal).toContainText(balance);
+    expect(Number(balance.exec((await thermal.textContent()) ?? "")?.[1])).toBeLessThan(0.1);
+    await thermal.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${OUT}/e03-heat-flows.png` });
+
+    await settings.getByLabel("Quantity").selectOption("temperature");
+    const legend = page.getByRole("region", { name: "Legend", exact: true });
+    await expect(legend).toContainText("Temperature (°C)");
+    await page.screenshot({ path: `${OUT}/e03-temperature.png` });
   });
 });

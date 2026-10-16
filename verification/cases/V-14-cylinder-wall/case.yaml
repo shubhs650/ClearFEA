@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-14: radial conduction through a quarter of a thick tube between a hot bore and a cool
+# outside (M5; added with M5.6).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-14
+title: Cylinder wall conduction
+analysis: steady_thermal
+features: [steady-state thermal analysis, fixed temperature, thermal conductivity, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  bore: { min: [0, 0, 0], max: [40, 40, 20] }
+  outside: { min: [0, 0, 0], max: [60, 60, 20] }
+  cut-y: { min: [40, 0, 0], max: [60, 0, 20] }
+mesh:
+  coarse: { value: 5, unit: mm } # four quadratic elements through the wall
+  full: { value: 2.5, unit: mm }
+# Both sizes divide the 20 mm wall, so the cut face's edge at z = 0 has nodes at r = 45, 50
+# and 55 mm, where the checks read the profile (the face's inside nodes lie anywhere). On the cut y = 0 the radial direction is x.
+checks:
+  - name: A quarter of the way through, r = 45 mm
+    quantity: temperature
+    face: cut-y
+    box: { min: [44.9, 0, 0], max: [45.1, 0, 0] }
+    reference: { value: 349.910903, unit: K }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Halfway through, r = 50 mm
+    quantity: temperature
+    face: cut-y
+    box: { min: [49.9, 0, 0], max: [50.1, 0, 0] }
+    reference: { value: 55.972823, unit: °C }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Three quarters of the way through, r = 55 mm
+    quantity: temperature
+    face: cut-y
+    box: { min: [54.9, 0, 0], max: [55.1, 0, 0] }
+    reference: { value: 98.90189, unit: °F }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Radial heat flux halfway through, Q / ((π/2) r L)
+    quantity: heatFlux.x
+    face: cut-y
+    box: { min: [49.9, 0, 0], max: [50.1, 0, 0] }
+    reference: { value: 56289.49, unit: BTU/(h·ft²) }
+    tolerance: { coarse: 0.02, full: 0.01 }
+  - name: Heat in through the bore, (π/2) k L ΔT / ln(b/a)
+    quantity: heatFlow
+    load: bore
+    reference: { value: 278.92678, unit: W }
+    tolerance: { coarse: 0.005, full: 0.002 }
+  - name: Heat out through the outside
+    quantity: heatFlow
+    load: outside
+    reference: { value: -951.73768, unit: BTU/h }
+    tolerance: { coarse: 0.005, full: 0.002 }

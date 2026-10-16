@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "analysis": "steady_thermal",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200, "unit": "GPa" },
+      "poissonsRatio": 0.3,
+      "thermalConductivity": { "value": 26, "unit": "BTU/(h·ft·°F)" }
+    }
+  ],
+  "supports": [],
+  "loads": [
+    {
+      "id": "bore",
+      "type": "fixed_temperature",
+      "name": "Hot bore",
+      "faces": ["bore"],
+      "temperature": { "value": 100, "unit": "°C" }
+    },
+    {
+      "id": "outside",
+      "type": "fixed_temperature",
+      "name": "Cool outside",
+      "faces": ["outside"],
+      "temperature": { "value": 68, "unit": "°F" }
+    }
+  ],
+  "mesh": { "size": { "value": 5, "unit": "mm" } }
+}

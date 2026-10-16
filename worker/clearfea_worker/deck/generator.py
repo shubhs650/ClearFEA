@@ -74,7 +74,7 @@ from .loads.heat import (
     radiations,
 )
 from .loads.thermal import expansions, stress_free_temperature, temperature_change
-from .loads.tie import Equation, body_groups, tied_bonds, ties
+from .loads.tie import Equation, body_groups, ties
 from .materials import Property, Table, expansion_reference, poisson, positive, rows, table
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
@@ -101,11 +101,15 @@ HEAT_SET = "TALL"
 #: these faces exchange from them (M5.3).
 EXCHANGE_SET = "XALL"
 
+#: The nodes whose temperature a bond ties (M5.6), for their nodal heat flows.
+HEAT_TIE_SET = "TTIED"
+
 __all__ = [
     "DECK_FORMAT",
     "DeckError",
     "EXCHANGE_SET",
     "HEAT_SET",
+    "HEAT_TIE_SET",
     "REACTION_SET",
     "TIE_SET",
     "generate_deck",
@@ -396,7 +400,6 @@ def _heat_parts(
     every other face insulated. Temperatures in kelvin. ``initial``, when given, is every
     node's starting temperature (a thermal stress analysis's stress-free temperature, M5.4);
     otherwise radiation starts every node at the mean of the known temperatures."""
-    analysis = _ANALYSIS_NAMES[spec.analysis]
     if spec.analysis == "steady_thermal":
         wrong = [*spec.supports, *(x for x in spec.loads if not isinstance(x, _THERMAL_LOADS))]
         if wrong:
@@ -417,11 +420,6 @@ def _heat_parts(
     for load in [*fixed, *face_loads]:
         _check_faces(mesh, load.faces, f"{load.name}")
     check_face_heat_loads(spec)
-    if len(mesh.bodies) > 1 and tied_bonds(spec):
-        raise DeckError(
-            f"Bonds do not carry heat in a {analysis} analysis yet, so bonded bodies "
-            "cannot be run. Remove the bonds to run each body on its own."
-        )
     k = conductivities(spec, mesh)
     _check_nodes(mesh)
     held = fixed_temperatures(spec, mesh)
@@ -429,16 +427,26 @@ def _heat_parts(
     films = convections(spec, mesh)
     radiates = radiations(spec, mesh)
     generated = heat_generation(spec, mesh)
-    # Bodies share no nodes (ADR-058), so each needs a fixed temperature, convection or
-    # radiation of its own, or its temperature is undetermined and the equations singular.
-    nodes = {n for item in held for n in item.nodes}
+    held_nodes = {n for item in held for n in item.nodes}
+    # Bonds carry heat (M5.6): each slave node's temperature follows the master face's.
+    heat_ties = ties(spec, mesh, {}, temperature=held_nodes)
+    # Bodies share no nodes (ADR-058), so each body, or each group of bonded bodies, needs a
+    # fixed temperature, convection or radiation of its own, or its temperature is
+    # undetermined and the equations singular.
+    nodes = set(held_nodes)
     for item in [*films, *radiates]:
         nodes.update(fixed_support_nodes(mesh, item.load.faces))
-    unset = [tag for tag, _, _ in bodies if not nodes & body_nodes(mesh, [tag])]
+    unset = [group for group in body_groups(mesh, heat_ties) if not nodes & body_nodes(mesh, group)]
     if unset:
+        tags = [t for group in unset for t in group]
+        joined = ", ".join(str(t) for t in tags)
         raise DeckError(
-            f"Body {', '.join(str(t) for t in unset)} has no fixed temperature, convection or "
-            "radiation, so its temperature is not set. Add one on one of its faces."
+            f"Body {joined} has no fixed temperature, convection or radiation and is not bonded "
+            "to a body that has one, so its temperature is not set. Add one on one of its faces."
+            if len(tags) == 1
+            else f"Bodies {joined} have no fixed temperature, convection or radiation and are not "
+            "bonded to a body that has one, so their temperatures are not set. Add one on a "
+            "face of each group of bonded bodies."
         )
 
     parts = _Parts()
@@ -462,6 +470,29 @@ def _heat_parts(
     if exchanged:
         out.append(f"*NSET, NSET={EXCHANGE_SET}")
         out.extend(_lines(exchanged))
+    heat_tied: list[int] = []
+    if heat_ties:
+        out.append("** Bonds carry heat (M5.6): the temperature of each node of one face of each")
+        out.append("** bond follows the other face's at the point closest to it (*EQUATION on")
+        out.append("** degree of freedom 11; loads/tie.py)")
+    for tie in heat_ties:
+        out.append(
+            f"** Heat bond of faces {tie.bond[0]} and {tie.bond[1]}: face {tie.slave} (body "
+            f"{tie.slave_body}) follows face {tie.master} (body {tie.master_body}); "
+            f"{tie.tied} of {tie.nodes} nodes tied,"
+        )
+        out.append(
+            f"** {tie.held} at a fixed temperature, {tie.off} off face {tie.master}, "
+            f"{tie.shared} tied by another bond"
+        )
+        if tie.equations:
+            out.append("*EQUATION")
+            for equation in tie.equations:
+                out.extend(_equation_lines(equation))
+        heat_tied.extend(dict.fromkeys(e[0].node for e in tie.equations))
+    if heat_tied:
+        out.append(f"*NSET, NSET={HEAT_TIE_SET}")
+        out.extend(_lines(n + 1 for n in heat_tied))
     for material in spec.materials:
         if material.id not in k:
             continue
@@ -594,6 +625,10 @@ def _heat_parts(
     if exchanged:
         out.append(f"*NODE PRINT, NSET={EXCHANGE_SET}")
         out.append("NT")
+    if heat_tied:
+        # The heat each tied node passes to the face it follows (results/heat.py, M5.6).
+        out.append(f"*NODE PRINT, NSET={HEAT_TIE_SET}")
+        out.append("RFL")
     out.append("*END STEP")
     return parts
 

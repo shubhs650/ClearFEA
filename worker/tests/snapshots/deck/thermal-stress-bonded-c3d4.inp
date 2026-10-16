@@ -1,0 +1,130 @@
+** ClearFEA solver input, deck format 5. Generated from the simulation's
+** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa, K, W).
+** Geometry 00000000-0000-4000-8000-000000000005
+*HEADING
+ClearFEA thermal stress analysis
+** 8 nodes, 2 C3D4 elements
+*NODE, NSET=NALL
+1, 0.0, 0.0, 0.0
+2, 0.01, 0.0, 0.0
+3, 0.0, 0.01, 0.0
+4, 0.0, 0.0, -0.01
+5, 0.002, 0.001, 0.0
+6, 0.006, 0.001, 0.0
+7, 0.002, 0.005, 0.0
+8, 0.003, 0.002, 0.01
+** Body 1
+*ELEMENT, TYPE=C3D4, ELSET=B1
+1, 1, 3, 2, 4
+** Body 2
+*ELEMENT, TYPE=C3D4, ELSET=B2
+2, 5, 6, 7, 8
+** Fixed temperature hot-1 "Hot side", faces 2: 100.0 °C = 373.15 K
+*NSET, NSET=T1
+1, 2, 3, 4
+*NSET, NSET=TALL
+1, 2, 3, 4
+*NSET, NSET=XALL
+6, 7, 8
+** Bonds carry heat (M5.6): the temperature of each node of one face of each
+** bond follows the other face's at the point closest to it (*EQUATION on
+** degree of freedom 11; loads/tie.py)
+** Heat bond of faces 1 and 3: face 3 (body 2) follows face 1 (body 1); 3 of 3 nodes tied,
+** 0 at a fixed temperature, 0 off face 1, 0 tied by another bond
+*EQUATION
+4
+5, 11, 1.0, 1, 11, -0.7, 3, 11, -0.1, 2, 11, -0.20000000000000004
+4
+6, 11, 1.0, 1, 11, -0.3000000000000001, 3, 11, -0.1, 2, 11, -0.6
+4
+7, 11, 1.0, 1, 11, -0.3, 3, 11, -0.5, 2, 11, -0.19999999999999996
+*NSET, NSET=TTIED
+5, 6, 7
+** Fixed support fixed-1 "Base", faces 2
+*NSET, NSET=S1
+1, 2, 3, 4
+*NSET, NSET=RALL
+1, 2, 3, 4
+** Bonds (M4.3): the nodes of one face of each bond follow the other face, each
+** node as the point of the other face closest to it (*EQUATION in the node's
+** own directions; loads/tie.py)
+** Bond of faces 1 and 3: face 3 (body 2) follows face 1 (body 1); 3 of 3 nodes tied,
+** 0 held by supports, 0 off face 1, 0 tied by another bond
+*EQUATION
+4
+5, 1, 1.0, 1, 1, -0.7, 3, 1, -0.1, 2, 1, -0.20000000000000004
+4
+5, 2, 1.0, 1, 2, -0.7, 3, 2, -0.1, 2, 2, -0.20000000000000004
+4
+5, 3, 1.0, 1, 3, -0.7, 3, 3, -0.1, 2, 3, -0.20000000000000004
+4
+6, 1, 1.0, 1, 1, -0.3000000000000001, 3, 1, -0.1, 2, 1, -0.6
+4
+6, 2, 1.0, 1, 2, -0.3000000000000001, 3, 2, -0.1, 2, 2, -0.6
+4
+6, 3, 1.0, 1, 3, -0.3000000000000001, 3, 3, -0.1, 2, 3, -0.6
+4
+7, 1, 1.0, 1, 1, -0.3, 3, 1, -0.5, 2, 1, -0.19999999999999996
+4
+7, 2, 1.0, 1, 2, -0.3, 3, 2, -0.5, 2, 2, -0.19999999999999996
+4
+7, 3, 1.0, 1, 3, -0.3, 3, 3, -0.5, 2, 3, -0.19999999999999996
+*NSET, NSET=TIED
+5, 6, 7
+** Material steel "Steel (US units)"
+*MATERIAL, NAME=M2
+** Thermal conductivity 26.0 BTU/(h·ft·°F)
+*CONDUCTIVITY
+44.99910132565617
+*ELASTIC
+199947961501.88248, 0.29
+** Thermal expansion 6.5 µin/(in·°F)
+*EXPANSION
+1.17e-05
+** Material copper "Copper"
+*MATERIAL, NAME=M3
+** Thermal conductivity 0.39 W/(mm·K)
+*CONDUCTIVITY
+390.0
+*ELASTIC
+117000000000.0, 0.34
+** Thermal expansion 17.0 µm/(m·K)
+*EXPANSION
+1.7e-05
+*SOLID SECTION, ELSET=B1, MATERIAL=M2
+*SOLID SECTION, ELSET=B2, MATERIAL=M3
+** Convection h-1 "Air", faces 6: 5.0 BTU/(h·ft²·°F) = 28.39131670556744 W/(m²·K) to 68.0 °F = 293.15000000000003 K
+*INITIAL CONDITIONS, TYPE=TEMPERATURE
+NALL, 293.15
+*STEP
+*HEAT TRANSFER, STEADY STATE, SOLVER=PASTIX
+1.0, 1.0
+*BOUNDARY
+T1, 11, 11, 373.15
+*FILM
+2, F3, 293.15000000000003, 28.39131670556744
+*NODE FILE
+NT
+*EL FILE
+HFL
+*NODE PRINT, NSET=TALL
+RFL
+*NODE PRINT, NSET=XALL
+NT
+*NODE PRINT, NSET=TTIED
+RFL
+*END STEP
+*STEP
+*STATIC, SOLVER=PASTIX
+1.0, 1.0, 1.0, 1.0
+*BOUNDARY
+S1, 1, 3
+*NODE FILE
+U
+*EL FILE
+S, E
+*NODE PRINT, NSET=RALL, GLOBAL=YES
+RF
+*NODE PRINT, NSET=TIED, GLOBAL=YES
+RF
+*END STEP

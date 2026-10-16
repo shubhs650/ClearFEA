@@ -7,7 +7,9 @@ heat balance, and a bar with every thermal load on it at once for the balance. S
 thermal stress decks of the linear profiles (ADR-067): the bar held on every side and at one
 end, so its stresses and displacements have a closed form at every node. Since M5.5 a
 conductivity that varies with temperature, given as a table (ADR-068), against the exact
-profile of a linear k(T) at every node.
+profile of a linear k(T) at every node. Since M5.6 the bar cut into two bonded bodies of
+different materials (bonded.py, ADR-069): heat across the bond at every node, as heat transfer
+and as thermal stress, and the heat balance with a fixed temperature next to the bond.
 
 Script only, not part of the worker package or its tests (the fast tier runs no solver). It
 checks what the platform path cannot see exactly: the temperature degree of freedom, the
@@ -26,6 +28,8 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+from bonded import L1M, bonded_setup, bonded_spec, faces_at
 
 from clearfea_worker.deck import generate_deck
 from clearfea_worker.geometry.importer import import_geometry
@@ -442,6 +446,185 @@ def _pick(allowed: float | tuple[float, float], order: int) -> float:
     return allowed[order - 1] if isinstance(allowed, tuple) else allowed
 
 
+#: The second body's material (M5.6): a third of the steel's conductivity and stiffness, the
+#: same expansion and Poisson's ratio, conductivity in W/(m·K) to mix units with the first.
+K2 = K / 3
+E2_KSI = E_KSI / 3
+FILM_BONDED = 200.0
+
+
+def bonded_checks(root: Path, order: int) -> list[tuple[str, float, float, str]]:
+    """The two-body bar's checks (bonded.py), each "loads | check" first."""
+    topology, mesh, bonds = bonded_setup(root, L, H, order)
+    hot = faces_at(topology, 0, 0.0)[0]
+    cold = faces_at(topology, 0, LM)[0]
+    second = {
+        "id": "soft",
+        "name": "Soft",
+        "model": "isotropic_elastic",
+        "youngsModulus": {"value": E2_KSI, "unit": "ksi"},
+        "poissonsRatio": NU,
+        "thermalExpansion": {"value": ALPHA_US, "unit": "µin/(in·°F)"},
+        "thermalConductivity": {"value": K2, "unit": "W/(m·K)"},
+    }
+    l2 = LM - L1M
+    p = mesh.positions
+    xs = [p[3 * n] for n in range(mesh.node_count)]
+    out: list[tuple[str, float, float, str]] = []
+
+    def series(t_hot: float, t_far: float, extra: float) -> tuple[float, Callable[[float], float]]:
+        """Flux and profile of the series wall from t_hot at x = 0 to t_far, with ``extra``
+        (m²·K/W) of resistance beyond x = L."""
+        q = (t_hot - t_far) / (L1M / K + l2 / K2 + extra)
+        middle = t_hot - q * L1M / K
+
+        def exact(x: float) -> float:
+            return t_hot - q * x / K if x <= L1M else middle - q * (x - L1M) / K2
+
+        return q, exact
+
+    def heat_rows(name: str, fields, result, q: float, exact) -> None:  # type: ignore[no-untyped-def]
+        t, f = fields.temperature, fields.heat_flux
+        worst = max(abs(t[n] - exact(x)) for n, x in enumerate(xs))
+        flux_off = max(
+            max(abs(f[3 * n] - q), abs(f[3 * n + 1]), abs(f[3 * n + 2]))
+            for n in range(mesh.node_count)
+        )
+        got = [x.heat for x in result.heat_flows or []]
+        flows_off = max(abs(a - b) for a, b in zip(got, [q * AREA, -q * AREA], strict=True))
+        out.extend(
+            [
+                (f"two bonded bodies, {name} | temperature", worst, 0.01, "K"),
+                (f"two bonded bodies, {name} | heat flux", flux_off / q, 1e-3, "of the largest"),
+                (
+                    f"two bonded bodies, {name} | heat flow of each load",
+                    flows_off / (q * AREA),
+                    1e-3,
+                    "of the largest",
+                ),
+                (
+                    f"two bonded bodies, {name} | heat balance",
+                    result.heat_balance.ratio,
+                    BALANCE,
+                    "",
+                ),
+            ]
+        )
+
+    base = spec([]).model_dump(by_alias=True)
+    q, exact = series(HOT_K, COLD_K, 0.0)
+    loads = [fixed(hot, HOT), fixed(cold, COLD)]
+    setup = bonded_spec(base, bonds, second, loads)
+    fields, result = solve(setup, mesh, root / f"bonded-p{order}-fixed")
+    heat_rows("fixed temperatures", fields, result, q, exact)
+
+    q, exact = series(HOT_K, COLD_K, 1 / FILM_BONDED)
+    film = {
+        "id": "film",
+        "type": "convection",
+        "name": "Cold end",
+        "faces": [cold],
+        "coefficient": {"value": FILM_BONDED, "unit": "W/(m²·K)"},
+        "ambientTemperature": {"value": COLD[0], "unit": COLD[1]},
+    }
+    setup = bonded_spec(base, bonds, second, [fixed(hot, HOT), film])
+    fields, result = solve(setup, mesh, root / f"bonded-p{order}-film")
+    heat_rows("fixed temperature, convection", fields, result, q, exact)
+
+    # Thermal stress of the series wall, held on the x = 0 end and the four sides of both bodies.
+    q, exact = series(HOT_K, COLD_K, 0.0)
+    sides = [
+        hot,
+        *faces_at(topology, 1, 0.0),
+        *faces_at(topology, 1, H / 1000),
+        *faces_at(topology, 2, 0.0),
+        *faces_at(topology, 2, H / 1000),
+    ]
+    one = stress_spec([fixed(hot, HOT), fixed(cold, COLD)], sides).model_dump(by_alias=True)
+    setup = bonded_spec(one, bonds, second, [fixed(hot, HOT), fixed(cold, COLD)])
+    fields, result = solve(setup, mesh, root / f"bonded-p{order}-stress")
+    second_body = [False] * mesh.node_count
+    first, count = mesh.bodies[2]
+    npe = 4 if order == 1 else 10
+    for node in mesh.elements[first * npe : (first + count) * npe]:
+        second_body[node] = True
+
+    def sigma(n: int, x: float) -> float:
+        modulus = E * (1 / 3 if second_body[n] else 1.0)
+        return -modulus * ALPHA / (1 - NU) * (exact(x) - REFERENCE_K)
+
+    middle = exact(L1M)
+
+    def ux(x: float) -> float:
+        # The integral of T − T₀ from 0 to x, linear in each body.
+        if x <= L1M:
+            area = ((HOT_K - REFERENCE_K) + (exact(x) - REFERENCE_K)) / 2 * x
+        else:
+            area = ((HOT_K - REFERENCE_K) + (middle - REFERENCE_K)) / 2 * L1M
+            area += ((middle - REFERENCE_K) + (exact(x) - REFERENCE_K)) / 2 * (x - L1M)
+        return ALPHA * (1 + NU) / (1 - NU) * area
+
+    s, u, t = fields.stress, fields.displacement, fields.thermal.temperature
+    peak = max(abs(sigma(n, x)) for n, x in enumerate(xs))
+    grow = max(abs(ux(x)) for x in xs)
+    stress_off = max(
+        max(abs(s[6 * n]), abs(s[6 * n + 1] - sigma(n, x)), abs(s[6 * n + 2] - sigma(n, x)))
+        for n, x in enumerate(xs)
+    )
+    move_off = max(
+        max(abs(u[3 * n] - ux(x)), abs(u[3 * n + 1]), abs(u[3 * n + 2])) for n, x in enumerate(xs)
+    )
+    name = "two bonded bodies, thermal stress"
+    out.extend(
+        [
+            (
+                f"{name} | temperature",
+                max(abs(t[n] - exact(x)) for n, x in enumerate(xs)),
+                0.01,
+                "K",
+            ),
+            (
+                f"{name} | normal stresses",
+                stress_off / peak,
+                _pick((0.05, 1e-3), order),
+                "of the largest",
+            ),
+            (
+                f"{name} | displacements",
+                move_off / grow,
+                _pick((0.005, 1e-3), order),
+                "of the largest",
+            ),
+            (f"{name} | heat balance", result.heat_balance.ratio, BALANCE, ""),
+            (f"{name} | reaction balance", result.balance.force_ratio, 1e-6, ""),
+        ]
+    )
+
+    # A fixed temperature on the first body's sides, which meet the bond's edges, and the cold
+    # end: tied nodes follow nodes the fixed temperature holds.
+    walls = [
+        f
+        for f in [*faces_at(topology, 1, 0.0), *faces_at(topology, 2, H / 1000)]
+        if next(x for x in topology.faces if x.tag == f).centroid[0] < L1M
+    ]
+    setup = bonded_spec(
+        base,
+        bonds,
+        second,
+        [{**fixed(walls[0], HOT), "faces": walls}, fixed(cold, COLD)],
+    )
+    _, result = solve(setup, mesh, root / f"bonded-p{order}-walls")
+    out.append(
+        (
+            "two bonded bodies, fixed temperature next to the bond | heat balance",
+            result.heat_balance.ratio,
+            BALANCE,
+            "",
+        )
+    )
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=None)
@@ -568,6 +751,12 @@ def main() -> int:
             f"W, out {balance.heat_out:.5g} W | {balance.ratio:.3g} | {BALANCE:g} | "
             f"{'ok' if ok else 'off'} |"
         )
+        for what, value, allowed, unit in bonded_checks(root, order):
+            ok = value <= allowed
+            failed |= not ok
+            rows.append(
+                f"| {label} | {what} | {value:.3g} {unit} | {allowed:g} | {'ok' if ok else 'off'} |"
+            )
     print("| Element | Loads | Check | Largest error | Allowed | Result |")
     print("| --- | --- | --- | --- | --- | --- |")
     print("\n".join(rows))
