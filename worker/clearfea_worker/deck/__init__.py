@@ -4,6 +4,7 @@
 from .generator import (
     DECK_FORMAT,
     REACTION_SET,
+    TIE_SET,
     DeckError,
     generate_deck,
     only_fixed_supports,
@@ -13,6 +14,7 @@ from .generator import (
 __all__ = [
     "DECK_FORMAT",
     "REACTION_SET",
+    "TIE_SET",
     "DeckError",
     "generate_deck",
     "only_fixed_supports",

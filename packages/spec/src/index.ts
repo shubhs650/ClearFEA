@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export * from "./generated";
-export { movesByDisplacement, preRunProblems } from "./prerun";
+export { movesByDisplacement, preRunProblems, unheldBodyMessages } from "./prerun";
 export {
+  bodyLabels,
+  bondIsTied,
+  bondKey,
   checkSimulationSpec,
   displacementAxes,
   elementOrder,
@@ -18,7 +21,10 @@ export {
   sameMeshSettings,
   type SpecProblem,
   simulationSpecProblems,
+  specBonds,
+  unheldBodies,
   supportKinds,
+  type TopologyBondTags,
   type TopologyTags,
 } from "./simulation";
 export {
@@ -38,6 +44,7 @@ export {
   SOLVERS,
   specSolver,
 } from "./estimator";
+export { checkReportNotes, hasTiedBonds, reportNotes, runReportNotes } from "./report";
 export { checkUnitsTable, isUnitSystem, systemUnit, unitsTable } from "./units";
 export { type Validation, validator } from "./validate";
 export { checkMaterialLibrary, materialLibrary } from "./library";

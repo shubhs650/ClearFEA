@@ -41,6 +41,13 @@ export type FaceTags = number[];
  */
 export type AnalysisType = "linear_static";
 /**
+ * detected: found by bond detection and not yet reviewed; it is tied. accepted: the user reviewed it and keeps it; it is tied. removed: the user removed it; it is not tied, and stays listed so it can be restored.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "BondStatus".
+ */
+export type BondStatus = "detected" | "accepted" | "removed";
+/**
  * One global component of a prescribed displacement: a length quantity (zero holds it, any other value moves the faces by that much), "free" when the component is not prescribed, or null until the user has chosen.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -157,6 +164,22 @@ export interface BodyAssignment {
    * Id of an entry in materials; null until one is assigned.
    */
   material: ItemId | null;
+}
+/**
+ * A candidate bond of the geometry (topology.json bonds, M4.2) and what the user decided about it. A bond is identified by its two faces.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "Bond".
+ */
+export interface Bond {
+  /**
+   * The two face tags of a candidate bond, smaller first.
+   *
+   * @minItems 2
+   * @maxItems 2
+   */
+  faces: [number, number];
+  status: BondStatus;
 }
 /**
  * A linear elastic isotropic material. The spec holds its own copy of the values, so a run made from it never changes when a library material does.
@@ -533,7 +556,7 @@ export interface MeshSettings {
   local?: LocalMeshSize[];
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -554,6 +577,10 @@ export interface SimulationSpec {
    * The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
    */
   solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
+  /**
+   * Every candidate bond of the geometry with the user's review of it (M4.2), in the order of topology.json. Absent in specs saved before M4.2, where every candidate counts as detected.
+   */
+  bonds?: Bond[];
 }
 /**
  * A simulation as its owner sees it.
@@ -1036,7 +1063,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -1054,6 +1081,10 @@ export interface SimulationSpec1 {
    * The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
    */
   solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
+  /**
+   * Every candidate bond of the geometry with the user's review of it (M4.2), in the order of topology.json. Absent in specs saved before M4.2, where every candidate counts as detected.
+   */
+  bonds?: Bond[];
 }
 /**
  * Answer to POST /api/simulations/{id}/runs (HTTP 201) and GET /api/runs/{id}.
@@ -1092,6 +1123,9 @@ export const validateFaceTags = validator<FaceTags>(schema, "FaceTags");
 export const AnalysisTypeValues = ["linear_static"] as const satisfies readonly AnalysisType[];
 export const validateAnalysisType = validator<AnalysisType>(schema, "AnalysisType");
 export const validateBodyAssignment = validator<BodyAssignment>(schema, "BodyAssignment");
+export const BondStatusValues = ["detected", "accepted", "removed"] as const satisfies readonly BondStatus[];
+export const validateBondStatus = validator<BondStatus>(schema, "BondStatus");
+export const validateBond = validator<Bond>(schema, "Bond");
 export const validateIsotropicMaterial = validator<IsotropicMaterial>(schema, "IsotropicMaterial");
 export const validateMaterialReference = validator<MaterialReference>(schema, "MaterialReference");
 export const validateMaterialLibrary = validator<MaterialLibrary>(schema, "MaterialLibrary");

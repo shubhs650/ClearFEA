@@ -5,9 +5,9 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M4 Assemblies, not started (M3 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M4.1, once the maintainer gives the go for M4 (the autodrive covered M1 to M3)
-- **Blocked on:** the maintainer's go for M4
+- **Current milestone:** M5 Thermal, not started (M4 closed 2026-10-16 on a green phase-end run on main)
+- **Next task:** M5.1, once the maintainer gives the go for M5 (his autodrive covered M4)
+- **Blocked on:** nothing
 
 ## Milestones
 
@@ -17,7 +17,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M1 | Thin slice | Done (phase-end run on main green, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); maintainer waived the hand exit check) | 2026-10-15 |
 | M2 | Structural setup | Done (phase-end run on main green, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) | 2026-10-16 |
 | M3 | Results tools | Done (phase-end run on main green, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) | 2026-10-16 |
-| M4 | Assemblies | Not started | |
+| M4 | Assemblies | Done (phase-end run on main green, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) | 2026-10-16 |
 | M5 | Thermal | Not started | |
 | M6 | Modal | Not started | |
 | M7 | Report | Not started | |
@@ -82,6 +82,14 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M3.7 Display-unit switching for results without rerun
 - [x] M3.8 CSV and VTK export
 
+### M4 Assemblies
+
+- [x] M4.1 Multi-body import: bodies listed, per-body material assignment
+- [x] M4.2 Bond detection between touching faces with a tolerance; bond list with accept and remove; highlight in the viewer
+- [x] M4.3 Per-body meshing; tie constraints in the deck
+- [x] M4.4 Validation: unbonded or unrestrained bodies reported before run
+- [x] M4.5 Report text noting reduced stress accuracy at tied interfaces (stored for M7)
+
 ## Maintainer to-do
 
 Things only the maintainer can do.
@@ -100,11 +108,23 @@ Things only the maintainer can do.
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 146 of 146 checks (M3.5) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4) |
 | Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step, the M3.5 safety factor step and the M3.6 saved view step |
-| Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main df2a895, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035); closed M3) | Green: full tier 146 of 146 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26); E-01 |
+| Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main 6e722e0, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547); closed M4) | Green: full tier 169 of 169 checks in all 15 cases (V-01 to V-12, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M4 close (2026-10-16): M4 closed on a green manual phase-end run on main (see the Milestones table), after PR #59 fixed E-01's one-body check that M4.1's tree row had broken. The M4 exit (a three-body shell, nozzle and pad model runs with balanced reactions) was checked locally through `make verify` as a scratch case; its files and result table are in the project's `m4-close/` folder, not the repository. Next is M5 in PLAN.md order, which waits for the maintainer's go. Still waiting on the maintainer: review of ADR-058 to ADR-062 (M4, accepted under the autodrive). E-03 (multi-body upload, bonds, run; listed for M4 in VERIFICATION.md) is not written; E-01 is still one body.
+
+> M4.5 (2026-10-16): report text on stress accuracy at tied interfaces, stored for M7 (ADR-062, accepted under Shubham's autodrive, pending his review). No physics-critical module touched. `packages/spec/report-notes.json` (schema `report-notes.schema.json`, Pydantic model generated) holds the note "Stresses near bonded faces" with ADR-060 item 9's measured figures; `runReportNotes(spec)` in `packages/spec/src/report.ts` returns the notes a run's frozen spec calls for (any bond not removed). The Run panel shows them under a succeeded run's results. For M7: the report job reads the same file (M7.5 can add the other standing statements to it, bumping `version` on any text change). Screenshot in the project's `m4.5/` folder. Next: M4 close (ADR list for review and a green manual phase-end run).
+
+> M4.4 (2026-10-16): bodies no support or bond reaches are refused before the run (ADR-061, accepted under Shubham's autodrive, pending his review). Physics-critical module touched: the deck generator's rigid-body check (`deck/constraints.py` `check_held`, `deck/loads/tie.py` `body_groups`, `deck/generator.py` now computes ties before the check); no deck text or snapshot changed. `unheldBodies` in `packages/spec` groups bodies by tied bonds and returns groups with no support face; `preRunProblems` adds one Bodies line per group (part names, and "restore a removed bond" when one touches it), so the API answers 409 and the Run panel lists it; the free body's row and the Bodies group are marked incomplete. The worker checks each bonded group on its own (joined by written equations or shared nodes), so a group held only partly, such as one frictionless face, is refused there, naming the body by tag. Not covered: a bond tied over too few nodes to stop relative turning. Screenshots in the project's `m4.4/` folder. For M4.5: report text on tied-interface stress accuracy (ADR-060 item 9 has the figures). Next: M4.5.
+
+> M4.3 (2026-10-16): bonds tied in the deck (ADR-060, accepted under Shubham's autodrive, pending his review). Physics-critical modules touched: the deck generator (`deck/generator.py`, `deck/constraints.py`), a new load translation module `deck/loads/tie.py`, and the result reader (`results/summary.py`). Every bond not removed ties the nodes of its finer face to the closest point of the other face as `*EQUATION` lines in each node's deck directions; the reader passes the tied nodes' printed forces on to held master nodes, so reactions balance (CalculiX's `*TIE` left 1.6e-4 of the load out of the reactions where symmetry planes cross a bond). Meshing was already per body (ADR-058), so the mesh job is unchanged. The API writes `specBonds` into each run's spec. New cases V-11 (V-02's cantilever as two bonded bodies) and V-12 (bi-material bar on symmetry planes crossing the bond); deck snapshots `bonded-c3d10` and `bonded-slide-c3d4`. Surprise: CalculiX's RF at a node in a tie or equation is the element force only; tie forces are not in it. For M4.4: the rigid-body check (`check_held`) still treats the model as one part; a body neither bonded nor held should be found before the run, and `ties()` tells which bodies are joined. For M4.5: stresses at a tie between unmatched meshes are off by up to about 12 percent one or two elements deep. Next: M4.4.
+
+> M4.2 (2026-10-16): bond detection and review (ADR-059, accepted under Shubham's autodrive, pending his review). No physics-critical module touched (deck, units, loads, results unchanged). The import job now writes `bondTolerance` (1e-4 of the model diagonal) and `bonds` (faces, bodies, contact area, largest gap) into `topology.json` (`worker/clearfea_worker/geometry/bonds.py`: box filter, OpenCASCADE distance, then each tessellation triangle counts when its vertices and centroid lie within the tolerance of the other face and the centroid lands inside its boundary; at least 1% of the smaller face). `SimulationSpec.bonds` lists every candidate as detected, accepted or removed; `specBonds` reads older specs as all detected; the spec check refuses non-candidates, missing candidates and repeats. Web: a Bonds group below Bodies (more than one body only) with Accept, Remove, Restore and "Accept all"; opening Bonds or a bond selects its faces in the viewer. Test models in `worker/tests/step_models.py` (`bond_model`): overhanging block, edge contact, 0.5 mm gap, rod on plate, pin in hole, pad on a curved shell. Surprise: Gmsh's `getClosestPoint` projects onto the untrimmed surface and `isInside` ignores the distance off the surface, so both are needed; a pad across a cylinder's seam is two faces and so two bonds. For M4.3: tie every bond whose status is not `removed` (`bondIsTied`); `gap` is there for the tie's position tolerance. Screenshots in the project's `m4.2/` folder. Next: M4.3.
+
+> M4.1 (2026-10-16): multi-body import with bodies listed and a material per body (ADR-058, accepted under Shubham's autodrive, pending his review). No physics-critical module touched. Import was already multi-body (each STEP solid a Gmsh volume, touching bodies keep separate faces, each meshed on its own with no shared nodes); what is new: `topology.json` bodies carry an optional `name` read from Gmsh's STEP label (last part of `Shapes/<assembly>/<n>/<part>`; OpenCASCADE's "Open CASCADE STEP translator …" placeholder and instance numbers are not names), `bodyLabels` in `packages/spec` (name, or "Body <tag>", tag added to shared names), a Bodies group in the tree (row per body, material list per body, opening a body selects its faces), labels in the material panel, viewer hide/show list and face hover, and pre-run messages pointing to Bodies. Test model: `two_blocks` in `worker/tests/step_models.py` (product names rewritten in the STEP text, since Gmsh writes only placeholders). Surprise: OpenCASCADE numbers its placeholder product names per process ("… 7.8 3.1" after earlier writes), so the test model finds them by pattern. Screenshots in the project's `m4.1/` folder. Next: M4.2 (bond detection); the solver thread "PaStiX default and 16 GB limits" runs alongside and owns solver, estimator and size caps.
 
 > M3 close (2026-10-16): M3 closed on a green manual phase-end run on main (see the Milestones table). Next is M4 in PLAN.md order, which waits for the maintainer's go: his autodrive covered M1 to M3. The maintainer reviewed and accepted ADR-054 to ADR-057 on 2026-10-16, so every ADR to date is accepted by him (ADR-054 item 7's temper choices included). Still waiting on the maintainer: how to reach the 2-million-element target (ADR-048 item 7).
 
@@ -212,6 +232,7 @@ Written by the last session for the next one. Replace, do not append.
 
 Ideas that came up during work and are outside the current milestone. Do not build these without a decision.
 
+- A user-set bond tolerance (ADR-059 item 3): the tolerance is fixed at 1e-4 of the model size; another would need a detection job run on request.
 - Shrink the worker image (about 990 MB): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use.
 - A rigid (kinematic) option for remote loads, which keeps the loaded faces' shape (ADR-041 item 2), and drawing a remote load's reference point in the viewer. Needs the maintainer's decision on the option.
 - Adopt PaStiX as the production solver (Shubham chose "adopt later", 2026-10-15, ADR-048 item 7): its own task after M2, a 64-bit-integer PaStiX4CalculiX build in the worker image (CUDA runtime libraries included) as a pinned version bump with a full verification run. Build recipe in `worker/benchmarks/solver/README.md`. 4 to 6 times faster than SPOOLES, no larger models.
@@ -222,6 +243,13 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M4 closed: phase-end workflow run by hand on main 6e722e0 ([run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) green, `make verify` full tier 169 of 169 checks in all 15 cases and `make e2e` E-01. Next: M5, waiting on the maintainer's go.
+- M4 close, part 1: the first phase-end run on main b4280bf ([run 38889867749](https://github.com/shubhs650/ClearFEA/actions/runs/38889867749)) failed in `make e2e`: E-01's M3.6 step expected no button named "Bodies…" on a one-body model, and M4.1's Bodies row in the simulation tree is one. The step now looks only in the 3D viewer, the check it meant. M4's exit (a three-body shell, nozzle and pad model runs with balanced reactions) was run locally through `make verify` as a scratch case, not committed: 65,881 elements, reactions balance the applied load to 0.0014 %, the run's own balance check to 1.2e-7 %, membrane stress away from the nozzle 48.48 MPa against Lamé's 48.51 MPa. Next: re-run the phase-end workflow on main.
+- M4.5: the report's note on stress accuracy near bonded faces is stored in `packages/spec/report-notes.json` and shown under the results of runs that tied bonds (ADR-062). Learned: the no-verdict test caught "pass through" in the first draft, so notes avoid the word in any sense.
+- M4.4: a body no support or bond reaches is refused before the run, and the deck generator's rigid-body check looks at each group of bonded bodies (ADR-061). Learned: the whole-model check let a free body pass beside a held one.
+- M4.3: bonds not removed tied in the deck as equations between each finer face's nodes and the other face, with tie forces added back into reactions (ADR-060); V-11 and V-12 added. Learned: CalculiX's printed RF leaves out the tie forces at held nodes, for `*TIE` as for `*EQUATION`.
+- M4.2: bonds between touching bodies found at import within a tolerance, listed in a Bonds group with accept, remove and restore, and shown in the viewer (ADR-059). Learned: Gmsh's `getClosestPoint` ignores a face's trimming and `isInside` ignores distance off the surface; sampling every triangle vertex keeps edge and line contacts out.
+- M4.1: bodies of an assembly listed by their STEP part names in a new Bodies group, each with its material (ADR-058). Learned: Gmsh keeps STEP product names as entity labels (`getEntityName`), so no STEP parsing of our own is needed.
 - ADR-054 to ADR-057 marked accepted by the maintainer (he reviewed them after the M3 close).
 - M3 closed: phase-end workflow run by hand on main df2a895 ([run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) green, `make verify` full tier 146 of 146 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26) and `make e2e` E-01. Next: M4, waiting on the maintainer's go.
 - M3.8: CSV and VTK export of a run's results, built in the browser from its stored files (ADR-057). Learned: writing text is the slow part (28 s for 2.7 million nodes), not the VTK file (under half a second).

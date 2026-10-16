@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import fixture from "../fixtures/simulation-v1.json";
-import { emptySimulationSpec, preRunProblems, type SimulationSpec, validateSimulationSpec } from "../src";
+import { emptySimulationSpec, preRunProblems, type SimulationSpec, unheldBodies, validateSimulationSpec } from "../src";
 
 const topology = {
   bodies: [{ tag: 1 }],
@@ -42,12 +42,16 @@ describe("pre-run validation", () => {
   it("names bodies without a material", () => {
     const one = { ...spec(), bodies: [{ tag: 1, material: null }] };
     expect(preRunProblems(one, topology)).toEqual([
-      { item: "bodies", message: "Body 1 has no material. Assign one under Materials." },
+      { item: "bodies", message: "Body 1 has no material. Pick one for it under Bodies." },
     ]);
     const two = { ...spec(), bodies: [{ tag: 1, material: null }, { tag: 2, material: null }] };
     const twoBodies = { ...topology, bodies: [{ tag: 1 }, { tag: 2 }] };
     expect(preRunProblems(two, twoBodies).map((p) => p.message)).toEqual([
-      "Bodies 1, 2 have no material. Assign one under Materials.",
+      "Bodies 1, 2 have no material. Pick one for each under Bodies.",
+    ]);
+    const named = { ...topology, bodies: [{ tag: 1, name: "Base plate" }, { tag: 2 }] };
+    expect(preRunProblems(two, named).map((p) => p.message)).toEqual([
+      'Bodies "Base plate", 2 have no material. Pick one for each under Bodies.',
     ]);
   });
 
@@ -278,4 +282,85 @@ describe("pre-run validation", () => {
       { item: "local-1", message: 'Local mesh size "Hole" has no size. Enter it.' },
     ]);
   });
+});
+
+describe("bodies no support holds (M4.4)", () => {
+  // Three bodies: a shell (faces 1-2), a nozzle (3-4) bonded to it, and a pad (5-6) bonded to the
+  // nozzle; body 4 (face 7) touches nothing.
+  const assembly = {
+    bodies: [{ tag: 1, name: "Shell" }, { tag: 2, name: "Nozzle" }, { tag: 3, name: "Pad" }, { tag: 4 }],
+    faces: [
+      { tag: 1, bodies: [1] },
+      { tag: 2, bodies: [1] },
+      { tag: 3, bodies: [2] },
+      { tag: 4, bodies: [2] },
+      { tag: 5, bodies: [3] },
+      { tag: 6, bodies: [3] },
+      { tag: 7, bodies: [4] },
+    ],
+    bonds: [
+      { faces: [2, 3] as [number, number], bodies: [1, 2] as [number, number] },
+      { faces: [4, 5] as [number, number], bodies: [2, 3] as [number, number] },
+    ],
+  };
+
+  type Status = "accepted" | "removed";
+
+  function assemblySpec(bonds: [Status, Status], supportFaces: number[] = [1]): SimulationSpec {
+    const s = spec();
+    const [material] = s.materials;
+    const [support] = s.supports;
+    const [load] = s.loads;
+    if (!material || !support || !load) throw new Error("incomplete fixture");
+    return {
+      ...s,
+      bodies: [1, 2, 3, 4].map((tag) => ({ tag, material: material.id })),
+      supports: [{ ...support, faces: supportFaces }],
+      loads: [{ ...load, faces: [6] }] as SimulationSpec["loads"],
+      bonds: [
+        { faces: [2, 3], status: bonds[0] },
+        { faces: [4, 5], status: bonds[1] },
+      ],
+    };
+  }
+
+  it("names a body that touches nothing and has no support", () => {
+    expect(unheldBodies(assemblySpec(["accepted", "accepted"]), assembly)).toEqual([[4]]);
+    expect(preRunProblems(assemblySpec(["accepted", "accepted"]), assembly)).toEqual([
+      {
+        item: "bodies",
+        message: "Body 4 is not bonded to a held body and no support holds it, so it is free to move. Add a support on one of its faces.",
+      },
+    ]);
+    expect(preRunProblems(assemblySpec(["accepted", "accepted"], [1, 7]), assembly)).toEqual([]);
+  });
+
+  it("follows bonds through bodies that hold each other, and stops at removed ones", () => {
+    expect(unheldBodies(assemblySpec(["accepted", "removed"], [1, 7]), assembly)).toEqual([[3]]);
+    expect(assemblyMessages(assemblySpec(["accepted", "removed"], [1, 7]))).toEqual([
+      'Body "Pad" is not bonded to a held body and no support holds it, so it is free to move. Add a support on one of its faces, or restore a removed bond under Bonds that joins it to a held body.',
+    ]);
+    expect(unheldBodies(assemblySpec(["removed", "accepted"], [1, 7]), assembly)).toEqual([[2, 3]]);
+    expect(assemblyMessages(assemblySpec(["removed", "accepted"], [1, 7]))).toEqual([
+      'Bodies "Nozzle" and "Pad" are bonded only to each other and no support holds them, so they are free to move. Add a support on a face of one of them, or restore a removed bond under Bonds that joins them to a held body.',
+    ]);
+    // A support on the pad holds the nozzle through their bond.
+    expect(unheldBodies(assemblySpec(["removed", "accepted"], [1, 5, 7]), assembly)).toEqual([]);
+  });
+
+  it("counts a bond still to be reviewed as tied", () => {
+    const { bonds: _, ...older } = assemblySpec(["accepted", "accepted"], [1, 7]);
+    expect(unheldBodies(older, assembly)).toEqual([]);
+  });
+
+  it("says nothing for one body, before any support has faces, or without each face's body", () => {
+    expect(unheldBodies(spec(), topology)).toEqual([]);
+    expect(unheldBodies(assemblySpec(["removed", "removed"], []), assembly)).toEqual([]);
+    const older = { ...assembly, faces: assembly.faces.map(({ tag }) => ({ tag })) };
+    expect(unheldBodies(assemblySpec(["removed", "removed"]), older)).toEqual([]);
+  });
+
+  function assemblyMessages(s: SimulationSpec): string[] {
+    return preRunProblems(s, assembly).map((p) => p.message);
+  }
 });

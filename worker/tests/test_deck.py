@@ -27,7 +27,8 @@ from clearfea_worker.deck.generator import FIELD_WIDTH
 from clearfea_worker.meshing.volume import NODES_PER_ELEMENT, TET_FACES, VolumeMesh
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
-from .deck_meshes import GMSH_EDGES, two_tets
+from .deck_meshes import GMSH_EDGES, bonded_tets, two_tets
+from .test_ties import bonded_spec
 
 FIXTURE = Path(__file__).resolve().parents[2] / "packages" / "spec" / "fixtures"
 SNAPSHOTS = Path(__file__).resolve().parent / "snapshots" / "deck"
@@ -301,6 +302,13 @@ def turned(mesh: VolumeMesh, degrees: float = 30.0) -> VolumeMesh:
     return VolumeMesh(mesh.order, p, mesh.elements, mesh.bodies, mesh.faces)
 
 
+def bonded_slide_spec() -> dict:
+    """bonded_tets with a frictionless support on a sloping face through the bond (M4.3)."""
+    spec = bonded_spec().model_dump(by_alias=True)
+    spec["supports"].append({"id": "slide-1", "type": "frictionless", "name": "Side", "faces": [4]})
+    return spec
+
+
 def deck(spec: dict, mesh: VolumeMesh) -> str:
     return generate_deck(SimulationSpec.model_validate(spec), mesh)
 
@@ -359,6 +367,8 @@ SNAPSHOT_CASES = {
     "elastic-sym-c3d10": (elastic_sym_spec, lambda: two_tets(order=2)),
     "elastic-sym-c3d4": (elastic_sym_spec, lambda: two_tets(order=1)),
     "thermal-two-bodies-c3d10": (thermal_spec, lambda: two_tets(order=2, bodies=2)),
+    "bonded-c3d10": (lambda: bonded_spec().model_dump(by_alias=True), lambda: bonded_tets(2)),
+    "bonded-slide-c3d4": (bonded_slide_spec, lambda: bonded_tets(1)),
 }
 
 

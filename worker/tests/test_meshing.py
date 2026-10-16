@@ -27,7 +27,7 @@ from clearfea_worker.meshing.volume import (
 )
 from clearfea_worker.spec.geometry_schema import Topology
 
-from .step_models import block_with_hole, with_length_unit
+from .step_models import block_with_hole, two_blocks, with_length_unit
 
 
 @pytest.fixture(scope="module")
@@ -87,6 +87,26 @@ def test_meshes_every_face_and_maps_it_to_element_faces(
     for tag, patch in display.items():
         assert len(patch.triangles) // 3 == len(mesh.faces[tag])
     assert output.result.surface_triangles == len(entries)
+
+
+def test_meshes_each_body_of_an_assembly_on_its_own(tmp_path: Path) -> None:
+    step = two_blocks(tmp_path / "pair.step", ("Bracket assembly", "Base plate", "Lug"))
+    import_geometry(step, tmp_path / "import", None)
+    topology = Topology.model_validate_json((tmp_path / "import" / "topology.json").read_bytes())
+    output = mesh_geometry(
+        step, topology, tmp_path / "mesh", scaling=1.0, size=0.01, unit="mm", order=2
+    )
+    mesh = read_volume_mesh(output.mesh_path)
+    (first, base), (second, lug) = mesh.bodies[1], mesh.bodies[2]
+    assert (first, second, base + lug) == (0, base, mesh.element_count)
+    assert base > 0 and lug > 0
+    assert sorted(mesh.faces) == list(range(1, 13))
+    # No element joins the bodies: their nodes are separate until M4.3 ties them.
+    n = NODES_PER_ELEMENT[2]
+    nodes_of = [
+        set(mesh.elements[a * n : (a + count) * n]) for a, count in (mesh.bodies[1], mesh.bodies[2])
+    ]
+    assert nodes_of[0].isdisjoint(nodes_of[1])
 
 
 def test_second_order_mid_edge_nodes_lie_on_the_hole(

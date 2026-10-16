@@ -261,8 +261,10 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
   });
 
   await test.step("save a view and bring it back (M3.6)", async () => {
-    // One body: nothing to hide.
-    await expect(page.getByRole("button", { name: /^Bodies/ })).toHaveCount(0);
+    // One body: nothing to hide, so the viewer has no Bodies button (the tree's Bodies row,
+    // M4.1, is not it).
+    const viewer = page.getByRole("main", { name: "3D viewer" });
+    await expect(viewer.getByRole("button", { name: /^Bodies/ })).toHaveCount(0);
     const quantity = settings.getByLabel("Quantity");
     const legend = page.getByRole("region", { name: "Legend", exact: true });
     await quantity.selectOption("principal1");

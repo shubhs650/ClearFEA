@@ -51,11 +51,11 @@ Tooling: pnpm workspaces for TypeScript, `uv` for Python, a top-level `Makefile`
 This is the highest-risk design point. A user clicks a face in the viewer and applies a pressure. That same face must be found in the mesh, written into the solver input as the right element faces, and later used to report reactions.
 
 1. **Import.** Gmsh reads the STEP file with its OpenCASCADE kernel and converts lengths to metres. Each body (volume) and face (surface) gets an integer tag.
-2. **Topology file.** The worker writes `topology.json`: for each body and face, its tag, type (plane, cylinder, other), area, centroid, bounding box and parent body; since M2.8 also each edge's tag, length, bounding box, the faces it bounds and a polyline the viewer draws and picks it by (ADR-045). This file is the reference for face and edge identity.
+2. **Topology file.** The worker writes `topology.json`: for each body and face, its tag, type (plane, cylinder, other), area, centroid, bounding box and parent body; since M2.8 also each edge's tag, length, bounding box, the faces it bounds and a polyline the viewer draws and picks it by (ADR-045); since M4.1 each body's part name from the STEP assembly tree, when the file gives one (ADR-058). Since M4.2 also the candidate bonds: pairs of faces of different bodies that touch over an area within `bondTolerance`, with contact area and gap (ADR-059). This file is the reference for face and edge identity.
 3. **Display mesh.** The worker tessellates each face and writes one binary file with triangles grouped by face tag (`packages/spec/display-mesh.md`). The viewer uses this for rendering and picking, so a click resolves to a face tag.
 4. **Spec.** Loads and supports in the `SimulationSpec` reference face tags (and body tags) of a specific geometry id.
-5. **Mesh.** Gmsh meshes the same imported geometry, with a global size, the element order and local sizes on faces, edges or bodies as background fields (ADR-045). Surface elements carry their face tag. The worker writes, for every face tag, the list of volume-element faces lying on it. The mesh file format is `packages/spec/volume-mesh.md` (ADR-028).
-6. **Deck.** The deck generator turns face tags into CalculiX node sets and element-face surfaces.
+5. **Mesh.** Gmsh meshes the same imported geometry, with a global size, the element order and local sizes on faces, edges or bodies as background fields (ADR-045). Each body is meshed on its own: touching bodies keep separate faces and nodes, and bonds join them in the deck (M4.3, ADR-060). Surface elements carry their face tag. The worker writes, for every face tag, the list of volume-element faces lying on it. The mesh file format is `packages/spec/volume-mesh.md` (ADR-028).
+6. **Deck.** The deck generator turns face tags into CalculiX node sets and element-face surfaces, and each tied bond's two faces into equations between their nodes.
 7. **Results.** Reaction sums and face-based result tables use the same sets.
 
 Rules that keep the chain intact:
@@ -103,7 +103,7 @@ Files in R2, keyed by owner and record id:
 
 One JSON document describes a complete setup: analysis type, per-body material assignment, bonds, supports, loads, mesh settings, output requests and solver options. Every physical quantity is stored as `{ "value": number, "unit": "MPa" }` exactly as the user typed it. The schema lives in `packages/spec`; TypeScript types and Pydantic models are generated from it.
 
-Version 1 (`packages/spec/schemas/simulation.schema.json`, ADR-026) holds the bodies with their material, isotropic materials, fixed supports, pressures and the global mesh size. Values may be null while the setup is built; `checkSimulationSpec` refuses what is wrong (units of the wrong kind, unknown tags), and pre-run validation lists what is missing. Once a simulation uses a geometry, the geometry's unit is locked. M2 adds supports and loads to the same version (ADR-039 to ADR-044), and M2.8 the element order and local mesh sizes on faces, edges or bodies (ADR-045). Materials from the library or a user's saved materials are copied into the spec with their `source` note (M2.9, ADR-046).
+Version 1 (`packages/spec/schemas/simulation.schema.json`, ADR-026) holds the bodies with their material, isotropic materials, fixed supports, pressures and the global mesh size. Values may be null while the setup is built; `checkSimulationSpec` refuses what is wrong (units of the wrong kind, unknown tags), and pre-run validation lists what is missing. Once a simulation uses a geometry, the geometry's unit is locked. M2 adds supports and loads to the same version (ADR-039 to ADR-044), and M2.8 the element order and local mesh sizes on faces, edges or bodies (ADR-045). Materials from the library or a user's saved materials are copied into the spec with their `source` note (M2.9, ADR-046). Since M4.2 the spec lists every candidate bond of the geometry as detected, accepted or removed; every bond not removed is tied (ADR-059).
 
 A run stores a frozen copy of the spec. Editing a simulation never changes an existing run.
 
@@ -186,7 +186,7 @@ Python package `clearfea_worker`:
 | `deck` | Pure function: spec + mesh → CalculiX input text. Physics-critical |
 | `deck.loads` | Translation of each load and support type. Physics-critical |
 | `results` | Parse `.frd` and `.dat`, derive fields, reaction sums, write viewer files. Physics-critical |
-| `report` | Assemble DOCX and PDF from run records and figures |
+| `report` | Assemble DOCX and PDF from run records and figures, with the standing notes of `packages/spec/report-notes.json` that the run's frozen spec calls for (ADR-062) |
 | `units` | Load `units.json`, convert to SI |
 
 ### Load and support translation
@@ -204,14 +204,14 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 | Hydrostatic pressure | p = ρ g · (x − s) below the free surface through s, zero above it, pushing into the body; written as consistent nodal loads (`*CLOAD`), with element faces the surface crosses split until the kink is followed closely (ADR-042) |
 | Gravity, centrifugal | `*DLOAD` `GRAV` and `CENTRIF` on each body's element set, with `*DENSITY` per material; gravity loads added into one vector, one centrifugal load per setup (ADR-040) |
 | Uniform temperature change | Initial and final temperature fields: every node at 0 in `*INITIAL CONDITIONS, TYPE=TEMPERATURE` and at the change in the step's `*TEMPERATURE`, with `*EXPANSION` per material; the change counts from the stress-free state and applies no nodal load (ADR-044) |
-| Bonded interface | `*TIE` between the two surfaces |
+| Bonded interface | Every bond not removed: each node of the face with the finer mesh follows the closest point of the other face, as `*EQUATION` lines in the nodes' own directions (u_s = Σ N_m u_m, master shape functions at that point); not CalculiX's `*TIE`, whose printed nodal forces leave out the tie forces a held node carries (ADR-060) |
 | Fixed temperature | `*BOUNDARY` on the temperature degree of freedom |
 | Heat flux, internal heat generation | `*DFLUX` |
 | Convection | `*FILM` |
 | Radiation to ambient | `*RADIATE` with the absolute-zero and Stefan-Boltzmann constants set for SI |
 | Thermal stress | Heat transfer step followed by a static step in one deck |
 | Modal | `*FREQUENCY` step |
-| Reactions | The force at each held node (printed node by node for every setup since M3.2), shared between the supports holding it along their own directions (ADR-039). Every load applied at held nodes, uniform pressures included, is taken out first, since CalculiX counts it in RF (ADR-040, ADR-051). An elastic support's reaction is its springs' force from the displacements (ADR-043). Each support's moment is taken about the area centroid of its faces; each load's total force and moment and the balance of loads against reactions go in the run's summary (ADR-051) |
+| Reactions | The force at each held node (printed node by node for every setup since M3.2), shared between the supports holding it along their own directions (ADR-039). Every load applied at held nodes, uniform pressures included, is taken out first, since CalculiX counts it in RF (ADR-040, ADR-051). An elastic support's reaction is its springs' force from the displacements (ADR-043). A held node that tied nodes follow also gets its share of their tie forces, from the tied nodes' printed forces and the equations' coefficients (ADR-060). Each support's moment is taken about the area centroid of its faces; each load's total force and moment and the balance of loads against reactions go in the run's summary (ADR-051) |
 
 ### Solver configuration
 
@@ -283,7 +283,7 @@ Not built in Phase 0, but the design must not block them.
 | Face tags drift between import and mesh | Pinned versions, topology comparison on every mesh job, M1 spike |
 | Docker unavailable in the development environment | Checked in M0; fallback is running the worker as a plain process with the same code |
 | CalculiX direct solver too slow or memory-hungry at the size target | Benchmark task in M2, solver build chosen by data |
-| Tied interfaces give poor stresses near bonds | Stated in the report; verification case comparing a bonded pair with a single body |
+| Tied interfaces give poor stresses near bonds | Stated in the report: a run that ties bonds carries the note in `packages/spec/report-notes.json`, with the measured figures, shown under its results and printed by the report (M4.5, ADR-062); verification cases V-11 and V-12 compare bonded bodies with single-body references |
 | Remote-load coupling behaves differently from expectation | Dedicated verification cases for force and moment equilibrium and stress distribution |
 | Real-world STEP files fail to import or mesh | Collect failing files as test cases (with permission); clear error messages; the beta exists to find these |
 | Local R2 and D1 emulation differ from production | Keep storage and database access behind thin interfaces; deploy a staging copy early in Phase 1 |

@@ -5,6 +5,8 @@
 // pre-run validation's job (preRunProblems in prerun.ts, M1.12).
 
 import type {
+  Bond,
+  BondStatus,
   ElementOrder,
   IsotropicMaterial,
   LocalMeshScope,
@@ -20,9 +22,100 @@ import { unitsTable } from "./units";
  * known). Edges are absent for geometries imported before M2.8.
  */
 export interface TopologyTags {
-  bodies: readonly { tag: number }[];
-  faces: readonly { tag: number; type?: string }[];
+  /** name: the body's part name from the STEP file, when it has one (M4.1, ADR-058). */
+  bodies: readonly { tag: number; name?: string }[];
+  /** bodies: the body each face belongs to, as topology.json lists it (used by unheldBodies, M4.4). */
+  faces: readonly { tag: number; type?: string; bodies?: readonly number[] }[];
   edges?: readonly { tag: number }[];
+  /**
+   * Candidate bonds between touching faces of different bodies (M4.2, ADR-059), with the contact
+   * area (m²) and largest gap (m) where known. Absent for geometries imported before M4.2.
+   */
+  bonds?: readonly TopologyBondTags[];
+}
+
+/** A candidate bond as topology.json lists it (M4.2): two faces, smaller tag first, and their bodies. */
+export interface TopologyBondTags {
+  faces: readonly [number, number];
+  bodies: readonly [number, number];
+  area?: number;
+  gap?: number;
+}
+
+/** The text a bond is told apart by: its two faces, smaller first ("6-11"). */
+export function bondKey(faces: readonly number[]): string {
+  return [...faces].sort((a, b) => a - b).join("-");
+}
+
+/**
+ * Every candidate bond of the geometry with the user's review of it (M4.2, ADR-059): the spec's
+ * own list, or, in a spec saved before M4.2, every candidate as detected.
+ */
+export function specBonds(spec: SimulationSpec, topology?: TopologyTags): Bond[] {
+  if (spec.bonds !== undefined) return spec.bonds;
+  return (topology?.bonds ?? []).map((b) => ({ faces: [b.faces[0], b.faces[1]], status: "detected" }));
+}
+
+/** True when a bond with this review is tied in the solver deck: every bond the user has not removed. */
+export function bondIsTied(status: BondStatus): boolean {
+  return status !== "removed";
+}
+
+/**
+ * The bodies no support holds (M4.4), as groups of body tags: bodies joined by tied bonds
+ * (bondIsTied) are one piece, and a piece is held when a support has a face on one of its bodies.
+ * Each group is sorted, groups in order of their smallest tag. Bodies are meshed apart and share
+ * no nodes (ADR-058), so a body no bond joins to a held body is free to move whatever holds the
+ * others. Empty for a single body, when no support has faces yet (the setup asks for a support
+ * then), or when the topology does not say which body each face is on. Whether the supports hold
+ * every rigid-body motion of a piece needs the mesh and is checked by the deck generator.
+ */
+export function unheldBodies(spec: SimulationSpec, topology?: TopologyTags): number[][] {
+  if (topology === undefined || topology.bodies.length < 2) return [];
+  const bodiesOf = new Map<number, readonly number[]>();
+  for (const face of topology.faces) if (face.bodies !== undefined) bodiesOf.set(face.tag, face.bodies);
+  const supported = spec.supports.flatMap((s) => s.faces);
+  if (bodiesOf.size === 0 || supported.length === 0) return [];
+
+  const parent = new Map<number, number>(topology.bodies.map((b) => [b.tag, b.tag]));
+  const root = (tag: number): number => {
+    let r = tag;
+    while ((parent.get(r) ?? r) !== r) r = parent.get(r) ?? r;
+    return r;
+  };
+  const candidates = new Map((topology.bonds ?? []).map((b) => [bondKey(b.faces), b.bodies]));
+  for (const bond of specBonds(spec, topology)) {
+    const [first, second] = candidates.get(bondKey(bond.faces)) ?? [];
+    if (!bondIsTied(bond.status) || first === undefined || second === undefined) continue;
+    const [a, b] = [root(first), root(second)];
+    if (a !== b && parent.has(a) && parent.has(b)) parent.set(Math.max(a, b), Math.min(a, b));
+  }
+  const held = new Set(supported.flatMap((f) => bodiesOf.get(f) ?? []).map(root));
+  const groups = new Map<number, number[]>();
+  for (const tag of topology.bodies.map((b) => b.tag).sort((a, b) => a - b)) {
+    const r = root(tag);
+    if (!held.has(r)) groups.set(r, [...(groups.get(r) ?? []), tag]);
+  }
+  // Groups are made in tag order, so they come out in order of their smallest tag.
+  return [...groups.values()];
+}
+
+/**
+ * What the setup calls each body (M4.1, ADR-058): its part name from the STEP file, or "Body <tag>"
+ * when the file gives none. A name several bodies share (a part used twice) gets the tag added,
+ * "Bolt (body 3)", so every label is unique.
+ */
+export function bodyLabels(topology: TopologyTags): Map<number, string> {
+  const uses = new Map<string, number>();
+  for (const body of topology.bodies) {
+    if (body.name !== undefined) uses.set(body.name, (uses.get(body.name) ?? 0) + 1);
+  }
+  return new Map(
+    topology.bodies.map((body) => {
+      if (body.name === undefined) return [body.tag, `Body ${body.tag}`];
+      return [body.tag, (uses.get(body.name) ?? 0) > 1 ? `${body.name} (body ${body.tag})` : body.name];
+    }),
+  );
 }
 
 /** The kind of a support as the setup and its messages name it. */
@@ -148,7 +241,7 @@ export function hasTemperatureChange(spec: SimulationSpec): boolean {
   return spec.loads.some((l) => l.type === "temperature");
 }
 
-/** A new, empty spec for a geometry: every body listed, nothing else set. */
+/** A new, empty spec for a geometry: every body and every candidate bond listed, nothing else set. */
 export function emptySimulationSpec(geometryId: string, topology: TopologyTags): SimulationSpec {
   return {
     version: 1,
@@ -160,6 +253,10 @@ export function emptySimulationSpec(geometryId: string, topology: TopologyTags):
     loads: [],
     mesh: { size: null, order: 2, local: [] },
     solver: "pastix",
+    // Every candidate bond starts tied and unreviewed (M4.2); geometries imported before M4.2 have none.
+    ...(topology.bonds === undefined
+      ? {}
+      : { bonds: topology.bonds.map((b) => ({ faces: [b.faces[0], b.faces[1]], status: "detected" as const })) }),
   };
 }
 
@@ -213,7 +310,7 @@ export function materialProblems(material: IsotropicMaterial): string[] {
 
 /**
  * A problem with a spec and the item it belongs to: the id of a material, support or load,
- * "bodies" for the body list, "mesh" for the mesh settings.
+ * "bodies" for the body list, "bonds" for the bond list, "mesh" for the mesh settings.
  */
 export interface SpecProblem {
   item: string;
@@ -329,7 +426,35 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
     }
   }
 
+  const bondKeys = new Set<string>();
+  for (const bond of spec.bonds ?? []) {
+    const key = bondKey(bond.faces);
+    if (bondKeys.has(key)) add("bonds", `The bond between faces ${bond.faces.join(" and ")} is listed more than once.`);
+    bondKeys.add(key);
+  }
+
   if (topology !== undefined) {
+    // Bonds (M4.2): the spec reviews exactly the geometry's candidates; no bond can be made by hand.
+    if (spec.bonds !== undefined) {
+      if (topology.bonds === undefined) {
+        if (spec.bonds.length > 0) {
+          add("bonds", "The setup lists bonds, but this geometry was imported before bonds were detected. Upload the STEP file again.");
+        }
+      } else {
+        const candidates = new Set(topology.bonds.map((b) => bondKey(b.faces)));
+        for (const bond of spec.bonds) {
+          if (!candidates.has(bondKey(bond.faces))) {
+            add("bonds", `The geometry has no bond between faces ${bond.faces.join(" and ")}.`);
+          }
+        }
+        for (const bond of topology.bonds) {
+          if (!bondKeys.has(bondKey(bond.faces))) {
+            add("bonds", `The bond between faces ${bond.faces.join(" and ")} of the geometry is not listed in bonds.`);
+          }
+        }
+      }
+    }
+
     const known = new Set(topology.bodies.map((b) => b.tag));
     const unknownBodies = [...bodyTags].filter((tag) => !known.has(tag));
     const missingBodies = [...known].filter((tag) => !bodyTags.has(tag));

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReportNotes",
+  "description": "Shape of packages/spec/report-notes.json: the standing notes a run's report prints when its setup calls for them (PLAN M4.5, M7.5; ADR-062). Each note is plain text, written once here and read by the web app and, from M7, the report job. Numbers only: no note may state a verdict (CLAUDE.md).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "notes"],
+  "properties": {
+    "version": {
+      "description": "Bumped whenever a note's text changes, so a report can say which wording it printed.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "notes": {
+      "description": "Every note, in the order a report prints them.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/ReportNote" }
+    }
+  },
+  "$defs": {
+    "ReportNoteCondition": {
+      "description": "When a run's report carries the note. tiedBonds: the run's frozen setup ties at least one bond (a bond the user has not removed, ADR-059, ADR-060).",
+      "type": "string",
+      "enum": ["tiedBonds"]
+    },
+    "ReportNote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "appliesWhen", "title", "text", "source"],
+      "properties": {
+        "id": { "description": "Stable name of the note.", "type": "string", "pattern": "^[a-z][A-Za-z]*$" },
+        "appliesWhen": { "$ref": "#/$defs/ReportNoteCondition" },
+        "title": { "description": "Heading of the note in the report.", "type": "string", "minLength": 1 },
+        "text": { "description": "The note's paragraph, as printed.", "type": "string", "minLength": 1 },
+        "source": { "description": "Where the note's figures come from, for people; not printed.", "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

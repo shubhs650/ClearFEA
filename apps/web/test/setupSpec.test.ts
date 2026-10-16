@@ -9,12 +9,14 @@ import {
   addPressure,
   addSupport,
   assignMaterial,
+  bodyItem,
   facesOf,
   meshIsCurrent,
   meshStatus,
   runStatus,
   removeItem,
   sameSpec,
+  setBondStatus,
   setupStatus,
   updateLoad,
   updateLocalSize,
@@ -195,12 +197,26 @@ describe("setup status marks", () => {
     ]);
   });
 
-  it("asks for a material on a body that has none", () => {
+  it("asks for a material on a body that has none, on the body and under Bodies (M4.1)", () => {
     const spec = assignMaterial(complete(), 1, null);
-    expect(setupStatus(spec, topology).get("materials")).toEqual({
-      mark: "incomplete",
-      notes: ["Assign a material to body 1."],
-    });
+    const statuses = setupStatus(spec, topology);
+    expect(statuses.get("bodies")).toEqual({ mark: "incomplete", notes: ["Pick a material for Body 1."] });
+    expect(statuses.get("body:1")).toEqual({ mark: "incomplete", notes: ["Pick its material."] });
+    expect(statuses.get("materials")?.mark).toBe("complete");
+  });
+
+  it("names bodies by their part names (M4.1)", () => {
+    const two = {
+      ...complete(),
+      bodies: [
+        { tag: 1, material: null },
+        { tag: 2, material: null },
+      ],
+    };
+    const named = { ...topology, bodies: [{ tag: 1, name: "Shell" }, { tag: 2 }] };
+    expect(setupStatus(two, named).get("bodies")?.notes).toEqual(["Pick a material for Shell, Body 2."]);
+    const none = { ...two, materials: [] };
+    expect(setupStatus(none, named).get("body:2")?.notes).toEqual(["Add a material under Materials, then pick it here."]);
   });
 });
 
@@ -362,5 +378,90 @@ describe("sameSpec", () => {
     expect(sameSpec(spec, reordered)).toBe(true);
     expect(sameSpec(spec, { ...spec, mesh: { size: { value: 3, unit: "mm" } } })).toBe(false);
     expect(sameSpec(spec, { ...spec, bodies: [] })).toBe(false);
+  });
+});
+
+describe("bonds (M4.2)", () => {
+  const assembly = {
+    bodies: [{ tag: 1 }, { tag: 2 }, { tag: 3 }],
+    faces: [6, 9, 11, 14].map((tag) => ({ tag })),
+    bonds: [
+      { faces: [6, 11] as [number, number], bodies: [1, 2] as [number, number] },
+      { faces: [9, 14] as [number, number], bodies: [2, 3] as [number, number] },
+    ],
+  };
+
+  it("marks Bonds incomplete until every detected bond is reviewed", () => {
+    let spec = emptySimulationSpec("g1", assembly);
+    expect(setupStatus(spec, assembly).get("bonds")).toEqual({
+      mark: "incomplete",
+      notes: ["Review 2 detected bonds: accept or remove each. Bonds not removed are tied."],
+    });
+    spec = setBondStatus(spec, assembly, ["6-11"], "accepted");
+    expect(setupStatus(spec, assembly).get("bonds")?.notes).toEqual([
+      "Review the detected bond: accept or remove each. Bonds not removed are tied.",
+    ]);
+    spec = setBondStatus(spec, assembly, ["9-14"], "removed");
+    expect(spec.bonds).toEqual([
+      { faces: [6, 11], status: "accepted" },
+      { faces: [9, 14], status: "removed" },
+    ]);
+    expect(setupStatus(spec, assembly).get("bonds")).toEqual({ mark: "complete", notes: [] });
+  });
+
+  it("gives a spec saved before M4.2 its own bond list on the first review", () => {
+    const { bonds: _, ...older } = emptySimulationSpec("g1", assembly);
+    expect(setBondStatus(older, assembly, ["9-14"], "accepted").bonds).toEqual([
+      { faces: [6, 11], status: "detected" },
+      { faces: [9, 14], status: "accepted" },
+    ]);
+  });
+
+  it("does not block a run: detected bonds are tied", () => {
+    const spec = emptySimulationSpec("g1", assembly);
+    expect(preRunProblems(spec, assembly).some((p) => p.item === "bonds")).toBe(false);
+  });
+});
+
+describe("bodies no support holds (M4.4)", () => {
+  const assembly = {
+    bodies: [{ tag: 1 }, { tag: 2, name: "Pad" }],
+    faces: [
+      { tag: 1, bodies: [1] },
+      { tag: 2, bodies: [1] },
+      { tag: 3, bodies: [2] },
+      { tag: 4, bodies: [2] },
+    ],
+    bonds: [{ faces: [2, 3] as [number, number], bodies: [1, 2] as [number, number] }],
+  };
+
+  function assemblySpec(status: "accepted" | "removed"): SimulationSpec {
+    const full = complete();
+    const [material] = full.materials;
+    const [support] = full.supports;
+    if (!material || !support) throw new Error("incomplete fixture");
+    return {
+      ...full,
+      bodies: [1, 2].map((tag) => ({ tag, material: material.id })),
+      supports: [{ ...support, faces: [1] }],
+      bonds: [{ faces: [2, 3], status }],
+      mesh: { size: { value: 5, unit: "mm" } },
+    };
+  }
+
+  it("marks the free body and Bodies incomplete, as the pre-run list refuses the run", () => {
+    const removed = setupStatus(assemblySpec("removed"), assembly);
+    expect(removed.get(bodyItem(1))).toEqual({ mark: "complete", notes: [] });
+    expect(removed.get(bodyItem(2))).toEqual({
+      mark: "incomplete",
+      notes: ["No support holds it and no bond joins it to a held body. Add a support on one of its faces."],
+    });
+    expect(removed.get("bodies")?.notes).toEqual([
+      'Body "Pad" is not bonded to a held body and no support holds it, so it is free to move. Add a support on one of its faces, or restore a removed bond under Bonds that joins it to a held body.',
+    ]);
+    expect(preRunProblems(assemblySpec("removed"), assembly).map((p) => p.item)).toEqual(["bodies"]);
+    const accepted = setupStatus(assemblySpec("accepted"), assembly);
+    expect([...accepted.values()].every((s) => s.mark === "complete")).toBe(true);
+    expect(preRunProblems(assemblySpec("accepted"), assembly)).toEqual([]);
   });
 });

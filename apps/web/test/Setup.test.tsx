@@ -373,6 +373,143 @@ describe("setup tree", () => {
     expect(settings().getByText("Enter Young's modulus and Poisson's ratio to save it to your materials.")).toBeTruthy();
   });
 
+  it("lists the bodies of an assembly by part name and assigns each its material (M4.1)", async () => {
+    const assembly = {
+      ...topology,
+      bodies: [
+        { tag: 1, name: "Base plate", faces: [3], volume: 0.0001 },
+        { tag: 2, faces: [7], volume: 0.0001 },
+      ],
+      faces: topology.faces.map((face) => ({ ...face, bodies: [face.tag === 3 ? 1 : 2] })),
+    };
+    const steel = { ...materialLibrary.materials[0], id: "steel" } as IsotropicMaterial;
+    const aluminium = { ...materialLibrary.materials[1], id: "aluminium" } as IsotropicMaterial;
+    const spec: SimulationSpec = {
+      ...emptySpec,
+      bodies: [
+        { tag: 1, material: "steel" },
+        { tag: 2, material: null },
+      ],
+      materials: [steel, aluminium],
+    };
+    const { sent, route } = saves();
+    serve(
+      routes([simulation(spec)], {
+        "GET /api/geometries": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
+        "GET /api/geometries/g1/topology": { status: 200, json: assembly },
+        "PUT /api/simulations/s1/spec": route,
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Bodies, incomplete" }));
+    expect(tree().getByRole("button", { name: "Base plate, complete" })).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Body 2, incomplete" })).toBeTruthy();
+    expect(settings().getByText("Pick a material for Body 2.")).toBeTruthy();
+    expect(settings().getByLabelText("Material of Base plate")).toHaveProperty("value", "steel");
+
+    fireEvent.change(settings().getByLabelText("Material of Body 2"), { target: { value: "aluminium" } });
+    expect(tree().getByRole("button", { name: "Bodies, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.bodies).toEqual([
+        { tag: 1, material: "steel" },
+        { tag: 2, material: "aluminium" },
+      ]),
+    );
+
+    // Opening a body selects its faces in the viewer and shows its name from the file.
+    fireEvent.click(tree().getByRole("button", { name: "Base plate, complete" }));
+    expect(scene.selections.at(-1)).toEqual([3]);
+    expect(settings().getByRole("heading", { name: "Base plate" })).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Material"), { target: { value: "" } });
+    expect(tree().getByRole("button", { name: "Base plate, incomplete" })).toBeTruthy();
+
+    // The material panel names the bodies the same way.
+    fireEvent.click(tree().getByRole("button", { name: `${aluminium.name}, complete` }));
+    expect(settings().getByRole("checkbox", { name: /^Body 2/ })).toHaveProperty("checked", true);
+    expect(settings().getByRole("checkbox", { name: /^Base plate/ })).toHaveProperty("checked", false);
+  });
+
+  it("lists the bonds between touching bodies, shows them in the viewer and saves each review (M4.2)", async () => {
+    const assembly = {
+      ...topology,
+      bodies: [
+        { tag: 1, name: "Base plate", faces: [3], volume: 0.0001 },
+        { tag: 2, name: "Lug", faces: [7], volume: 0.0001 },
+      ],
+      faces: topology.faces.map((face) => ({ ...face, bodies: [face.tag === 3 ? 1 : 2] })),
+      bondTolerance: 0.00001,
+      bonds: [{ faces: [3, 7], bodies: [1, 2], area: 0.0004, gap: 0 }],
+    };
+    const spec: SimulationSpec = {
+      ...emptySpec,
+      bodies: [
+        { tag: 1, material: null },
+        { tag: 2, material: null },
+      ],
+      bonds: [{ faces: [3, 7], status: "detected" }],
+    };
+    const { sent, route } = saves();
+    serve(
+      routes([simulation(spec)], {
+        "GET /api/geometries": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
+        "GET /api/geometries/g1/topology": { status: 200, json: assembly },
+        "PUT /api/simulations/s1/spec": route,
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Bonds, incomplete" }));
+    // Opening Bonds selects the faces of every tied bond.
+    expect(scene.selections.at(-1)).toEqual([3, 7]);
+    expect(settings().getByText(/touch within 0.01 mm are bonded/)).toBeTruthy();
+    const bond = () => within(settings().getByRole("listitem", { name: "Base plate to Lug" }));
+    expect(bond().getByText("Faces 3 and 7, 400 mm². Detected, tied.")).toBeTruthy();
+
+    fireEvent.click(settings().getByRole("button", { name: "Accept the bond Base plate to Lug" }));
+    expect(tree().getByRole("button", { name: "Bonds, complete" })).toBeTruthy();
+    await waitFor(() => expect(sent.at(-1)?.bonds).toEqual([{ faces: [3, 7], status: "accepted" }]));
+
+    fireEvent.click(settings().getByRole("button", { name: "Remove the bond Base plate to Lug" }));
+    expect(bond().getByText("Faces 3 and 7, 400 mm². Removed, not tied.")).toBeTruthy();
+    await waitFor(() => expect(sent.at(-1)?.bonds).toEqual([{ faces: [3, 7], status: "removed" }]));
+    expect(settings().getByRole("button", { name: "Show every tied bond" })).toHaveProperty("disabled", true);
+
+    fireEvent.click(settings().getByRole("button", { name: "Restore the bond Base plate to Lug" }));
+    await waitFor(() => expect(sent.at(-1)?.bonds).toEqual([{ faces: [3, 7], status: "accepted" }]));
+
+    // Showing a bond selects its two faces.
+    fireEvent.click(tree().getByRole("button", { name: "Base plate, incomplete" }));
+    expect(scene.selections.at(-1)).toEqual([3]);
+    fireEvent.click(tree().getByRole("button", { name: "Bonds, complete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Show the bond Base plate to Lug, faces 3 and 7" }));
+    expect(scene.selections.at(-1)).toEqual([3, 7]);
+  });
+
+  it("has no Bonds item for a single body, and says when a geometry predates bond detection", async () => {
+    serve(routes([simulation()]));
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "Materials, incomplete" })).toBeTruthy();
+    expect(tree().queryByRole("button", { name: /^Bonds/ })).toBeNull();
+    cleanup();
+
+    const older = {
+      ...topology,
+      bodies: [
+        { tag: 1, faces: [3], volume: 0.0001 },
+        { tag: 2, faces: [7], volume: 0.0001 },
+      ],
+    };
+    const spec: SimulationSpec = { ...emptySpec, bodies: [{ tag: 1, material: null }, { tag: 2, material: null }] };
+    serve(
+      routes([simulation(spec)], {
+        "GET /api/geometries": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
+        "GET /api/geometries/g1/topology": { status: 200, json: older },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Bonds, complete" }));
+    expect(settings().getByText(/imported before bonds were detected. Upload the STEP file again/)).toBeTruthy();
+  });
+
   it("gives a new support the faces selected in the viewer, and shows an item's faces when opened", async () => {
     const { sent, route } = saves();
     serve(routes([simulation()], { "PUT /api/simulations/s1/spec": route }));
@@ -941,7 +1078,7 @@ const supported: SimulationSpec = {
 
 /** Routes of a setup whose run has succeeded, with its result files; ``beforeM32`` leaves out
  * what runs solved before M3.2 lack (reaction moments, load totals, the balance check). */
-function finishedRun(beforeM32 = false): Record<string, Route> {
+function finishedRun(beforeM32 = false, spec: SimulationSpec = supported): Record<string, Route> {
   const full: SolveResult = {
     nodes: 7108,
     displacement: { max: { value: 1.2e-4, node: 17, position: [0.1, 0.05, 0.02] } },
@@ -975,6 +1112,7 @@ function finishedRun(beforeM32 = false): Record<string, Route> {
       json: {
         runs: [
           run({
+            spec,
             status: "succeeded",
             stage: null,
             result,
@@ -1224,6 +1362,26 @@ describe("run", () => {
     expect(figures.getByText("Run again to see reaction moments and the balance of loads and reactions.")).toBeTruthy();
     // Nor has it a safety factor (M3.5).
     expect(figures.getByText("None: it needs a yield strength for every material. Enter them under Materials and run again.")).toBeTruthy();
+  });
+
+  it("notes that stresses near bonded faces are less accurate on a run that tied bonds (M4.5)", async () => {
+    const tied: SimulationSpec = { ...supported, bonds: [{ faces: [3, 7], status: "accepted" }] };
+    serve(routes([simulation(supported)], finishedRun(false, tied)));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const note = await settings().findByRole("note", { name: "Stresses near bonded faces" });
+    expect(note.textContent).toMatch(/^Stresses near bonded faces\. The bodies of this model are meshed separately/);
+    expect(note.textContent).toContain("13% below to 12% above the exact value with 10-node elements");
+    expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
+  });
+
+  it("leaves the note out when every bond was removed or there were none", async () => {
+    const removed: SimulationSpec = { ...supported, bonds: [{ faces: [3, 7], status: "removed" }] };
+    serve(routes([simulation(supported)], finishedRun(false, removed)));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    await settings().findByLabelText("Run results");
+    expect(settings().queryByRole("note", { name: "Stresses near bonded faces" })).toBeNull();
   });
 
   it("shows the run record with its versions and links to view and download the deck and log", async () => {

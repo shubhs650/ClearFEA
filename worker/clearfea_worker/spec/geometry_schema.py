@@ -65,6 +65,10 @@ class TopologyBody(BaseModel):
         populate_by_name=True,
     )
     tag: int
+    name: Annotated[str | None, Field(min_length=1)] = None
+    """
+    The body's name from the STEP file (its part's name), when the file gives one (M4.1, ADR-058). Absent for geometries imported before M4.1 and for unnamed bodies.
+    """
     volume: float
     """
     Cubic metres.
@@ -117,6 +121,33 @@ class TopologyEdge(BaseModel):
     """
 
 
+class TopologyBond(BaseModel):
+    """
+    Two faces of different bodies that touch over an area (M4.2): a candidate bond, which M4.3 ties unless the user removes it. Found by the import job within the topology's bondTolerance.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    faces: Annotated[list[int], Field(max_length=2, min_length=2)]
+    """
+    The two face tags, smaller first.
+    """
+    bodies: Annotated[list[int], Field(max_length=2, min_length=2)]
+    """
+    The body of each face, in the order of faces.
+    """
+    area: float
+    """
+    Square metres over which the faces lie within the tolerance of each other.
+    """
+    gap: float
+    """
+    Largest distance between the faces over that area, in metres; at most bondTolerance.
+    """
+
+
 class Software(BaseModel):
     """
     Versions that produced the tags. Tags are only stable for the same file and the same versions.
@@ -156,6 +187,14 @@ class Topology(BaseModel):
     """
     bodies: list[TopologyBody]
     faces: list[TopologyFace]
+    bond_tolerance: Annotated[float | None, Field(alias="bondTolerance", gt=0.0)] = None
+    """
+    Metres: faces of different bodies closer than this over an area are candidate bonds (M4.2). Absent for geometries imported before M4.2.
+    """
+    bonds: list[TopologyBond] | None = None
+    """
+    Candidate bonds between touching faces of different bodies (M4.2), sorted by face tags. Absent for geometries imported before M4.2, whose bonds cannot be detected until the file is uploaded again.
+    """
     edges: list[TopologyEdge] | None = None
     """
     Every edge of the geometry (M2.8). Absent for geometries imported before M2.8, whose edges cannot be picked until the file is uploaded again.

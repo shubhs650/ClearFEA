@@ -76,6 +76,28 @@ class BodyAssignment(BaseModel):
     """
 
 
+type BondStatus = Literal["detected", "accepted", "removed"]
+"""
+detected: found by bond detection and not yet reviewed; it is tied. accepted: the user reviewed it and keeps it; it is tied. removed: the user removed it; it is not tied, and stays listed so it can be restored.
+"""
+
+
+class Bond(BaseModel):
+    """
+    A candidate bond of the geometry (topology.json bonds, M4.2) and what the user decided about it. A bond is identified by its two faces.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    faces: Annotated[list[int], Field(max_length=2, min_length=2)]
+    """
+    The two face tags of a candidate bond, smaller first.
+    """
+    status: BondStatus
+
+
 type PoissonsRatio = Annotated[float, Field(gt=-1.0, lt=0.5)]
 """
 Poisson's ratio, dimensionless, between -1 and 0.5 exclusive; null until entered.
@@ -1016,7 +1038,7 @@ class MeshSettings(BaseModel):
 
 class SimulationSpec(BaseModel):
     """
-    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
     """
 
     model_config = ConfigDict(
@@ -1037,6 +1059,10 @@ class SimulationSpec(BaseModel):
     solver: Solver | None = None
     """
     The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
+    """
+    bonds: list[Bond] | None = None
+    """
+    Every candidate bond of the geometry with the user's review of it (M4.2), in the order of topology.json. Absent in specs saved before M4.2, where every candidate counts as detected.
     """
 
 

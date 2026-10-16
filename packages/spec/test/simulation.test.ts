@@ -2,6 +2,9 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../fixtures/simulation-v1.json";
 import {
+  bodyLabels,
+  bondIsTied,
+  bondKey,
   checkSimulationSpec,
   elementOrder,
   emptySimulationSpec,
@@ -12,6 +15,8 @@ import {
   type PressureLoad,
   type SimulationSpec,
   simulationSpecProblems,
+  specBonds,
+  type TopologyTags,
   validateCreateSimulationRequest,
   validateSimulationSpec,
 } from "../src";
@@ -75,6 +80,87 @@ describe("SimulationSpec schema", () => {
 
   it("lets a create request leave the spec out", () => {
     expect(validateCreateSimulationRequest({ geometryId: "g1", name: "Static 1" }).ok).toBe(true);
+  });
+});
+
+describe("bodyLabels", () => {
+  it("uses part names, falls back to the tag and tells shared names apart", () => {
+    const labels = bodyLabels({
+      bodies: [{ tag: 1, name: "Shell" }, { tag: 2 }, { tag: 3, name: "Bolt" }, { tag: 4, name: "Bolt" }],
+      faces: [],
+    });
+    expect([...labels]).toEqual([
+      [1, "Shell"],
+      [2, "Body 2"],
+      [3, "Bolt (body 3)"],
+      [4, "Bolt (body 4)"],
+    ]);
+  });
+});
+
+describe("bonds (M4.2)", () => {
+  const assembly: TopologyTags = {
+    bodies: [{ tag: 1 }, { tag: 2 }, { tag: 3 }],
+    faces: [6, 9, 11, 14].map((tag) => ({ tag })),
+    bonds: [
+      { faces: [6, 11], bodies: [1, 2], area: 0.0016, gap: 0 },
+      { faces: [9, 14], bodies: [2, 3], area: 0.0004, gap: 0 },
+    ],
+  };
+
+  it("lists every candidate bond as detected in a new spec", () => {
+    const empty = emptySimulationSpec("g1", assembly);
+    expect(empty.bonds).toEqual([
+      { faces: [6, 11], status: "detected" },
+      { faces: [9, 14], status: "detected" },
+    ]);
+    expect(validateSimulationSpec(empty).ok).toBe(true);
+    expect(checkSimulationSpec(empty, assembly)).toEqual([]);
+  });
+
+  it("leaves bonds out for a geometry imported before bonds were detected", () => {
+    expect(emptySimulationSpec("g1", topology).bonds).toBeUndefined();
+  });
+
+  it("reads a spec saved before M4.2 as every candidate detected", () => {
+    const { bonds: _, ...older } = emptySimulationSpec("g1", assembly);
+    expect(specBonds(older, assembly).map((b) => b.status)).toEqual(["detected", "detected"]);
+    expect(specBonds(older)).toEqual([]);
+    expect(checkSimulationSpec(older, assembly)).toEqual([]);
+  });
+
+  it("ties every bond the user has not removed", () => {
+    expect(bondIsTied("detected")).toBe(true);
+    expect(bondIsTied("accepted")).toBe(true);
+    expect(bondIsTied("removed")).toBe(false);
+  });
+
+  it("tells a bond by its faces in either order", () => {
+    expect(bondKey([11, 6])).toBe("6-11");
+    expect(bondKey([6, 11])).toBe("6-11");
+  });
+
+  it("refuses bonds the geometry does not have, missing ones and repeats", () => {
+    const base = emptySimulationSpec("g1", assembly);
+    expect(checkSimulationSpec({ ...base, bonds: [{ faces: [6, 11], status: "accepted" }] }, assembly)).toEqual([
+      "The bond between faces 9 and 14 of the geometry is not listed in bonds.",
+    ]);
+    const made = { ...base, bonds: [...(base.bonds ?? []), { faces: [6, 9] as [number, number], status: "accepted" as const }] };
+    expect(checkSimulationSpec(made, assembly)).toEqual(["The geometry has no bond between faces 6 and 9."]);
+    const twice = { ...base, bonds: [...(base.bonds ?? []), { faces: [11, 6] as [number, number], status: "removed" as const }] };
+    expect(simulationSpecProblems(twice, assembly)).toEqual([
+      { item: "bonds", message: "The bond between faces 11 and 6 is listed more than once." },
+    ]);
+    const older = { ...assembly, bonds: undefined };
+    expect(checkSimulationSpec(base, older)).toEqual([
+      "The setup lists bonds, but this geometry was imported before bonds were detected. Upload the STEP file again.",
+    ]);
+  });
+
+  it("refuses a bond status or face list the schema does not know", () => {
+    const base = emptySimulationSpec("g1", assembly);
+    expect(validateSimulationSpec({ ...base, bonds: [{ faces: [6, 11], status: "ignored" }] }).ok).toBe(false);
+    expect(validateSimulationSpec({ ...base, bonds: [{ faces: [6], status: "detected" }] }).ok).toBe(false);
   });
 });
 

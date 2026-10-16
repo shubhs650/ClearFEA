@@ -16,6 +16,8 @@
 // can be exported as CSV and VTK files (ADR-057). Since ADR-063 the panel chooses the equation
 // solver (PaStiX by default), shows each solver's element limit on a 16 GB machine, warns that
 // the iterative solvers are less exact, and the record says which solver a run used.
+// From M4.5 a run whose setup ties bonds shows
+// the report's note on stresses near bonded faces under its results (ADR-062).
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import {
@@ -29,6 +31,7 @@ import {
   type RunView,
   SOLVER_LABELS,
   SOLVERS,
+  runReportNotes,
   type SimulationSpec,
   type Solver,
   type SolveResult,
@@ -631,6 +634,13 @@ export function RunPanel({
           {run !== null && <Reactions result={result} spec={run.spec} units={units} />}
         </dl>
       )}
+      {run !== null &&
+        result &&
+        runReportNotes(run.spec).map((note) => (
+          <p key={note.id} className="field-hint" role="note" aria-label={note.title}>
+            <strong>{note.title}.</strong> {note.text}
+          </p>
+        ))}
       {run !== null && result && <RunExport run={run} result={result} units={units} />}
       {run !== null && <RunRecord run={run} currentSpec={currentSpec} />}
       {run !== null && (

@@ -4,10 +4,13 @@
 // API refuses a run with exactly the list the web app shows beside the Run button, before any
 // machine is used (DECISIONS.md, pricing: pre-run checks). The mesh's own state (made, current)
 // is not part of the spec and is checked where the mesh is known. Whether the supports hold every
-// rigid-body motion needs the mesh's face normals and is checked by the deck generator (ADR-039).
+// rigid-body motion needs the mesh's face normals and is checked by the deck generator (ADR-039);
+// a body of an assembly that no support or bond reaches at all is found here (M4.4).
 
 import type { SimulationSpec } from "./generated/simulation";
 import {
+  bodyLabels,
+  bondKey,
   displacementAxes,
   hasBodyLoad,
   hasTemperatureChange,
@@ -15,7 +18,9 @@ import {
   localScopes,
   type SpecProblem,
   simulationSpecProblems,
+  specBonds,
   type TopologyTags,
+  unheldBodies,
 } from "./simulation";
 
 /** True when the setup moves something by itself: a prescribed displacement other than zero. */
@@ -30,6 +35,40 @@ export function movesByDisplacement(spec: SimulationSpec): boolean {
   );
 }
 
+/** A body as messages name it after "Body": its part name in quotes, or its tag (M4.1). */
+function bodyName(tag: number, labels: Map<number, string>): string {
+  const label = labels.get(tag);
+  return label === undefined || label === `Body ${tag}` ? `${tag}` : `"${label}"`;
+}
+
+/**
+ * One message for each group of bodies no support holds (unheldBodies, M4.4): a body no bond
+ * joins to a held body, or bodies bonded only to each other. Where a removed bond touches the
+ * group, restoring it is offered as the other way to hold it.
+ */
+export function unheldBodyMessages(spec: SimulationSpec, topology?: TopologyTags): string[] {
+  const groups = unheldBodies(spec, topology);
+  if (topology === undefined || groups.length === 0) return [];
+  const labels = bodyLabels(topology);
+  const candidates = new Map((topology.bonds ?? []).map((b) => [bondKey(b.faces), b.bodies]));
+  const removed = new Set(
+    specBonds(spec, topology)
+      .filter((b) => b.status === "removed")
+      .flatMap((b) => candidates.get(bondKey(b.faces)) ?? []),
+  );
+  return groups.map((group) => {
+    const names = group.map((tag) => bodyName(tag, labels));
+    const one = group.length === 1;
+    const what = one
+      ? `Body ${names[0]} is not bonded to a held body and no support holds it, so it is free to move.`
+      : `Bodies ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are bonded only to each other and no support holds them, so they are free to move.`;
+    const restore = group.some((tag) => removed.has(tag))
+      ? `, or restore a removed bond under Bonds that joins ${one ? "it" : "them"} to a held body`
+      : "";
+    return `${what} Add a support on ${one ? "one of its faces" : "a face of one of them"}${restore}.`;
+  });
+}
+
 /**
  * What stops the setup from being run, in the order of the setup tree, each with the item it
  * belongs to (as in SpecProblem); an empty list when the setup can be run. Problems that make
@@ -42,12 +81,24 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
   if (spec.materials.length === 0) {
     add("materials", "There is no material. Add a material under Materials.");
   } else {
-    const unassigned = spec.bodies.filter((b) => b.material === null).map((b) => b.tag);
+    // Named bodies are quoted, others go by their tag: Bodies "Base plate", 3 have ... (M4.1).
+    const labels = topology ? bodyLabels(topology) : new Map<number, string>();
+    const unassigned = spec.bodies
+      .filter((b) => b.material === null)
+      .map((b) => {
+        const label = labels.get(b.tag);
+        return label === undefined || label === `Body ${b.tag}` ? `${b.tag}` : `"${label}"`;
+      });
     if (unassigned.length > 0) {
-      const which = unassigned.length === 1 ? `Body ${unassigned[0]} has` : `Bodies ${unassigned.join(", ")} have`;
-      add("bodies", `${which} no material. Assign one under Materials.`);
+      add(
+        "bodies",
+        unassigned.length === 1
+          ? `Body ${unassigned[0]} has no material. Pick one for it under Bodies.`
+          : `Bodies ${unassigned.join(", ")} have no material. Pick one for each under Bodies.`,
+      );
     }
   }
+  for (const message of unheldBodyMessages(spec, topology)) add("bodies", message);
   const bodyLoad = hasBodyLoad(spec);
   const temperatureChange = hasTemperatureChange(spec);
   for (const material of spec.materials) {

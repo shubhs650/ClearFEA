@@ -28,6 +28,7 @@ import {
   type ViewListResponse,
   type ViewResponse,
   sameMeshSettings,
+  specBonds,
   type Topology,
   validateCreateRunRequest,
   validateCreateSimulationRequest,
@@ -296,6 +297,8 @@ simulations.get("/:id/estimate", async (c) => {
  * validation (M1.12, ADR-034) finds incomplete is refused here, so no job is queued or charged;
  * the deck generator still refuses anything that slips past. The run goes on the machine size
  * the body names, or on the recommended one, and keeps the estimate made now (M2.12, ADR-049).
+ * The run's copy lists every bond of the geometry, so a spec saved before M4.2 is tied the way
+ * the setup shows it (every candidate detected, ADR-059); the deck ties what the list says (M4.3).
  * A mesh with more elements than the spec's solver may solve on a 16 GB machine is refused
  * before any machine is used (ADR-063).
  */
@@ -340,7 +343,7 @@ simulations.post("/:id/runs", async (c) => {
     meshId: mesh.id,
     // The run's frozen spec always names its solver, so a later default cannot change what a
     // run says it was solved with (ADR-063).
-    spec: { ...simulation.spec, solver },
+    spec: { ...simulation.spec, solver, bonds: specBonds(simulation.spec, read.topology) },
     machineSize: size.size,
     estimate,
   });

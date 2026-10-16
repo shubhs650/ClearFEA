@@ -12,11 +12,12 @@ from array import array
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from ..deck import REACTION_SET, support_set_names
+from ..deck import REACTION_SET, TIE_SET, support_set_names
 from ..deck.applied import Resultant, applied_nodal_loads, load_resultants
-from ..deck.constraints import node_constraints, support_node_reactions
+from ..deck.constraints import holds, node_constraints, node_frames, support_node_reactions
 from ..deck.linalg import Vector, cross, norm
 from ..deck.loads import elastic_springs, faces_centroid, spring_forces
+from ..deck.loads.tie import tie_forces, ties
 from ..meshing.volume import VolumeMesh
 from ..spec.simulation_schema import ElasticSupport, SimulationSpec, SolveResult
 from .dat import DatError, read_node_displacements, read_node_forces
@@ -157,7 +158,9 @@ def read_reactions(spec: SimulationSpec, mesh: VolumeMesh, dat: Path) -> list[Re
     every load applied at the held nodes, which is taken back out (deck.applied). An elastic
     support's reaction is the force of its springs, worked out from the displacement of their
     nodes (deck.loads.elastic, M2.6). Moments are summed node by node at the undeformed
-    positions (a linear analysis).
+    positions (a linear analysis). Where bonds are tied (M4.3), a held node that tied nodes
+    follow also carries its share of the tie forces, which CalculiX leaves out of its figure
+    and the reader adds back (deck.loads.tie, ADR-060).
     """
     names = support_set_names(spec)
     held = node_constraints(spec, mesh)
@@ -167,6 +170,19 @@ def read_reactions(spec: SimulationSpec, mesh: VolumeMesh, dat: Path) -> list[Re
         if node in forces:
             fx, fy, fz = forces[node]
             forces[node] = (fx - lx, fy - ly, fz - lz)
+    if held and spec.bonds:
+        frames = node_frames(holds(spec, mesh))
+        tie_list = ties(spec, mesh, frames)
+        if any(t.equations for t in tie_list):
+            residual = read_node_forces(dat, TIE_SET)
+            loads = applied_nodal_loads(spec, mesh, residual)
+            for node, (lx, ly, lz) in loads.items():
+                fx, fy, fz = residual[node]
+                residual[node] = (fx - lx, fy - ly, fz - lz)
+            for node, (tx, ty, tz) in tie_forces(tie_list, frames, residual).items():
+                if node in forces:
+                    fx, fy, fz = forces[node]
+                    forces[node] = (fx + tx, fy + ty, fz + tz)
     try:
         nodal = support_node_reactions(spec, mesh, forces)
     except ValueError as error:

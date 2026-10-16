@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [
+    { "tag": 1, "material": "steel" },
+    { "tag": 2, "material": "light" }
+  ],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel-like (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200, "unit": "GPa" },
+      "poissonsRatio": 0.3
+    },
+    {
+      "id": "light",
+      "name": "Light alloy-like, same ν/E (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 70000, "unit": "MPa" },
+      "poissonsRatio": 0.105
+    }
+  ],
+  "supports": [
+    { "id": "start", "type": "frictionless", "name": "Start", "faces": ["start"] },
+    { "id": "symmetry", "type": "frictionless", "name": "Symmetry planes", "faces": ["sym-y-1", "sym-y-2", "sym-z-1", "sym-z-2"] }
+  ],
+  "loads": [
+    {
+      "id": "force-1",
+      "type": "force",
+      "name": "End pull",
+      "faces": ["end"],
+      "x": { "value": 5, "unit": "kN" },
+      "y": { "value": 0, "unit": "N" },
+      "z": { "value": 0, "unit": "lbf" }
+    }
+  ],
+  "mesh": {
+    "size": { "value": 5, "unit": "mm" },
+    "local": [{ "id": "body-2", "name": "Body 2", "scope": "bodies", "tags": [2], "size": { "value": 3, "unit": "mm" } }]
+  }
+}

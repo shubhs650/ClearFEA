@@ -600,6 +600,18 @@ describe("hiding bodies (M3.6)", () => {
     expect(screen.queryByRole("button", { name: /^Bodies/ })).toBeNull();
   });
 
+  it("names bodies by their part names in the list and on hover (M4.1)", async () => {
+    const named = { ...twoBodies, bodies: [twoBodies.bodies[0], { ...twoBodies.bodies[1], name: "Lug" }] };
+    serve({ ...shown, "/api/geometries/g1/topology": { status: 200, json: named } });
+    render(<Harness view={geometry({ bodyCount: 2 })} />);
+    await screen.findByText(/Click a face/);
+    fireEvent.click(screen.getByRole("button", { name: "Bodies" }));
+    expect(screen.getByRole("checkbox", { name: "Body 1" })).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Lug" })).toBeTruthy();
+    act(() => scene.instances[0]?.events.onHover(7));
+    expect(screen.getByText(/^Face 7, .*, Lug$/)).toBeTruthy();
+  });
+
   it("hides a body's faces, keeps the last body shown, and shows all again", async () => {
     serve({ ...shown, "/api/geometries/g1/topology": { status: 200, json: twoBodies } });
     render(<Harness view={geometry({ bodyCount: 2 })} />);
