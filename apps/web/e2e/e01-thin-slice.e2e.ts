@@ -295,7 +295,7 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await quantity.selectOption("vonMises");
     await expect(max).toHaveText(/^Max [\d.e+-]+ MPa$/);
     const inMpa = Number(/Max ([\d.e+-]+) MPa/.exec((await max.textContent()) ?? "")?.[1]);
-    await settings.getByLabel("Stress", { exact: true }).selectOption("ksi");
+    await settings.getByRole("combobox", { name: "Stress", exact: true }).selectOption("ksi");
     await expect(legend).toContainText("Von Mises stress (ksi)");
     await expect(max).toHaveText(/^Max [\d.e+-]+ ksi$/);
     const inKsi = Number(/Max ([\d.e+-]+) ksi/.exec((await max.textContent()) ?? "")?.[1]);
@@ -304,7 +304,7 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     const results = settings.getByLabel("Run results");
     await expect(results).toContainText(/Largest von Mises stress[\d.e+-]+ ksi/);
     // The cut plane's position follows a picked length unit: x = 20 mm is 0.7874 in.
-    await settings.getByLabel("Length", { exact: true }).selectOption("in");
+    await settings.getByRole("combobox", { name: "Length", exact: true }).selectOption("in");
     await expect(results).toContainText(/Largest displacement[\d.e+-]+ in at \(.*\) in/);
     await page.getByRole("checkbox", { name: "Cut plane", exact: true }).check();
     const cut = page.getByRole("region", { name: "Cut plane", exact: true });
@@ -313,16 +313,16 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await page.getByRole("checkbox", { name: "Cut plane", exact: true }).uncheck();
     await quantity.selectOption("strainZZ");
     await expect(legend).toContainText("Normal strain εzz (mm/mm)");
-    await settings.getByLabel("Strain", { exact: true }).selectOption("µε");
+    await settings.getByRole("combobox", { name: "Strain", exact: true }).selectOption("µε");
     await expect(legend).toContainText("Normal strain εzz (µε)");
     await quantity.selectOption("vonMises");
-    await settings.getByLabel("Units shown").scrollIntoViewIfNeeded();
+    await settings.getByRole("group", { name: "Units shown", exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${OUT}/e01-units.png` });
     // Kept for the user after the page is opened again; the input units stay the system's.
     await page.reload();
     await treeRow(page, "Run").click();
     await expect(legend).toContainText("Von Mises stress (ksi)", { timeout: 60_000 });
-    await expect(page.getByLabel("Unit system")).toHaveValue("metric-mm");
+    await expect(page.getByRole("combobox", { name: "Unit system", exact: true })).toHaveValue("metric-mm");
     await settings.getByRole("button", { name: "Show all in the unit system" }).click();
     await expect(legend).toContainText("Von Mises stress (MPa)");
     await expect(page.locator("body")).not.toContainText(/\b(PASS|FAIL)\b|compliant/i);
