@@ -2,8 +2,8 @@
 // E-01 (docs/VERIFICATION.md): upload, select faces, material, support, pressure, mesh, run, see
 // the contour and switch to other result quantities (M3.1), read reactions (M3.2), and read the
 // min/max markers and probe a node (M3.3), cut it with a plane (M3.4), show the safety factor against
-// yield (M3.5) and save a view and bring it back (M3.6), all through the UI. The model is a
-// 40 × 20 × 10 mm block (e2e/block.py), fixed at its x = 40 mm end and pressed on its top face,
+// yield (M3.5), save a view and bring it back (M3.6) and show the result in other units (M3.7),
+// all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its x = 40 mm end and pressed on its top face,
 // z = 10 mm. Both faces look towards the viewer's starting camera, so they can be clicked
 // without turning the model.
 import { readFileSync } from "node:fs";
@@ -281,5 +281,50 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await expect(page.getByRole("checkbox", { name: "Cut plane", exact: true })).toBeChecked();
     await expect(cut).toContainText("x = 20 mm");
     await page.screenshot({ path: `${OUT}/e01-view.png` });
+  });
+
+  await test.step("show the result in units of its own without running again (M3.7)", async () => {
+    // The one units table, so the test has no conversion factor of its own (CLAUDE.md).
+    const table = JSON.parse(readFileSync(new URL("../../../packages/spec/units.json", import.meta.url), "utf8")) as {
+      kinds: Record<string, { units: Record<string, { factor: number }> }>;
+    };
+    const factor = (kind: string, unit: string) => table.kinds[kind]?.units[unit]?.factor ?? Number.NaN;
+    const quantity = settings.getByLabel("Quantity");
+    const legend = page.getByRole("region", { name: "Legend", exact: true });
+    const max = page.locator(".viewer-marker-max");
+    await quantity.selectOption("vonMises");
+    await expect(max).toHaveText(/^Max [\d.e+-]+ MPa$/);
+    const inMpa = Number(/Max ([\d.e+-]+) MPa/.exec((await max.textContent()) ?? "")?.[1]);
+    await settings.getByLabel("Stress", { exact: true }).selectOption("ksi");
+    await expect(legend).toContainText("Von Mises stress (ksi)");
+    await expect(max).toHaveText(/^Max [\d.e+-]+ ksi$/);
+    const inKsi = Number(/Max ([\d.e+-]+) ksi/.exec((await max.textContent()) ?? "")?.[1]);
+    const same = (inKsi * factor("pressure", "ksi")) / (inMpa * factor("pressure", "MPa"));
+    expect(Math.abs(same - 1)).toBeLessThan(2e-3);
+    const results = settings.getByLabel("Run results");
+    await expect(results).toContainText(/Largest von Mises stress[\d.e+-]+ ksi/);
+    // The cut plane's position follows a picked length unit: x = 20 mm is 0.7874 in.
+    await settings.getByLabel("Length", { exact: true }).selectOption("in");
+    await expect(results).toContainText(/Largest displacement[\d.e+-]+ in at \(.*\) in/);
+    await page.getByRole("checkbox", { name: "Cut plane", exact: true }).check();
+    const cut = page.getByRole("region", { name: "Cut plane", exact: true });
+    await expect(cut).toContainText("x = 0.7874 in");
+    await expect(cut).toContainText(/Cuts [\d,]+ elements\./, { timeout: 60_000 });
+    await page.getByRole("checkbox", { name: "Cut plane", exact: true }).uncheck();
+    await quantity.selectOption("strainZZ");
+    await expect(legend).toContainText("Normal strain εzz (mm/mm)");
+    await settings.getByLabel("Strain", { exact: true }).selectOption("µε");
+    await expect(legend).toContainText("Normal strain εzz (µε)");
+    await quantity.selectOption("vonMises");
+    await settings.getByLabel("Units shown").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${OUT}/e01-units.png` });
+    // Kept for the user after the page is opened again; the input units stay the system's.
+    await page.reload();
+    await treeRow(page, "Run").click();
+    await expect(legend).toContainText("Von Mises stress (ksi)", { timeout: 60_000 });
+    await expect(page.getByLabel("Unit system")).toHaveValue("metric-mm");
+    await settings.getByRole("button", { name: "Show all in the unit system" }).click();
+    await expect(legend).toContainText("Von Mises stress (MPa)");
+    await expect(page.locator("body")).not.toContainText(/\b(PASS|FAIL)\b|compliant/i);
   });
 });

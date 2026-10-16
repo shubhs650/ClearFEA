@@ -1315,6 +1315,66 @@ describe("unit system", () => {
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
   });
 
+  it("shows results in units picked in the result view, kept for the user and put back on request", async () => {
+    window.localStorage.clear();
+    const fetchMock = serve(routes([simulation(supported)], finishedRun()));
+    const { unmount } = render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const legend = await screen.findByLabelText("Legend");
+    const stress = settings().getByLabelText("Stress") as HTMLSelectElement;
+    expect(stress.value).toBe("");
+    expect(within(stress).getByRole("option", { name: "As the unit system (MPa)" })).toBeTruthy();
+
+    // 2.4e8 Pa = 34.81 ksi; 1.2e-4 m = 0.012 cm; 400 N = 0.4 kN.
+    fireEvent.change(stress, { target: { value: "ksi" } });
+    fireEvent.change(settings().getByLabelText("Length"), { target: { value: "cm" } });
+    fireEvent.change(settings().getByLabelText("Force"), { target: { value: "kN" } });
+    expect(legend.textContent).toContain("Von Mises stress (ksi)");
+    const figures = within(settings().getByLabelText("Run results"));
+    expect(figures.getByText("34.81 ksi")).toBeTruthy();
+    expect(figures.getByText("0.012 cm")).toBeTruthy();
+    expect(figures.getByText("(0, 0, -0.4) kN")).toBeTruthy();
+    // The unit system still sets the units offered first for input; it stays as it was.
+    expect(unitSystem().value).toBe("metric-mm");
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST" || init?.method === "PATCH")).toBe(false);
+
+    // Kept in this browser for the user: still there after the page is opened again.
+    unmount();
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    expect((await screen.findByLabelText("Legend")).textContent).toContain("Von Mises stress (ksi)");
+    expect((settings().getByLabelText("Stress") as HTMLSelectElement).value).toBe("ksi");
+
+    fireEvent.click(settings().getByRole("button", { name: "Show all in the unit system" }));
+    expect(screen.getByLabelText("Legend").textContent).toContain("Von Mises stress (MPa)");
+    expect(within(settings().getByLabelText("Run results")).getByText("0.12 mm")).toBeTruthy();
+    expect(settings().queryByRole("button", { name: "Show all in the unit system" })).toBeNull();
+    window.localStorage.clear();
+  });
+
+  it("shows strain in microstrain when picked", async () => {
+    window.localStorage.clear();
+    serve(routes([simulation(supported)], finishedRun()));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    fireEvent.change(settings().getByLabelText("Quantity"), { target: { value: "strainXX" } });
+    const legend = await screen.findByLabelText("Legend");
+    await waitFor(() => expect(legend.textContent).toContain("(mm/mm)"));
+    fireEvent.change(settings().getByLabelText("Strain"), { target: { value: "µε" } });
+    expect(legend.textContent).toContain("(µε)");
+    window.localStorage.clear();
+  });
+
+  it("ignores a stored unit that is not one of the kind's", async () => {
+    window.localStorage.setItem("clearfea.resultUnits.a", JSON.stringify({ pressure: "lbf", length: "in" }));
+    serve(routes([simulation(supported)], finishedRun()));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    expect((await screen.findByLabelText("Legend")).textContent).toContain("Von Mises stress (MPa)");
+    expect((settings().getByLabelText("Length") as HTMLSelectElement).value).toBe("in");
+    window.localStorage.clear();
+  });
+
   it("puts the system back and says why when the API refuses the change", async () => {
     serve(
       routes([simulation()], {
