@@ -1006,3 +1006,39 @@ fieldset.field {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* A modal run's natural frequencies (M6.2): a row per mode; clicking a row shows its shape. */
+.frequency-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.frequency-table th,
+.frequency-table td {
+  text-align: left;
+  padding: 0.2rem 0.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.frequency-table thead th {
+  font-weight: 600;
+  color: #495057;
+}
+
+.frequency-table tbody tr {
+  cursor: pointer;
+}
+
+.frequency-table tbody tr:hover {
+  background: #f1f3f5;
+}
+
+.frequency-table tr.frequency-shown {
+  background: #e7f5ff;
+}
+
+.frequency-table td:nth-child(2) {
+  font-variant-numeric: tabular-nums;
+}

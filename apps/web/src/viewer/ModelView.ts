@@ -10,7 +10,10 @@
 // section there. The cut is made on the undeformed shape, so the model is clipped by each
 // point's undeformed position (a `reference` attribute) and the section meets it exactly on
 // the deformed shape too. Faces can be hidden (M3.6, to hide bodies): they are not drawn,
-// picked or probed, and the camera can be read and set to restore a saved view.
+// picked or probed, and the camera can be read and set to restore a saved view. Given a swing
+// per vertex (M6.2, a mode shape drawn deformed), it animates the model, its outlines and the
+// section between the undeformed shape and the shape drawn, through the opposite one, in the
+// vertex shader, so a frame moves nothing on the CPU.
 
 import {
   AmbientLight,
@@ -105,7 +108,20 @@ export type Cut = {
   /** Three section vertex indices per triangle, counter-clockwise seen from the cut-away side. */
   indices: Uint32Array;
   coordinates: Float32Array;
+  /** While the model swings (M6.2): how far each section vertex moves, as for setSwing. */
+  swing?: Float32Array;
 };
+
+/** How long one swing of an animated mode shape takes on screen, in milliseconds (M6.2). */
+const SWING_PERIOD_MS = 1600;
+
+/** Adds `transformed += swing * swingPhase` to a material's vertex shader: the vertex moves
+ * along its swing attribute by the shared phase (0 while nothing swings). */
+function swingVertices(shader: { vertexShader: string }): void {
+  shader.vertexShader = shader.vertexShader
+    .replace("#include <common>", "#include <common>\nattribute vec3 swing;\nuniform float swingPhase;")
+    .replace("#include <begin_vertex>", "#include <begin_vertex>\ntransformed += swing * swingPhase;");
+}
 
 /** Texture coordinates for band coordinates: u along the band texture, v in its middle. */
 function bandUv(coordinates: Float32Array): Float32Array {
@@ -155,7 +171,13 @@ export class ModelView {
     cutNormal: { value: new Vector3() },
     cutOffset: { value: 0 },
     cutOn: { value: 0 },
+    /** sin(ωt) − 1 while the model swings (M6.2), else 0: the drawn shape at the start. */
+    swingPhase: { value: 0 },
   };
+  /** How far each model vertex moves from the shape drawn to the undeformed one while the
+   * model swings, or null (M6.2). */
+  private swing: Float32Array | null = null;
+  private swingFrame = 0;
 
   /** Throws if the browser cannot create a WebGL context. */
   constructor(
@@ -208,6 +230,7 @@ export class ModelView {
     this.clearModel();
     this.mesh = mesh;
     this.reference = reference;
+    this.stopSwing();
     this.facesByTag = new Map(mesh.faces.map((face) => [face.tag, face]));
     this.picking = bandCoordinates === undefined;
 
@@ -216,6 +239,7 @@ export class ModelView {
     geometry.setAttribute("reference", new BufferAttribute(reference, 3));
     geometry.setAttribute("color", new BufferAttribute(new Float32Array(mesh.positions.length), 3));
     geometry.setAttribute("shown", new BufferAttribute(this.shownOf(mesh), 1));
+    geometry.setAttribute("swing", new BufferAttribute(new Float32Array(mesh.positions.length), 3));
     if (bandCoordinates !== undefined) {
       geometry.setAttribute("uv", new BufferAttribute(bandUv(bandCoordinates), 2));
       this.bands ??= bandTexture();
@@ -236,7 +260,7 @@ export class ModelView {
         polygonOffsetUnits: 1,
       }),
     );
-    this.clipped(this.surface.material, true);
+    this.clipped(this.surface.material, true, true);
     this.scene.add(this.surface);
 
     this.edgesKind = edges;
@@ -381,27 +405,62 @@ export class ModelView {
       const normals = new Float32Array(cut.positions.length);
       for (let v = 0; v < normals.length; v += 3) normals.set(cut.plane.normal, v);
       geometry.setAttribute("normal", new BufferAttribute(normals, 3));
+      geometry.setAttribute("swing", new BufferAttribute(cut.swing ?? new Float32Array(cut.positions.length), 3));
       geometry.setIndex(new BufferAttribute(cut.indices, 1));
       geometry.computeBoundingSphere();
       this.bands ??= bandTexture();
-      this.section = new Mesh(
-        geometry,
-        new MeshStandardMaterial({
-          map: this.bands,
-          roughness: 0.75,
-          metalness: 0.05,
-          side: DoubleSide,
-          polygonOffset: true,
-          polygonOffsetFactor: 1,
-          polygonOffsetUnits: 1,
-        }),
-      );
+      const material = new MeshStandardMaterial({
+        map: this.bands,
+        roughness: 0.75,
+        metalness: 0.05,
+        side: DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1,
+      });
+      material.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, this.clip);
+        swingVertices(shader);
+      };
+      this.section = new Mesh(geometry, material);
       this.scene.add(this.section);
     }
     this.requestRender();
   }
 
+  /**
+   * Animates the model (M6.2): each vertex swings from the shape setMesh drew, by -2 times
+   * `swing` and back, so with the drawn shape deformed by a mode shape and `swing` that same
+   * deformation, the model vibrates about its undeformed shape. Null stops it at the drawn
+   * shape. setMesh stops it, so call this after it; give the section's swing with setCut.
+   * Markers are hidden while it swings, since they mark the drawn shape.
+   */
+  setSwing(swing: Float32Array | null): void {
+    const attribute = this.surface?.geometry.getAttribute("swing");
+    if (swing !== null && (!(attribute instanceof BufferAttribute) || attribute.array.length !== swing.length)) return;
+    this.stopSwing();
+    this.swing = swing;
+    if (attribute instanceof BufferAttribute) {
+      (attribute.array as Float32Array).set(swing ?? new Float32Array(attribute.array.length));
+      attribute.needsUpdate = true;
+    }
+    this.drawOutlines();
+    if (swing === null) {
+      this.requestRender();
+      return;
+    }
+    this.markerLayer.hidden = true;
+    const start = performance.now();
+    const tick = (now: number) => {
+      this.clip.swingPhase.value = Math.sin((2 * Math.PI * (now - start)) / SWING_PERIOD_MS) - 1;
+      this.renderer.render(this.scene, this.camera);
+      this.swingFrame = requestAnimationFrame(tick);
+    };
+    this.swingFrame = requestAnimationFrame(tick);
+  }
+
   dispose(): void {
+    this.stopSwing();
     cancelAnimationFrame(this.frame);
     this.resize.disconnect();
     this.controls.dispose();
@@ -451,9 +510,11 @@ export class ModelView {
    * in the geometry's `reference` attribute, and with `hiding` what its `shown` attribute marks
    * 0 (a hidden face's vertices).
    */
-  private clipped<T extends Material>(material: T, hiding = false): T {
+  private clipped<T extends Material>(material: T, hiding = false, swinging = false): T {
     material.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, this.clip);
+      // With `swinging`, the geometry has a swing attribute that setSwing animates (M6.2).
+      if (swinging) swingVertices(shader);
       const declare = hiding ? "\nattribute float shown;\nvarying float vShown;" : "";
       shader.vertexShader = shader.vertexShader
         .replace("#include <common>", `#include <common>\nattribute vec3 reference;\nvarying vec3 vReference;${declare}`)
@@ -503,8 +564,10 @@ export class ModelView {
     const segmentsOf = this.edgesKind === "elements" ? triangleEdges : faceOutlines;
     lines.setAttribute("position", new BufferAttribute(segmentsOf({ ...mesh, faces }), 3));
     lines.setAttribute("reference", new BufferAttribute(segmentsOf({ ...mesh, faces, positions: reference }), 3));
+    const swing = this.swing ?? new Float32Array(mesh.positions.length);
+    lines.setAttribute("swing", new BufferAttribute(segmentsOf({ ...mesh, faces, positions: swing }), 3));
     const colour = this.edgesKind === "elements" ? COLOURS.elementEdge : COLOURS.outline;
-    this.outlines = new LineSegments(lines, this.clipped(new LineBasicMaterial({ color: colour })));
+    this.outlines = new LineSegments(lines, this.clipped(new LineBasicMaterial({ color: colour }), false, true));
     this.scene.add(this.outlines);
   }
 
@@ -529,6 +592,15 @@ export class ModelView {
     if (this.plane === null) return false;
     const [nx, ny, nz] = this.plane.normal;
     return nx * x + ny * y + nz * z > this.plane.offset;
+  }
+
+  /** Stops the animation at the drawn shape; the swing attributes stay until setMesh. */
+  private stopSwing(): void {
+    cancelAnimationFrame(this.swingFrame);
+    this.swingFrame = 0;
+    this.swing = null;
+    this.clip.swingPhase.value = 0;
+    this.markerLayer.hidden = false;
   }
 
   private clearSection(): void {

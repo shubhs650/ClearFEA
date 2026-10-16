@@ -57,9 +57,10 @@ type ResultQuantity = Literal[
     "heatFluxX",
     "heatFluxY",
     "heatFluxZ",
+    "modeShape",
 ]
 """
-A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1), and its heat flux magnitude and components (M5.3).
+A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1), and its heat flux magnitude and components (M5.3); a modal run's mode shape (M6.2), whose mode a view keeps in mode.
 """
 
 
@@ -97,6 +98,10 @@ class ViewResult(BaseModel):
     extremes: bool
     """
     Whether the min and max markers are drawn.
+    """
+    mode: Annotated[int | None, Field(ge=1)] = None
+    """
+    The mode a view of a modal run's mode shape shows, from 1 (M6.2); left out for other quantities.
     """
     cut: ViewCut | None
 

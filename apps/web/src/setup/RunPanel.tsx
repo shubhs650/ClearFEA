@@ -19,7 +19,9 @@
 // stress and reactions, and offers only the temperature to show on the undeformed model.
 // Since ADR-063 the panel chooses the equation solver (PaStiX by default), shows each solver's
 // element limit on a 16 GB machine, warns that the iterative solvers are less exact, and the
-// record says which solver a run used.
+// record says which solver a run used. From M6.1 a modal run lists its natural frequencies, and
+// from M6.2 (ADR-071) they form a table whose rows pick the mode shape drawn, exaggerated or
+// undeformed, and swinging when asked.
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import {
@@ -57,6 +59,7 @@ import {
   unitsOf,
 } from "./displayUnits";
 import {
+  isModalRun,
   isThermalRun,
   isThermalStressRun,
   QUANTITIES,
@@ -131,7 +134,15 @@ function DisplayUnits({
 }
 
 /** The headings of the quantity list, in order. */
-const QUANTITY_GROUPS: readonly QuantityGroup[] = ["Displacement", "Stress", "Strain", "Safety factor", "Temperature", "Heat flux"];
+const QUANTITY_GROUPS: readonly QuantityGroup[] = [
+  "Displacement",
+  "Stress",
+  "Strain",
+  "Safety factor",
+  "Temperature",
+  "Heat flux",
+  "Mode shape",
+];
 
 /** One reason the setup cannot be run now, and the tree item that fixes it (null for none). */
 export interface RunBlocker {
@@ -298,8 +309,12 @@ function estimateText(run: RunView): string | null {
   return `about ${duration(estimate.seconds)} and ${memory(estimate.memoryBytes)} of solver memory${cost}`;
 }
 
-/** What the viewer draws of the run's results. */
-export type ResultChoice = { quantity: Quantity; deformation: Deformation };
+/** What the viewer draws of the run's results: for a modal run (M6.2) the mode whose shape is
+ * drawn, from 1, and whether it swings. */
+export type ResultChoice = { quantity: Quantity; deformation: Deformation; mode: number; animate: boolean };
+
+/** A modal run's mode shape has no true scale (M6.2). */
+const MODE_DEFORMATIONS: readonly Deformation[] = ["auto", "undeformed"];
 
 const DEFORMATIONS: Record<Deformation, string> = {
   auto: "Deformed, exaggerated to be seen",
@@ -399,31 +414,96 @@ function heatFlowText(heat: number, unit: string): string {
  * they are, and since M5.3 its largest heat flux, the heat each thermal load brings in or takes
  * out, and the heat balance. Absolute temperatures, converted with their offset. Numbers only. */
 /**
- * A modal run's natural frequencies, mode 1 first (M6.1, ADR-070). A mode near zero is a
- * rigid-body mode of a body no support holds; rounding can put it a little below zero.
+ * A modal run's natural frequencies, mode 1 first (M6.1, ADR-070), as a table whose rows pick
+ * the mode shape the viewer draws (M6.2, ADR-071), with the shape and whether it swings. A
+ * mode near zero is a rigid-body mode of a body no support holds; rounding can put it a little
+ * below zero.
  */
-function ModalFigures({ result, units }: { result: SolveResult; units: ResultUnits }) {
+function ModalFigures({
+  result,
+  units,
+  choice,
+  onChoiceChange,
+}: {
+  result: SolveResult;
+  units: ResultUnits;
+  choice: ResultChoice;
+  onChoiceChange: (next: ResultChoice) => void;
+}) {
   const frequencies = result.frequencies ?? [];
   const largest = Math.max(0, ...frequencies.map((f) => Math.abs(f)));
   const rigid = frequencies.some((f) => Math.abs(f) <= RIGID_BODY_FRACTION * largest);
   return (
     <>
-      <dl className="geometry-facts" aria-label="Natural frequencies">
-        {frequencies.length === 0 ? (
-          <>
-            <dt>Natural frequencies</dt>
-            <dd className="field-hint">The run reported no frequencies. Run it again.</dd>
-          </>
-        ) : (
-          frequencies.map((f, k) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: the mode number is the position
-            <Fragment key={k}>
-              <dt>Mode {k + 1}</dt>
-              <dd>{figure(f, units.frequency, "frequency")}</dd>
-            </Fragment>
-          ))
-        )}
-      </dl>
+      {frequencies.length === 0 ? (
+        <dl className="geometry-facts" aria-label="Natural frequencies">
+          <dt>Natural frequencies</dt>
+          <dd className="field-hint">The run reported no frequencies. Run it again.</dd>
+        </dl>
+      ) : (
+        <>
+          <table className="frequency-table" aria-label="Natural frequencies">
+            <thead>
+              <tr>
+                <th scope="col">Mode</th>
+                <th scope="col">Frequency ({units.frequency})</th>
+                <th scope="col">Shown</th>
+              </tr>
+            </thead>
+            <tbody>
+              {frequencies.map((f, k) => {
+                const mode = k + 1;
+                const shown = choice.mode === mode;
+                return (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: the mode number is the position
+                  <tr key={k} className={shown ? "frequency-shown" : undefined} onClick={() => onChoiceChange({ ...choice, mode })}>
+                    <th scope="row">{mode}</th>
+                    <td>{Number(fromSi(f, units.frequency, "frequency").toPrecision(4))}</td>
+                    <td>
+                      <input
+                        type="radio"
+                        name="mode-shown"
+                        aria-label={`Show mode ${mode}`}
+                        checked={shown}
+                        onChange={() => onChoiceChange({ ...choice, mode })}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <fieldset className="result-choice">
+            <legend>Mode shape on the model</legend>
+            <label>
+              Shape
+              <select
+                value={choice.deformation}
+                onChange={(event) => onChoiceChange({ ...choice, deformation: event.target.value as Deformation })}
+              >
+                {MODE_DEFORMATIONS.map((d) => (
+                  <option key={d} value={d}>
+                    {DEFORMATIONS[d]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={choice.animate && choice.deformation !== "undeformed"}
+                disabled={choice.deformation === "undeformed"}
+                onChange={(event) => onChoiceChange({ ...choice, animate: event.target.checked })}
+              />
+              Animate
+            </label>
+            <p className="field-hint">
+              A mode shape shows how the model moves in that mode, not how far: the colours give each point's displacement
+              relative to the largest, which is 1.
+            </p>
+          </fieldset>
+        </>
+      )}
       {rigid && (
         <p className="field-hint" role="note">
           Frequencies at or near zero are rigid-body modes: a body no support holds moves in them without deforming.
@@ -669,8 +749,8 @@ export function RunPanel({
   // the structural results and the temperatures and heat flows of its thermal step.
   const thermal = run !== null && isThermalRun(run);
   const thermalStress = run !== null && isThermalStressRun(run);
-  // A modal run (M6.1) has its natural frequencies only; mode shapes come with M6.2.
-  const modal = run !== null && run.spec.analysis === "modal";
+  // A modal run (M6.1) has its natural frequencies and, since M6.2, its mode shapes.
+  const modal = run !== null && isModalRun(run);
   const quantities = run === null ? [] : runQuantities(run);
   // The size to run on: the recommended one (the largest when none fits) until the user picks
   // another for this estimate.
@@ -763,7 +843,7 @@ export function RunPanel({
         </p>
       )}
       {result && thermal && run !== null && <ThermalFigures result={result} spec={run.spec} units={units} />}
-      {result && modal && <ModalFigures result={result} units={units} />}
+      {result && modal && <ModalFigures result={result} units={units} choice={choice} onChoiceChange={onChoiceChange} />}
       {result && !thermal && !modal && (
         <dl className="geometry-facts" aria-label="Run results">
           {result.displacement && (
