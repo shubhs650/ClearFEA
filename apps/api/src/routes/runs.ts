@@ -25,6 +25,7 @@ export function runView(run: Run): RunView {
     software: run.software,
     files: run.files,
     machine: run.machine,
+    estimate: run.estimate,
     cost: run.cost,
     status: run.status,
     stage: run.status !== "solving" ? null : run.jobStatus === "queued" ? "queued" : run.jobStage,

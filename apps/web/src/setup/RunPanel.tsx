@@ -7,18 +7,22 @@
 // M1.11 the record also shows the machine size, its rate and what the run cost (ADR-033).
 // From M1.12 the button sits above the plain-language list of what stops the setup from being
 // run (ADR-034); each line opens the tree item it is about. From M2.1 figures are shown in the
-// project's unit system (ADR-038).
+// project's unit system (ADR-038). From M2.12 the panel shows the estimate for the current mesh
+// before a run, with a machine size to run on (the recommended one first), and the record shows
+// the estimate the run started with (ADR-049).
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
-import type { RunFileName, RunView, SimulationSpec } from "@clearfea/spec";
-import { Fragment } from "react";
+import type { RunEstimate, RunFileName, RunView, SimulationSpec } from "@clearfea/spec";
+import { Fragment, useState } from "react";
 import { runFileUrl } from "../api/runs";
 import { credits } from "../billing/credits";
+import { duration, memory } from "../billing/estimate";
 import type { Deformation } from "../layout/Viewer";
 import { fromSi } from "../units/convert";
 import { QUANTITIES, type Quantity } from "../viewer/resultFields";
 import { Notes } from "./ItemPanels";
 import { type ItemStatus, sameSpec } from "./spec";
+import type { EstimateState } from "./useEstimate";
 
 /** The units result figures are shown in: the project system's units for these kinds. */
 export type ResultUnits = Readonly<Record<"length" | "pressure" | "force", string>>;
@@ -49,6 +53,90 @@ function Blockers({ blockers, onOpen }: { blockers: readonly RunBlocker[]; onOpe
       </ul>
     </section>
   );
+}
+
+/** One machine size as an option: its cores and memory, and whether it is the recommended one. */
+function sizeLabel(size: RunEstimate["sizes"][number], recommended: string | null): string {
+  const label = `${size.size} (${size.cores} cores, ${memory(size.memoryBytes)})`;
+  if (size.size === recommended) return `${label}, recommended`;
+  return size.fits ? label : `${label}, too little memory`;
+}
+
+/**
+ * The estimate for the current mesh (ADR-049) and the machine size to run on. Shown before a
+ * run; the chosen size goes with the Run button.
+ */
+function Estimate({
+  state,
+  size,
+  onSizeChange,
+}: {
+  state: EstimateState;
+  size: string | null;
+  onSizeChange: (size: string) => void;
+}) {
+  if (state.kind === "none") return null;
+  if (state.kind === "loading") return <p className="field-hint">Estimating memory, time and cost…</p>;
+  if (state.kind === "failed") {
+    return <p className="field-hint">No estimate: {state.problem}</p>;
+  }
+  const { estimate } = state;
+  const chosen = estimate.sizes.find((s) => s.size === size);
+  return (
+    <section aria-label="Estimate">
+      <h3 className="pane-subtitle">Estimate</h3>
+      <dl className="geometry-facts">
+        <dt>Solver memory</dt>
+        <dd>about {memory(estimate.memoryBytes)} at its peak</dd>
+        <dt>Time</dt>
+        <dd>about {duration(estimate.seconds)}</dd>
+        {chosen !== undefined && (
+          <>
+            <dt>Cost</dt>
+            <dd>
+              about {credits(chosen.cost)} on {chosen.size}
+            </dd>
+          </>
+        )}
+      </dl>
+      <label className="field">
+        Machine size
+        <select value={size ?? ""} onChange={(event) => onSizeChange(event.target.value)}>
+          {estimate.sizes.map((s) => (
+            <option key={s.size} value={s.size}>
+              {sizeLabel(s, estimate.recommended)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="field-hint">
+        Estimated for this mesh's {estimate.nodes.toLocaleString("en-US")} nodes from the solver benchmark of a stocky
+        block; slender parts usually need less memory.
+        {estimate.extrapolated && " The mesh is larger than any the estimate was measured on, so it is less certain."}
+      </p>
+      {estimate.recommended === null && (
+        <p className="field-hint">
+          By the estimate no machine size has enough memory for this mesh. A coarser mesh, or linear elements, needs
+          less.
+        </p>
+      )}
+      {estimate.recommended !== null && chosen !== undefined && !chosen.fits && (
+        <p className="field-hint">
+          The estimate needs more memory than this size has, so the run may stop for lack of memory. The recommended size
+          is {estimate.recommended}.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** The estimate a run started with, on the size it ran on. */
+function estimateText(run: RunView): string | null {
+  const { estimate } = run;
+  if (estimate === null) return null;
+  const size = estimate.sizes.find((s) => s.size === run.machine?.size);
+  const cost = size === undefined ? "" : `, ${credits(size.cost)}`;
+  return `about ${duration(estimate.seconds)} and ${memory(estimate.memoryBytes)} of solver memory${cost}`;
 }
 
 /** What the viewer draws of the run's results. */
@@ -137,6 +225,12 @@ function RunRecord({ run, currentSpec }: { run: RunView; currentSpec: Simulation
             </dd>
           </>
         )}
+        {estimateText(run) !== null && (
+          <>
+            <dt>Estimate</dt>
+            <dd>{estimateText(run)}</dd>
+          </>
+        )}
         <dt>Cost</dt>
         <dd>{costText(run)}</dd>
         {(["deck.inp", "solver.log"] as const).map((name) => (
@@ -175,6 +269,7 @@ export function RunPanel({
   onOpen,
   units,
   supportNames,
+  estimate,
   requesting,
   requestProblem,
   onRun,
@@ -194,19 +289,40 @@ export function RunPanel({
   units: ResultUnits;
   /** Names of the setup's supports by id, for the reaction lines. */
   supportNames: ReadonlyMap<string, string>;
+  /** The estimate for the current mesh, shown before a run. */
+  estimate: EstimateState;
   requesting: boolean;
   requestProblem?: string;
-  onRun: () => void;
+  /** Starts a run on the machine size chosen. */
+  onRun: (machineSize: string | undefined) => void;
   choice: ResultChoice;
   onChoiceChange: (next: ResultChoice) => void;
 }) {
   const solving = run?.status === "solving";
   const result = run?.status === "succeeded" ? run.result : null;
+  // The size to run on: the recommended one (the largest when none fits) until the user picks
+  // another for this estimate.
+  const [picked, setPicked] = useState<{ estimate: RunEstimate; size: string } | null>(null);
+  const loaded = estimate.kind === "loaded" ? estimate.estimate : null;
+  const size =
+    loaded === null
+      ? null
+      : picked?.estimate === loaded
+        ? picked.size
+        : (loaded.recommended ?? [...loaded.sizes].sort((a, b) => b.memoryBytes - a.memoryBytes)[0]?.size ?? null);
+  const setSize = (chosen: string) => {
+    if (loaded !== null) setPicked({ estimate: loaded, size: chosen });
+  };
   return (
     <section className="setup-panel" aria-label="Run">
       <h2 className="pane-title">Run</h2>
       <Notes status={status} />
-      <button type="button" onClick={onRun} disabled={blockers.length > 0 || requesting || solving}>
+      {!solving && <Estimate state={estimate} size={size} onSizeChange={setSize} />}
+      <button
+        type="button"
+        onClick={() => onRun(size ?? undefined)}
+        disabled={blockers.length > 0 || requesting || solving}
+      >
         {run === null ? "Run" : "Run again"}
       </button>
       {blockers.length > 0 && !solving && <Blockers blockers={blockers} onOpen={onOpen} />}

@@ -3,14 +3,17 @@
 // Shapes: packages/spec/schemas/simulation.schema.json.
 
 import {
+  type CreateRunRequest,
   type CreateSimulationRequest,
   checkSimulationSpec,
   elementOrder,
+  type EstimateResponse,
   localScopes,
   localSizeParams,
   type MeshResponse,
   preRunProblems,
   type RunListResponse,
+  type RunEstimate,
   type RunResponse,
   type SimulationMeshResponse,
   emptySimulationSpec,
@@ -20,21 +23,25 @@ import {
   type SimulationView,
   sameMeshSettings,
   type Topology,
+  validateCreateRunRequest,
   validateCreateSimulationRequest,
   validateSimulationSpec,
   validateTopology,
 } from "@clearfea/spec";
 import { Hono } from "hono";
+import { estimateRun, runSize } from "../billing/estimate";
 import { readBody } from "../body";
 import { type Geometry, geometryKey, getGeometry } from "../db/geometries";
 import {
   createMesh,
   findReusableMesh,
   linkMesh,
+  type Mesh,
   type MeshRequest,
   meshSettingsHash,
   simulationMesh,
 } from "../db/meshes";
+import { listMachineSizes } from "../db/machines";
 import { createRun, listRuns } from "../db/runs";
 import {
   createSimulation,
@@ -230,12 +237,60 @@ simulations.get("/:id/runs", async (c) => {
 });
 
 /**
+ * The simulation's current mesh when a run can be solved on it: ready, and made with the saved
+ * spec's mesh settings. Otherwise what to do first, in plain language.
+ */
+async function runnableMesh(
+  db: D1Database,
+  userId: string,
+  simulation: Simulation,
+): Promise<{ mesh: Mesh } | { error: string }> {
+  const mesh = await simulationMesh(db, userId, simulation.id);
+  if (mesh === null || mesh.status === "failed") {
+    return { error: "Generate the mesh in the Mesh settings, then run the simulation." };
+  }
+  if (mesh.status === "meshing") {
+    return { error: "The mesh is still being made. Run the simulation when it has finished." };
+  }
+  if (!sameMeshSettings(simulation.spec, mesh)) {
+    return { error: "The mesh settings changed after the mesh was made. Generate the mesh again, then run." };
+  }
+  return { mesh };
+}
+
+/** The estimate for a ready mesh on every machine size (M2.12, ADR-049). */
+async function meshEstimate(db: D1Database, mesh: Mesh): Promise<RunEstimate> {
+  if (mesh.nodeCount === null) throw new Error("A ready mesh has no node count.");
+  return estimateRun(mesh.nodeCount, await listMachineSizes(db));
+}
+
+/**
+ * Memory, time and cost estimated for solving the simulation on its current mesh, per machine
+ * size, with the size recommended (M2.12, ADR-049).
+ */
+simulations.get("/:id/estimate", async (c) => {
+  const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
+  if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  const found = await runnableMesh(c.env.DB, c.var.userId, simulation);
+  if ("error" in found) return c.json({ error: found.error }, 409);
+  return c.json({ estimate: await meshEstimate(c.env.DB, found.mesh) } satisfies EstimateResponse);
+});
+
+/**
  * Solves the simulation's saved spec on its current mesh (M1.8, ADR-030). The run keeps a copy
  * of the spec as it is now; later edits to the simulation never change it. A setup that pre-run
  * validation (M1.12, ADR-034) finds incomplete is refused here, so no job is queued or charged;
- * the deck generator still refuses anything that slips past.
+ * the deck generator still refuses anything that slips past. The run goes on the machine size
+ * the body names, or on the recommended one, and keeps the estimate made now (M2.12, ADR-049).
  */
 simulations.post("/:id/runs", async (c) => {
+  let request: CreateRunRequest = {};
+  // An empty body asks for the recommended size.
+  if ((await c.req.raw.clone().text()) !== "") {
+    const body = await readBody(c.req.raw, validateCreateRunRequest, "CreateRunRequest", "simulation.schema.json");
+    if ("error" in body) return c.json({ error: body.error }, 400);
+    request = body.value;
+  }
   const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
   if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
   const geometry = await getGeometry(c.env.DB, c.var.userId, simulation.geometryId);
@@ -247,15 +302,14 @@ simulations.post("/:id/runs", async (c) => {
     const list = problems.map((p) => p.message).join(" ");
     return c.json({ error: `The setup is not ready to run. ${list}` }, 409);
   }
-  const mesh = await simulationMesh(c.env.DB, c.var.userId, simulation.id);
-  if (mesh === null || mesh.status === "failed") {
-    return c.json({ error: "Generate the mesh in the Mesh settings, then run the simulation." }, 409);
-  }
-  if (mesh.status === "meshing") {
-    return c.json({ error: "The mesh is still being made. Run the simulation when it has finished." }, 409);
-  }
-  if (!sameMeshSettings(simulation.spec, mesh)) {
-    return c.json({ error: "The mesh settings changed after the mesh was made. Generate the mesh again, then run." }, 409);
+  const found = await runnableMesh(c.env.DB, c.var.userId, simulation);
+  if ("error" in found) return c.json({ error: found.error }, 409);
+  const { mesh } = found;
+  const estimate = await meshEstimate(c.env.DB, mesh);
+  const size = runSize(estimate, request.machineSize);
+  if (size === undefined) {
+    const names = estimate.sizes.map((s) => s.size).join(", ");
+    return c.json({ error: `There is no machine size called ${request.machineSize}. Choose one of: ${names}.` }, 400);
   }
   const [latest] = await listRuns(c.env.DB, c.var.userId, simulation.id, 1);
   if (latest?.status === "solving") {
@@ -265,9 +319,11 @@ simulations.post("/:id/runs", async (c) => {
     simulationId: simulation.id,
     meshId: mesh.id,
     spec: simulation.spec,
+    machineSize: size.size,
+    estimate,
   });
   if (created === null) {
-    return c.json({ error: "The mesh changed meanwhile. Generate the mesh again, then run." }, 409);
+    return c.json({ error: "The mesh or the machine sizes changed meanwhile. Check the mesh, then run again." }, 409);
   }
   return c.json({ run: runView(created.run) } satisfies RunResponse, 201);
 });

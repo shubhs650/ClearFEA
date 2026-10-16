@@ -69,7 +69,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M2.9 Material library (generic values with sources), custom materials saved per user
 - [x] M2.10 Mesh reuse across runs by settings hash
 - [x] M2.11 Benchmark: solver build (PaStiX measured in a follow-up PR; adopting it and the 2M target await the maintainer, ADR-048 item 7)
-- [ ] M2.12 Estimator v1 fitted from the benchmark data; estimate shown before run; machine size recommendation
+- [x] M2.12 Estimator v1 fitted from the benchmark data; estimate shown before run; machine size recommendation
 
 ## Maintainer to-do
 
@@ -173,6 +173,8 @@ Written by the last session for the next one. Replace, do not append.
 >
 > M2.11 follow-up (2026-10-15): PaStiX measured (ADR-048 item 7 rewritten). The fork was reachable over git after all; built by hand as `worker/benchmarks/solver/README.md` describes (not in the image), its rows are in `results.json` with `build` `ccx-2.21-pastix4calculix`. It matched SPOOLES on every mesh and passed `make verify` (116 of 116) as the worker's `ccx`, 4 to 6 times faster for 1.25 times the memory, and crashed at 331,000 nodes in its 32-bit-integer build. `bench.py` now takes the SPOOLES comparison from earlier single-thread SPOOLES rows when SPOOLES is not in the same invocation. For M2.12: filter rows on `build` `ubuntu-2.21-1`, `solver` SPOOLES and `threads` 1; PaStiX rows are not the production build. Waiting on Shubham: adopt PaStiX (its own version-bump task, 64-bit integers, CUDA runtime libraries in the image) or not, and how to reach 2 million elements (about 200 GiB machines, extrapolated, or an iterative solver with its accuracy shown).
 
+> M2.12 (2026-10-15): estimator v1 and machine sizes (ADR-049, accepted under Shubham's standing M2 instruction, pending his review). `worker/benchmarks/solver/steps.py` times the solve job's own steps on the M2.11 block (10 meshes, 5k to 207k nodes, both orders, `steps.json`); `fit.py` fits peak memory and job time as `constant + coefficient × nodes^exponent` into `packages/spec/estimator.json` (memory within 2 percent, time within 21 percent; a worker test fails if the file is not the fit). `packages/spec/src/estimator.ts` evaluates it; `apps/api/src/billing/estimate.ts` prices it per size with `costOf` and recommends the cheapest size that holds the peak × 1.25 in 85 percent of its memory. Migration 0013 replaces the `local` size with small/medium/large/xlarge (2-16 cores, 8-64 GiB, 0.5-4 credits an hour, placeholders; medium stays the mesh jobs' default) and adds `runs.estimate`. `GET /api/simulations/:id/estimate`; `POST .../runs` takes an optional `machineSize`. The Run panel shows memory, time, cost and a size choice before the run; the run record shows the estimate. Checked: `make verify` 116 of 116, `make e2e` (now also checks the estimate, screenshot `m2.12/estimate.png`). Surprise: on the verification cases the estimate is about right below 10,000 nodes but twice the billed time for slender 12k-39k-node parts (the fit is on a stocky block); a shape term is a later refit (M8.9 measures it). The 16 GiB size holds about 170,000 stocky second-order elements, below DECISIONS' 300,000-500,000 laptop tier (ADR-049 item 8; PaStiX would not move it, as it needs about 1.25 times the memory, but adopting it means refitting with `steps.py` and `fit.py`). Not done, on purpose: thread count and memory limit per size (M8.5), balance check before a run (M8.1), stop limit (M8.2), modal terms (M6.3). Test fix: the M2.10 mesh-reuse web test waited for its button with `getBy` (a race); now `findBy`.
+
 > Still to watch from the ADR review: browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
 ## Parked ideas
@@ -189,6 +191,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-15
 
+- M2.12: estimator v1 fitted to timed solve jobs (memory and time as power laws in the node count), shown with cost per machine size before every run; four machine sizes by memory with the cheapest that fits recommended and the estimate frozen with the run (ADR-049 accepted under the standing M2 instruction).
 - M2.11: solver benchmark from 25,000 to 1.52 million second-order elements with raw data for M2.12; SPOOLES stays the solver for runs and is pinned to one thread after its threaded mode gave wrong answers; iterative solvers fail 0.1 percent verification checks; PaStiX blocked by the sandbox's network (ADR-048, item 7 awaits the maintainer).
 - M2.11 follow-up: PaStiX built from the CalculiX fork and benchmarked; same answers as SPOOLES, `make verify` 116 of 116, 4 to 6 times faster, 1.25 times the memory, crashes above about 330,000 nodes in a 32-bit build; not adopted, decision with the maintainer (ADR-048 item 7).
 - M2.10: meshes are reused by a SHA-256 hash of geometry, scaling and mesh settings across a user's simulations of a geometry; a reused mesh queues no job and is not charged, and the Mesh panel says so (ADR-047 accepted under the standing M2 instruction).

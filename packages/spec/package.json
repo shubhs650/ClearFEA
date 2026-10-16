@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./units.json": "./units.json",
+    "./estimator.json": "./estimator.json",
     "./fixtures/*": "./fixtures/*"
   },
   "scripts": {

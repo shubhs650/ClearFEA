@@ -3,12 +3,14 @@
 // user id and filter on owner_id. recordRunOutcome is called for a job the worker holds, and
 // touches only that job's own run. A run's spec and mesh are written once, at creation; its
 // versions and file list are completed once, when its job ends (ADR-032). Its machine size and
-// cost are its solve job's, fixed when the job is queued and when it ends (ADR-033).
+// cost are its solve job's, fixed when the job is queued and when it ends (ADR-033); its
+// estimate is written once, at creation (ADR-049).
 
 import type {
   ElementOrder,
   JobStatus,
   RunCost,
+  RunEstimate,
   RunMachine,
   Quantity,
   RunFileName,
@@ -32,6 +34,8 @@ export interface Run {
   files: RunFileName[];
   /** From the solve job: its machine size and rate, and once it has ended, its cost (ADR-033). */
   machine: RunMachine | null;
+  /** The estimate made when the run started; null for runs from before M2.12. */
+  estimate: RunEstimate | null;
   cost: RunCost | null;
   status: RunStatus;
   problem: string | null;
@@ -52,6 +56,7 @@ interface RunRow {
   spec: string;
   software: string | null;
   files: string | null;
+  estimate: string | null;
   status: RunStatus;
   problem: string | null;
   result: string | null;
@@ -90,6 +95,7 @@ function toRun(row: RunRow): Run {
       row.job_machine_size === null || row.job_rate_per_hour === null
         ? null
         : { size: row.job_machine_size, ratePerHour: row.job_rate_per_hour },
+    estimate: row.estimate === null ? null : JSON.parse(row.estimate),
     cost:
       row.job_billed_seconds === null || row.job_cost === null
         ? null
@@ -126,34 +132,47 @@ export function runKey(ownerId: string, runId: string, file: RunFile): string {
 }
 
 /**
- * Records a run with its frozen spec and queues its solve job, in one batch so a run never
- * exists without its job. The run is inserted only while the mesh is the user's and ready;
- * returns null otherwise. The caller has checked that the simulation is the user's and that
- * the mesh is the simulation's current one.
+ * Records a run with its frozen spec and estimate and queues its solve job on the machine size
+ * named, in one batch so a run never exists without its job. The run is inserted only while the
+ * mesh is the user's and ready and the size exists; returns null otherwise. The caller has
+ * checked that the simulation is the user's and that the mesh is the simulation's current one.
  */
 export async function createRun(
   db: D1Database,
   userId: string,
-  request: { simulationId: string; meshId: string; spec: SimulationSpec },
+  request: { simulationId: string; meshId: string; spec: SimulationSpec; machineSize: string; estimate: RunEstimate },
 ): Promise<{ run: Run; job: Job } | null> {
   const id = crypto.randomUUID();
-  const job = newJob(db, userId, "solve", id, { meshId: request.meshId, spec: request.spec });
+  const job = newJob(db, userId, "solve", id, { meshId: request.meshId, spec: request.spec }, request.machineSize);
   const [, inserted] = await db.batch([
     job.statement,
     db
       .prepare(
         // The mesh's versions come from its own job's MeshResult.
-        `INSERT INTO runs (id, owner_id, simulation_id, mesh_id, spec, job_id, software)
-         SELECT ?, ?, ?, meshes.id, ?, ?,
+        `INSERT INTO runs (id, owner_id, simulation_id, mesh_id, spec, job_id, estimate, software)
+         SELECT ?, ?, ?, meshes.id, ?, ?, ?,
                 json_object('gmsh', json_extract(jobs.result, '$.software.gmsh'),
                             'occt', json_extract(jobs.result, '$.software.occt'))
            FROM meshes LEFT JOIN jobs ON jobs.id = meshes.job_id
-          WHERE meshes.id = ? AND meshes.owner_id = ? AND meshes.status = 'ready'`,
+          WHERE meshes.id = ? AND meshes.owner_id = ? AND meshes.status = 'ready'
+            AND EXISTS (SELECT 1 FROM jobs queued WHERE queued.id = ? AND queued.owner_id = ?)`,
       )
-      .bind(id, userId, request.simulationId, JSON.stringify(request.spec), job.id, request.meshId, userId),
+      .bind(
+        id,
+        userId,
+        request.simulationId,
+        JSON.stringify(request.spec),
+        job.id,
+        JSON.stringify(request.estimate),
+        request.meshId,
+        userId,
+        job.id,
+        userId,
+      ),
   ]);
   if (inserted?.meta.changes !== 1) {
-    // The mesh stopped being ready in between; the queued job must not run without its run.
+    // The mesh stopped being ready, or the size was removed, in between; the queued job (if
+    // any) must not run without its run.
     await db.prepare("DELETE FROM jobs WHERE id = ? AND owner_id = ? AND status = 'queued'").bind(job.id, userId).run();
     return null;
   }
