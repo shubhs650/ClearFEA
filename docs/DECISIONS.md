@@ -250,7 +250,7 @@ The M1.1 spike (`worker/spikes/face_identity/`) ran the chain in `ARCHITECTURE.m
 Not covered, for later tasks: CalculiX's face numbering of C3D4 and C3D10 elements (the spike records Gmsh's local face index; M1.7 maps it and checks it against the CalculiX manual), multiple bodies and the tag renumbering that `fragment` causes (M4), and STEP files exported by commercial CAD systems (the test files were written by OpenCASCADE with the unit entity edited). Meshing was run single-threaded; the same input gave the same element count in separate processes and repeated runs, but the same shape declared in different units gave slightly different meshes (842 to 864 tetrahedra for the block), so a mesh is reproducible only for the same imported geometry. The spike uses numpy through `uv run --with`; adding it as a worker dependency is left to the task that first needs it in job code.
 
 ### ADR-024: The import job applies the STEP unit through OpenCASCADE's reading factor; jobs move files through per-job transfer routes
-2026-10-14 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-14 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.2 turns ADR-023 into the `import` job, the geometry routes and the upload panel. Decisions it needed:
 
@@ -265,7 +265,7 @@ M1.2 turns ADR-023 into the `import` job, the geometry routes and the upload pan
 Not done here: a heartbeat timeout that fails a job whose worker died (an import whose worker crashes leaves its geometry `importing`), and running Gmsh in a child process so a crash on a malformed file cannot take the worker down. Both are worth doing before files from outside the project are imported.
 
 ### ADR-025: The viewer draws the display mesh as one three.js mesh coloured per face; a click toggles a face in the selection
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.3 adds the viewer (`apps/web/src/layout/Viewer.tsx`, `apps/web/src/viewer/`). Choices it needed:
 
@@ -276,7 +276,7 @@ M1.3 adds the viewer (`apps/web/src/layout/Viewer.tsx`, `apps/web/src/viewer/`).
 5. **No WebGL in the tests.** jsdom has none, so component tests replace `ModelView` with a recording stand-in and drive hover and pick through its callbacks; the three.js code itself was checked with `make dev` and headless Chromium (SwiftShader) on the M1.1 bracket and flanged pipe. A browser that cannot create a WebGL context gets a plain message saying to turn on hardware acceleration.
 
 ### ADR-026: SimulationSpec v1 is a draft-friendly document with inline materials; a used geometry's unit is locked
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.4 defines `SimulationSpec` version 1 (`packages/spec/schemas/simulation.schema.json`) and the routes that store it. Choices it needed:
 
@@ -291,7 +291,7 @@ M1.4 defines `SimulationSpec` version 1 (`packages/spec/schemas/simulation.schem
 Not done here: a Python counterpart of `checkSimulationSpec` (the Pydantic model checks the shape; the deck generator, M1.7, converts units through `units.py`, which refuses a unit of the wrong kind, and should also refuse repeated faces, which Pydantic does not check), optimistic concurrency on saves, renaming and deleting simulations, and projects.
 
 ### ADR-027: The setup tree marks each item from the spec; panels save the whole spec shortly after each edit
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.5 adds the simulation tree and the settings panels for a material, a fixed support and a pressure (`apps/web/src/layout/SimulationTree.tsx`, `apps/web/src/setup/`). Choices it needed:
 
@@ -304,7 +304,7 @@ M1.5 adds the simulation tree and the settings panels for a material, a fixed su
 
 
 ### ADR-028: The mesh job meshes the confirmed geometry with second-order tetrahedra of one global size and writes its own mesh file
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.6 adds the `mesh` job (`worker/clearfea_worker/meshing/`), the `meshes` table and routes, and the Mesh item of the setup tree. Choices it needed:
 
@@ -317,7 +317,7 @@ M1.6 adds the `mesh` job (`worker/clearfea_worker/meshing/`), the `meshes` table
 7. **Showing it.** The tree gains a Mesh row: incomplete until a size is entered and a mesh exists for that size, incomplete while meshing, error with the reason when meshing failed. The panel offers the geometry's own unit first. While the Mesh row is open and the latest mesh is ready, the viewer draws the mesh surface with every element edge and "Mesh: N elements, M nodes"; switching between geometry and mesh keeps the camera. Meshing is not metered until M1.11 and cannot be cancelled yet.
 
 ### ADR-029: The deck generator writes one deterministic CalculiX deck from the spec and the mesh file
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.7 adds the deck generator (`worker/clearfea_worker/deck/`), a pure function `generate_deck(spec, mesh) -> str` from a `SimulationSpec` and a `mesh.bin` (ADR-028). Choices it needed:
 
@@ -330,7 +330,7 @@ M1.7 adds the deck generator (`worker/clearfea_worker/deck/`), a pure function `
 
 
 ### ADR-030: The solve job runs CalculiX as a supervised child process, streams its console log with the heartbeats, and reads nodal results from the ASCII `.frd`
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.8 adds runs, the `solve` job, the solver log and the result reader (`worker/clearfea_worker/results/`, physics-critical). Choices it needed:
 
@@ -344,7 +344,7 @@ M1.8 adds runs, the `solve` job, the solver log and the result reader (`worker/c
 Not done here: a heartbeat-timeout sweep for jobs whose worker died (a run whose worker is lost stays `solving`, and blocks the next run of that simulation), a time limit on the solver, and the solver's thread count and memory limit per machine size (M1.11, M2.11).
 
 ### ADR-031: The solve job writes the mesh surface and per-vertex result fields for the viewer, which draws nine banded contours with an auto-scaled deformed shape
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.9 adds the viewer's result files (`worker/clearfea_worker/results/surface.py`, physics-critical) and the result view. Choices it needed:
 
@@ -357,7 +357,7 @@ M1.9 adds the viewer's result files (`worker/clearfea_worker/results/surface.py`
 Checked with the solver: `worker/spikes/solve_check/` now also writes and reads back the viewer files on the cantilever (surface area equal to the bar's, every triangle facing outwards, largest surface displacement and von Mises equal to the summary's within float32 precision), 13 of 13 checks.
 
 ### ADR-032: A run records the versions that produced it and the files its job stored; the deck and log are served as plain text to view or download
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.10 completes the run record (ARCHITECTURE section 4: spec, mesh, deck, versions) and makes the solver input and log viewable and downloadable (DECISIONS "Solver input"). Choices it needed:
 
@@ -370,7 +370,7 @@ M1.10 completes the run record (ARCHITECTURE section 4: spec, mesh, deck, versio
 7. **Deck and log are served as plain text.** `GET /api/runs/:id/files/deck.inp` and `/solver.log` answer `text/plain; charset=utf-8` with `nosniff` and a `sandbox` content security policy, because the deck carries names the user typed; `?download=1` makes it an attachment named `clearfea-run-<first 8 of id>-<file>`. Other run files are not served here. The Run panel links to both (view opens a new tab), so the browser streams large decks itself instead of the app holding them in memory. While the run solves, the live log stays in the panel; the stored files appear when it has finished (409 before, 404 for another user's run).
 
 ### ADR-033: Jobs are metered by the worker's handler time, billed per started second at the rate fixed when queued, and charged in whole micro-credits in the same batch that completes them
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.11 adds metering and the ledger (ARCHITECTURE section 6, "Metering"; DECISIONS "Unit of charge" and "Phase 0 wallet"). Choices it needed:
 
@@ -384,7 +384,7 @@ M1.11 adds metering and the ledger (ARCHITECTURE section 6, "Metering"; DECISION
 8. **The run shows its machine and cost.** `RunView.machine` (size and rate, from the solve job) and `RunView.cost` (billed seconds, amount, whether charged; null while solving) are read from the run's job, whose metering columns are written once when it ends. The Run panel's run record shows both; runs from before M1.11 say they were not metered. The mesh job's charge is in the ledger but not shown in the Mesh panel until the wallet page (M8.1).
 
 ### ADR-034: Pre-run validation is one pure function in `packages/spec`, enforced by the API before a job is queued and shown as a list under the Run button
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.12 adds pre-run validation (ARCHITECTURE section 8; DECISIONS "Pre-run checks"). Choices it needed:
 
@@ -395,7 +395,7 @@ M1.12 adds pre-run validation (ARCHITECTURE section 8; DECISIONS "Pre-run checks
 5. **The list sits under the Run button.** While anything stops a run, the Run button is disabled and "Before the simulation can run:" lists every reason (not only the first). Each line that belongs to a tree item is a link-styled button that opens that item (a body without a material opens Materials). The tree marks and the list agree: every setup item's mark is complete exactly when the list is empty, which a web unit test checks over a set of setups.
 
 ### ADR-035: `make verify` runs each case through a fresh API and worker and reads its results from the run's viewer files
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.13 adds the verification harness and the first two cases (docs/VERIFICATION.md, "Verification cases"). Choices it needed:
 
@@ -411,7 +411,7 @@ M1.13 adds the verification harness and the first two cases (docs/VERIFICATION.m
 10. **Deck numbers fit CalculiX's fields.** V-01 found that CalculiX 2.21 reads at most 20 characters of a number and silently drops the rest: `1.234567890123456e-16` is read as 0.1234. The deck generator now rounds a number whose shortest text is longer to as many significant digits as fit (at least 13). Existing deck snapshots are unchanged.
 
 ### ADR-036: `make e2e` runs Playwright against a fresh API, worker and dev server, and picks faces through the pointer
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction, pending his later review)
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M1.14 adds the first browser end-to-end test, E-01 (docs/VERIFICATION.md, "Browser end-to-end tests"). Choices it needed:
 
@@ -423,7 +423,7 @@ M1.14 adds the first browser end-to-end test, E-01 (docs/VERIFICATION.md, "Brows
 6. **The nightly workflow is unchanged.** Running `make e2e` there needs Docker, the worker image and Playwright's browser in CI, a change to the CI configuration that the maintainer decides (as for `make verify`, ADR-035 item 9).
 
 ### ADR-037: `make verify` and `make e2e` run in CI at the end of each milestone, not nightly
-2026-10-15 · Accepted (Shubham chose phase-end runs over nightly on 2026-10-15; the details below await his later review)
+2026-10-15 · Accepted (Shubham chose phase-end runs over nightly on 2026-10-15; details reviewed and accepted by Shubham on 2026-10-16)
 
 ADR-035 and ADR-036 left running the verification cases and the browser tests in CI to the maintainer. He chose to run them at the end of each milestone (M1, M2, M3 and so on) rather than every night. Choices this needed:
 
@@ -435,7 +435,7 @@ ADR-035 and ADR-036 left running the verification cases and the browser tests in
 6. **Three fixes the first CI runs needed.** `infra/verify.sh` now creates a `VERIFY_OUT` folder that does not exist yet, as `e2e.sh` already did. `infra/e2e.sh` starts Vite on `127.0.0.1` explicitly, because on the runner `localhost` resolves to `::1` and the script's readiness check on `127.0.0.1` never got an answer. The workflow sets `BUILDX_BAKE_ENTITLEMENTS_FS=0`, because the runner's `buildx bake` refuses to read the empty default CA secret (`/dev/null`) without a filesystem entitlement; `make dev` and the compose file are unchanged.
 
 ### ADR-038: `units.json` version 2 with the M2 kinds and three unit systems; one project per user holds the system; one shared quantity input
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review)
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M2.1 completes the units table, adds the project's default unit system ("Per-field unit choice with a project default", DECISIONS product table) and the shared quantity input (ARCHITECTURE section 9). Choices it needed:
 
@@ -447,7 +447,7 @@ M2.1 completes the units table, adds the project's default unit system ("Per-fie
 6. **The choice sits under the simulation tree.** "Unit system" is a list at the bottom of the tree pane, with a line saying it sets the units offered first and used for results and that values keep the unit they were entered in. The change shows at once and is put back, with the API's reason, if the API refuses it. The viewer's hover line now gives the face area in the system's area unit, which ADR-025 left for M2.1.
 
 ### ADR-039: Prescribed displacement and frictionless support as per-node constraints; rigid-body check; reactions shared per node
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review)
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M2.2 adds the prescribed displacement and the frictionless (symmetry) support (DECISIONS product table, planar faces only). Choices it needed:
 
@@ -461,7 +461,7 @@ M2.2 adds the prescribed displacement and the frictionless (symmetry) support (D
 
 
 ### ADR-040: Force as a uniform traction, gravity and centrifugal load as CalculiX body loads, applied loads taken out of reactions
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review)
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M2.3 adds the force on a face, gravity and the centrifugal load (DECISIONS product table). Choices it needed:
 
@@ -473,7 +473,7 @@ M2.3 adds the force on a face, gravity and the centrifugal load (DECISIONS produ
 6. **Verification.** V-10 (column standing on a fixed base under its own weight, in inches with lb/in³ and g) checks the base reaction against the weight, the mid-height stress ρgh/2 and the top's shortening. V-06 (a quarter of a thin ring on three symmetry planes at 10,000 rpm) checks the hoop stress and radial growth on both faces against the plane stress rotating disc, and each cut's reaction against the hoop force ρω²t(b³ − a³)/3. V-02's end load becomes a force on the patch, as VERIFICATION.md planned; its results do not change, and it gains a check of the clamp's reaction. The harness adds forces and body loads (from the volume and first moment the run's surface encloses) to the applied total it balances reactions against.
 
 ### ADR-041: Remote force and moment as the statically equivalent linear traction on the faces, written as nodal loads
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review)
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M2.4 adds the remote force and moment (DECISIONS product table). Choices it needed:
 
@@ -484,7 +484,7 @@ M2.4 adds the remote force and moment (DECISIONS product table). Choices it need
 5. **Verification.** V-04 (a round stub clamped at one end, an axial force through a point 10 mm off its axis plus a torque and a bending moment, in cm, kN, lbf, N·m and lbf·in) checks von Mises on top, underneath and on the side along the middle against Saint-Venant extension, bending and torsion, which together pin the force, the moment and the point's lever, and the clamp's reaction against the force. `worker/spikes/load_check` solves a column loaded through a point off to the side and above it and checks, node by node, that the base reaction balances the force and, about the point, the moment, and that the axial stress at mid-height follows beam theory.
 
 ### ADR-042: Hydrostatic pressure from a fluid density, gravity and a free-surface point, written as nodal loads
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review)
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M2.5 adds hydrostatic pressure (DECISIONS product table; PLAN: fluid density, free-surface level, direction). Choices it needed:
 
@@ -495,7 +495,7 @@ M2.5 adds hydrostatic pressure (DECISIONS product table; PLAN: fluid density, fr
 5. **Verification.** V-05 (a strip of tank wall clamped at its base, water up to 100 mm below its top, ν = 0 so it is a cantilever beam; in GPa, g/cm³, ft/s², g, m/s², in, m and cm) checks the base reaction against ρ g b H²/2, the bending stress at two heights against the cubic moment ρ g b (H − z)³/6 and the top deflection. The harness's balance check integrates the pressure exactly over each surface triangle's wet part. `worker/spikes/load_check` checks a sunk column (nodal loads equal Archimedes' buoyancy with no moment, and the base reaction balances them although the held base is wet) and a column wet on one side.
 
 ### ADR-043: Elastic support as normal-only grounded springs per node, its reaction from displacements
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review)
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M2.6 adds the elastic support (DECISIONS product table: "elastic (spring) support"; ARCHITECTURE section 7: grounded springs per node weighted by nodal area). Choices it needed:
 
@@ -508,7 +508,7 @@ M2.6 adds the elastic support (DECISIONS product table: "elastic (spring) suppor
 7. **Verification.** V-07 (a 100 × 60 × 40 mm block on a foundation of 2,000 lbf/in³ with two symmetry planes, pressed by 6 kN) checks settlement F/(kA), top displacement, uniform stress and the foundation reaction to 0.1 percent; new V-25 (V-09's quarter tube in a stiff sleeve, k = 5 × 10¹¹ N/m³) checks the curved case against Lamé with σr(b) = −k u(b), including springs at nodes held through local axes. `worker/spikes/support_check` adds a turned bar pressed into a foundation on a leaning face (every node's displacement and stress exact, the support's reaction p·A along the normal) and the refusal of an elastic support alone on one face.
 
 ### ADR-044: Uniform temperature change as initial and final nodal temperatures, expansion per material
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review)
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M2.7 adds the uniform temperature change (DECISIONS product table; ARCHITECTURE section 7: initial and final temperature fields). Choices it needed:
 
@@ -534,7 +534,7 @@ M2.8 adds local mesh sizes on faces, edges and bodies, the element order choice 
 9. **Verification.** V-03, a plate with a hole (d/W = 0.1, ν = 0) on three symmetry planes with a 0.5 mm local size on the hole (0.25 mm full tier) against a 5 mm global size, checks the peak stress against Ktg = 3.025 (Howland; Peterson's fit) and the far-field stress. V-26 is V-24's kind of bar under a force with four-node tetrahedra, exact to 0.1 percent.
 
 ### ADR-046: A material library of 24 metals copied as printed from MIL-HDBK-5G, and users' own materials kept per user
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review)
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M2.9 adds the generic material library and custom materials saved per user (DECISIONS product table, "Materials"). Choices it needed:
 
@@ -547,7 +547,7 @@ M2.9 adds the generic material library and custom materials saved per user (DECI
 7. **Setup.** The Materials panel has "Add an empty material" and below it a material list (your materials first, then the library) showing the chosen material's values in the project's units with the values as given, and its source; "Add this material" copies it, and a saved material can be deleted there. A material's panel shows "Values from …" and has "Save to my materials".
 
 ### ADR-047: Meshes reused by a SHA-256 settings hash of geometry, scaling and mesh settings, shared across a user's simulations
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review)
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16)
 
 M2.10 makes meshes reusable across runs when the mesh settings are unchanged (DECISIONS data structure). Choices it needed:
 
@@ -561,7 +561,7 @@ M2.10 makes meshes reusable across runs when the mesh settings are unchanged (DE
 
 
 ### ADR-048: The production solver stays the packaged CalculiX 2.21-1 with single-threaded SPOOLES; iterative solvers are not used for runs; PaStiX is measured but not adopted yet
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review). Item 7 updated the same day with PaStiX's results (his choice (a)); it needs his decision on adopting PaStiX and on the 2-million-element target.
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16). Item 7 updated the same day with PaStiX's results (his choice (a)); adopting PaStiX is parked as its own task after M2 (his choice), and the 2-million-element target is still open.
 
 M2.11 benchmarks CalculiX's equation solvers for the production build (ADR-010). Script, raw data and method: `worker/benchmarks/solver/` (`results.json` is what M2.12 fits). Measured in the Claude Code sandbox: 4 cores (Intel Xeon, 2.8 GHz), 15.7 GiB RAM, 13.4 GiB memory limit for the process group. Model: a 100 × 100 × 50 mm steel block held at one end and pressed at the other, second-order tetrahedra, meshes and decks made by the worker's own mesher and deck generator. Choices it needed:
 
@@ -598,7 +598,7 @@ M2.11 benchmarks CalculiX's equation solvers for the production build (ADR-010).
 
 
 ### ADR-049: Estimator v1 is two power laws in the node count, fitted to timed solve jobs; machine sizes are listed by memory and recommended by memory alone
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review).
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M2.12 adds the estimate before a run and the machine-size recommendation that DECISIONS asks for (Estimate, Size recommendation) and ARCHITECTURE describes (Estimator). Choices it needed:
 
