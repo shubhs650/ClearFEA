@@ -44,3 +44,38 @@ checks:
     box: { min: [-61, -61, 215], max: [61, 61, 235] }
     reference: { value: 0.0048, unit: mm }
     tolerance: { coarse: 0.01, full: 0.005 }
+# Principal stresses and stress and strain components (M3.1, ADR-050). At the bore the hoop
+# stress is σ1 and the radial stress (the pressure) σ3; σz = 0 is σ2 and is not checked, since a
+# relative tolerance needs a reference other than zero. The shear checks read the bore near
+# 45 degrees, where τxy = (σr − σθ) sin θ cos θ is largest; the band 150 to 290 mm along z is
+# 6/β or more from the fixed end (reference.md) and gives the coarse mesh enough vertices.
+  - name: Hoop stress at the bore is σ1
+    quantity: principal.1
+    face: bore
+    box: { min: [-41, -41, 215], max: [41, 41, 235] }
+    reference: { value: 26.0, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Radial stress at the bore is σ3, the pressure
+    quantity: principal.3
+    face: bore
+    box: { min: [-41, -41, 215], max: [41, 41, 235] }
+    reference: { value: -10.0, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Hoop stress at the outside is σ1
+    quantity: principal.1
+    face: outside
+    box: { min: [-61, -61, 215], max: [61, 61, 235] }
+    reference: { value: 16.0, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Shear stress τxy at 45 degrees on the bore
+    quantity: stress.xy
+    face: bore
+    box: { min: [27.5, 27.5, 150], max: [29.1, 29.1, 290] }
+    reference: { value: -18.0, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Shear strain εxy at 45 degrees on the bore (tensor, γxy / 2)
+    quantity: strain.xy
+    face: bore
+    box: { min: [27.5, 27.5, 150], max: [29.1, 29.1, 290] }
+    reference: { value: -117.0, unit: µε }
+    tolerance: { coarse: 0.03, full: 0.01 }

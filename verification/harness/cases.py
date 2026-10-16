@@ -68,10 +68,18 @@ class Case:
     spec: dict[str, Any]  # spec.json, faces by name
 
 
+#: Tensor components in fields.bin order (result-fields.md): xx, yy, zz, xy, yz, zx.
+TENSOR = ("xx", "yy", "zz", "xy", "yz", "zx")
+
 #: Quantity a check can compare -> its units.json kind. Radial is about the z axis. A reaction
-#: is a component of one support's total reaction in the run's result (M2.2).
+#: is a component of one support's total reaction in the run's result (M2.2). Stress and strain
+#: components and principal stresses (σ1 ≥ σ2 ≥ σ3) are the run's fields as written (M3.1);
+#: shear strains are tensor components, half of γ.
 QUANTITIES = {
     "vonMises": "pressure",
+    **{f"stress.{c}": "pressure" for c in TENSOR},
+    **{f"principal.{k}": "pressure" for k in (1, 2, 3)},
+    **{f"strain.{c}": "strain" for c in TENSOR},
     "displacement": "length",
     "displacement.x": "length",
     "displacement.y": "length",
@@ -201,9 +209,17 @@ def build_spec(case: Case, tags: dict[str, int], geometry_id: str, tier: str) ->
     return spec
 
 
-def _value(quantity: str, p: tuple[float, ...], u: tuple[float, ...], mises: float) -> float:
+def _value(
+    quantity: str, p: tuple[float, ...], fields: dict[str, list[tuple[float, ...]]], v: int
+) -> float:
+    u = fields["displacement"][v]
     if quantity == "vonMises":
-        return mises
+        return fields["vonMises"][v][0]
+    field, _, part = quantity.partition(".")
+    if field in ("stress", "strain"):
+        return fields[field][v][TENSOR.index(part)]
+    if field == "principal":
+        return fields["principalStress"][v][int(part) - 1]
     if quantity == "displacement":
         return math.sqrt(sum(c * c for c in u))
     if quantity == "displacement.radial":
@@ -225,9 +241,7 @@ def evaluate(
         for v in range(patch.first_vertex, patch.first_vertex + patch.vertex_count):
             p = surface.positions[v]
             if check.box is None or check.box.holds(p):
-                values.append(
-                    _value(check.quantity, p, fields["displacement"][v], fields["vonMises"][v][0])
-                )
+                values.append(_value(check.quantity, p, fields, v))
     if not values:
         raise CaseError(
             f"No surface vertex of face {check.face} lies in the box of {check.name!r}."

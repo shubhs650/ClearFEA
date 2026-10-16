@@ -68,13 +68,78 @@ export function parseResultFields(buffer: ArrayBuffer): ResultFields {
   return { vertexCount, fields };
 }
 
-/** The quantities the result view can colour the model by. */
-export type Quantity = "displacement" | "vonMises";
+/** The quantities the result view can colour the model by (M1.9; components and principal
+ * stresses since M3.1, ADR-050). */
+export type Quantity =
+  | "displacement"
+  | "vonMises"
+  | "principal1"
+  | "principal2"
+  | "principal3"
+  | "stressXX"
+  | "stressYY"
+  | "stressZZ"
+  | "stressXY"
+  | "stressYZ"
+  | "stressZX"
+  | "strainXX"
+  | "strainYY"
+  | "strainZZ"
+  | "strainXY"
+  | "strainYZ"
+  | "strainZX";
 
-export const QUANTITIES: Record<Quantity, { label: string; kind: string }> = {
-  displacement: { label: "Displacement magnitude", kind: "length" },
-  vonMises: { label: "Von Mises stress", kind: "pressure" },
+export type QuantityGroup = "Displacement" | "Stress" | "Strain";
+
+export type QuantityInfo = {
+  label: string;
+  /** units.json kind of the values. */
+  kind: string;
+  group: QuantityGroup;
+  /** The fields.bin field it is read from, its component count, and the component shown;
+   * null shows a vector's length or a scalar's value. */
+  field: string;
+  components: number;
+  component: number | null;
 };
+
+const tensor = (field: string, kind: string, c: number): Pick<QuantityInfo, "field" | "kind" | "components" | "component"> => ({
+  field,
+  kind,
+  components: 6,
+  component: c,
+});
+
+/** In menu order. Tensor components are in CalculiX's order xx, yy, zz, xy, yz, zx; shear
+ * strains are tensor components, half the engineering shear strain γ. */
+export const QUANTITIES: Record<Quantity, QuantityInfo> = {
+  displacement: { label: "Displacement magnitude", kind: "length", group: "Displacement", field: "displacement", components: 3, component: null },
+  vonMises: { label: "Von Mises stress", kind: "pressure", group: "Stress", field: "vonMises", components: 1, component: null },
+  principal1: { label: "Maximum principal stress σ1", kind: "pressure", group: "Stress", field: "principalStress", components: 3, component: 0 },
+  principal2: { label: "Middle principal stress σ2", kind: "pressure", group: "Stress", field: "principalStress", components: 3, component: 1 },
+  principal3: { label: "Minimum principal stress σ3", kind: "pressure", group: "Stress", field: "principalStress", components: 3, component: 2 },
+  stressXX: { label: "Normal stress σxx", group: "Stress", ...tensor("stress", "pressure", 0) },
+  stressYY: { label: "Normal stress σyy", group: "Stress", ...tensor("stress", "pressure", 1) },
+  stressZZ: { label: "Normal stress σzz", group: "Stress", ...tensor("stress", "pressure", 2) },
+  stressXY: { label: "Shear stress τxy", group: "Stress", ...tensor("stress", "pressure", 3) },
+  stressYZ: { label: "Shear stress τyz", group: "Stress", ...tensor("stress", "pressure", 4) },
+  stressZX: { label: "Shear stress τzx", group: "Stress", ...tensor("stress", "pressure", 5) },
+  strainXX: { label: "Normal strain εxx", group: "Strain", ...tensor("strain", "strain", 0) },
+  strainYY: { label: "Normal strain εyy", group: "Strain", ...tensor("strain", "strain", 1) },
+  strainZZ: { label: "Normal strain εzz", group: "Strain", ...tensor("strain", "strain", 2) },
+  strainXY: { label: "Shear strain εxy (γxy / 2)", group: "Strain", ...tensor("strain", "strain", 3) },
+  strainYZ: { label: "Shear strain εyz (γyz / 2)", group: "Strain", ...tensor("strain", "strain", 4) },
+  strainZX: { label: "Shear strain εzx (γzx / 2)", group: "Strain", ...tensor("strain", "strain", 5) },
+};
+
+/** The values a quantity shows, one per vertex: a component of its field, or the field's
+ * scalarValues. */
+export function quantityValues(field: ResultField, component: number | null): Float32Array {
+  if (component === null) return scalarValues(field);
+  const out = new Float32Array(field.values.length / field.components);
+  for (let v = 0; v < out.length; v++) out[v] = field.values[v * field.components + component] ?? 0;
+  return out;
+}
 
 /** One value per vertex: the vector's length for a vector field, the value for a scalar one. */
 export function scalarValues(field: ResultField): Float32Array {

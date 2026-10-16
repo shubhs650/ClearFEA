@@ -1070,7 +1070,23 @@ describe("run", () => {
     const legend = await screen.findByLabelText("Legend");
     expect(legend.textContent).toContain("Von Mises stress (MPa)");
     expect(legend.textContent).toContain("Deformed shape, scale ×5");
-    fireEvent.change(settings().getByLabelText("Quantity"), { target: { value: "displacement" } });
+    // The quantity list is grouped: displacement, then stresses, then strains (M3.1).
+    const quantity = settings().getByLabelText("Quantity");
+    expect([...quantity.querySelectorAll("optgroup")].map((g) => g.label)).toEqual(["Displacement", "Stress", "Strain"]);
+    expect([...quantity.querySelectorAll("optgroup[label=Stress] option")].map((o) => o.textContent)).toEqual([
+      "Von Mises stress",
+      "Maximum principal stress σ1",
+      "Middle principal stress σ2",
+      "Minimum principal stress σ3",
+      "Normal stress σxx",
+      "Normal stress σyy",
+      "Normal stress σzz",
+      "Shear stress τxy",
+      "Shear stress τyz",
+      "Shear stress τzx",
+    ]);
+    expect(quantity.querySelectorAll("optgroup[label=Strain] option")).toHaveLength(6);
+    fireEvent.change(quantity, { target: { value: "displacement" } });
     fireEvent.change(settings().getByLabelText("Shape"), { target: { value: "undeformed" } });
     expect(legend.textContent).toContain("Displacement magnitude (mm)");
     expect(legend.textContent).toContain("Undeformed shape");

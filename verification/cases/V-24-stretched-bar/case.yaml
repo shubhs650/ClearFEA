@@ -55,3 +55,24 @@ checks:
     support: start
     reference: { value: -3.625, unit: kip }
     tolerance: { coarse: 0.001, full: 0.001 }
+# Stress and strain components and principal stresses (M3.1, ADR-050): uniaxial stress along x.
+  - name: Normal stress σxx along the side (E ε)
+    quantity: stress.xx
+    face: side-y
+    reference: { value: 14.5, unit: ksi }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Largest principal stress along the side is σxx
+    quantity: principal.1
+    face: side-y
+    reference: { value: 14.5, unit: ksi }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Axial strain along the side (δ / L)
+    quantity: strain.xx
+    face: side-y
+    reference: { value: 500, unit: µε }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Lateral strain along the side (−ν ε)
+    quantity: strain.yy
+    face: side-y
+    reference: { value: -0.000145, unit: in/in }
+    tolerance: { coarse: 0.001, full: 0.001 }

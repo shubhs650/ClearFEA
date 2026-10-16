@@ -46,3 +46,26 @@ checks:
     face: top
     reference: { value: 0.007605, unit: mm }
     tolerance: { coarse: 0.001, full: 0.001 }
+# Stress and strain components and principal stresses (M3.1, ADR-050). The strain shown is
+# the total strain, thermal part included, so the held length reads zero (not checked: a
+# relative tolerance needs a reference other than zero) and the free sides read (1 + ν) α ΔT.
+  - name: Axial stress σxx is compression −E alpha dT
+    quantity: stress.xx
+    face: side
+    reference: { value: -116.969557, unit: MPa }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Smallest principal stress is the axial compression
+    quantity: principal.3
+    face: side
+    reference: { value: -116.969557, unit: MPa }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Total strain across the width (1 + nu) alpha dT
+    quantity: strain.yy
+    face: side
+    reference: { value: 0.07605, unit: "%" }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Total strain through the thickness (1 + nu) alpha dT
+    quantity: strain.zz
+    face: top
+    reference: { value: 760.5, unit: µε }
+    tolerance: { coarse: 0.001, full: 0.001 }

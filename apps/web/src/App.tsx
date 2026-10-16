@@ -125,6 +125,7 @@ export function App() {
       length: systemUnit(unitSystem, "length"),
       pressure: systemUnit(unitSystem, "pressure"),
       force: systemUnit(unitSystem, "force"),
+      strain: systemUnit(unitSystem, "strain"),
     }),
     [unitSystem],
   );
