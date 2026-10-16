@@ -80,6 +80,10 @@ export interface UnitReading {
 export interface TopologyBody {
   tag: number;
   /**
+   * The body's name from the STEP file (its part's name), when the file gives one (M4.1, ADR-058). Absent for geometries imported before M4.1 and for unnamed bodies.
+   */
+  name?: string;
+  /**
    * Cubic metres.
    */
   volume: number;

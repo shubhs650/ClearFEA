@@ -8,6 +8,7 @@
 
 import type { SimulationSpec } from "./generated/simulation";
 import {
+  bodyLabels,
   displacementAxes,
   hasBodyLoad,
   hasTemperatureChange,
@@ -42,10 +43,21 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
   if (spec.materials.length === 0) {
     add("materials", "There is no material. Add a material under Materials.");
   } else {
-    const unassigned = spec.bodies.filter((b) => b.material === null).map((b) => b.tag);
+    // Named bodies are quoted, others go by their tag: Bodies "Base plate", 3 have ... (M4.1).
+    const labels = topology ? bodyLabels(topology) : new Map<number, string>();
+    const unassigned = spec.bodies
+      .filter((b) => b.material === null)
+      .map((b) => {
+        const label = labels.get(b.tag);
+        return label === undefined || label === `Body ${b.tag}` ? `${b.tag}` : `"${label}"`;
+      });
     if (unassigned.length > 0) {
-      const which = unassigned.length === 1 ? `Body ${unassigned[0]} has` : `Bodies ${unassigned.join(", ")} have`;
-      add("bodies", `${which} no material. Assign one under Materials.`);
+      add(
+        "bodies",
+        unassigned.length === 1
+          ? `Body ${unassigned[0]} has no material. Pick one for it under Bodies.`
+          : `Bodies ${unassigned.join(", ")} have no material. Pick one for each under Bodies.`,
+      );
     }
   }
   const bodyLoad = hasBodyLoad(spec);

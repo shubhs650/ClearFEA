@@ -5,9 +5,9 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M4 Assemblies, not started (M3 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M4.1, once the maintainer gives the go for M4 (the autodrive covered M1 to M3)
-- **Blocked on:** the maintainer's go for M4
+- **Current milestone:** M4 Assemblies, in progress under the maintainer's autodrive (M3 closed 2026-10-16 on a green phase-end run on main)
+- **Next task:** M4.2
+- **Blocked on:** nothing
 
 ## Milestones
 
@@ -17,7 +17,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M1 | Thin slice | Done (phase-end run on main green, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); maintainer waived the hand exit check) | 2026-10-15 |
 | M2 | Structural setup | Done (phase-end run on main green, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) | 2026-10-16 |
 | M3 | Results tools | Done (phase-end run on main green, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) | 2026-10-16 |
-| M4 | Assemblies | Not started | |
+| M4 | Assemblies | In progress | |
 | M5 | Thermal | Not started | |
 | M6 | Modal | Not started | |
 | M7 | Report | Not started | |
@@ -82,6 +82,14 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M3.7 Display-unit switching for results without rerun
 - [x] M3.8 CSV and VTK export
 
+### M4 Assemblies
+
+- [x] M4.1 Multi-body import: bodies listed, per-body material assignment
+- [ ] M4.2 Bond detection between touching faces with a tolerance; bond list with accept and remove; highlight in the viewer
+- [ ] M4.3 Per-body meshing; tie constraints in the deck
+- [ ] M4.4 Validation: unbonded or unrestrained bodies reported before run
+- [ ] M4.5 Report text noting reduced stress accuracy at tied interfaces (stored for M7)
+
 ## Maintainer to-do
 
 Things only the maintainer can do.
@@ -105,6 +113,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M4.1 (2026-10-16): multi-body import with bodies listed and a material per body (ADR-058, accepted under Shubham's autodrive, pending his review). No physics-critical module touched. Import was already multi-body (each STEP solid a Gmsh volume, touching bodies keep separate faces, each meshed on its own with no shared nodes); what is new: `topology.json` bodies carry an optional `name` read from Gmsh's STEP label (last part of `Shapes/<assembly>/<n>/<part>`; OpenCASCADE's "Open CASCADE STEP translator …" placeholder and instance numbers are not names), `bodyLabels` in `packages/spec` (name, or "Body <tag>", tag added to shared names), a Bodies group in the tree (row per body, material list per body, opening a body selects its faces), labels in the material panel, viewer hide/show list and face hover, and pre-run messages pointing to Bodies. Test model: `two_blocks` in `worker/tests/step_models.py` (product names rewritten in the STEP text, since Gmsh writes only placeholders). Surprise: OpenCASCADE numbers its placeholder product names per process ("… 7.8 3.1" after earlier writes), so the test model finds them by pattern. Screenshots in the project's `m4.1/` folder. Next: M4.2 (bond detection); the solver thread "PaStiX default and 16 GB limits" runs alongside and owns solver, estimator and size caps.
 
 > M3 close (2026-10-16): M3 closed on a green manual phase-end run on main (see the Milestones table). Next is M4 in PLAN.md order, which waits for the maintainer's go: his autodrive covered M1 to M3. The maintainer reviewed and accepted ADR-054 to ADR-057 on 2026-10-16, so every ADR to date is accepted by him (ADR-054 item 7's temper choices included). Still waiting on the maintainer: how to reach the 2-million-element target (ADR-048 item 7).
 
@@ -222,6 +232,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M4.1: bodies of an assembly listed by their STEP part names in a new Bodies group, each with its material (ADR-058). Learned: Gmsh keeps STEP product names as entity labels (`getEntityName`), so no STEP parsing of our own is needed.
 - ADR-054 to ADR-057 marked accepted by the maintainer (he reviewed them after the M3 close).
 - M3 closed: phase-end workflow run by hand on main df2a895 ([run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) green, `make verify` full tier 146 of 146 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26) and `make e2e` E-01. Next: M4, waiting on the maintainer's go.
 - M3.8: CSV and VTK export of a run's results, built in the browser from its stored files (ADR-057). Learned: writing text is the slow part (28 s for 2.7 million nodes), not the VTK file (under half a second).

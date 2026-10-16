@@ -195,12 +195,26 @@ describe("setup status marks", () => {
     ]);
   });
 
-  it("asks for a material on a body that has none", () => {
+  it("asks for a material on a body that has none, on the body and under Bodies (M4.1)", () => {
     const spec = assignMaterial(complete(), 1, null);
-    expect(setupStatus(spec, topology).get("materials")).toEqual({
-      mark: "incomplete",
-      notes: ["Assign a material to body 1."],
-    });
+    const statuses = setupStatus(spec, topology);
+    expect(statuses.get("bodies")).toEqual({ mark: "incomplete", notes: ["Pick a material for Body 1."] });
+    expect(statuses.get("body:1")).toEqual({ mark: "incomplete", notes: ["Pick its material."] });
+    expect(statuses.get("materials")?.mark).toBe("complete");
+  });
+
+  it("names bodies by their part names (M4.1)", () => {
+    const two = {
+      ...complete(),
+      bodies: [
+        { tag: 1, material: null },
+        { tag: 2, material: null },
+      ],
+    };
+    const named = { ...topology, bodies: [{ tag: 1, name: "Shell" }, { tag: 2 }] };
+    expect(setupStatus(two, named).get("bodies")?.notes).toEqual(["Pick a material for Shell, Body 2."]);
+    const none = { ...two, materials: [] };
+    expect(setupStatus(none, named).get("body:2")?.notes).toEqual(["Add a material under Materials, then pick it here."]);
   });
 });
 

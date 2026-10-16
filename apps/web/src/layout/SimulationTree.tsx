@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The simulation tree (M1.5): geometry, then materials, supports and loads with their items,
+// The simulation tree (M1.5): geometry, then its bodies (M4.1), materials, supports and loads with their items,
 // then the mesh (M1.6) with its local sizes (M2.8) and the run (M1.8).
 // Each row carries a complete / incomplete / error mark; selecting a row opens its settings.
 
 import type { GeometryStatus, GeometryView } from "@clearfea/spec";
 import type { ReactNode } from "react";
-import type { Group, ItemStatus, Mark } from "../setup/spec";
+import { bodyItem, type Group, type ItemStatus, type Mark } from "../setup/spec";
 import type { SaveState, Setup } from "../setup/useSimulation";
 
 const markLabels: Record<Mark, string> = {
@@ -83,6 +83,7 @@ export function SimulationTree({
   starting,
   startProblem,
   units,
+  bodyLabels,
 }: {
   geometry: GeometryView | null;
   setup: Setup;
@@ -95,6 +96,8 @@ export function SimulationTree({
   startProblem?: string;
   /** The project's unit system choice, shown under the tree. */
   units?: ReactNode;
+  /** What each body is called (M4.1): its part name, or "Body <tag>". */
+  bodyLabels?: ReadonlyMap<number, string>;
 }) {
   const geometryStatus: ItemStatus = {
     mark: geometry === null ? "incomplete" : geometryMarks[geometry.status],
@@ -107,6 +110,25 @@ export function SimulationTree({
         <li>
           <Row id="geometry" label="Geometry" status={geometryStatus} selected={selected} onSelect={onSelect} />
         </li>
+        {setup.kind === "open" && (
+          <li>
+            <Row id="bodies" label="Bodies" status={statuses.get("bodies")} selected={selected} onSelect={onSelect} />
+            <ul className="tree">
+              {setup.spec.bodies.map((body) => (
+                <li key={body.tag}>
+                  <Row
+                    id={bodyItem(body.tag)}
+                    label={bodyLabels?.get(body.tag) ?? `Body ${body.tag}`}
+                    status={statuses.get(bodyItem(body.tag))}
+                    selected={selected}
+                    onSelect={onSelect}
+                    depth={1}
+                  />
+                </li>
+              ))}
+            </ul>
+          </li>
+        )}
         {setup.kind === "open" &&
           groups.map(({ group, label }) => {
             const items =

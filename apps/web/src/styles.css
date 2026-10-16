@@ -532,6 +532,28 @@ button:disabled {
   gap: 4px;
 }
 
+/* The Bodies panel (M4.1): a row per body with its material. */
+.setup-bodies-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.setup-bodies-table th,
+.setup-bodies-table td {
+  text-align: left;
+  padding: 3px 6px 3px 0;
+  font-weight: normal;
+}
+
+.setup-bodies-table thead th {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.setup-bodies-table select {
+  width: 100%;
+}
+
 .field-actions-column {
   flex-direction: column;
   align-items: flex-start;

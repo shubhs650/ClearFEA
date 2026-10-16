@@ -2,6 +2,7 @@
 export * from "./generated";
 export { movesByDisplacement, preRunProblems } from "./prerun";
 export {
+  bodyLabels,
   checkSimulationSpec,
   displacementAxes,
   elementOrder,

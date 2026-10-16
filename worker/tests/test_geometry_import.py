@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 from clearfea_worker.geometry.display import FacePatch, read_display
-from clearfea_worker.geometry.importer import ImportFailure, import_geometry
+from clearfea_worker.geometry.importer import ImportFailure, body_name, import_geometry
 from clearfea_worker.spec.geometry_schema import Topology
 
-from .step_models import block_with_hole, plate_surface, with_length_unit
+from .step_models import block_with_hole, plate_surface, two_blocks, with_length_unit
 
 #: Re-imports of the same file with the same versions agree exactly (ADR-023); allow rounding.
 SAME = 1e-12
@@ -64,6 +64,46 @@ def test_imports_a_millimetre_file_in_metres(mm_step: Path, tmp_path: Path) -> N
     assert sorted(f.type for f in topo.faces) == ["cylinder"] + ["plane"] * 6
     # OpenCASCADE pads bounding boxes by its tolerance, 1e-7 m here.
     assert topo.bbox == pytest.approx([0, 0, 0, 0.1, 0.05, 0.02], abs=2e-7)
+
+
+def test_an_unnamed_body_has_no_name(mm_step: Path, tmp_path: Path) -> None:
+    import_geometry(mm_step, tmp_path, None)
+    document = json.loads((tmp_path / "topology.json").read_text())
+    assert "name" not in document["bodies"][0]
+    assert load(tmp_path).bodies[0].name is None
+
+
+def test_lists_each_body_of_an_assembly_with_its_part_name(tmp_path: Path) -> None:
+    step = two_blocks(tmp_path / "pair.step", ("Bracket assembly", "Base plate", "Lug"))
+    output = import_geometry(step, tmp_path / "out", None)
+    assert (output.result.bodies, output.result.faces) == (2, 12)
+    topo = load(tmp_path / "out")
+    assert [(b.tag, b.name) for b in topo.bodies] == [(1, "Base plate"), (2, "Lug")]
+    assert [b.volume for b in topo.bodies] == pytest.approx([2e-5, 1.2e-5], rel=1e-9)
+    # Touching bodies keep their own faces; finding and tying the touching pair is M4.2/M4.3.
+    assert all(len(f.bodies) == 1 for f in topo.faces)
+    assert set(topo.bodies[0].faces).isdisjoint(topo.bodies[1].faces)
+
+
+def test_placeholder_product_names_are_not_body_names(tmp_path: Path) -> None:
+    import_geometry(two_blocks(tmp_path / "pair.step"), tmp_path / "out", None)
+    assert [b.name for b in load(tmp_path / "out").bodies] == [None, None]
+
+
+@pytest.mark.parametrize(
+    ("label", "name"),
+    [
+        ("Shapes/Bracket assembly/2/Lug", "Lug"),
+        ("Shapes/Bracket", "Bracket"),
+        ("Shapes/Open CASCADE STEP translator 7.8 1.2", None),
+        ("Shapes/Bracket assembly/2", None),
+        ("Shapes", None),
+        ("", None),
+        ("Shapes/Pad " + "x" * 200, "Pad " + "x" * 116),
+    ],
+)
+def test_reads_a_body_name_from_its_step_label(label: str, name: str | None) -> None:
+    assert body_name(label) == name
 
 
 def test_lists_every_edge_with_a_polyline_along_it(mm_step: Path, tmp_path: Path) -> None:

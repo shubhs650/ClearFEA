@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../fixtures/simulation-v1.json";
 import {
+  bodyLabels,
   checkSimulationSpec,
   elementOrder,
   emptySimulationSpec,
@@ -75,6 +76,21 @@ describe("SimulationSpec schema", () => {
 
   it("lets a create request leave the spec out", () => {
     expect(validateCreateSimulationRequest({ geometryId: "g1", name: "Static 1" }).ok).toBe(true);
+  });
+});
+
+describe("bodyLabels", () => {
+  it("uses part names, falls back to the tag and tells shared names apart", () => {
+    const labels = bodyLabels({
+      bodies: [{ tag: 1, name: "Shell" }, { tag: 2 }, { tag: 3, name: "Bolt" }, { tag: 4, name: "Bolt" }],
+      faces: [],
+    });
+    expect([...labels]).toEqual([
+      [1, "Shell"],
+      [2, "Body 2"],
+      [3, "Bolt (body 3)"],
+      [4, "Bolt (body 4)"],
+    ]);
   });
 });
 

@@ -44,6 +44,11 @@ EDGE_POINTS_CURVED = 49
 log = logging.getLogger(__name__)
 
 _FACE_TYPES = {"Plane": "plane", "Cylinder": "cylinder"}
+#: The product name OpenCASCADE writes when a shape has none ("Open CASCADE STEP translator 7.8
+#: 1.2"): not a name anyone gave the part.
+_PLACEHOLDER_NAME = re.compile(r"^Open CASCADE STEP translator\b")
+#: Longest body name kept; a STEP string has no limit.
+MAX_NAME_LENGTH = 120
 #: Gmsh element type of a 3-node triangle.
 _TRIANGLE = 2
 
@@ -114,6 +119,22 @@ def _bbox(gmsh: ModuleType, dim: int, tag: int) -> list[float]:
     return [float(v) for v in gmsh.model.getBoundingBox(dim, tag)]
 
 
+def body_name(label: str) -> str | None:
+    """A body's name from Gmsh's STEP label, or None when the file names it not.
+
+    Gmsh labels each imported solid with its path in the file's assembly tree, for example
+    ``Shapes/Bracket assembly/2/Lug``: the last part is the name of the solid's own product
+    (M4.1, ADR-058). Instance numbers and OpenCASCADE's placeholder product names are not names.
+    """
+    parts = [p.strip() for p in label.split("/") if p.strip()]
+    if not parts or parts == ["Shapes"]:
+        return None
+    name = parts[-1]
+    if name.isdigit() or _PLACEHOLDER_NAME.match(name):
+        return None
+    return name[:MAX_NAME_LENGTH].rstrip()
+
+
 def topology(gmsh: ModuleType, unit: UnitReading, scaling: float) -> Topology:
     model = gmsh.model
     bodies = []
@@ -122,6 +143,7 @@ def topology(gmsh: ModuleType, unit: UnitReading, scaling: float) -> Topology:
         bodies.append(
             TopologyBody(
                 tag=vol,
+                name=body_name(model.getEntityName(3, vol)),
                 volume=model.occ.getMass(3, vol),
                 faces=sorted(int(f) for f in faces),
             )
@@ -273,9 +295,11 @@ def import_geometry(step: Path, out_dir: Path, confirmed_unit: str | None) -> Im
                 "that are broken or too small; repair them in your CAD system.",
             ) from None
     topology_path = out_dir / "topology.json"
-    topology_path.write_text(
-        json.dumps(topo.model_dump(mode="json", by_alias=True)), encoding="utf-8"
-    )
+    document = topo.model_dump(mode="json", by_alias=True)
+    for body in document["bodies"]:
+        if body["name"] is None:
+            del body["name"]  # the schema has no null name: an unnamed body has none
+    topology_path.write_text(json.dumps(document), encoding="utf-8")
     display_path = out_dir / "display.bin"
     triangles = write_display(display_path, patches)
     result = ImportResult(

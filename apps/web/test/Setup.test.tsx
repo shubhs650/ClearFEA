@@ -370,6 +370,62 @@ describe("setup tree", () => {
     expect(settings().getByText("Enter Young's modulus and Poisson's ratio to save it to your materials.")).toBeTruthy();
   });
 
+  it("lists the bodies of an assembly by part name and assigns each its material (M4.1)", async () => {
+    const assembly = {
+      ...topology,
+      bodies: [
+        { tag: 1, name: "Base plate", faces: [3], volume: 0.0001 },
+        { tag: 2, faces: [7], volume: 0.0001 },
+      ],
+      faces: topology.faces.map((face) => ({ ...face, bodies: [face.tag === 3 ? 1 : 2] })),
+    };
+    const steel = { ...materialLibrary.materials[0], id: "steel" } as IsotropicMaterial;
+    const aluminium = { ...materialLibrary.materials[1], id: "aluminium" } as IsotropicMaterial;
+    const spec: SimulationSpec = {
+      ...emptySpec,
+      bodies: [
+        { tag: 1, material: "steel" },
+        { tag: 2, material: null },
+      ],
+      materials: [steel, aluminium],
+    };
+    const { sent, route } = saves();
+    serve(
+      routes([simulation(spec)], {
+        "GET /api/geometries": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
+        "GET /api/geometries/g1/topology": { status: 200, json: assembly },
+        "PUT /api/simulations/s1/spec": route,
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Bodies, incomplete" }));
+    expect(tree().getByRole("button", { name: "Base plate, complete" })).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Body 2, incomplete" })).toBeTruthy();
+    expect(settings().getByText("Pick a material for Body 2.")).toBeTruthy();
+    expect(settings().getByLabelText("Material of Base plate")).toHaveProperty("value", "steel");
+
+    fireEvent.change(settings().getByLabelText("Material of Body 2"), { target: { value: "aluminium" } });
+    expect(tree().getByRole("button", { name: "Bodies, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.bodies).toEqual([
+        { tag: 1, material: "steel" },
+        { tag: 2, material: "aluminium" },
+      ]),
+    );
+
+    // Opening a body selects its faces in the viewer and shows its name from the file.
+    fireEvent.click(tree().getByRole("button", { name: "Base plate, complete" }));
+    expect(scene.selections.at(-1)).toEqual([3]);
+    expect(settings().getByRole("heading", { name: "Base plate" })).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Material"), { target: { value: "" } });
+    expect(tree().getByRole("button", { name: "Base plate, incomplete" })).toBeTruthy();
+
+    // The material panel names the bodies the same way.
+    fireEvent.click(tree().getByRole("button", { name: `${aluminium.name}, complete` }));
+    expect(settings().getByRole("checkbox", { name: /^Body 2/ })).toHaveProperty("checked", true);
+    expect(settings().getByRole("checkbox", { name: /^Base plate/ })).toHaveProperty("checked", false);
+  });
+
   it("gives a new support the faces selected in the viewer, and shows an item's faces when opened", async () => {
     const { sent, route } = saves();
     serve(routes([simulation()], { "PUT /api/simulations/s1/spec": route }));
