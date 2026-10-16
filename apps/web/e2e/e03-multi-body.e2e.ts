@@ -287,8 +287,8 @@ test("E-03: a model of two bonded bodies from upload to results", async ({ page 
     }
 
     // Lug is heated on its top, Base cooled at its end: neither body's temperature needs the
-    // bond to be set, but every watt the top takes in reaches the end only through it.
-    await selection.getByRole("button", { name: "Clear" }).click();
+    // bond to be set, but every watt the top takes in reaches the end only through it. Nothing is
+    // selected after the run, so the first face is picked straight away.
     await clickFace(page, lugTop);
     await treeRow(page, "Loads").click();
     await page.getByRole("button", { name: "Add a fixed temperature" }).click();
@@ -309,7 +309,8 @@ test("E-03: a model of two bonded bodies from upload to results", async ({ page 
 
     await treeRow(page, "Run").click();
     await expect(blockers).toHaveCount(0);
-    await run.getByRole("button", { name: "Run", exact: true }).click();
+    // The structural run above is still shown, so the button reads "Run again".
+    await run.getByRole("button", { name: "Run again", exact: true }).click();
     const thermal = run.getByLabel("Thermal results");
     await expect(thermal).toContainText(/Highest temperature\s*120 °C/, { timeout: 180_000 });
     const flows = /Heat flow, Hot top\s*([\d.]+) W in.*Heat flow, Cooled end\s*([\d.]+) W out/;
