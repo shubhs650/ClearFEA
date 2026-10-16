@@ -70,6 +70,8 @@
     { "kind": "heatFlow", "value": 2.5, "unit": "kW", "si": 2500 },
     { "kind": "heatFlow", "value": 1, "unit": "BTU/h", "si": 0.2930710701722222 },
     { "kind": "heatFlow", "value": 3412.141633127942, "unit": "BTU/h", "si": 1000 },
+    { "kind": "frequency", "value": 2.5, "unit": "kHz", "si": 2500 },
+    { "kind": "frequency", "value": 1800, "unit": "cpm", "si": 30 },
     { "kind": "strain", "value": 0.0012, "unit": "mm/mm", "si": 0.0012 },
     { "kind": "strain", "value": 0.0012, "unit": "in/in", "si": 0.0012 },
     { "kind": "strain", "value": 1200, "unit": "µε", "si": 0.0012 },

@@ -4,7 +4,7 @@
 // analysis has no supports, so their group is left out unless the setup still lists some to delete.
 // Each row carries a complete / incomplete / error mark; selecting a row opens its settings.
 
-import { type GeometryStatus, type GeometryView, isThermal, type SimulationSpec } from "@clearfea/spec";
+import { type GeometryStatus, type GeometryView, isModal, isThermal, type SimulationSpec } from "@clearfea/spec";
 import type { ReactNode } from "react";
 import { bodyItem, type Group, type ItemStatus, type Mark } from "../setup/spec";
 import type { SaveState, Setup } from "../setup/useSimulation";
@@ -73,9 +73,16 @@ const groups: { group: Group; label: string }[] = [
   { group: "loads", label: "Loads" },
 ];
 
-/** The groups the tree shows: supports only for a linear static analysis, or while some are left. */
+/**
+ * The groups the tree shows: supports not for a steady-state thermal analysis and loads not for
+ * a modal one (M6.1), unless some are left to delete.
+ */
 function shownGroups(spec: SimulationSpec) {
-  return groups.filter(({ group }) => group !== "supports" || !isThermal(spec) || spec.supports.length > 0);
+  return groups.filter(
+    ({ group }) =>
+      (group !== "supports" || !isThermal(spec) || spec.supports.length > 0) &&
+      (group !== "loads" || !isModal(spec) || spec.loads.length > 0),
+  );
 }
 
 export function SimulationTree({

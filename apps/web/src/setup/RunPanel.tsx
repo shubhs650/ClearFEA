@@ -52,6 +52,7 @@ import {
   type ResultUnits,
   STATIC_KINDS,
   THERMAL_KINDS,
+  MODAL_KINDS,
   THERMAL_STRESS_KINDS,
   unitsOf,
 } from "./displayUnits";
@@ -79,6 +80,7 @@ const KIND_LABELS: Record<DisplayKind, string> = {
   temperature: "Temperature",
   heatFlux: "Heat flux",
   heatFlow: "Heat flow",
+  frequency: "Frequency",
 };
 
 /**
@@ -396,6 +398,44 @@ function heatFlowText(heat: number, unit: string): string {
 /** The figures of a steady-state thermal run (M5.1): its highest and lowest temperature, where
  * they are, and since M5.3 its largest heat flux, the heat each thermal load brings in or takes
  * out, and the heat balance. Absolute temperatures, converted with their offset. Numbers only. */
+/**
+ * A modal run's natural frequencies, mode 1 first (M6.1, ADR-070). A mode near zero is a
+ * rigid-body mode of a body no support holds; rounding can put it a little below zero.
+ */
+function ModalFigures({ result, units }: { result: SolveResult; units: ResultUnits }) {
+  const frequencies = result.frequencies ?? [];
+  const largest = Math.max(0, ...frequencies.map((f) => Math.abs(f)));
+  const rigid = frequencies.some((f) => Math.abs(f) <= RIGID_BODY_FRACTION * largest);
+  return (
+    <>
+      <dl className="geometry-facts" aria-label="Natural frequencies">
+        {frequencies.length === 0 ? (
+          <>
+            <dt>Natural frequencies</dt>
+            <dd className="field-hint">The run reported no frequencies. Run it again.</dd>
+          </>
+        ) : (
+          frequencies.map((f, k) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: the mode number is the position
+            <Fragment key={k}>
+              <dt>Mode {k + 1}</dt>
+              <dd>{figure(f, units.frequency, "frequency")}</dd>
+            </Fragment>
+          ))
+        )}
+      </dl>
+      {rigid && (
+        <p className="field-hint" role="note">
+          Frequencies at or near zero are rigid-body modes: a body no support holds moves in them without deforming.
+        </p>
+      )}
+    </>
+  );
+}
+
+/** A mode below this fraction of the largest frequency reads as a rigid-body mode (M6.1). */
+const RIGID_BODY_FRACTION = 1e-4;
+
 function ThermalFigures({
   result,
   spec,
@@ -629,6 +669,8 @@ export function RunPanel({
   // the structural results and the temperatures and heat flows of its thermal step.
   const thermal = run !== null && isThermalRun(run);
   const thermalStress = run !== null && isThermalStressRun(run);
+  // A modal run (M6.1) has its natural frequencies only; mode shapes come with M6.2.
+  const modal = run !== null && run.spec.analysis === "modal";
   const quantities = run === null ? [] : runQuantities(run);
   // The size to run on: the recommended one (the largest when none fits) until the user picks
   // another for this estimate.
@@ -667,7 +709,7 @@ export function RunPanel({
           {run.stage === "queued" || run.stage === null ? "Waiting for the solver…" : `Solver: ${run.stage}…`}
         </p>
       )}
-      {result && (
+      {result && !modal && (
         <fieldset className="result-choice">
           <legend>Show on the model</legend>
           <label>
@@ -709,7 +751,7 @@ export function RunPanel({
       )}
       {result && (
         <DisplayUnits
-          kinds={thermal ? THERMAL_KINDS : thermalStress ? THERMAL_STRESS_KINDS : STATIC_KINDS}
+          kinds={modal ? MODAL_KINDS : thermal ? THERMAL_KINDS : thermalStress ? THERMAL_STRESS_KINDS : STATIC_KINDS}
           choice={unitChoice}
           onChange={onUnitChange}
           onReset={onUnitReset}
@@ -721,7 +763,8 @@ export function RunPanel({
         </p>
       )}
       {result && thermal && run !== null && <ThermalFigures result={result} spec={run.spec} units={units} />}
-      {result && !thermal && (
+      {result && modal && <ModalFigures result={result} units={units} />}
+      {result && !thermal && !modal && (
         <dl className="geometry-facts" aria-label="Run results">
           {result.displacement && (
             <>
@@ -767,7 +810,7 @@ export function RunPanel({
             <strong>{note.title}.</strong> {note.text}
           </p>
         ))}
-      {run !== null && result && <RunExport run={run} result={result} units={units} thermal={thermal} thermalStress={thermalStress} />}
+      {run !== null && result && !modal && <RunExport run={run} result={result} units={units} thermal={thermal} thermalStress={thermalStress} />}
       {run !== null && <RunRecord run={run} currentSpec={currentSpec} />}
       {run !== null && (
         <details className="run-log" open={solving}>

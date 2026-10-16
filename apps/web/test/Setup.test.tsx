@@ -2105,3 +2105,81 @@ describe("steady-state thermal analysis (M5.1)", () => {
     window.localStorage.clear();
   });
 });
+
+describe("modal analysis (M6.1)", () => {
+  /** The supported setup as a modal analysis: the density entered and the pressure deleted. */
+  const modalSpec: SimulationSpec = {
+    ...supported,
+    analysis: "modal",
+    modes: 4,
+    loads: [],
+    materials: [{ ...(supported.materials[0] as SimulationSpec["materials"][0]), density: { value: 7850, unit: "kg/m³" } }],
+  };
+
+  it("switches to a modal analysis with ten modes, marks the loads and asks the material for its density", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation(supported)], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Analysis, complete" }));
+    fireEvent.click(settings().getByRole("radio", { name: "Modal" }));
+    await waitFor(() => expect(sent.at(-1)?.analysis).toBe("modal"));
+    expect(sent.at(-1)?.modes).toBe(10);
+    expect((settings().getByLabelText("Number of modes") as HTMLInputElement).value).toBe("10");
+    // The pressure stays, marked as having no effect; the support still holds the body.
+    expect(tree().getByRole("button", { name: "Top, has a problem" })).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Base, complete" })).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Steel, incomplete" }).getAttribute("title")).toBe(
+      "Enter the density; a modal analysis needs it for the mass.",
+    );
+
+    // Once its loads are deleted, a modal setup has no Loads group.
+    fireEvent.click(tree().getByRole("button", { name: "Top, has a problem" }));
+    fireEvent.click(settings().getByRole("button", { name: "Delete pressure" }));
+    await waitFor(() => expect(sent.at(-1)?.loads).toEqual([]));
+    expect(tree().queryByRole("button", { name: /^Loads,/ })).toBeNull();
+  });
+
+  it("shows a modal run's natural frequencies in display units and notes its rigid-body modes", async () => {
+    window.localStorage.clear();
+    const result: SolveResult = { nodes: 7108, frequencies: [-0.0021, 0.0008, 64.8335, 129.526], software: { calculix: "2.21" } };
+    serve(
+      routes([simulation(modalSpec)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": {
+          status: 200,
+          json: {
+            runs: [
+              run({
+                spec: { ...modalSpec, solver: "spooles" },
+                status: "succeeded",
+                stage: null,
+                result,
+                files: ["deck.inp", "solver.log"],
+                cost: { billedSeconds: 3, amount: 833, charged: true },
+                finishedAt: "2026-10-16T12:01:00.000Z",
+              }),
+            ],
+          },
+        },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
+        "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const frequencies = within(await screen.findByLabelText("Natural frequencies"));
+    expect(frequencies.getByText("Mode 3").nextElementSibling?.textContent).toBe("64.83 Hz");
+    expect(frequencies.getByText("Mode 4").nextElementSibling?.textContent).toBe("129.5 Hz");
+    expect(settings().getByRole("note").textContent).toContain("rigid-body modes");
+    // Frequencies only: no quantity to draw, no static figures and no export until mode shapes.
+    expect(settings().queryByLabelText("Quantity")).toBeNull();
+    expect(settings().queryByRole("region", { name: "Export" })).toBeNull();
+    expect(settings().queryByText(/von Mises|Reaction/)).toBeNull();
+    const units = within(settings().getByRole("group", { name: "Units shown" }));
+    expect(units.getAllByRole("combobox").map((c) => c.closest("label")?.firstChild?.textContent)).toEqual(["Frequency"]);
+    fireEvent.change(settings().getByLabelText("Frequency"), { target: { value: "cpm" } });
+    expect(frequencies.getByText("Mode 3").nextElementSibling?.textContent).toBe("3890 cpm");
+    expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
+    window.localStorage.clear();
+  });
+});

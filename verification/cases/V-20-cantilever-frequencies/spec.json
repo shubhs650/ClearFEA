@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "analysis": "modal",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200000, "unit": "MPa" },
+      "poissonsRatio": 0.3,
+      "density": { "value": 7.85, "unit": "g/cm³" }
+    }
+  ],
+  "supports": [{ "id": "root", "type": "fixed", "name": "Clamped root", "faces": ["root"] }],
+  "loads": [],
+  "mesh": { "size": { "value": 4, "unit": "mm" } },
+  "modes": 5
+}

@@ -16,7 +16,9 @@ import {
   faceHeatConflicts,
   hasTemperatureChange,
   type IsotropicMaterial,
+  isModal,
   isThermal,
+  DEFAULT_MODES,
   type Load,
   type LocalMeshScope,
   type LocalMeshSize,
@@ -112,11 +114,17 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   // The analysis type (M5.1) always has one of its values; a thermal stress analysis (M5.4)
   // needs its stress-free temperature.
   const thermalStress = spec.analysis === "thermal_stress";
+  // A modal analysis (M6.1, ADR-070) needs its number of modes.
+  const modal = isModal(spec);
   result.set(
     "analysis",
     status(
       errorsOf("analysis"),
-      thermalStress && (spec.stressFreeTemperature ?? null) === null ? ["Enter the stress-free temperature."] : [],
+      thermalStress && (spec.stressFreeTemperature ?? null) === null
+        ? ["Enter the stress-free temperature."]
+        : modal && (spec.modes ?? null) === null
+          ? ["Enter the number of modes."]
+          : [],
     ),
   );
   // A steady-state thermal analysis (M5.1, ADR-064) needs conductivities and fixed temperatures;
@@ -133,6 +141,11 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
       if (!hasProperty(spec, m, "thermalConductivity")) {
         missing.push("Enter the thermal conductivity; a steady-state thermal analysis needs it.");
       }
+    } else if (modal) {
+      // Single values only: tables are read where temperatures are solved (ADR-068).
+      if ((m.youngsModulus ?? null) === null) missing.push("Enter Young's modulus.");
+      if ((m.poissonsRatio ?? null) === null) missing.push("Enter Poisson's ratio.");
+      if ((m.density ?? null) === null) missing.push("Enter the density; a modal analysis needs it for the mass.");
     } else {
       if (thermalStress && !hasProperty(spec, m, "thermalConductivity")) {
         missing.push("Enter the thermal conductivity; a thermal stress analysis needs it.");
@@ -160,7 +173,8 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   // A body no support or bond reaches (M4.4) is incomplete too, and so is the group.
   const labels = topology ? bodyLabels(topology) : new Map<number, string>();
   // A thermal analysis has no supports, so no body is "unheld"; its body messages are its own.
-  const unheld = new Set(thermal ? [] : unheldBodies(spec, topology).flat());
+  // A body no support holds in a modal analysis vibrates freely (ADR-070).
+  const unheld = new Set(thermal || modal ? [] : unheldBodies(spec, topology).flat());
   // A body no load sets the temperature of, directly or through bonds (M5.6), in an analysis
   // that solves temperatures.
   const unset = new Set(
@@ -192,7 +206,9 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
         : [`Pick a material for ${unassigned.join(", ")}.`];
   const bodyMessages = thermal
     ? thermalBodyMessages(spec, topology)
-    : [...(thermalStress ? thermalBodyMessages(spec, topology) : []), ...unheldBodyMessages(spec, topology)];
+    : modal
+      ? []
+      : [...(thermalStress ? thermalBodyMessages(spec, topology) : []), ...unheldBodyMessages(spec, topology)];
   result.set("bodies", status(errorsOf("bodies"), [...bodiesMissing, ...bodyMessages]));
   // Bonds (M4.2): incomplete while a detected bond awaits review. Detected bonds are tied all the
   // same, so this is a reminder, not something a run waits for.
@@ -225,6 +241,13 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
       for (const axis of displacementAxes) {
         if (s[axis] === null) missing.push(`Enter the ${axis} displacement or set it free.`);
       }
+      const moving = displacementAxes.filter((axis) => {
+        const c = s[axis];
+        return c !== null && c !== "free" && c.value !== 0;
+      });
+      if (modal && moving.length > 0) {
+        missing.push("A modal analysis holds the faces where they are: set every component to 0 or free.");
+      }
       if (displacementAxes.every((axis) => s[axis] === "free")) {
         missing.push("Give at least one component a value; every one is free.");
       }
@@ -235,7 +258,8 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
     result.set(s.id, item);
     return item;
   });
-  const needsSupport = !thermal && spec.supports.length === 0;
+  // A modal analysis runs without supports too: the bodies vibrate freely (ADR-070).
+  const needsSupport = !thermal && !modal && spec.supports.length === 0;
   result.set("supports", worst([status([], needsSupport ? ["Add a support."] : []), ...supports]));
 
   const loads = spec.loads.map((l) => {
@@ -246,7 +270,12 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   // A prescribed displacement other than zero loads the part by itself (ADR-039).
   // A thermal setup needs a load that sets the temperature (M5.2, ADR-065).
   const temperatures = solvesTemperature(spec);
-  const needsLoad = temperatures ? !spec.loads.some(setsTemperature) : spec.loads.length === 0 && !movesByDisplacement(spec);
+  // A modal analysis has no loads (ADR-070).
+  const needsLoad = modal
+    ? false
+    : temperatures
+      ? !spec.loads.some(setsTemperature)
+      : spec.loads.length === 0 && !movesByDisplacement(spec);
   const addLoadNote = temperatures ? "Add a fixed temperature, convection or radiation." : "Add a load.";
   result.set("loads", worst([status([], needsLoad ? [addLoadNote] : []), ...loads]));
 
@@ -277,6 +306,8 @@ function withWrongAnalysis(spec: SimulationSpec, item: Support | Load, errors: r
 
 /** Sets the analysis type (M5.1). Items that do not belong to it stay, marked, until deleted. */
 export function setAnalysis(spec: SimulationSpec, analysis: AnalysisType): SimulationSpec {
+  // A modal analysis starts with the default number of modes (M6.1); it stays when the type changes.
+  if (analysis === "modal" && (spec.modes ?? null) === null) return { ...spec, analysis, modes: DEFAULT_MODES };
   return { ...spec, analysis };
 }
 

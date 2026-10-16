@@ -533,6 +533,60 @@ def tables_spec() -> dict:
     return spec
 
 
+def modal_spec() -> dict:
+    """A modal analysis (M6.1): the fixture's fixed face 1, no load, four modes, the density in
+    g/cm³ and the solver named."""
+    spec = fixture_spec()
+    spec["analysis"] = "modal"
+    spec["loads"] = []
+    spec["modes"] = 4
+    spec["solver"] = "spooles"
+    spec["materials"][0]["density"] = {"value": 7.85, "unit": "g/cm³"}
+    return spec
+
+
+def modal_held_spec() -> dict:
+    """A modal analysis held by a symmetry plane on face 1, an elastic support on face 2 and a
+    prescribed displacement holding face 4 at zero along y; PaStiX by default."""
+    spec = modal_spec()
+    del spec["solver"]
+    spec["supports"] = [
+        {"id": "sym", "type": "frictionless", "name": "Symmetry", "faces": [1]},
+        {
+            "id": "base",
+            "type": "elastic",
+            "name": "Base",
+            "faces": [2],
+            "stiffness": {"value": 2000, "unit": "MN/m³"},
+        },
+        {
+            "id": "hold",
+            "type": "displacement",
+            "name": "Held along y",
+            "faces": [4],
+            "x": "free",
+            "y": {"value": 0, "unit": "mm"},
+            "z": "free",
+        },
+    ]
+    return spec
+
+
+def modal_free_spec() -> dict:
+    """Two bonded bodies no support holds (M6.1): a free assembly, which a modal analysis takes
+    and a static one refuses; the bond is tied. SPOOLES, since PaStiX cannot solve a free body
+    (ADR-070)."""
+    spec = bonded_spec().model_dump(by_alias=True, exclude_none=True)
+    spec["analysis"] = "modal"
+    spec["solver"] = "spooles"
+    spec["supports"] = []
+    spec["loads"] = []
+    spec["modes"] = 8
+    spec["materials"][0]["density"] = {"value": 7850, "unit": "kg/m³"}
+    spec["materials"][1]["density"] = {"value": 2.7, "unit": "g/cm³"}
+    return spec
+
+
 def deck(spec: dict, mesh: VolumeMesh) -> str:
     return generate_deck(SimulationSpec.model_validate(spec), mesh)
 
@@ -600,6 +654,9 @@ SNAPSHOT_CASES = {
     "heat-loads-c3d10": (heat_loads_spec, lambda: two_tets(order=2)),
     "thermal-stress-c3d10": (thermal_stress_spec, lambda: two_tets(order=2)),
     "thermal-stress-tables-c3d10": (tables_spec, lambda: two_tets(order=2)),
+    "modal-c3d10": (modal_spec, lambda: two_tets(order=2)),
+    "modal-held-c3d4": (modal_held_spec, lambda: two_tets(order=1)),
+    "modal-free-bonded-c3d10": (modal_free_spec, lambda: bonded_tets(2)),
 }
 
 
@@ -1834,3 +1891,67 @@ def test_a_table_replaces_a_missing_single_value_in_thermal_stress() -> None:
         "thermalConductivity": None,
     }
     assert deck(spec, two_tets(order=2)) == deck(tables_spec(), two_tets(order=2))
+
+
+# --- Modal analysis (M6.1, ADR-070) ---
+
+
+def modal_broken(change) -> dict:  # type: ignore[no-untyped-def]
+    spec = modal_spec()
+    change(spec)
+    return spec
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda s: s.update(modes=None), "no number of modes"),
+        (
+            lambda s: s.update(loads=loads_spec()["loads"][:1]),
+            "has no effect in a modal analysis",
+        ),
+        (lambda s: s["materials"][0].update(density=None), "A modal analysis needs it"),
+        (lambda s: s.update(solver="iterative_cholesky"), "iterative solvers cannot find"),
+        (lambda s: s.update(solver="iterative_scaling"), "iterative solvers cannot find"),
+        (
+            lambda s: s.update(supports=supports_spec()["supports"]),
+            "moves its faces, which a modal analysis cannot do",
+        ),
+    ],
+)
+def test_modal_refuses_a_spec_it_cannot_solve(change, message: str) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(DeckError, match=message):
+        deck(modal_broken(change), two_tets(order=2))
+
+
+def test_modal_step_asks_for_the_modes_and_the_mode_shapes_only() -> None:
+    text = deck(modal_spec(), two_tets(order=2))
+    step = text[text.index("*STEP") :]
+    assert step == (
+        "*STEP\n*FREQUENCY, SOLVER=SPOOLES\n4\n*BOUNDARY\nS1, 1, 3\n*NODE FILE\nU\n*END STEP\n"
+    )
+    # The mass: 7.85 g/cm³ in kg/m³.
+    assert "*DENSITY\n7850.0\n" in text
+    assert "ClearFEA modal analysis" in text
+
+
+def test_modal_takes_a_body_no_support_holds() -> None:
+    spec = modal_spec()
+    spec["supports"] = []
+    text = deck(spec, two_tets(order=2))
+    assert "*BOUNDARY" not in text
+    # A static analysis of the same body is refused.
+    spec.update(analysis="linear_static", loads=fixture_spec()["loads"])
+    with pytest.raises(DeckError, match="free to move"):
+        deck(spec, two_tets(order=2))
+
+
+def test_modal_refuses_pastix_for_a_body_no_support_holds() -> None:
+    # CalculiX factors K - 1·M; a free body makes it indefinite and PaStiX gives wrong
+    # frequencies or stops (ADR-070). A held body still solves with PaStiX.
+    spec = modal_spec()
+    spec["solver"] = "pastix"
+    assert "*FREQUENCY, SOLVER=PASTIX" in deck(spec, two_tets(order=2))
+    spec["supports"] = []
+    with pytest.raises(DeckError, match="Choose SPOOLES"):
+        deck(spec, two_tets(order=2))

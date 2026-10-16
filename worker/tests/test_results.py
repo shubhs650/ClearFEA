@@ -15,8 +15,10 @@ from clearfea_worker.deck.elements import FACE_NODES
 from clearfea_worker.results import (
     DatError,
     FrdError,
+    ModalFields,
     node_fields,
     principal_stresses,
+    read_eigenvalues,
     read_fields,
     read_node_displacements,
     read_node_forces,
@@ -636,3 +638,51 @@ def test_a_bonded_thermal_stress_run_balances_heat_and_forces() -> None:
     # Body 2 is cooler than body 1 and its temperature comes only through the bond.
     t = fields.thermal.temperature
     assert max(t[4:8]) < min(t[0:4]) + 1e-9 and min(t[4:8]) > 293.15
+
+
+# --- Modal runs (M6.1, ADR-070) ---
+
+MODAL = Path(__file__).resolve().parent / "fixtures" / "modal"
+
+
+def test_reads_the_eigenvalues_of_a_modal_run() -> None:
+    # Solved by ccx 2.21 (SPOOLES) from snapshot modal-c3d10.
+    assert read_eigenvalues(MODAL / "modal-c3d10.dat") == [
+        0.1215792e12,
+        0.2032137e12,
+        0.3891252e12,
+        0.7713482e12,
+    ]
+
+
+def test_modal_summary_gives_each_mode_in_hertz_and_rigid_body_modes_signed() -> None:
+    from .test_deck import modal_free_spec
+
+    spec = SimulationSpec.model_validate(modal_free_spec())
+    mesh = bonded_tets(2)
+    dat = MODAL / "modal-free-bonded-c3d10.dat"
+    fields, result = read_results(spec, mesh, MODAL / "absent.frd", dat, "2.21")
+    assert isinstance(fields, ModalFields) and fields.node_count == mesh.node_count
+    frequencies = result.frequencies
+    assert frequencies is not None and len(frequencies) == 8
+    # CalculiX's own frequency column, cycles per second, to its seven digits.
+    assert frequencies[6] == pytest.approx(0.5880702e05, rel=1e-6)
+    assert frequencies[7] == pytest.approx(0.9114661e05, rel=1e-6)
+    # Rigid-body modes: a negative eigenvalue gives minus the square root of its size over 2π.
+    assert frequencies[0] == pytest.approx(-math.sqrt(0.2255780e-02) / (2 * math.pi))
+    assert frequencies[3] == pytest.approx(0.1058319e-02, rel=1e-6)
+    assert max(abs(f) for f in frequencies[:6]) < 1e-6 * frequencies[6]
+    assert result.displacement is None and result.reactions is None and result.balance is None
+
+
+def test_modal_run_writes_viewer_files_without_fields(tmp_path: Path) -> None:
+    mesh = bonded_tets(2)
+    files = write_viewer_files(mesh, ModalFields(mesh.node_count), tmp_path)
+    vertices, fields = read_fields_file(files.fields_path)
+    assert vertices > 0 and fields == []
+    assert read_fields_file(files.nodes_path) == (mesh.node_count, [])
+
+
+def test_a_dat_file_without_eigenvalues_is_refused() -> None:
+    with pytest.raises(DatError, match="no eigenvalues"):
+        read_eigenvalues(SOLVE / "job.dat")

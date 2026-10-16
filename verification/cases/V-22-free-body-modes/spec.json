@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "analysis": "modal",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200, "unit": "GPa" },
+      "poissonsRatio": 0.3,
+      "density": { "value": 7.85e-9, "unit": "t/mm³" }
+    }
+  ],
+  "supports": [],
+  "loads": [],
+  "mesh": { "size": { "value": 4, "unit": "mm" } },
+  "modes": 8,
+  "solver": "spooles"
+}

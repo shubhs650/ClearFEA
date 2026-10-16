@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-22: an unrestrained body: six rigid-body modes, then its first elastic modes (M6.1).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-22
+title: Unrestrained body
+analysis: modal
+features: [modal analysis, no support, rigid-body modes, density, mixed input units]
+geometry:
+  unit: mm
+faces: {}
+mesh:
+  coarse: { value: 4, unit: mm }
+  full: { value: 2, unit: mm }
+# Modes 1 to 6 move the bar without deforming it: zero, measured against mode 7 (relativeTo).
+# Modes 7 and 8 bend it free-free in z and y. Tolerances: reference.md.
+checks:
+  - name: Rigid-body mode 1 near zero
+    quantity: frequency
+    mode: 1
+    relativeTo: 7
+    reference: { value: 0, unit: Hz }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Rigid-body mode 2 near zero
+    quantity: frequency
+    mode: 2
+    relativeTo: 7
+    reference: { value: 0, unit: Hz }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Rigid-body mode 3 near zero
+    quantity: frequency
+    mode: 3
+    relativeTo: 7
+    reference: { value: 0, unit: Hz }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Rigid-body mode 4 near zero
+    quantity: frequency
+    mode: 4
+    relativeTo: 7
+    reference: { value: 0, unit: Hz }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Rigid-body mode 5 near zero
+    quantity: frequency
+    mode: 5
+    relativeTo: 7
+    reference: { value: 0, unit: Hz }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Rigid-body mode 6 near zero
+    quantity: frequency
+    mode: 6
+    relativeTo: 7
+    reference: { value: 0, unit: Hz }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: First elastic mode, free-free bending in z, βL = 4.7300
+    quantity: frequency
+    mode: 7
+    reference: { value: 64.855895, unit: Hz }
+    tolerance: { coarse: 0.005, full: 0.003 }
+  - name: Second elastic mode, free-free bending in y, βL = 4.7300
+    quantity: frequency
+    mode: 8
+    reference: { value: 0.12971179, unit: kHz }
+    tolerance: { coarse: 0.005, full: 0.003 }

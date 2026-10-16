@@ -7,6 +7,7 @@
 // rigid-body motion needs the mesh's face normals and is checked by the deck generator (ADR-039);
 // a body of an assembly that no support or bond reaches at all is found here (M4.4).
 
+import { isIterative, SOLVER_LABELS, specSolver } from "./estimator";
 import type { Load, SimulationSpec, Support } from "./generated/simulation";
 import {
   analysisKinds,
@@ -18,6 +19,7 @@ import {
   hasBodyLoad,
   hasProperty,
   hasTemperatureChange,
+  isModal,
   isThermal,
   loadHasFaces,
   loadKinds,
@@ -27,11 +29,11 @@ import {
   setsTemperature,
   type SpecProblem,
   simulationSpecProblems,
-  solvesStress,
   specBonds,
   supportKinds,
   type TableProperty,
   type TopologyTags,
+  takesSupports,
   tableProblems,
   unheldBodies,
   unreachedBodies,
@@ -93,17 +95,22 @@ export function unheldBodyMessages(spec: SimulationSpec, topology?: TopologyTags
  * Why a support or load does not belong to the setup's analysis type (M5.1, ADR-064), or null when
  * it does: supports and structural loads in a steady-state thermal analysis, a fixed temperature
  * in a linear static one, a uniform temperature change in a thermal stress one (M5.4, ADR-067),
- * whose temperatures come from its thermal step.
+ * whose temperatures come from its thermal step, and every load in a modal one (M6.1, ADR-070).
  */
 export function wrongAnalysisMessage(spec: SimulationSpec, item: Support | Load): string | null {
   const isSupport = (Object.keys(supportKinds) as string[]).includes(item.type);
-  if (isSupport ? solvesStress(spec) : analysisLoads[spec.analysis].includes(item.type as Load["type"])) {
+  if (isSupport ? takesSupports(spec) : analysisLoads[spec.analysis].includes(item.type as Load["type"])) {
     return null;
   }
   const kind = isSupport ? supportKinds[item.type as Support["type"]] : loadKinds[item.type as Load["type"]];
   // The analysis type that takes the item.
   const other = isSupport || analysisLoads.linear_static.includes(item.type as Load["type"]) ? "linear_static" : "steady_thermal";
-  const why = spec.analysis === "thermal_stress" ? ", whose temperatures come from its thermal step" : "";
+  const why =
+    spec.analysis === "thermal_stress"
+      ? ", whose temperatures come from its thermal step"
+      : spec.analysis === "modal"
+        ? ", which finds the natural frequencies of the bodies as they are held, without loads"
+        : "";
   return `${kind} "${item.name}" has no effect in a ${analysisKinds[spec.analysis].toLowerCase()} analysis${why}. Delete it, or set the analysis type to ${analysisKinds[other].toLowerCase()}.`;
 }
 
@@ -186,6 +193,83 @@ function loadFaceProblem(load: Load, add: (item: string, message: string) => voi
   }
 }
 
+/** What the supports still need (M1.12, M2.2, M2.6): faces, a stiffness, every component. */
+function supportProblems(spec: SimulationSpec, add: (item: string, message: string) => void) {
+  for (const support of spec.supports) {
+    if (support.faces.length === 0) {
+      const what = { fixed: "to fix", displacement: "to move", frictionless: "it holds", elastic: "it supports" }[support.type];
+      add(support.id, `Support "${support.name}" has no faces. Select the faces ${what} and add them to it.`);
+    }
+    if (support.type === "elastic" && support.stiffness === null) {
+      add(support.id, `Support "${support.name}" has no foundation stiffness. Enter it.`);
+    }
+    if (support.type === "displacement") {
+      const missing = displacementAxes.filter((axis) => support[axis] === null);
+      for (const axis of missing) {
+        add(support.id, `Support "${support.name}" has no value for its ${axis} component. Enter one or set it free.`);
+      }
+      if (displacementAxes.every((axis) => support[axis] === "free")) {
+        add(
+          support.id,
+          `Support "${support.name}" leaves every component free, so it holds nothing. Give at least one component a value (0 holds the faces in that direction).`,
+        );
+      }
+    }
+  }
+}
+
+/**
+ * What a modal setup still needs (M6.1, ADR-070), after the materials and bodies: the number of
+ * modes, a direct equation solver, each material's stiffness and density (the mass), the
+ * supports' own values, and no load. A body no support holds is not a problem: it vibrates
+ * freely, and its six rigid-body modes come out at or near zero.
+ */
+function modalProblems(spec: SimulationSpec, topology: TopologyTags | undefined, add: (item: string, message: string) => void) {
+  if ((spec.modes ?? null) === null) {
+    add("analysis", "There is no number of modes. Enter how many natural frequencies to find under Analysis.");
+  }
+  const solver = specSolver(spec);
+  if (isIterative(solver)) {
+    add(
+      "run",
+      `${SOLVER_LABELS[solver]} cannot find natural frequencies: CalculiX's iterative solvers do not work in a modal analysis. Choose PaStiX or SPOOLES as the equation solver.`,
+    );
+  }
+  // CalculiX factors K - 1·M, which a free body makes indefinite; PaStiX then gives wrong
+  // frequencies or stops (ADR-070). The worker's deck check also catches partly held bodies.
+  if (solver === "pastix" && (spec.supports.length === 0 || unheldBodies(spec, topology).length > 0)) {
+    add(
+      "run",
+      "PaStiX cannot find the natural frequencies of a body no support holds: it gives wrong frequencies or stops. Choose SPOOLES as the equation solver, or add supports that hold every body.",
+    );
+  }
+  for (const material of spec.materials) {
+    if ((material.youngsModulus ?? null) === null) add(material.id, `Material "${material.name}" has no Young's modulus. Enter it.`);
+    if ((material.poissonsRatio ?? null) === null) add(material.id, `Material "${material.name}" has no Poisson's ratio. Enter it.`);
+    if ((material.density ?? null) === null) {
+      add(material.id, `Material "${material.name}" has no density, which a modal analysis needs for the mass. Enter it.`);
+    }
+  }
+  supportProblems(spec, add);
+  for (const support of spec.supports) {
+    if (support.type !== "displacement") continue;
+    const moving = displacementAxes.filter((axis) => {
+      const c = support[axis];
+      return c !== null && c !== "free" && c.value !== 0;
+    });
+    if (moving.length > 0) {
+      add(
+        support.id,
+        `Support "${support.name}" moves its faces, which a modal analysis cannot do: it finds vibrations about the held position. Set its ${moving.join(", ")} ${moving.length === 1 ? "component" : "components"} to 0 or free.`,
+      );
+    }
+  }
+  for (const load of spec.loads) {
+    const message = wrongAnalysisMessage(spec, load);
+    if (message !== null) add(load.id, message);
+  }
+}
+
 /**
  * What stops the setup from being run, in the order of the setup tree, each with the item it
  * belongs to (as in SpecProblem); an empty list when the setup can be run. Problems that make
@@ -226,6 +310,11 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
         add(material.id, message);
       }
     }
+  }
+  if (isModal(spec)) {
+    modalProblems(spec, topology, add);
+    meshProblems(spec, add);
+    return problems;
   }
   if (isThermal(spec)) {
     thermalProblems(spec, topology, add);
@@ -285,27 +374,7 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
   if (spec.supports.length === 0) {
     add("supports", "There is no support, so the part is free to move. Add a support under Supports.");
   }
-  for (const support of spec.supports) {
-    if (support.faces.length === 0) {
-      const what = { fixed: "to fix", displacement: "to move", frictionless: "it holds", elastic: "it supports" }[support.type];
-      add(support.id, `Support "${support.name}" has no faces. Select the faces ${what} and add them to it.`);
-    }
-    if (support.type === "elastic" && support.stiffness === null) {
-      add(support.id, `Support "${support.name}" has no foundation stiffness. Enter it.`);
-    }
-    if (support.type === "displacement") {
-      const missing = displacementAxes.filter((axis) => support[axis] === null);
-      for (const axis of missing) {
-        add(support.id, `Support "${support.name}" has no value for its ${axis} component. Enter one or set it free.`);
-      }
-      if (displacementAxes.every((axis) => support[axis] === "free")) {
-        add(
-          support.id,
-          `Support "${support.name}" leaves every component free, so it holds nothing. Give at least one component a value (0 holds the faces in that direction).`,
-        );
-      }
-    }
-  }
+  supportProblems(spec, add);
 
   // A prescribed displacement other than zero loads the part by itself (ADR-034 item 3,
   // narrowed by ADR-039); so does the temperature of a thermal stress analysis.

@@ -35,6 +35,7 @@ from .cases import (
     build_spec,
     evaluate,
     evaluate_inside,
+    frequency_error,
     heat_flow,
     load_case,
     name_faces,
@@ -246,6 +247,21 @@ def run_case(
         )
 
     for check in case.checks:
+        if check.mode is not None:
+            value, error = frequency_error(check, run["result"].get("frequencies", []))
+            limit = check.tolerance[tier]
+            against = "" if check.relative_to is None else f" of mode {check.relative_to}"
+            outcome.rows.append(
+                Row(
+                    check.name,
+                    _shown(check.reference, check),
+                    f"{_shown(value, check)} (mode {check.mode})",
+                    f"{100 * error:+.4f} %{against}",
+                    f"{100 * limit:g} %{against}",
+                    abs(error) <= limit,
+                )
+            )
+            continue
         if check.load is not None:
             value = heat_flow(check, run["result"].get("heatFlows", []))
             where = f"load {check.load}"
@@ -274,10 +290,16 @@ def run_case(
     # Automatic checks on every case (docs/VERIFICATION.md): the force balance of a structural
     # run, the heat balance of a steady-state thermal one (M5.3), both for a thermal stress run
     # (M5.4), whose thermal loads apply no force.
-    if spec["analysis"] != "linear_static":
+    # A modal run (M6.1) has no loads to balance; it must find every mode it was asked for.
+    if spec["analysis"] in ("steady_thermal", "thermal_stress"):
         heat_balance_rows(outcome, spec, surface, run)
-    if spec["analysis"] != "steady_thermal":
+    if spec["analysis"] in ("linear_static", "thermal_stress"):
         balance_rows(outcome, spec, surface, run)
+    if spec["analysis"] == "modal":
+        found = len(run["result"].get("frequencies", []))
+        outcome.rows.append(
+            Row("Modes found", str(spec["modes"]), str(found), "", "equal", found == spec["modes"])
+        )
     warnings = unexpected_warnings(log, case.allowed_warnings)
     outcome.rows.append(
         Row(

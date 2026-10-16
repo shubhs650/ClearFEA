@@ -301,7 +301,7 @@ def _nodes_and_elements(
     out = [
         f"** ClearFEA solver input, deck format {DECK_FORMAT}. Generated from the simulation's",
         "** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa"
-        + (", K, W)." if spec.analysis != "linear_static" else ")."),
+        + (", K, W)." if spec.analysis in ("steady_thermal", "thermal_stress") else ")."),
         f"** Geometry {spec.geometry_id}",
         "*HEADING",
         heading,
@@ -336,7 +336,12 @@ _ANALYSIS_NAMES = {
     "linear_static": "linear static",
     "steady_thermal": "steady-state thermal",
     "thermal_stress": "thermal stress",
+    "modal": "modal",
 }
+
+#: The equation solvers a *FREQUENCY step can use: CalculiX refuses its iterative ones there
+#: (frequencys.f), as its Lanczos method needs the factorised stiffness (M6.1, ADR-070).
+FREQUENCY_SOLVERS = ("PASTIX", "SPOOLES")
 
 
 @dataclass
@@ -635,12 +640,12 @@ def _heat_parts(
 
 def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None = None) -> str:
     """CalculiX input for the analysis of ``spec`` on ``mesh``: linear static, steady-state
-    thermal (M5.1), or thermal stress (M5.4): a heat transfer step, then a static step on the
-    temperatures it solved.
+    thermal (M5.1), thermal stress (M5.4): a heat transfer step, then a static step on the
+    temperatures it solved, or modal (M6.1): a frequency step on the supported bodies.
 
-    The step lines (``*STATIC`` or ``*HEAT TRANSFER``) name the spec's equation solver
-    (ADR-063); ``solver``, a CalculiX name from SOLVERS, replaces it for the solver benchmark
-    (M2.11). Raises DeckError when the spec is incomplete or does not fit the mesh.
+    The step lines (``*STATIC``, ``*HEAT TRANSFER`` or ``*FREQUENCY``) name the spec's
+    equation solver (ADR-063); ``solver``, a CalculiX name from SOLVERS, replaces it for the
+    solver benchmark (M2.11). Raises DeckError when the spec is incomplete or does not fit the mesh.
     """
     if solver is None:
         solver = SOLVER_NAMES[spec.solver or DEFAULT_SOLVER]
@@ -659,6 +664,14 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
         bodies = _materials(spec, mesh)
         heat = _heat_parts(spec, mesh, bodies, solver, initial=reference)
         return _deck(spec, mesh, bodies, [heat, static])
+    if spec.analysis == "modal":
+        if solver not in FREQUENCY_SOLVERS:
+            raise DeckError(
+                "CalculiX's iterative solvers cannot find natural frequencies. Choose PaStiX or "
+                "SPOOLES as the equation solver."
+            )
+        modal = _static_parts(spec, mesh, solver)
+        return _deck(spec, mesh, _materials(spec, mesh), [modal])
     if spec.analysis != "linear_static":
         raise DeckError(f"Analysis type '{spec.analysis}' is not supported.")
     static = _static_parts(spec, mesh, solver)
@@ -668,8 +681,32 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
 def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts:
     """The linear static step and its model data (supports, springs, bonds, elastic
     materials). In a thermal stress analysis (M5.4) it follows the heat transfer step, takes
-    its temperatures, and has no temperature change of its own."""
+    its temperatures, and has no temperature change of its own. In a modal analysis (M6.1,
+    ADR-070) the step is a frequency step instead, on the same model data with each material's
+    density for the mass, no loads, and supports that need not hold every rigid-body motion: a
+    free body has rigid-body modes at or near zero."""
     thermal_stress = spec.analysis == "thermal_stress"
+    modal = spec.analysis == "modal"
+    if modal:
+        if spec.loads:
+            raise DeckError(
+                f'"{spec.loads[0].name}" has no effect in a modal analysis, which finds the '
+                "natural frequencies of the bodies as they are held, without loads. Delete it, or "
+                "set the analysis type to linear static."
+            )
+        if spec.modes is None:
+            raise DeckError(
+                "There is no number of modes. Enter how many natural frequencies to find."
+            )
+        for support in spec.supports:
+            if isinstance(support, PrescribedDisplacement) and any(
+                c is not None and c != "free" and c.value != 0.0
+                for c in (support.x, support.y, support.z)
+            ):
+                raise DeckError(
+                    f'Support "{support.name}" moves its faces, which a modal analysis cannot do: '
+                    "it finds vibrations about the held position. Set its components to 0 or free."
+                )
     thermal_loads = [x for x in spec.loads if isinstance(x, _THERMAL_LOADS)]
     if thermal_loads and not thermal_stress:
         kind = {FixedTemperatureLoad: "Fixed temperature", HeatGenerationLoad: "Heat generation"}
@@ -686,7 +723,7 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
                 "analysis, whose temperatures come from its thermal step. Delete it, or set the "
                 "analysis type to linear static."
             )
-    if not spec.supports:
+    if not spec.supports and not modal:
         raise DeckError("The setup has no supports, so the part is free to move. Add a support.")
     structural = [x for x in spec.loads if not isinstance(x, _THERMAL_LOADS)]
     for item in (*spec.supports, *structural):
@@ -696,6 +733,8 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
     gravity, spin = body_loads(spec)
     if gravity is not None or spin is not None:
         densities(spec, mesh)  # body loads need every body's density; DeckError names a gap
+    if modal:
+        densities(spec, mesh, "A modal analysis needs it for the mass")
     thermal = temperature_change(spec)
     if thermal_stress:
         alpha = expansions(spec, mesh, "A thermal stress analysis", tables=True)
@@ -706,7 +745,21 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
     held = holds(spec, mesh)
     springs = _elastic_springs(spec, mesh)
     tie_list = ties(spec, mesh, node_frames(held))
-    check_held(mesh, held, [s for _, group in springs for s in group], body_groups(mesh, tie_list))
+    held_springs = [s for _, group in springs for s in group]
+    if not modal:
+        check_held(mesh, held, held_springs, body_groups(mesh, tie_list))
+    elif solver == "PASTIX":
+        # A modal analysis finds the rigid-body modes of what nothing holds instead, but only
+        # SPOOLES can: CalculiX factors K - 1·M, which a free body makes indefinite, and PaStiX
+        # then gives wrong frequencies or stops (ADR-070).
+        try:
+            check_held(mesh, held, held_springs, body_groups(mesh, tie_list))
+        except DeckError:
+            raise DeckError(
+                "PaStiX cannot find the natural frequencies of a body the supports leave free "
+                "to move: it gives wrong frequencies or stops. Choose SPOOLES as the equation "
+                "solver, or add supports that hold every body."
+            ) from None
     fixed_only = only_fixed_supports(spec)
     normals = {} if fixed_only else frictionless_normals(spec, mesh)
 
@@ -758,7 +811,8 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
         if transform is not None:
             out.append(f"*TRANSFORM, NSET=C{k + 1}, TYPE=R")
             out.append(transform)
-    if held:
+    # A modal analysis prints no reactions (M6.1), so it needs neither node set.
+    if held and not modal:
         out.append(f"*NSET, NSET={REACTION_SET}")
         out.extend(_lines(n + 1 for n in held))
 
@@ -816,7 +870,7 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
             for equation in tie.equations:
                 out.extend(_equation_lines(equation))
         tied.extend(dict.fromkeys(e[0].node for e in tie.equations))
-    if tied:
+    if tied and not modal:
         out.append(f"*NSET, NSET={TIE_SET}")
         out.extend(_lines(n + 1 for n in tied))
 
@@ -970,6 +1024,10 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
 
     out = parts.step
     out.append("*STEP")
+    if modal:
+        assert spec.modes is not None  # refused above
+        _frequency_step(out, spec, support_sets, groups, spec.modes, solver)
+        return parts
     out.append(f"*STATIC, SOLVER={solver}")
     if thermal_stress:
         # After a heat transfer step CalculiX treats the static step as nonlinear and warns
@@ -1030,3 +1088,35 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
         out.append("RF")
     out.append("*END STEP")
     return parts
+
+
+def _frequency_step(
+    out: list[str],
+    spec: SimulationSpec,
+    support_sets: list[str],
+    groups: list[_Group],
+    modes: int,
+    solver: str,
+) -> None:
+    """The frequency step of a modal analysis (M6.1, ADR-070), after its *STEP line: the
+    lowest ``modes`` eigenvalues and mode shapes of the held bodies by CalculiX's Lanczos
+    method, the supports' held directions at zero. CalculiX writes the eigenvalues and
+    frequencies to the .dat file and each mode shape, mass-normalised, to the .frd file."""
+    # The data line gives the number of eigenvalues only: no frequency range, so the lowest
+    # ones come out, and the Lanczos shift stays CalculiX's 1 (rad/s)², which a free body's
+    # singular stiffness needs (arpack.c; checked with ccx 2.21 on a free bar).
+    out.append(f"*FREQUENCY, SOLVER={solver}")
+    out.append(str(modes))
+    holds_any = any(isinstance(s, FixedSupport) for s in spec.supports) or groups
+    if holds_any:
+        out.append("*BOUNDARY")
+    for support, name in zip(spec.supports, support_sets, strict=True):
+        if isinstance(support, FixedSupport):
+            out.append(f"{name}, 1, 3")
+    # A frequency step sets every held value to zero (frequencys.f); a prescribed displacement
+    # other than zero is refused before, so the values are zero already.
+    for k, (_, _, dofs) in enumerate(groups):
+        out.extend(f"C{k + 1}, {dof}, {dof}" for dof, _ in dofs)
+    out.append("*NODE FILE")
+    out.append("U")
+    out.append("*END STEP")

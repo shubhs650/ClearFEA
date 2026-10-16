@@ -166,6 +166,7 @@ export const analysisKinds = {
   linear_static: "Linear static",
   steady_thermal: "Steady-state thermal",
   thermal_stress: "Thermal stress",
+  modal: "Modal",
 } as const;
 
 const structuralLoads = ["pressure", "force", "remote", "hydrostatic", "gravity", "centrifugal"] as const;
@@ -174,12 +175,15 @@ const thermalLoads = ["fixed_temperature", "heat_flux", "convection", "radiation
 /**
  * The load types each analysis type takes (M5.1, ADR-064; M5.2, ADR-065). A thermal stress
  * analysis (M5.4, ADR-067) takes both kinds but not a uniform temperature change, since its
- * temperatures come from its thermal step. Supports belong to the analyses with a static step.
+ * temperatures come from its thermal step. Supports belong to the analyses with a static step
+ * and to a modal one (M6.1).
  */
 export const analysisLoads: Record<AnalysisType, readonly Load["type"][]> = {
   linear_static: [...structuralLoads, "temperature"],
   steady_thermal: thermalLoads,
   thermal_stress: [...structuralLoads, ...thermalLoads],
+  // A modal analysis finds natural frequencies of the bodies as held, with no load (M6.1, ADR-070).
+  modal: [],
 };
 
 /** True for an analysis that solves temperatures only, with no displacement or stress (M5.1). */
@@ -194,8 +198,21 @@ export function solvesTemperature(spec: Pick<SimulationSpec, "analysis">): boole
 
 /** True for an analysis with a static step, which takes supports and solves displacements and stresses (M5.4). */
 export function solvesStress(spec: Pick<SimulationSpec, "analysis">): boolean {
+  return spec.analysis === "linear_static" || spec.analysis === "thermal_stress";
+}
+
+/** True for a modal analysis (M6.1, ADR-070): natural frequencies of the bodies as held, no loads. */
+export function isModal(spec: Pick<SimulationSpec, "analysis">): boolean {
+  return spec.analysis === "modal";
+}
+
+/** True for an analysis that takes supports: those with a static step and a modal one (M6.1). */
+export function takesSupports(spec: Pick<SimulationSpec, "analysis">): boolean {
   return spec.analysis !== "steady_thermal";
 }
+
+/** The number of modes the setup asks for when a modal analysis is chosen (M6.1). */
+export const DEFAULT_MODES = 10;
 
 /**
  * The material properties that may be given against temperature (M5.5, ADR-068): each table's

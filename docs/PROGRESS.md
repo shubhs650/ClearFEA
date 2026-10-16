@@ -5,8 +5,8 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M6 Modal, not started (M5 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M6.1, once the maintainer gives the go for M6 (his autodrive covered M5)
+- **Current milestone:** M6 Modal, in progress (maintainer's M6 autodrive, 2026-10-16)
+- **Next task:** M6.2, frequency table and mode shape display
 - **Blocked on:** nothing
 
 ## Milestones
@@ -19,7 +19,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M3 | Results tools | Done (phase-end run on main green, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) | 2026-10-16 |
 | M4 | Assemblies | Done (phase-end run on main green, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) | 2026-10-16 |
 | M5 | Thermal | Done (phase-end run on main green, [run 38931101479](https://github.com/shubhs650/ClearFEA/actions/runs/38931101479)) | 2026-10-16 |
-| M6 | Modal | Not started | |
+| M6 | Modal | In progress | |
 | M7 | Report | Not started | |
 | M8 | Platform | Not started | |
 | M9 | Gate | Not started | |
@@ -92,6 +92,12 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M4.5 Report text noting reduced stress accuracy at tied interfaces (stored for M7)
 - [x] E-03 Multi-body browser test (listed for M4 in VERIFICATION.md, written after the M4 close)
 
+### M6 Modal
+
+- [x] M6.1 Modal analysis type: number of modes, supports only (with V-20, V-21, V-22)
+- [ ] M6.2 Frequency table; mode shape display and animation
+- [ ] M6.3 Estimator terms for modal runs
+
 ### M5 Thermal
 
 - [x] M5.1 Steady-state thermal analysis type; thermal material properties
@@ -117,14 +123,16 @@ Things only the maintainer can do.
 | Tier | Last run | Result |
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
-| Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 23 cases, 271 of 271 checks (M5.6: new V-14 tube wall and V-27 two-layer tube); before that 249 of 249 (M5.5: new V-19); 230 of 230 (M5.4: new V-18 thermal stress cylinder); V-08, V-12, V-18 and V-24 61 of 61 again after the no-load balance scale change |
-| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4); V-18 16 of 16 (M5.4); V-19 19 of 19 (2026-10-16, M5.5); V-14 and V-27 22 of 22 (M5.6) |
+| Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-20, V-21 and V-22 28 of 28 (M6.1, new modal cases; V-22 on SPOOLES); before that all 23 cases, all 23 cases, 271 of 271 checks (M5.6: new V-14 tube wall and V-27 two-layer tube); before that 249 of 249 (M5.5: new V-19); 230 of 230 (M5.4: new V-18 thermal stress cylinder); V-08, V-12, V-18 and V-24 61 of 61 again after the no-load balance scale change |
+| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4); V-18 16 of 16 (M5.4); V-19 19 of 19 (2026-10-16, M5.5); V-14 and V-27 22 of 22 (M5.6); V-20 and V-21 at 3 mm 16 of 16, V-22 at 2 mm 12 of 12 (2026-10-16, M6.1) |
 | Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 (one body, every result step to M3.8), E-02 (mixed-unit entry, written during M6), E-03 (two bonded bodies; also as thermal stress with heat across the bond since M5.6) and E-04 (thermal stress, M5.4; with conductivity and Young's modulus tables since M5.5); E-01 also checks the ADR-063 solver choice |
 | Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main 94eb5e6, [run 38931101479](https://github.com/shubhs650/ClearFEA/actions/runs/38931101479); closed M5) | Green: full tier 271 of 271 checks in all 23 cases (V-01 to V-19, V-24 to V-27); E-01, E-03 and E-04 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M6.1 (2026-10-16): modal analysis type (ADR-070, accepted under Shubham's M6 autodrive, pending his review). Physics-critical modules touched: the units table (version 8, `frequency`: Hz, kHz, cpm), the deck generator (`generator.py` `_frequency_step`: `*FREQUENCY, SOLVER=`, the modes, the supports' `*BOUNDARY` without values, `*NODE FILE` `U`; loads, nonzero prescribed displacements and iterative solvers refused; free bodies allowed but not with PaStiX) and the result reader (new `results/modal.py`, the `.dat` eigenvalue table; `SolveResult.frequencies` in Hz, signed). Earlier decks byte-identical, DECK_FORMAT 5; new snapshots `modal-c3d10`, `modal-held-c3d4`, `modal-free-bonded-c3d10`. Found: PaStiX gives wrong frequencies or aborts on a free body, because CalculiX factors K − 1·M (ADR-070 item 4), so a free body needs SPOOLES. Also: a modal run takes more memory than the static estimate, and V-20/V-21 at 2 mm ran out of the verification worker's 4 GB with PaStiX, so their full tier is 3 mm; M6.3 should fit modal memory and time. Mode shapes are written to the `.frd` but not read: `fields.bin`/`nodes.bin` of a modal run are empty and the viewer shows the geometry; M6.2 reads them (`results/modal.py` `ModalFields`) and adds the table and animation. New `worker/spikes/modal_check` (SPOOLES, 4 mm or `--size`). Web: Analysis gets Modal and "Number of modes"; the Run panel lists the frequencies (`ModalFigures`) with a rigid-body note. PLAN.md's V-21 corrected to the fixed-fixed beam. Screenshots in the project's `m6.1/` folder.
 
 > E-02 (2026-10-16): the mixed-unit entry browser test, listed for M2 and written during M6 at the maintainer's request. `apps/web/e2e/e02-mixed-units.e2e.ts` signs in as `alice` after E-01, picks the US (in, lbf, psi) system, uploads E-01's millimetre block and enters Young's modulus 200 GPa, yield strength 36 ksi, 0.5 MPa and a -100 lbf force on the top and a 5 mm mesh, checking that each empty field offered the system's unit first. It checks the stored spec keeps each value as typed, the fields after a reload, the top face's hover area (1.24 in²), the deck's `*ELASTIC` modulus in Pa, the applied totals and reaction in lbf (balance under 0.1 %), and after switching back to metric the totals in N with the typed units unchanged; it ends with alice on metric again. Every factor comes from `units.json`. The display-unit switch stays E-01's (M3.7). No app code changed. Found: the project's unit system loads after sign-in and overwrites a choice made before it lands (`apps/web/src/units/useProject.ts`); the test waits for `/api/project`, and the app race is parked. Screenshots in the project's `e02/` folder.
 
@@ -276,6 +284,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M6.1: modal analysis type, frequencies only (ADR-070); V-20, V-21, V-22. Learned: PaStiX cannot solve a free body's frequency step (CalculiX's shift makes the matrix indefinite), and a modal solve needs more memory than a static one.
 - E-02: browser test of values entered in mixed units, part of `make e2e` (E-01 to E-04 pass locally). Learned: a unit system picked right after sign-in is drawn over when the project loads.
 - ADR-064 to ADR-069 (M5) reviewed and accepted by the maintainer; their status lines in DECISIONS.md updated.
 - M5 closed: phase-end workflow run by hand on main 94eb5e6 ([run 38931101479](https://github.com/shubhs650/ClearFEA/actions/runs/38931101479)) green, `make verify` full tier 271 of 271 checks in all 23 cases and `make e2e` E-01, E-03 and E-04. Next: M6, waiting on the maintainer's go.

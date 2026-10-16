@@ -35,8 +35,8 @@
       "uniqueItems": true
     },
     "AnalysisType": {
-      "description": "linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports. thermal_stress: a steady-state thermal step followed by a linear static step on the temperatures it solved, in one deck (M5.4, ADR-067); it uses supports, the structural loads other than a uniform temperature change, and the thermal loads, and needs the spec's stressFreeTemperature.",
-      "enum": ["linear_static", "steady_thermal", "thermal_stress"]
+      "description": "linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports. thermal_stress: a steady-state thermal step followed by a linear static step on the temperatures it solved, in one deck (M5.4, ADR-067); it uses supports, the structural loads other than a uniform temperature change, and the thermal loads, and needs the spec's stressFreeTemperature. modal: the natural frequencies of the bodies as they are held, one *FREQUENCY step (M6.1, ADR-070); it uses supports and no loads, and needs the spec's modes; bodies no support holds have rigid-body modes at or near zero.",
+      "enum": ["linear_static", "steady_thermal", "thermal_stress", "modal"]
     },
     "BodyAssignment": {
       "description": "A body of the geometry and the material it is made of. Every body of the geometry appears exactly once.",
@@ -545,7 +545,7 @@
       "enum": ["pastix", "spooles", "iterative_cholesky", "iterative_scaling"]
     },
     "SimulationSpec": {
-      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), or one thermal stress analysis with its stress-free temperature (M5.4), material properties against temperature (M5.5), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
+      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), or one thermal stress analysis with its stress-free temperature (M5.4), or one modal analysis with its number of modes (M6.1), material properties against temperature (M5.5), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
       "type": "object",
       "additionalProperties": false,
       "required": ["version", "analysis", "geometryId", "bodies", "materials", "supports", "loads", "mesh"],
@@ -565,6 +565,10 @@
         "stressFreeTemperature": {
           "description": "The temperature at which the bodies have no thermal strain, an absolute temperature quantity above 0 K (M5.4, ADR-067). Used by a thermal stress analysis, whose thermal strain is the thermal expansion times the solved temperature minus this one; absent or null until entered.",
           "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+        },
+        "modes": {
+          "description": "How many natural frequencies a modal analysis finds, the lowest first (M6.1, ADR-070); absent or null until entered.",
+          "oneOf": [{ "type": "integer", "minimum": 1, "maximum": 100 }, { "type": "null" }]
         },
         "bonds": {
           "description": "Every candidate bond of the geometry with the user's review of it (M4.2), in the order of topology.json. Absent in specs saved before M4.2, where every candidate counts as detected.",
@@ -809,7 +813,7 @@
       }
     },
     "SolveResult": {
-      "description": "Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons, temperature in kelvin, heat flux in W/m², heat flows in watts. A linear static run has displacement, vonMises and reactions; a steady-state thermal run has temperature instead (M5.1, ADR-064), and since M5.3 heatFlux, heatFlows and heatBalance.",
+      "description": "Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons, temperature in kelvin, heat flux in W/m², heat flows in watts. A linear static run has displacement, vonMises and reactions; a steady-state thermal run has temperature instead (M5.1, ADR-064), and since M5.3 heatFlux, heatFlows and heatBalance. A modal run has frequencies only (M6.1, ADR-070).",
       "type": "object",
       "additionalProperties": false,
       "required": ["nodes", "software"],
@@ -845,6 +849,11 @@
         },
         "heatFlows": { "description": "One entry per thermal load of a steady-state thermal run, in spec order (M5.3). Absent for thermal runs solved before M5.3.", "type": "array", "items": { "$ref": "#/$defs/HeatFlow" } },
         "heatBalance": { "description": "Absent for thermal runs solved before M5.3.", "$ref": "#/$defs/HeatBalance" },
+        "frequencies": {
+          "description": "The natural frequencies of a modal run in hertz, lowest first: entry k is mode k + 1 (M6.1, ADR-070). Each is the square root of CalculiX's eigenvalue (rad²/s²) over 2π; an eigenvalue below zero, which only rounding gives (the rigid-body modes of a body free to move), gives minus the square root of its size over 2π.",
+          "type": "array",
+          "items": { "type": "number" }
+        },
         "reactions": { "description": "One entry per support, in spec order.", "type": "array", "items": { "$ref": "#/$defs/SupportReaction" } },
         "loads": { "description": "One entry per load, in spec order. Absent for runs solved before M3.2.", "type": "array", "items": { "$ref": "#/$defs/LoadTotal" } },
         "balance": { "description": "Absent for runs solved before M3.2.", "$ref": "#/$defs/BalanceCheck" },

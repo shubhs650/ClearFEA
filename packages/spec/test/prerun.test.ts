@@ -764,3 +764,79 @@ describe("pre-run validation of temperature tables (M5.5)", () => {
     ]);
   });
 });
+
+describe("pre-run validation of a modal analysis (M6.1)", () => {
+  function modal(): SimulationSpec {
+    const s = spec();
+    return {
+      ...s,
+      analysis: "modal",
+      modes: 10,
+      loads: [],
+      materials: [{ ...s.materials[0], density: { value: 7850, unit: "kg/m³" } } as SimulationSpec["materials"][0]],
+    };
+  }
+
+  it("runs a complete modal setup, and one with no support at all on SPOOLES", () => {
+    expect(preRunProblems(modal(), topology)).toEqual([]);
+    expect(preRunProblems({ ...modal(), supports: [], solver: "spooles" }, topology)).toEqual([]);
+  });
+
+  it("asks for SPOOLES when no support holds the body, since PaStiX cannot solve it", () => {
+    expect(preRunProblems({ ...modal(), supports: [] }, topology)).toEqual([
+      {
+        item: "run",
+        message:
+          "PaStiX cannot find the natural frequencies of a body no support holds: it gives wrong frequencies or stops. Choose SPOOLES as the equation solver, or add supports that hold every body.",
+      },
+    ]);
+  });
+
+  it("asks for the number of modes, the density and a direct solver", () => {
+    const s = modal();
+    const noDensity = { ...s.materials[0], density: null } as SimulationSpec["materials"][0];
+    expect(preRunProblems({ ...s, modes: null, materials: [noDensity], solver: "iterative_scaling" }, topology)).toEqual([
+      {
+        item: "analysis",
+        message: "There is no number of modes. Enter how many natural frequencies to find under Analysis.",
+      },
+      {
+        item: "run",
+        message:
+          "Iterative scaling cannot find natural frequencies: CalculiX's iterative solvers do not work in a modal analysis. Choose PaStiX or SPOOLES as the equation solver.",
+      },
+      {
+        item: "steel",
+        message: 'Material "Structural steel" has no density, which a modal analysis needs for the mass. Enter it.',
+      },
+    ]);
+  });
+
+  it("refuses loads and a prescribed displacement that moves its faces", () => {
+    const s = modal();
+    const moved = {
+      ...s,
+      loads: spec().loads,
+      supports: [
+        {
+          id: "move",
+          type: "displacement",
+          name: "Moved",
+          faces: [1],
+          x: { value: 0, unit: "mm" },
+          y: { value: 0.1, unit: "mm" },
+          z: "free",
+        },
+      ],
+    } as SimulationSpec;
+    expect(messages(moved)).toEqual([
+      'Support "Moved" moves its faces, which a modal analysis cannot do: it finds vibrations about the held position. Set its y component to 0 or free.',
+      'Pressure "Pressure 1" has no effect in a modal analysis, which finds the natural frequencies of the bodies as they are held, without loads. Delete it, or set the analysis type to linear static.',
+    ]);
+  });
+
+  it("does not report a body no support holds", () => {
+    const two = { ...modal(), supports: [], solver: "spooles" as const, bodies: [{ tag: 1, material: "steel" }, { tag: 2, material: "steel" }] };
+    expect(preRunProblems(two, { ...topology, bodies: [{ tag: 1 }, { tag: 2 }] })).toEqual([]);
+  });
+});

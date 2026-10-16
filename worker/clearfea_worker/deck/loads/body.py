@@ -158,8 +158,11 @@ def body_loads(spec: SimulationSpec) -> tuple[Vector | None, Rotation | None]:
     return (None if gravity is None else (gravity[0], gravity[1], gravity[2])), spin
 
 
-def densities(spec: SimulationSpec, mesh: VolumeMesh) -> dict[int, float]:
-    """Density (kg/m^3) of every body of the mesh; DeckError for a material without one."""
+def densities(
+    spec: SimulationSpec, mesh: VolumeMesh, need: str = "Gravity and centrifugal loads need it"
+) -> dict[int, float]:
+    """Density (kg/m^3) of every body of the mesh; DeckError for a material without one,
+    saying what ``need``s it."""
     material = {m.id: m for m in spec.materials}
     assigned = {b.tag: b.material for b in spec.bodies}
     out = {}
@@ -169,9 +172,7 @@ def densities(spec: SimulationSpec, mesh: VolumeMesh) -> dict[int, float]:
             raise DeckError(f"Body {tag} has no material. Assign a material to it.")
         what = f'Material "{m.name}"'
         if m.density is None:
-            raise DeckError(
-                f"{what} has no density. Gravity and centrifugal loads need it; enter it."
-            )
+            raise DeckError(f"{what} has no density. {need}; enter it.")
         value = si(m.density, "density", f"{what}: density")
         if not value > 0.0:
             raise DeckError(f"{what}: the density must be greater than zero.")
