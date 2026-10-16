@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "kinds": {
     "length": {
       "description": "Lengths and coordinates.",
@@ -324,6 +324,16 @@
           "definition": "1 % = 0.01 m/m exactly"
         }
       }
+    },
+    "ratio": {
+      "description": "Ratios of two quantities of the same kind, dimensionless, such as the safety factor against yield (M3.5). Shown without a unit.",
+      "si": "1",
+      "units": {
+        "1": {
+          "factor": 1,
+          "definition": "SI coherent unit, 1 (dimensionless)"
+        }
+      }
     }
   },
   "systems": {
@@ -342,7 +352,8 @@
         "temperature": "°C",
         "temperatureDifference": "°C",
         "thermalExpansion": "1/°C",
-        "strain": "mm/mm"
+        "strain": "mm/mm",
+        "ratio": "1"
       }
     },
     "si": {
@@ -360,7 +371,8 @@
         "temperature": "K",
         "temperatureDifference": "K",
         "thermalExpansion": "1/K",
-        "strain": "m/m"
+        "strain": "m/m",
+        "ratio": "1"
       }
     },
     "us-in": {
@@ -378,7 +390,8 @@
         "temperature": "°F",
         "temperatureDifference": "°F",
         "thermalExpansion": "1/°F",
-        "strain": "in/in"
+        "strain": "in/in",
+        "ratio": "1"
       }
     }
   },

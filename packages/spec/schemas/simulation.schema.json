@@ -79,6 +79,10 @@
           "description": "Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.",
           "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
         },
+        "yieldStrength": {
+          "description": "Tensile yield strength, a pressure quantity greater than zero (M3.5, ADR-054). Needed only for the safety factor against yield, which the result shows when every material of the setup has one; absent or null until entered.",
+          "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+        },
         "source": {
           "description": "Where the values came from, as text: a library material's citation, or a note the user saved with a custom material (M2.9, ADR-046). Information only; the setup drops it when a value is changed, since the values then no longer match it. Absent when unknown.",
           "type": "string",
@@ -648,6 +652,13 @@
         "reactions": { "description": "One entry per support, in spec order.", "type": "array", "items": { "$ref": "#/$defs/SupportReaction" } },
         "loads": { "description": "One entry per load, in spec order. Absent for runs solved before M3.2.", "type": "array", "items": { "$ref": "#/$defs/LoadTotal" } },
         "balance": { "description": "Absent for runs solved before M3.2.", "$ref": "#/$defs/BalanceCheck" },
+        "safetyFactor": {
+          "description": "Smallest safety factor against yield over every node of the mesh: the yield strength of the node's material over its von Mises stress, at most 15 (ADR-054). Absent when a material of the setup has no yield strength, and for runs solved before M3.5.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min"],
+          "properties": { "min": { "$ref": "#/$defs/NodeValue" } }
+        },
         "software": {
           "title": "SolveSoftware",
           "description": "Versions that solved the run.",

@@ -178,6 +178,10 @@ export interface IsotropicMaterial {
    */
   thermalExpansion?: Quantity | null;
   /**
+   * Tensile yield strength, a pressure quantity greater than zero (M3.5, ADR-054). Needed only for the safety factor against yield, which the result shows when every material of the setup has one; absent or null until entered.
+   */
+  yieldStrength?: Quantity | null;
+  /**
    * Where the values came from, as text: a library material's citation, or a note the user saved with a custom material (M2.9, ADR-046). Information only; the setup drops it when a value is changed, since the values then no longer match it. Absent when unknown.
    */
   source?: string;
@@ -824,6 +828,12 @@ export interface SolveResult {
    */
   loads?: LoadTotal[];
   balance?: BalanceCheck1;
+  /**
+   * Smallest safety factor against yield over every node of the mesh: the yield strength of the node's material over its von Mises stress, at most 15 (ADR-054). Absent when a material of the setup has no yield strength, and for runs solved before M3.5.
+   */
+  safetyFactor?: {
+    min: NodeValue;
+  };
   software: SolveSoftware;
 }
 /**
