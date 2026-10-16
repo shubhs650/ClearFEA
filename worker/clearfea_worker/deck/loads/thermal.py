@@ -10,6 +10,7 @@ No nodal loads are applied, so reactions need no correction (deck/applied.py).
 from ...meshing.volume import VolumeMesh
 from ...spec.simulation_schema import SimulationSpec, TemperatureLoad
 from ..common import DeckError, si
+from ..materials import Property, expansion_reference, table
 
 
 def temperature_change(spec: SimulationSpec) -> tuple[TemperatureLoad, float] | None:
@@ -31,13 +32,19 @@ def temperature_change(spec: SimulationSpec) -> tuple[TemperatureLoad, float] | 
 
 
 def expansions(
-    spec: SimulationSpec, mesh: VolumeMesh, needed_by: str = "A temperature change"
-) -> dict[str, float]:
+    spec: SimulationSpec,
+    mesh: VolumeMesh,
+    needed_by: str = "A temperature change",
+    *,
+    tables: bool = False,
+) -> dict[str, Property]:
     """Thermal expansion coefficient (1/K) of every material a body of the mesh uses, by
-    material id; DeckError for a material without one, saying what ``needed_by`` it."""
+    material id; DeckError for a material without one, saying what ``needed_by`` it. With
+    ``tables`` (a thermal stress analysis, M5.5, ADR-068), a material's table of mean
+    coefficients, with the temperature they are measured from, replaces its one value."""
     material = {m.id: m for m in spec.materials}
     assigned = {b.tag: b.material for b in spec.bodies}
-    out = {}
+    out: dict[str, Property] = {}
     for tag in sorted(mesh.bodies):
         m = material.get(assigned.get(tag) or "")
         if m is None:
@@ -45,6 +52,12 @@ def expansions(
         if m.id in out:
             continue
         what = f'Material "{m.name}"'
+        if tables and m.thermal_expansion_table is not None:
+            out[m.id] = table(
+                m.thermal_expansion_table, "thermalExpansion", f"{what}: thermal expansion table"
+            )
+            expansion_reference(m.thermal_expansion_table, f"{what}: thermal expansion table")
+            continue
         if m.thermal_expansion is None:
             raise DeckError(f"{what} has no thermal expansion. {needed_by} needs it; enter it.")
         out[m.id] = si(m.thermal_expansion, "thermalExpansion", f"{what}: thermal expansion")

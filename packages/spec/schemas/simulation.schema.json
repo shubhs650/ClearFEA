@@ -97,6 +97,22 @@
           "description": "Thermal conductivity, a thermalConductivity quantity greater than zero (M5.1, ADR-064). Needed only by a steady-state thermal and a thermal stress analysis; absent or null until entered.",
           "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
         },
+        "youngsModulusTable": {
+          "description": "Young's modulus against temperature (M5.5, ADR-068), a PropertyTable of pressures; absent or null when it does not vary.",
+          "oneOf": [{ "$ref": "#/$defs/PropertyTable" }, { "type": "null" }]
+        },
+        "poissonsRatioTable": {
+          "description": "Poisson's ratio against temperature (M5.5, ADR-068), a PropertyTable without unit; absent or null when it does not vary.",
+          "oneOf": [{ "$ref": "#/$defs/PropertyTable" }, { "type": "null" }]
+        },
+        "thermalExpansionTable": {
+          "description": "Thermal expansion against temperature (M5.5, ADR-068), an ExpansionTable; absent or null when it does not vary.",
+          "oneOf": [{ "$ref": "#/$defs/ExpansionTable" }, { "type": "null" }]
+        },
+        "thermalConductivityTable": {
+          "description": "Thermal conductivity against temperature (M5.5, ADR-068), a PropertyTable of thermal conductivities; absent or null when it does not vary.",
+          "oneOf": [{ "$ref": "#/$defs/PropertyTable" }, { "type": "null" }]
+        },
         "yieldStrength": {
           "description": "Tensile yield strength, a pressure quantity greater than zero (M3.5, ADR-054). Needed only for the safety factor against yield, which the result shows when every material of the setup has one; absent or null until entered.",
           "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
@@ -107,6 +123,39 @@
           "minLength": 1,
           "maxLength": 500
         }
+      }
+    },
+    "PropertyTableRow": {
+      "description": "One row of a property table: a temperature and the property's value there, as typed in the table's units; either is null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["temperature", "value"],
+      "properties": {
+        "temperature": { "oneOf": [{ "type": "number" }, { "type": "null" }] },
+        "value": { "oneOf": [{ "type": "number" }, { "type": "null" }] }
+      }
+    },
+    "PropertyTable": {
+      "description": "A material property that varies with temperature (M5.5, ADR-068): rows of a temperature and the value there, in rising temperature, at least two. Between rows the value is interpolated linearly; below the first row and above the last it is the first and last value (as CalculiX does). temperatureUnit is a temperature unit and unit a unit of the property's kind from packages/spec/units.json; unit is absent for Poisson's ratio. Used in place of the material's single value by steady-state thermal and thermal stress analyses, whose temperatures are solved; a linear static analysis uses the single value.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["temperatureUnit", "rows"],
+      "properties": {
+        "temperatureUnit": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/PropertyTableRow" }, "maxItems": 50 }
+      }
+    },
+    "ExpansionTable": {
+      "description": "A thermal expansion coefficient that varies with temperature (M5.5, ADR-068): a PropertyTable of mean (secant) coefficients, each measured from referenceTemperature, as handbooks print them: the thermal strain at T is alpha(T) (T - referenceTemperature), counted from the stress-free temperature. referenceTemperature is a temperature quantity, null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["temperatureUnit", "unit", "rows", "referenceTemperature"],
+      "properties": {
+        "temperatureUnit": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/PropertyTableRow" }, "maxItems": 50 },
+        "referenceTemperature": { "$ref": "#/$defs/OptionalQuantity" }
       }
     },
     "MaterialReference": {

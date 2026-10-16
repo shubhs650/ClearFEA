@@ -223,6 +223,22 @@ export interface IsotropicMaterial {
    */
   thermalConductivity?: Quantity | null;
   /**
+   * Young's modulus against temperature (M5.5, ADR-068), a PropertyTable of pressures; absent or null when it does not vary.
+   */
+  youngsModulusTable?: PropertyTable | null;
+  /**
+   * Poisson's ratio against temperature (M5.5, ADR-068), a PropertyTable without unit; absent or null when it does not vary.
+   */
+  poissonsRatioTable?: PropertyTable | null;
+  /**
+   * Thermal expansion against temperature (M5.5, ADR-068), an ExpansionTable; absent or null when it does not vary.
+   */
+  thermalExpansionTable?: ExpansionTable | null;
+  /**
+   * Thermal conductivity against temperature (M5.5, ADR-068), a PropertyTable of thermal conductivities; absent or null when it does not vary.
+   */
+  thermalConductivityTable?: PropertyTable | null;
+  /**
    * Tensile yield strength, a pressure quantity greater than zero (M3.5, ADR-054). Needed only for the safety factor against yield, which the result shows when every material of the setup has one; absent or null until entered.
    */
   yieldStrength?: Quantity | null;
@@ -230,6 +246,45 @@ export interface IsotropicMaterial {
    * Where the values came from, as text: a library material's citation, or a note the user saved with a custom material (M2.9, ADR-046). Information only; the setup drops it when a value is changed, since the values then no longer match it. Absent when unknown.
    */
   source?: string;
+}
+/**
+ * A material property that varies with temperature (M5.5, ADR-068): rows of a temperature and the value there, in rising temperature, at least two. Between rows the value is interpolated linearly; below the first row and above the last it is the first and last value (as CalculiX does). temperatureUnit is a temperature unit and unit a unit of the property's kind from packages/spec/units.json; unit is absent for Poisson's ratio. Used in place of the material's single value by steady-state thermal and thermal stress analyses, whose temperatures are solved; a linear static analysis uses the single value.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "PropertyTable".
+ */
+export interface PropertyTable {
+  temperatureUnit: string;
+  unit?: string;
+  /**
+   * @maxItems 50
+   */
+  rows: PropertyTableRow[];
+}
+/**
+ * One row of a property table: a temperature and the property's value there, as typed in the table's units; either is null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "PropertyTableRow".
+ */
+export interface PropertyTableRow {
+  temperature: number | null;
+  value: number | null;
+}
+/**
+ * A thermal expansion coefficient that varies with temperature (M5.5, ADR-068): a PropertyTable of mean (secant) coefficients, each measured from referenceTemperature, as handbooks print them: the thermal strain at T is alpha(T) (T - referenceTemperature), counted from the stress-free temperature. referenceTemperature is a temperature quantity, null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "ExpansionTable".
+ */
+export interface ExpansionTable {
+  temperatureUnit: string;
+  unit: string;
+  /**
+   * @maxItems 50
+   */
+  rows: PropertyTableRow[];
+  referenceTemperature: OptionalQuantity;
 }
 /**
  * A document the material library cites.
@@ -333,7 +388,7 @@ export interface ElasticSupport {
   name: ItemName;
   faces: FaceTags;
   /**
-   * Foundation stiffness, the pressure per unit of normal displacement, a foundationStiffness quantity greater than zero.
+   * A Quantity, or null until the user has entered it.
    */
   stiffness: Quantity | null;
 }
@@ -1266,6 +1321,9 @@ export const BondStatusValues = ["detected", "accepted", "removed"] as const sat
 export const validateBondStatus = validator<BondStatus>(schema, "BondStatus");
 export const validateBond = validator<Bond>(schema, "Bond");
 export const validateIsotropicMaterial = validator<IsotropicMaterial>(schema, "IsotropicMaterial");
+export const validatePropertyTableRow = validator<PropertyTableRow>(schema, "PropertyTableRow");
+export const validatePropertyTable = validator<PropertyTable>(schema, "PropertyTable");
+export const validateExpansionTable = validator<ExpansionTable>(schema, "ExpansionTable");
 export const validateMaterialReference = validator<MaterialReference>(schema, "MaterialReference");
 export const validateMaterialLibrary = validator<MaterialLibrary>(schema, "MaterialLibrary");
 export const validateMaterialsResponse = validator<MaterialsResponse>(schema, "MaterialsResponse");
