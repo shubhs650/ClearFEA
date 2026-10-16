@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "analysis": "steady_thermal",
+  "geometryId": null,
+  "bodies": [
+    { "tag": 1, "material": "inner" },
+    { "tag": 2, "material": "outer" }
+  ],
+  "materials": [
+    {
+      "id": "inner",
+      "name": "Inner layer (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200, "unit": "GPa" },
+      "poissonsRatio": 0.3,
+      "thermalConductivity": { "value": 0.05, "unit": "W/(mm·K)" }
+    },
+    {
+      "id": "outer",
+      "name": "Outer layer (case value)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 28000, "unit": "ksi" },
+      "poissonsRatio": 0.29,
+      "thermalConductivity": { "value": 15, "unit": "W/(m·K)" }
+    }
+  ],
+  "supports": [],
+  "loads": [
+    {
+      "id": "bore",
+      "type": "fixed_temperature",
+      "name": "Hot bore",
+      "faces": ["bore"],
+      "temperature": { "value": 392, "unit": "°F" }
+    },
+    {
+      "id": "outside",
+      "type": "fixed_temperature",
+      "name": "Cool outside",
+      "faces": ["outside"],
+      "temperature": { "value": 50, "unit": "°C" }
+    }
+  ],
+  "mesh": {
+    "size": { "value": 5, "unit": "mm" },
+    "local": [{ "id": "outer", "name": "Outer layer", "scope": "bodies", "tags": [2], "size": { "value": 2, "unit": "mm" } }]
+  }
+}

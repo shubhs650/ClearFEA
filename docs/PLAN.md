@@ -113,7 +113,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 - [ ] M5.5 Temperature-dependent property tables in materials, UI and deck.
 - [ ] M5.6 Thermal bonds across tied interfaces.
 
-**Verification added:** V-13 plane wall conduction, V-14 cylinder wall conduction, V-15 wall with convection both sides, V-16 radiating plate, V-17 internal generation slab, V-18 thick cylinder thermal stress, V-19 temperature-dependent conductivity.
+**Verification added:** V-13 plane wall conduction, V-14 cylinder wall conduction, V-15 wall with convection both sides, V-16 radiating plate, V-17 internal generation slab, V-18 thick cylinder thermal stress, V-19 temperature-dependent conductivity, V-27 two-layer tube wall (bonded layers, M5.6).
 
 **Exit:** a hot-inside, cool-outside thick component gives a temperature profile and thermal stress matching closed-form values.
 

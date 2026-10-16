@@ -61,7 +61,7 @@ Stress is checked away from supports and load application points unless the case
 | V-11 | Two bonded blocks against one block: V-02's cantilever cut across at x = 3 in into two bodies, the root block meshed finer | V-02's single-body Timoshenko values: tip deflection, bending stress 2 in past the bond, clamp reaction through the bond | M4 |
 | V-12 | Bi-material bar in tension: a quarter of a bar of two materials with the same ν/E bonded end to end, on symmetry planes crossing the bond, meshed differently each side | Series stiffness: end displacement σ(L1/E1 + L2/E2); uniform stress F/A and strain σ/E in each body; equal sideways contraction; end reaction | M4 |
 | V-13 | Plane wall conduction | Linear temperature profile; flux kΔT/L | M5 |
-| V-14 | Cylinder wall conduction | Logarithmic profile; heat flow 2πkLΔT/ln(ro/ri) | M5 |
+| V-14 | Cylinder wall conduction: a quarter of a thick tube, hot bore, cool outside | Logarithmic profile at three radii; radial heat flux; heat flow 2πkLΔT/ln(ro/ri) in at the bore and out at the outside | M5 (written with M5.6) |
 | V-15 | Wall with convection on both sides | Flux ΔT/(1/h₁ + L/k + 1/h₂); surface temperatures | M5 |
 | V-16 | Heated plate radiating to ambient | Surface temperature from εσ(T⁴ − T∞⁴) balance | M5 |
 | V-17 | Slab with internal heat generation | Centre temperature rise q‴L²/2k | M5 |
@@ -74,6 +74,7 @@ Stress is checked away from supports and load application points unless the case
 | V-24 | Quarter bar stretched by prescribed end displacements on two symmetry planes | Uniform stress Eδ/L (von Mises, σxx, σ1), strains δ/L and −νδ/L, lateral contraction νεy, end reaction σA; safety factor against yield Sy/σ (M3.5) | M2 |
 | V-25 | V-09's quarter tube with its outside on an elastic support (a stiff sleeve) | Lamé with σr(b) = −k u(b): von Mises and radial displacement at the bore and the outside; the sleeve's and the cut planes' reactions | M2 |
 | V-26 | V-24's kind of quarter bar pulled by a force on its end, meshed with first-order (four-node) tetrahedra | Uniform stress F/A, end displacement FL/(EA), lateral contraction νεy, start reaction F (exact for four-node tetrahedra) | M2 |
+| V-27 | Two-layer tube wall: a quarter of a tube of two bonded bodies of different conductivity, the outer one meshed finer, hot bore, cool outside (M5.6) | Composite cylinder in series: logarithmic profile in each layer, the bond temperature on both sides, radial heat flux in each layer, heat flow (π/2) L ΔT / Σ ln(r_out/r_in)/k in and out | M5 |
 
 More published benchmarks (NAFEMS thermal and free-vibration sets) are added as their feature lands. Reference values from publications are cited in `reference.md` and never copied wholesale.
 
@@ -95,9 +96,9 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Centrifugal load | V-06 |
 | Uniform temperature change | V-08 |
 | Bonded interface (structural) | V-11, V-12; E-03 runs a bonded two-body model through the UI |
-| Bonded interface (thermal) | to be added in M5 |
-| Steady-state thermal analysis | V-13, V-15, V-16, V-17 (and the heat step of V-18) |
-| Fixed temperature | V-13, V-17, V-18, V-14 |
+| Bonded interface (thermal) | V-27 (M5.6); `worker/spikes/heat_check` checks a two-body bar at every node, as heat transfer and as thermal stress, and a fixed temperature next to the bond; E-03 runs its bonded model as a thermal stress analysis |
+| Steady-state thermal analysis | V-13, V-14, V-15, V-16, V-17, V-27 (and the heat step of V-18) |
+| Fixed temperature | V-13, V-17, V-18, V-14, V-27 |
 | Heat flux | V-16 |
 | Convection | V-15 |
 | Radiation to ambient | V-16 |
@@ -141,7 +142,7 @@ Playwright drives the real UI against the local system on tiny models. `make e2e
 | --- | --- | --- |
 | E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance, read the min/max markers and probe a node, cut it across x and y with a cut plane, show the safety factor against yield, save a view and bring it back, show the result in other units after a reload, export CSV and VTK files (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
 | E-02 | Unit entry in mixed units and display-unit switch | M2 |
-| E-03 | Multi-body upload: bodies listed by part name with a material each, the bond found reviewed and shown, a body held only by a removed bond refused before the run, run with the bond tied, reactions balancing the load carried through the bond, the note on stresses near bonded faces, one body hidden in the result view (`e03-multi-body.e2e.ts`, two blocks touching end to end; signs in as the second test user) | M4 (written after the M4 close) |
+| E-03 | Multi-body upload: bodies listed by part name with a material each, the bond found reviewed and shown, a body held only by a removed bond refused before the run, run with the bond tied, reactions balancing the load carried through the bond, the note on stresses near bonded faces, one body hidden in the result view, then the same setup as a thermal stress analysis whose heat crosses the bond (M5.6) (`e03-multi-body.e2e.ts`, two blocks touching end to end; signs in as the second test user) | M4 (written after the M4 close) |
 | E-04 | Thermal stress setup: the analysis type and its stress-free temperature, a material with elastic and thermal values and, since M5.5, conductivity and Young's modulus tables against temperature, a fixed support, a fixed temperature and convection; run, see the von Mises stress on the deformed shape, the highest and lowest temperature, each fixed temperature's heat flow and the heat balance, draw the temperature of the same result and find both the reactions and the heat flows exports (`e04-thermal-stress.e2e.ts`, E-01's block, hot top and cold fixed end; signs in as the second test user) | M5 (M5.4, M5.5) |
 | E-05 | Report generation and download | M7 |
 | E-06 | Cancel a running job; stop limit reached | M8 |

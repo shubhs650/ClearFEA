@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-27: a quarter of a tube of two bonded layers of different conductivity, hot bore and cool
+# outside; the heat crosses the bond between them (M5.6).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-27
+title: Two-layer tube wall conduction
+analysis: steady_thermal
+features: [bonded interface (thermal), multi-body, material per body, local mesh refinement, steady-state thermal analysis, fixed temperature, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit. The two faces of the bond share one
+# box, so the interface is read on the cut faces, each body's own.
+faces:
+  bore: { min: [0, 0, 0], max: [40, 40, 20] }
+  outside: { min: [0, 0, 0], max: [60, 60, 20] }
+  cut-y-1: { min: [40, 0, 0], max: [50, 0, 20] }
+  cut-y-2: { min: [50, 0, 0], max: [60, 0, 20] }
+mesh:
+  coarse: { value: 5, unit: mm } # two quadratic elements through the inner layer
+  full: { value: 2.5, unit: mm }
+  # The outer layer is meshed finer, so the bond's two faces have different nodes.
+  local:
+    outer:
+      coarse: { value: 2, unit: mm }
+      full: { value: 1, unit: mm }
+# The cut faces' edges along x get nodes at every element size, so the boxes at r = 45 and
+# 54 mm find nodes on both tiers. On the cut y = 0 the radial direction is x.
+checks:
+  - name: Inner layer halfway through, r = 45 mm
+    quantity: temperature
+    face: cut-y-1
+    box: { min: [44.9, 0, 0], max: [45.1, 0, 20] }
+    reference: { value: 178.736507, unit: °C }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Bond, inner layer's side, r = 50 mm
+    quantity: temperature
+    face: cut-y-1
+    box: { min: [49.9, 0, 0], max: [50.1, 0, 20] }
+    reference: { value: 432.865664, unit: K }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Bond, outer layer's side, r = 50 mm
+    quantity: temperature
+    face: cut-y-2
+    box: { min: [49.9, 0, 0], max: [50.1, 0, 20] }
+    reference: { value: 319.488195, unit: °F }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Outer layer, r = 54 mm
+    quantity: temperature
+    face: cut-y-2
+    box: { min: [53.9, 0, 0], max: [54.1, 0, 20] }
+    reference: { value: 113.402809, unit: °C }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Radial heat flux in the inner layer, r = 45 mm, Q / ((π/2) r L)
+    quantity: heatFlux.x
+    face: cut-y-1
+    box: { min: [44.9, 0, 0], max: [45.1, 0, 20] }
+    reference: { value: 200590.04, unit: W/m² }
+    tolerance: { coarse: 0.02, full: 0.01 }
+  - name: Radial heat flux in the outer layer, r = 54 mm
+    quantity: heatFlux.x
+    face: cut-y-2
+    box: { min: [53.9, 0, 0], max: [54.1, 0, 20] }
+    reference: { value: 167158.36, unit: W/m² }
+    tolerance: { coarse: 0.02, full: 0.01 }
+  - name: Heat in through the bore, (π/2) L ΔT / (ln(r1/a)/k1 + ln(b/r1)/k2)
+    quantity: heatFlow
+    load: bore
+    reference: { value: 283.57749, unit: W }
+    tolerance: { coarse: 0.005, full: 0.002 }
+  - name: Heat out through the outside, all of it across the bond
+    quantity: heatFlow
+    load: outside
+    reference: { value: -967.60654, unit: BTU/h }
+    tolerance: { coarse: 0.005, full: 0.002 }
