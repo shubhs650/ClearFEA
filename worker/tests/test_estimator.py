@@ -64,6 +64,65 @@ def test_every_measured_mesh_under_a_limit_fits_16_gib_with_the_margin(solver: s
     assert checked >= 5
 
 
+def test_every_measured_modal_mesh_under_a_limit_fits_16_gib_with_the_margin() -> None:
+    """The same rule for the modal limits (M6.3), which are for the most modes: every modal
+    mesh measured under a limit, with any number of modes, fits."""
+    table = EstimatorTable.model_validate_json(ESTIMATOR.read_text())
+    usable = table.limit_memory_bytes * table.usable_memory_fraction
+    rows = json.loads((BENCHMARKS / "steps.json").read_text())["runs"]
+    checked = 0
+    for solver in ("pastix", "spooles"):
+        model = getattr(table.analyses.modal, solver)
+        if model is None:
+            continue
+        for row in rows:
+            if row.get("analysis") != "modal" or row["solver"] != solver:
+                continue
+            limit = model.max_elements.order1 if row["order"] == 1 else model.max_elements.order2
+            if row["elements"] <= limit:
+                assert row["peakMemoryBytes"] * table.memory_margin <= usable, row["elements"]
+                checked += 1
+    assert checked >= 5
+
+
+def test_the_modal_fit_splits_a_part_per_mode() -> None:
+    """Given rows that follow memory = 1e8 + 1e3 n and 1e2 n per mode, at 1 and 100 modes,
+    the modal fit recovers both parts."""
+    fit = load_fit()
+    rows = []
+    for order, target, nodes in (
+        (2, 3000, 5_000),
+        (2, 25000, 40_000),
+        (1, 100000, 20_000),
+        (1, 400000, 70_000),
+    ):
+        for modes in (1, 100):
+            rows.append(
+                {
+                    "analysis": "modal",
+                    "solver": "spooles",
+                    "order": order,
+                    "targetElements": target,
+                    "elements": target,
+                    "nodes": nodes,
+                    "modes": modes,
+                    "peakMemoryBytes": 1e8 + 1e3 * nodes + modes * 1e2 * nodes,
+                    "jobSeconds": 1.0 + 1e-3 * nodes + modes * 1e-4 * nodes,
+                    "ccxVersion": "2.21",
+                }
+            )
+    model = fit.fit_modal({"runs": rows})["spooles"]
+    for nodes in (5_000, 70_000):
+        assert fit.law(model["peakMemoryBytesPerMode"], nodes) == pytest.approx(
+            1e2 * nodes, rel=1e-2
+        )
+        assert fit.law(model["peakMemoryBytes"], nodes) == pytest.approx(
+            1e8 + 1e3 * nodes, rel=1e-2
+        )
+        assert fit.law(model["jobSecondsPerMode"], nodes) == pytest.approx(1e-4 * nodes, rel=1e-2)
+    assert model["fittedModes"] == [1, 100]
+
+
 def test_the_mesher_limit_in_the_fit_is_the_mesher_s() -> None:
     from clearfea_worker.meshing.mesher import MAX_ELEMENTS
 

@@ -9,6 +9,7 @@ import {
   DEFAULT_SOLVER,
   elementLimitProblem,
   preRunProblems,
+  specRunKind,
   specSolver,
   type SessionUser,
   type SimulationSpec,
@@ -130,6 +131,8 @@ export function App() {
     setup.kind === "open" ? setup.id : null,
     setup.kind === "open" && mesh?.status === "ready" && meshIsCurrent(setup.spec, mesh) ? mesh.id : null,
     solver,
+    spec === null ? "linear_static" : spec.analysis,
+    spec === null ? null : specRunKind(spec).modes ?? null,
     signedOut,
   );
   const { run } = runs;
@@ -178,7 +181,7 @@ export function App() {
         blockers.push({ message: "The mesh is still being made. Wait for it to finish.", item: "mesh" });
       } else if (mesh.elementCount !== null) {
         // The API refuses the same run (ADR-063): it could run out of memory.
-        const tooLarge = elementLimitProblem(solver, mesh.order, mesh.elementCount);
+        const tooLarge = elementLimitProblem(solver, mesh.order, mesh.elementCount, specRunKind(setup.spec));
         if (tooLarge !== null) blockers.push({ message: tooLarge, item: "mesh" });
       }
     }

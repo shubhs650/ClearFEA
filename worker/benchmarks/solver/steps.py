@@ -142,7 +142,14 @@ def save_row(path: Path, row: dict[str, object]) -> None:
     data["runs"] = [r for r in data["runs"] if key(r) != key(row)]
     data["runs"].append(row)
     data["runs"].sort(
-        key=lambda r: (analysis_of(r) != "linear_static", analysis_of(r), r["solver"], r["order"], r.get("modes", 0), r["nodes"])
+        key=lambda r: (
+            analysis_of(r) != "linear_static",
+            analysis_of(r),
+            r["solver"],
+            r["order"],
+            r.get("modes", 0),
+            r["nodes"],
+        )
     )
     path.write_text(json.dumps(data, indent=2) + "\n")
 
@@ -164,7 +171,10 @@ def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     if args.one:
         target, order = (int(part) for part in args.one.split(":"))
-        print(json.dumps(solve_one(args.out, target, order, args.solver, args.analysis, args.modes)), flush=True)
+        print(
+            json.dumps(solve_one(args.out, target, order, args.solver, args.analysis, args.modes)),
+            flush=True,
+        )
         return 0
     for case in args.cases:
         # A fresh process per solve, so the peak memory of its children is this solve's.

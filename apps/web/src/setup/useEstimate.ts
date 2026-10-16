@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The estimate before a run (M2.12, ADR-049): read from the API for the simulation's current
-// mesh whenever that mesh becomes ready, and again when it or the solver changes (ADR-063).
+// mesh whenever that mesh becomes ready, and again when it or the solver changes (ADR-063), or
+// the analysis or a modal run's modes (M6.3).
 
-import type { RunEstimate, Solver } from "@clearfea/spec";
+import type { AnalysisType, RunEstimate, Solver } from "@clearfea/spec";
 import { useEffect, useState } from "react";
 import { getEstimate } from "../api/runs";
 
@@ -20,6 +21,8 @@ export function useEstimate(
   simulationId: string | null,
   meshId: string | null,
   solver: Solver,
+  analysis: AnalysisType,
+  modes: number | null,
   onSignedOut: (problem: string) => void,
 ): EstimateState {
   const [state, setState] = useState<EstimateState>({ kind: "none" });
@@ -30,7 +33,7 @@ export function useEstimate(
     }
     let current = true;
     setState({ kind: "loading" });
-    void getEstimate(simulationId, solver).then((result) => {
+    void getEstimate(simulationId, solver, { analysis, modes }).then((result) => {
       if (!current) return;
       if (result.kind === "ok") setState({ kind: "loaded", estimate: result.value });
       else {
@@ -41,6 +44,6 @@ export function useEstimate(
     return () => {
       current = false;
     };
-  }, [simulationId, meshId, solver, onSignedOut]);
+  }, [simulationId, meshId, solver, analysis, modes, onSignedOut]);
   return state;
 }

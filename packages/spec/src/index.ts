@@ -53,12 +53,18 @@ export {
   ITERATIVE_ACCURACY_NOTE,
   isIterative,
   limitMemoryText,
+  MAX_MODES,
   type MeshEstimate,
   maxElements,
   memoryFits,
   powerLaw,
+  type RunKind,
+  runSolverProblem,
+  runSolvers,
   SOLVER_LABELS,
   SOLVERS,
+  STATIC_RUN,
+  specRunKind,
   specSolver,
 } from "./estimator";
 export { checkReportNotes, hasTiedBonds, reportNotes, runReportNotes } from "./report";

@@ -14,7 +14,12 @@ import {
   type MeshResponse,
   preRunProblems,
   type RunListResponse,
+  AnalysisTypeValues,
+  type AnalysisType,
+  MAX_MODES,
   type RunEstimate,
+  type RunKind,
+  runSolverProblem,
   type RunResponse,
   type SimulationMeshResponse,
   emptySimulationSpec,
@@ -24,6 +29,7 @@ import {
   type SimulationView,
   type Solver,
   SolverValues,
+  specRunKind,
   specSolver,
   type ViewListResponse,
   type ViewResponse,
@@ -267,28 +273,50 @@ async function runnableMesh(
   return { mesh };
 }
 
-/** The estimate for a ready mesh with a solver on every machine size (M2.12, ADR-049, ADR-063). */
-async function meshEstimate(db: D1Database, mesh: Mesh, solver: Solver): Promise<RunEstimate> {
+/**
+ * The estimate for a ready mesh with a solver on every machine size (M2.12, ADR-049, ADR-063),
+ * for a run of `kind` (M6.3); the solver must be one that solves such a run.
+ */
+async function meshEstimate(db: D1Database, mesh: Mesh, solver: Solver, kind: RunKind): Promise<RunEstimate> {
   if (mesh.nodeCount === null) throw new Error("A ready mesh has no node count.");
-  return estimateRun(mesh.nodeCount, await listMachineSizes(db), solver);
+  return estimateRun(mesh.nodeCount, await listMachineSizes(db), solver, kind);
 }
 
 /**
  * Memory, time and cost estimated for solving the simulation on its current mesh, per machine
  * size, with the size recommended (M2.12, ADR-049). `?solver=` asks for another solver than
- * the saved spec's, so the setup can show the estimate of a choice before it is saved (ADR-063).
+ * the saved spec's, so the setup can show the estimate of a choice before it is saved (ADR-063);
+ * `?analysis=` and `?modes=` do the same for the analysis and a modal run's modes (M6.3).
  */
 simulations.get("/:id/estimate", async (c) => {
   const asked = c.req.query("solver");
   if (asked !== undefined && !(SolverValues as readonly string[]).includes(asked)) {
     return c.json({ error: `There is no solver called ${asked}. Choose one of: ${SolverValues.join(", ")}.` }, 400);
   }
+  const askedAnalysis = c.req.query("analysis");
+  if (askedAnalysis !== undefined && !(AnalysisTypeValues as readonly string[]).includes(askedAnalysis)) {
+    return c.json(
+      { error: `There is no analysis called ${askedAnalysis}. Choose one of: ${AnalysisTypeValues.join(", ")}.` },
+      400,
+    );
+  }
+  const askedModes = c.req.query("modes");
+  const modes = askedModes === undefined ? undefined : Number(askedModes);
+  if (modes !== undefined && !(Number.isInteger(modes) && modes >= 1 && modes <= MAX_MODES)) {
+    return c.json({ error: `The number of modes must be a whole number from 1 to ${MAX_MODES}, not ${askedModes}.` }, 400);
+  }
   const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
   if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
   const found = await runnableMesh(c.env.DB, c.var.userId, simulation);
   if ("error" in found) return c.json({ error: found.error }, 409);
   const solver = (asked as Solver | undefined) ?? specSolver(simulation.spec);
-  return c.json({ estimate: await meshEstimate(c.env.DB, found.mesh, solver) } satisfies EstimateResponse);
+  const kind = specRunKind({
+    analysis: (askedAnalysis as AnalysisType | undefined) ?? simulation.spec.analysis,
+    modes: modes ?? simulation.spec.modes,
+  });
+  const cannot = runSolverProblem(solver, kind);
+  if (cannot !== null) return c.json({ error: cannot }, 409);
+  return c.json({ estimate: await meshEstimate(c.env.DB, found.mesh, solver, kind) } satisfies EstimateResponse);
 });
 
 /**
@@ -326,9 +354,13 @@ simulations.post("/:id/runs", async (c) => {
   const { mesh } = found;
   const solver = specSolver(simulation.spec);
   if (mesh.elementCount === null) throw new Error("A ready mesh has no element count.");
-  const tooLarge = elementLimitProblem(solver, mesh.order, mesh.elementCount);
+  const kind = specRunKind(simulation.spec);
+  // Pre-run validation refuses a solver that cannot solve the analysis; this is a backstop.
+  const cannot = runSolverProblem(solver, kind);
+  if (cannot !== null) return c.json({ error: cannot }, 409);
+  const tooLarge = elementLimitProblem(solver, mesh.order, mesh.elementCount, kind);
   if (tooLarge !== null) return c.json({ error: tooLarge }, 409);
-  const estimate = await meshEstimate(c.env.DB, mesh, solver);
+  const estimate = await meshEstimate(c.env.DB, mesh, solver, kind);
   const size = runSize(estimate, request.machineSize);
   if (size === undefined) {
     const names = estimate.sizes.map((s) => s.size).join(", ");

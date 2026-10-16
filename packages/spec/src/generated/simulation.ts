@@ -1199,6 +1199,14 @@ export interface RunEstimate {
    * The solver the estimate is for (ADR-063); absent in estimates made before it, which were for spooles.
    */
   solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
+  /**
+   * linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports. thermal_stress: a steady-state thermal step followed by a linear static step on the temperatures it solved, in one deck (M5.4, ADR-067); it uses supports, the structural loads other than a uniform temperature change, and the thermal loads, and needs the spec's stressFreeTemperature. modal: the natural frequencies of the bodies as they are held, one *FREQUENCY step (M6.1, ADR-070); it uses supports and no loads, and needs the spec's modes; bodies no support holds have rigid-body modes at or near zero.
+   */
+  analysis?: "linear_static" | "steady_thermal" | "thermal_stress" | "modal";
+  /**
+   * The modes a modal estimate is for (M6.3); absent for other analyses.
+   */
+  modes?: number;
 }
 /**
  * Answer to GET /api/simulations/{id}/estimate: the estimate for the simulation's current ready mesh.

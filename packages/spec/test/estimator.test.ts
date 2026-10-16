@@ -9,8 +9,14 @@ import {
   estimatorTable,
   maxElements,
   memoryFits,
+  MAX_MODES,
   powerLaw,
+  type RunKind,
+  runSolverProblem,
+  runSolvers,
   SOLVERS,
+  STATIC_RUN,
+  specRunKind,
 } from "../src/estimator";
 
 describe("the estimator table", () => {
@@ -94,5 +100,46 @@ describe("the element limit", () => {
   it("offers no solver when none takes the mesh", () => {
     const problem = elementLimitProblem("pastix", 1, 10_000_000);
     expect(problem).not.toContain("choose a solver");
+  });
+});
+
+describe("a modal run (M6.3)", () => {
+  const modal = (modes: number): RunKind => ({ analysis: "modal", modes });
+
+  it("is solved with the solvers that have a modal model", () => {
+    expect(runSolvers(modal(10))).toEqual(SOLVERS.filter((s) => estimatorTable.analyses.modal[s as "pastix" | "spooles"]));
+    expect(runSolvers(modal(10))).not.toContain("iterative_cholesky");
+    expect(runSolverProblem("iterative_scaling", modal(10))).toContain("cannot solve a modal analysis");
+    expect(runSolverProblem("iterative_scaling", STATIC_RUN)).toBeNull();
+  });
+
+  it("costs more memory and time with more modes, and more than a static run", () => {
+    for (const solver of runSolvers(modal(10))) {
+      const few = estimateMesh(50_000, solver, modal(1));
+      const many = estimateMesh(50_000, solver, modal(MAX_MODES));
+      expect(many.memoryBytes).toBeGreaterThan(few.memoryBytes);
+      expect(many.seconds).toBeGreaterThan(few.seconds);
+      expect(few.seconds).toBeGreaterThanOrEqual(estimateMesh(50_000, solver).seconds * 0.5);
+    }
+  });
+
+  it("counts the most modes while the setup has no number yet", () => {
+    expect(specRunKind({ analysis: "modal", modes: null })).toEqual(modal(MAX_MODES));
+    expect(specRunKind({ analysis: "steady_thermal" })).toEqual({ analysis: "steady_thermal" });
+  });
+
+  it("has element limits of its own, for the most modes", () => {
+    for (const solver of runSolvers(modal(10))) {
+      const limit = maxElements(solver, 2, modal(10));
+      expect(elementLimitProblem(solver, 2, limit, modal(10))).toBeNull();
+      const problem = elementLimitProblem(solver, 2, limit + 1, modal(10));
+      expect(problem).toContain(`in a modal analysis of up to ${MAX_MODES} modes`);
+      expect(problem).not.toContain("Iterative");
+    }
+  });
+
+  it("leaves a solver that cannot solve it to pre-run validation", () => {
+    expect(elementLimitProblem("iterative_cholesky", 2, 10_000_000, modal(10))).toBeNull();
+    expect(() => estimateMesh(1000, "iterative_cholesky", modal(10))).toThrow("cannot solve a modal analysis");
   });
 });
