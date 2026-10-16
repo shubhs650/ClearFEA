@@ -3,6 +3,7 @@
 // value only when the text is a number (or empty, which is null), so a half-typed "1e" never
 // reaches the spec. Physical values use the shared QuantityInput in ../units/ (M2.1).
 
+import type { BodyAssignment } from "@clearfea/spec";
 import { useId, useState } from "react";
 
 function parse(text: string): number | null | undefined {
@@ -13,18 +14,25 @@ function parse(text: string): number | null | undefined {
 
 const NOT_A_NUMBER = "Enter a number, for example 210 or 2.1e5.";
 
-type Bounds = { above: number; below: number };
+/** Values above `above` and below `below`, or up to and including it with `orEqual` (M5.2). */
+type Bounds = { above: number; below: number; orEqual?: boolean };
+
+function inside(value: number, range: Bounds): boolean {
+  return value > range.above && (range.orEqual ? value <= range.below : value < range.below);
+}
 
 /** The value a field's text stands for, or the problem with it. Empty text is null. */
 function check(text: string, range?: Bounds): { value: number | null } | { problem: string } {
   const parsed = parse(text);
   if (parsed === undefined) return { problem: NOT_A_NUMBER };
-  if (parsed !== null && range && !(parsed > range.above && parsed < range.below)) {
+  if (parsed !== null && range && !inside(parsed, range)) {
     return {
       problem:
         range.below === Number.POSITIVE_INFINITY
           ? `Enter a value greater than ${range.above}.`
-          : `Enter a value above ${range.above} and below ${range.below}.`,
+          : range.orEqual
+            ? `Enter a value above ${range.above} and at most ${range.below}.`
+            : `Enter a value above ${range.above} and below ${range.below}.`,
     };
   }
   return { value: parsed };
@@ -150,5 +158,38 @@ export function TagsField({
         </button>
       </div>
     </div>
+  );
+}
+
+/** Tick boxes for the bodies of the setup (M2.8; heat generation's bodies, M5.2). */
+export function BodiesField({
+  bodies,
+  tags,
+  onChange,
+}: {
+  bodies: readonly BodyAssignment[];
+  tags: readonly number[];
+  onChange: (tags: number[]) => void;
+}) {
+  return (
+    <fieldset className="field">
+      <legend>Bodies</legend>
+      {bodies.map((body) => (
+        <label key={body.tag} className="checkbox">
+          <input
+            type="checkbox"
+            checked={tags.includes(body.tag)}
+            onChange={(event) =>
+              onChange(
+                event.target.checked
+                  ? [...tags, body.tag].sort((a, b) => a - b)
+                  : tags.filter((tag) => tag !== body.tag),
+              )
+            }
+          />
+          Body {body.tag}
+        </label>
+      ))}
+    </fieldset>
   );
 }

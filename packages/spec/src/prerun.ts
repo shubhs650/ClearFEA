@@ -14,12 +14,14 @@ import {
   bodyLabels,
   bondKey,
   displacementAxes,
+  faceHeatConflicts,
   hasBodyLoad,
   hasTemperatureChange,
   isThermal,
   loadHasFaces,
   loadKinds,
   localScopes,
+  setsTemperature,
   type SpecProblem,
   simulationSpecProblems,
   specBonds,
@@ -92,8 +94,8 @@ export function wrongAnalysisMessage(spec: SimulationSpec, item: Support | Load)
 /**
  * What stops the bodies of a steady-state thermal analysis from having a temperature (M5.1,
  * ADR-064): bonds do not carry heat yet, so bodies bonded to each other cannot be run, and every
- * body needs a fixed temperature on one of its faces. Empty for a single body or without the
- * topology's face bodies.
+ * body needs a fixed temperature, convection or radiation on one of its faces (M5.2, ADR-065).
+ * Empty for a single body or without the topology's face bodies.
  */
 export function thermalBodyMessages(spec: SimulationSpec, topology?: TopologyTags): string[] {
   if (topology === undefined || topology.bodies.length < 2) return [];
@@ -107,7 +109,10 @@ export function thermalBodyMessages(spec: SimulationSpec, topology?: TopologyTag
   for (const face of topology.faces) if (face.bodies !== undefined) bodiesOf.set(face.tag, face.bodies);
   if (bodiesOf.size === 0) return messages;
   const fixed = new Set(
-    spec.loads.flatMap((l) => (l.type === "fixed_temperature" ? l.faces : [])).flatMap((f) => bodiesOf.get(f) ?? []),
+    spec.loads
+      .filter(setsTemperature)
+      .flatMap((l) => l.faces)
+      .flatMap((f) => bodiesOf.get(f) ?? []),
   );
   const labels = bodyLabels(topology);
   const unset = topology.bodies.map((b) => b.tag).filter((tag) => !fixed.has(tag));
@@ -115,14 +120,14 @@ export function thermalBodyMessages(spec: SimulationSpec, topology?: TopologyTag
     const names = unset.map((tag) => bodyName(tag, labels));
     messages.push(
       unset.length === 1
-        ? `Body ${names[0]} has no fixed temperature, so its temperature is not set. Add a fixed temperature on one of its faces.`
-        : `Bodies ${names.join(", ")} have no fixed temperature, so their temperatures are not set. Add a fixed temperature on a face of each.`,
+        ? `Body ${names[0]} has no fixed temperature, convection or radiation, so its temperature is not set. Add one on one of its faces.`
+        : `Bodies ${names.join(", ")} have no fixed temperature, convection or radiation, so their temperatures are not set. Add one on a face of each.`,
     );
   }
   return messages;
 }
 
-/** The missing values and items of a steady-state thermal setup, after the materials and bodies (M5.1). */
+/** The missing values and items of a steady-state thermal setup, after the materials and bodies (M5.1, M5.2). */
 function thermalProblems(spec: SimulationSpec, topology: TopologyTags | undefined, add: (item: string, message: string) => void) {
   for (const message of thermalBodyMessages(spec, topology)) add("bodies", message);
   for (const material of spec.materials) {
@@ -134,10 +139,10 @@ function thermalProblems(spec: SimulationSpec, topology: TopologyTags | undefine
     const message = wrongAnalysisMessage(spec, support);
     if (message !== null) add(support.id, message);
   }
-  if (!spec.loads.some((l) => l.type === "fixed_temperature")) {
+  if (!spec.loads.some(setsTemperature)) {
     add(
       "loads",
-      "There is no fixed temperature, so the temperatures are not set anywhere. Add a fixed temperature under Loads.",
+      "There is no fixed temperature, convection or radiation, so the temperatures are not set anywhere. Add one under Loads.",
     );
   }
   for (const load of spec.loads) {
@@ -146,10 +151,27 @@ function thermalProblems(spec: SimulationSpec, topology: TopologyTags | undefine
       add(load.id, message);
       continue;
     }
-    if (load.type !== "fixed_temperature") continue;
-    if (load.faces.length === 0) add(load.id, `Load "${load.name}" has no faces. Select the faces it holds and add them to it.`);
-    if (load.temperature === null) add(load.id, `Load "${load.name}" has no temperature. Enter it.`);
+    const missing = (what: string) => add(load.id, `Load "${load.name}" has no ${what}. Enter it.`);
+    if (loadHasFaces(load) && load.faces.length === 0) {
+      const verb = load.type === "fixed_temperature" ? "holds" : "acts on";
+      add(load.id, `Load "${load.name}" has no faces. Select the faces it ${verb} and add them to it.`);
+    }
+    if (load.type === "fixed_temperature") {
+      if (load.temperature === null) missing("temperature");
+    } else if (load.type === "heat_flux") {
+      if (load.flux === null) missing("heat flux");
+    } else if (load.type === "convection") {
+      if (load.coefficient === null) missing("convection coefficient");
+      if (load.ambientTemperature === null) missing("ambient temperature");
+    } else if (load.type === "radiation") {
+      if (load.emissivity === null) missing("emissivity");
+      if (load.ambientTemperature === null) missing("ambient temperature");
+    } else if (load.type === "heat_generation") {
+      if (load.bodies.length === 0) add(load.id, `Load "${load.name}" has no bodies. Pick the bodies that produce the heat.`);
+      if (load.power === null) missing("heat generation");
+    }
   }
+  for (const conflict of faceHeatConflicts(spec)) add(conflict.item, conflict.message);
 }
 
 /**
@@ -244,7 +266,8 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
       continue;
     }
     if (loadHasFaces(load) && load.faces.length === 0) {
-      add(load.id, `Load "${load.name}" has no faces. Select the faces it acts on and add them to it.`);
+      const verb = load.type === "fixed_temperature" ? "holds" : "acts on";
+      add(load.id, `Load "${load.name}" has no faces. Select the faces it ${verb} and add them to it.`);
     }
     if (load.type === "pressure") {
       if (load.magnitude === null) add(load.id, `Load "${load.name}" has no pressure value. Enter it.`);

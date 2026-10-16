@@ -1636,7 +1636,9 @@ describe("steady-state thermal analysis (M5.1)", () => {
     const thermal = settings().getByRole("radio", { name: "Steady-state thermal" });
     expect(linear).toHaveProperty("checked", true);
     expect(
-      settings().getByText("Steady-state heat conduction: temperatures from fixed temperatures on faces; every other face is insulated."),
+      settings().getByText(
+        "Steady-state heat conduction: temperatures from fixed temperatures, heat fluxes, convection and radiation on faces and heat generated in bodies; faces with none of them are insulated.",
+      ),
     ).toBeTruthy();
 
     fireEvent.click(thermal);
@@ -1661,7 +1663,7 @@ describe("steady-state thermal analysis (M5.1)", () => {
     expect(tree().getByRole("button", { name: "Top, complete" })).toBeTruthy();
   });
 
-  it("offers only a fixed temperature, on the selected faces, and asks the material for its conductivity", async () => {
+  it("offers only thermal loads, a fixed temperature on the selected faces, and asks the material for its conductivity", async () => {
     const { sent, route } = saves();
     const unset: SimulationSpec = {
       ...thermalSpec,
@@ -1671,20 +1673,30 @@ describe("steady-state thermal analysis (M5.1)", () => {
     render(<App />);
     await screen.findByText(/Click a face to select it/);
     expect(tree().queryByRole("button", { name: /^Supports,/ })).toBeNull();
-    expect(tree().getByRole("button", { name: "Loads, incomplete" }).getAttribute("title")).toBe("Add a fixed temperature.");
+    expect(tree().getByRole("button", { name: "Loads, incomplete" }).getAttribute("title")).toBe(
+      "Add a fixed temperature, convection or radiation.",
+    );
 
     act(() => scene.events[0]?.onPick(3));
     fireEvent.click(tree().getByRole("button", { name: "Loads, incomplete" }));
-    expect(settings().getByText("Select faces in the viewer first to give the new fixed temperature those faces.")).toBeTruthy();
+    expect(
+      settings().getByText(
+        "Select faces in the viewer first to give a new fixed temperature, heat flux, convection or radiation those faces. Heat generation acts on the bodies you tick. Every body needs a fixed temperature, convection or radiation.",
+      ),
+    ).toBeTruthy();
     expect(within(settings().getByRole("region", { name: "Loads" })).getAllByRole("button").map((b) => b.textContent)).toEqual([
       "Add a fixed temperature",
+      "Add a heat flux",
+      "Add convection",
+      "Add radiation",
+      "Add heat generation",
     ]);
     fireEvent.click(settings().getByRole("button", { name: "Add a fixed temperature" }));
     expect(tree().getByRole("button", { name: "Fixed temperature 1, incomplete" })).toBeTruthy();
     expect(settings().getByRole("heading", { name: "Fixed temperature" })).toBeTruthy();
     expect(
       settings().getByText(
-        "Holds every node of the faces at this temperature. Faces with no fixed temperature are insulated: no heat crosses them.",
+        "Holds every node of the faces at this temperature. Faces with no thermal load are insulated: no heat crosses them.",
       ),
     ).toBeTruthy();
     expect(settings().getByText("Enter the temperature.")).toBeTruthy();
@@ -1714,6 +1726,67 @@ describe("steady-state thermal analysis (M5.1)", () => {
     expect(tree().getByRole("button", { name: "Steel, complete" })).toBeTruthy();
     await waitFor(() =>
       expect(sent.at(-1)?.materials[0]?.thermalConductivity).toEqual({ value: 45, unit: "W/(m·°C)" }),
+    );
+  });
+
+  it("sets up convection and radiation on the selected faces and heat generation in the bodies (M5.2)", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation(thermalSpec)], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+
+    act(() => scene.events[0]?.onPick(7));
+    fireEvent.click(tree().getByRole("button", { name: "Loads, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add convection" }));
+    expect(settings().getByRole("heading", { name: "Convection" })).toBeTruthy();
+    expect(settings().getByText("Enter the convection coefficient.")).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Convection coefficient"), { target: { value: "25" } });
+    fireEvent.change(settings().getByLabelText("Ambient temperature"), { target: { value: "20" } });
+    expect(tree().getByRole("button", { name: "Convection 1, complete" })).toBeTruthy();
+    // Convection sets the temperature, so the setup needs no fixed temperature.
+    expect(tree().getByRole("button", { name: "Loads, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.loads).toEqual([
+        {
+          id: "convection-1",
+          type: "convection",
+          name: "Convection 1",
+          faces: [7],
+          coefficient: { value: 25, unit: "W/(m²·°C)" },
+          ambientTemperature: { value: 20, unit: "°C" },
+        },
+      ]),
+    );
+
+    fireEvent.click(tree().getByRole("button", { name: "Loads, complete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add radiation" }));
+    fireEvent.change(settings().getByLabelText("Emissivity"), { target: { value: "1.5" } });
+    expect(settings().getByText("Enter a value above 0 and at most 1.")).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Emissivity"), { target: { value: "1" } });
+    fireEvent.change(settings().getByLabelText("Ambient temperature"), { target: { value: "20" } });
+    // The same face as the convection: radiation and convection may share a face.
+    expect(tree().getByRole("button", { name: "Radiation 1, complete" })).toBeTruthy();
+
+    fireEvent.click(tree().getByRole("button", { name: "Loads, complete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add heat generation" }));
+    expect(settings().getByRole("checkbox", { name: "Body 1" })).toHaveProperty("checked", true);
+    expect(settings().getByLabelText("Heat per volume unit")).toHaveProperty("value", "W/m³");
+    fireEvent.change(settings().getByLabelText("Heat per volume"), { target: { value: "5000" } });
+    expect(tree().getByRole("button", { name: "Heat generation 1, complete" })).toBeTruthy();
+    fireEvent.click(settings().getByRole("checkbox", { name: "Body 1" }));
+    expect(tree().getByRole("button", { name: "Heat generation 1, incomplete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.loads.slice(1)).toEqual([
+        {
+          id: "radiation-1",
+          type: "radiation",
+          name: "Radiation 1",
+          faces: [7],
+          emissivity: 1,
+          ambientTemperature: { value: 20, unit: "°C" },
+        },
+        { id: "heat_generation-1", type: "heat_generation", name: "Heat generation 1", bodies: [], power: { value: 5000, unit: "W/m³" } },
+      ]),
     );
   });
 
