@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-19: a flat wall whose conductivity, Young's modulus, Poisson's ratio and thermal expansion
+# all vary with temperature, between a hot and a cold fixed temperature, held sideways between
+# frictionless walls (M5.5).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-19
+title: Wall with temperature-dependent properties
+analysis: thermal_stress
+features:
+  [thermal stress analysis, temperature-dependent conductivity, temperature-dependent elasticity, temperature-dependent expansion, frictionless support, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  hot: { min: [0, 0, 0], max: [0, 20, 20] }
+  cold: { min: [40, 0, 0], max: [40, 20, 20] }
+  y0: { min: [0, 0, 0], max: [40, 0, 20] }
+  y1: { min: [0, 20, 0], max: [40, 20, 20] }
+  z0: { min: [0, 0, 0], max: [40, 20, 0] }
+  z1: { min: [0, 0, 20], max: [40, 20, 20] }
+# Both sizes divide the 40 mm thickness, so the face y = 0 has nodes on its edges at x = 10,
+# 20 and 30 mm, where the checks read the profile.
+mesh:
+  coarse: { value: 5, unit: mm }
+  full: { value: 2.5, unit: mm }
+checks:
+  - name: Heat flux, k at the mean temperature times ΔT / L
+    quantity: heatFlux.x
+    face: y0
+    reference: { value: 421.8, unit: kW/m² }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: Heat in through the hot face, q A
+    quantity: heatFlow
+    load: hot
+    reference: { value: 168.72, unit: W }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: Heat out through the cold face, − q A
+    quantity: heatFlow
+    load: cold
+    reference: { value: -168.72, unit: W }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: A quarter of the way through
+    quantity: temperature
+    face: y0
+    box: { min: [10, 0, 0], max: [10, 0, 20] }
+    reference: { value: 291.749058, unit: °C }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: Halfway through, 16 K below the mean of the faces
+    quantity: temperature
+    face: y0
+    box: { min: [20, 0, 0], max: [20, 0, 20] }
+    reference: { value: 193.856137, unit: °C }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: Three quarters of the way through
+    quantity: temperature
+    face: y0
+    box: { min: [30, 0, 0], max: [30, 0, 20] }
+    reference: { value: 103.817448, unit: °C }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: Sideways stress at the hot face, − E ε / (1 − ν) at 400 °C
+    quantity: stress.yy
+    face: hot
+    reference: { value: -1182.188406, unit: MPa }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: Sideways stress halfway through
+    quantity: stress.zz
+    face: y0
+    box: { min: [20, 0, 0], max: [20, 0, 20] }
+    reference: { value: -481.183044, unit: MPa }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: Sideways stress three quarters of the way through
+    quantity: stress.zz
+    face: y0
+    box: { min: [30, 0, 0], max: [30, 0, 20] }
+    reference: { value: -177.410879, unit: MPa }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: Sideways stress at the cold face, below the stress-free temperature
+    quantity: stress.yy
+    face: cold
+    reference: { value: 98.450704, unit: MPa }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: von Mises stress at the hot face, |σ| with σxx = 0
+    quantity: vonMises
+    face: hot
+    reference: { value: 1182.188406, unit: MPa }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: Growth of the hot face, − ∫ ε (1 + ν) / (1 − ν) dx
+    quantity: displacement.x
+    face: hot
+    reference: { value: -0.145252771, unit: mm }
+    tolerance: { coarse: 0.5, full: 0.5 }
+  - name: Force on the wall y = 0, − H ∫ σ dx
+    quantity: reaction.y
+    support: wall-y0
+    reference: { value: 401990.71, unit: N }
+    tolerance: { coarse: 0.5, full: 0.5 }

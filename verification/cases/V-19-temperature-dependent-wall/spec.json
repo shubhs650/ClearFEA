@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "analysis": "thermal_stress",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case tables)",
+      "model": "isotropic_elastic",
+      "youngsModulus": null,
+      "poissonsRatio": null,
+      "youngsModulusTable": {
+        "temperatureUnit": "°C",
+        "unit": "GPa",
+        "rows": [
+          { "temperature": 20, "value": 200 },
+          { "temperature": 400, "value": 172 }
+        ]
+      },
+      "poissonsRatioTable": {
+        "temperatureUnit": "°F",
+        "rows": [
+          { "temperature": 212, "value": 0.29 },
+          { "temperature": 572, "value": 0.31 }
+        ]
+      },
+      "thermalExpansionTable": {
+        "temperatureUnit": "°F",
+        "unit": "µm/(m·K)",
+        "referenceTemperature": { "value": 68, "unit": "°F" },
+        "rows": [
+          { "temperature": 68, "value": 11.5 },
+          { "temperature": 752, "value": 13.4 }
+        ]
+      },
+      "thermalConductivityTable": {
+        "temperatureUnit": "°C",
+        "unit": "W/(m·K)",
+        "rows": [
+          { "temperature": 20, "value": 52 },
+          { "temperature": 420, "value": 36 }
+        ]
+      }
+    }
+  ],
+  "supports": [
+    { "id": "cold-x", "type": "frictionless", "name": "Cold face", "faces": ["cold"] },
+    { "id": "wall-y0", "type": "frictionless", "name": "Wall y = 0", "faces": ["y0"] },
+    { "id": "wall-y1", "type": "frictionless", "name": "Wall y = 20 mm", "faces": ["y1"] },
+    { "id": "wall-z0", "type": "frictionless", "name": "Wall z = 0", "faces": ["z0"] },
+    { "id": "wall-z1", "type": "frictionless", "name": "Wall z = 20 mm", "faces": ["z1"] }
+  ],
+  "loads": [
+    {
+      "id": "hot",
+      "type": "fixed_temperature",
+      "name": "Hot face",
+      "faces": ["hot"],
+      "temperature": { "value": 752, "unit": "°F" }
+    },
+    {
+      "id": "cold",
+      "type": "fixed_temperature",
+      "name": "Cold face",
+      "faces": ["cold"],
+      "temperature": { "value": 20, "unit": "°C" }
+    }
+  ],
+  "stressFreeTemperature": { "value": 323.15, "unit": "K" },
+  "mesh": { "size": { "value": 5, "unit": "mm" } }
+}

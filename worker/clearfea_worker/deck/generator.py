@@ -551,6 +551,13 @@ def _heat_parts(
     # CalculiX treats every heat transfer step as nonlinear and warns unless the first time
     # increment and the step time are given; a linear steady state needs one increment.
     out.append("1.0, 1.0")
+    if varies:
+        # A conductivity table makes the step nonlinear. CalculiX stops iterating when the heat
+        # flux residual is 0.005 and the temperature correction 0.01 of their averages, which
+        # left a bar's heat flows 1e-4 out of balance; at 1e-5 of each it was 1.5e-7, in two
+        # more iterations (checked with ccx 2.21; ADR-068).
+        out.append("*CONTROLS, PARAMETERS=FIELD")
+        out.append("1e-5, 1e-5")
     out.append("*BOUNDARY")
     # Degree of freedom 11 is the temperature.
     out.extend(f"T{j + 1}, 11, 11, {_number(item.kelvin)}" for j, item in enumerate(held))

@@ -1698,6 +1698,14 @@ def test_a_varying_conductivity_starts_a_thermal_step_at_the_mean_known_temperat
     start = lines.index("*INITIAL CONDITIONS, TYPE=TEMPERATURE")
     assert lines[start + 1] == "NALL, 373.15"
     assert "*PHYSICAL CONSTANTS" not in " ".join(lines)
+    # The step is nonlinear, so it iterates to tighter criteria than CalculiX's defaults.
+    controls = lines.index("*CONTROLS, PARAMETERS=FIELD")
+    assert lines[controls - 2 : controls + 2] == [
+        "*HEAT TRANSFER, STEADY STATE, SOLVER=PASTIX",
+        "1.0, 1.0",
+        "*CONTROLS, PARAMETERS=FIELD",
+        "1e-5, 1e-5",
+    ]
     k = lines.index("*CONDUCTIVITY")
     assert lines[k + 1 : k + 3] == ["50.0, 273.15", "40.0, 473.15"]
 
