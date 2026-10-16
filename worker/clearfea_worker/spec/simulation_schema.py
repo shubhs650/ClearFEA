@@ -535,6 +535,12 @@ class LocalMeshSize(BaseModel):
     """
 
 
+type Solver = Literal["pastix", "spooles", "iterative_cholesky", "iterative_scaling"]
+"""
+CalculiX's equation solver for a run (ADR-063). pastix, the default, and spooles are direct solvers, verified to the 0.1 percent checks. iterative_cholesky and iterative_scaling need far less memory but stop at CalculiX 2.21's fixed relative residual of 1e-4, which left verification results up to about 0.5 percent off.
+"""
+
+
 type ElementOrder = Literal[1, 2]
 """
 1: four-node tetrahedra (CalculiX C3D4). 2: ten-node tetrahedra with curved edges on curved faces (C3D10), the default (ADR-028, ADR-045).
@@ -1006,6 +1012,10 @@ class RunEstimate(BaseModel):
     """
     sizes: list[SizeEstimate]
     recommended: str | None
+    solver: Solver | None = None
+    """
+    The solver the estimate is for (ADR-063); absent in estimates made before it, which were for spooles.
+    """
 
 
 class EstimateResponse(BaseModel):
@@ -1066,7 +1076,7 @@ class MeshSettings(BaseModel):
 
 class SimulationSpec(BaseModel):
     """
-    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), and the mesh settings: a global size, the element order and local sizes (M2.8), and the review of the bonds between touching bodies (M4.2). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
     """
 
     model_config = ConfigDict(
@@ -1084,6 +1094,10 @@ class SimulationSpec(BaseModel):
     supports: list[Support]
     loads: list[Load]
     mesh: MeshSettings
+    solver: Solver | None = None
+    """
+    The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
+    """
     bonds: list[Bond] | None = None
     """
     Every candidate bond of the geometry with the user's review of it (M4.2), in the order of topology.json. Absent in specs saved before M4.2, where every candidate counts as detected.

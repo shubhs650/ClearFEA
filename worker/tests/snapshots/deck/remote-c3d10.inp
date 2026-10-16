@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 3. Generated from the simulation's
+** ClearFEA solver input, deck format 4. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
 ** Geometry 00000000-0000-4000-8000-000000000001
 *HEADING
@@ -38,7 +38,7 @@ ClearFEA linear static analysis
 ** force (2.0 kN, -150.0 lbf, 0.0 kN) = (2000.0, -667.233242289075, 0.0) N
 ** moment (15.0 N·m, -80.0 lbf·in, 0.02 kN·m) = (15.0, -9.038786322209337, 20.0) N*m, carried to the faces as a linear traction
 *STEP
-*STATIC
+*STATIC, SOLVER=PASTIX
 *BOUNDARY
 S1, 1, 3
 *DLOAD

@@ -145,6 +145,7 @@ describe("creating a simulation", () => {
       supports: [],
       loads: [],
       mesh: { size: null, order: 2, local: [] },
+      solver: "pastix",
     });
   });
 

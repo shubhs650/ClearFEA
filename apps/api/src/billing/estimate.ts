@@ -10,6 +10,7 @@ import {
   memoryFits,
   type RunEstimate,
   type SizeEstimate,
+  type Solver,
 } from "@clearfea/spec";
 import { costOf } from "./cost";
 
@@ -23,17 +24,18 @@ export interface MachineSize {
 }
 
 /**
- * The estimate for solving a mesh of `nodes` nodes. The solver runs on one thread on every size
- * (ADR-048 item 3), so the time is the same on each and only the rate differs. The recommended
- * size is the cheapest whose memory fits, conservatively (estimator.json's margin); null when
- * none does.
+ * The estimate for solving a mesh of `nodes` nodes with `solver` (ADR-063). The solver runs on
+ * one thread on every size (ADR-048 item 3), so the time is the same on each and only the rate
+ * differs. The recommended size is the cheapest whose memory fits, conservatively
+ * (estimator.json's margin); null when none does.
  */
 export function estimateRun(
   nodes: number,
   sizes: readonly MachineSize[],
+  solver: Solver,
   estimator: EstimatorTable = estimatorTable,
 ): RunEstimate {
-  const mesh = estimateMesh(nodes, estimator);
+  const mesh = estimateMesh(nodes, solver, estimator);
   const priced: SizeEstimate[] = [...sizes]
     .sort((a, b) => a.ratePerHour - b.ratePerHour || a.memoryBytes - b.memoryBytes || a.name.localeCompare(b.name))
     .map((size) => ({
@@ -52,6 +54,7 @@ export function estimateRun(
     extrapolated: mesh.extrapolated,
     sizes: priced,
     recommended: priced.find((size) => size.fits)?.size ?? null,
+    solver,
   };
 }
 

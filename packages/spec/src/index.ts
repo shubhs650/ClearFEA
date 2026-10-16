@@ -30,7 +30,23 @@ export {
   type TopologyBondTags,
   type TopologyTags,
 } from "./simulation";
-export { checkEstimatorTable, estimateMesh, estimatorTable, type MeshEstimate, memoryFits, powerLaw } from "./estimator";
+export {
+  checkEstimatorTable,
+  DEFAULT_SOLVER,
+  elementLimitProblem,
+  estimateMesh,
+  estimatorTable,
+  ITERATIVE_ACCURACY_NOTE,
+  isIterative,
+  limitMemoryText,
+  type MeshEstimate,
+  maxElements,
+  memoryFits,
+  powerLaw,
+  SOLVER_LABELS,
+  SOLVERS,
+  specSolver,
+} from "./estimator";
 export { checkReportNotes, hasTiedBonds, reportNotes, runReportNotes } from "./report";
 export { checkUnitsTable, isUnitSystem, systemUnit, unitsTable } from "./units";
 export { type Validation, validator } from "./validate";

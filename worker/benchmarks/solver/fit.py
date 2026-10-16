@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Fits the run estimator (M2.12, ADR-049) to the job-step benchmark and writes its coefficients
-to packages/spec/estimator.json, the file the API estimates from.
+"""Fits the run estimator (M2.12, ADR-049) to the job-step benchmark, per equation solver, and
+works out each solver's element limits on a 16 GiB machine (ADR-063); writes them to
+packages/spec/estimator.json, the file the API estimates from and the limits are read from.
 
     cd worker && uv run python benchmarks/solver/fit.py [--check]
 
@@ -28,6 +29,12 @@ MEMORY_MARGIN = 1.25
 #: Share of a machine size's memory the solver may use (the M2.11 benchmark stopped ccx at 85
 #: percent of the machine's limit; the rest is the system's and the worker's).
 USABLE_MEMORY_FRACTION = 0.85
+#: Memory of the machine the element limits are for (ADR-063): 16 GiB, the laptop class and the
+#: medium machine size. Larger machines get their own limits when they are benchmarked.
+LIMIT_MEMORY_BYTES = 16 * 2**30
+#: The most elements the mesher makes (ClearFEA's MAX_ELEMENTS, ADR-045 item 5); no limit is
+#: larger.
+MESHER_LIMIT = 2_000_000
 #: Constants tried: this many steps between zero and the smallest measurement.
 CONSTANT_STEPS = 400
 
@@ -60,26 +67,70 @@ def fit_power_law(points: list[tuple[int, float]]) -> dict[str, float]:
     return {key: float(f"{value:.6g}") for key, value in law.items()}
 
 
+#: What each solver's rows were measured with, for people reading estimator.json.
+SOLVER_LABELS = {
+    "pastix": "PaStiX (mixed precision) on one thread",
+    "spooles": "SPOOLES on one thread (ADR-048)",
+    "iterative_cholesky": "iterative Cholesky (one thread)",
+    "iterative_scaling": "iterative scaling (one thread)",
+}
+
+
+def node_limit(memory: dict[str, float]) -> float:
+    """The node count whose fitted peak memory, raised by the fit's worst shortfall
+    (largestRatio) and times the margin, fills the usable share of a LIMIT_MEMORY_BYTES
+    machine. The shortfall keeps every measured mesh under the limit within its own rule."""
+    room = (
+        LIMIT_MEMORY_BYTES * USABLE_MEMORY_FRACTION / MEMORY_MARGIN / memory["largestRatio"]
+        - memory["constant"]
+    )
+    return (room / memory["coefficient"]) ** (1 / memory["exponent"])
+
+
+def element_limit(nodes: float, rows: list[dict]) -> int:
+    """``nodes`` as an element count of one order: divided by the nodes per element of the
+    measured mesh nearest that node count, rounded down to a thousand. Never more than the
+    largest mesh measured (the maintainer had the benchmark stop at 500,000 elements, ADR-063),
+    so a limit is never an extrapolation, nor more than the mesher makes."""
+    nearest = min(rows, key=lambda row: abs(row["nodes"] - nodes))
+    largest = max(row["elements"] for row in rows)
+    elements = min(nodes * nearest["elements"] / nearest["nodes"], largest, MESHER_LIMIT)
+    return int(elements // 1000 * 1000)
+
+
 def fit(steps: dict) -> dict:
-    """The estimator table's analyses and margins from the job-step rows."""
-    rows = steps["runs"]
-    if len(rows) < 3:
-        raise SystemExit("steps.json needs at least three rows to fit three coefficients.")
-    nodes = [row["nodes"] for row in rows]
-    memory = [(row["nodes"], row["peakMemoryBytes"]) for row in rows]
-    seconds = [(row["nodes"], row["jobSeconds"]) for row in rows]
+    """The estimator table's per-solver models, element limits and margins from the job-step
+    rows. Both element orders are fitted together: per node they cost about the same."""
+    models = {}
+    for solver, label in SOLVER_LABELS.items():
+        rows = [row for row in steps["runs"] if row["solver"] == solver]
+        if len(rows) < 3:
+            raise SystemExit(
+                f"steps.json needs at least three {solver} rows to fit three coefficients."
+            )
+        nodes = [row["nodes"] for row in rows]
+        memory = fit_power_law([(row["nodes"], row["peakMemoryBytes"]) for row in rows])
+        limit = node_limit(memory)
+        orders = {}
+        for order in (1, 2):
+            measured = [row for row in rows if row["order"] == order]
+            if not measured:
+                raise SystemExit(f"steps.json has no {solver} rows of order {order}.")
+            orders[f"order{order}"] = element_limit(limit, measured)
+        models[solver] = {
+            "solver": label
+            + ", CalculiX "
+            + ", ".join(sorted({row["ccxVersion"] for row in rows})),
+            "peakMemoryBytes": memory,
+            "jobSeconds": fit_power_law([(row["nodes"], row["jobSeconds"]) for row in rows]),
+            "fittedNodes": [min(nodes), max(nodes)],
+            "maxElements": orders,
+        }
     return {
-        "analyses": {
-            "linear_static": {
-                "solver": "SPOOLES on one thread (ADR-048), CalculiX "
-                + ", ".join(sorted({row["ccxVersion"] for row in rows})),
-                "peakMemoryBytes": fit_power_law(memory),
-                "jobSeconds": fit_power_law(seconds),
-                "fittedNodes": [min(nodes), max(nodes)],
-            }
-        },
+        "analyses": {"linear_static": models},
         "memoryMargin": MEMORY_MARGIN,
         "usableMemoryFraction": USABLE_MEMORY_FRACTION,
+        "limitMemoryBytes": LIMIT_MEMORY_BYTES,
     }
 
 
@@ -110,9 +161,9 @@ def main() -> int:
             return 1
         return 0
     ESTIMATOR.write_text(json.dumps(new, indent=2) + "\n")
-    law = new["analyses"]["linear_static"]
-    for name in ("peakMemoryBytes", "jobSeconds"):
-        print(f"{name}: {law[name]}")
+    for solver, law in new["analyses"]["linear_static"].items():
+        print(f"{solver}: memory {law['peakMemoryBytes']}, time {law['jobSeconds']}")
+        print(f"  most elements on 16 GiB: {law['maxElements']}")
     print(f"wrote {ESTIMATOR} (version {new['version']})")
     return 0
 

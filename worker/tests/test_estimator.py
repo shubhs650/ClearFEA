@@ -44,16 +44,27 @@ def test_fit_recovers_a_power_law_with_a_constant() -> None:
     assert law["largestRatio"] == pytest.approx(1.0, abs=2e-3)
 
 
-def test_the_fit_covers_what_the_m2_11_benchmark_measured() -> None:
-    """The estimate's peak memory is within 5 percent of every single-threaded SPOOLES solve in
-    results.json, which were measured separately (the solver alone, OMP_NUM_THREADS=1)."""
+@pytest.mark.parametrize("solver", ["pastix", "spooles", "iterative_cholesky", "iterative_scaling"])
+def test_every_measured_mesh_under_a_limit_fits_16_gib_with_the_margin(solver: str) -> None:
+    """The element limits keep every benchmarked mesh within the rule they are made from: its
+    measured peak memory, times the margin, fits in the usable share of 16 GiB (ADR-063). This
+    replaces M2.11's cross-check against the packaged ccx, which no longer solves runs."""
     table = EstimatorTable.model_validate_json(ESTIMATOR.read_text())
-    memory = table.analyses.linear_static.peak_memory_bytes
-    rows = json.loads((BENCHMARKS / "results.json").read_text())["runs"]
-    # The production build only: results.json also holds PaStiX rows (ADR-048 item 7).
-    production = ("ubuntu-2.21-1", "SPOOLES", 1, "ok")
-    solved = [r for r in rows if (r["build"], r["solver"], r["threads"], r["status"]) == production]
-    assert solved
-    for row in solved:
-        fitted = memory.constant + memory.coefficient * row["nodes"] ** memory.exponent
-        assert row["peakMemoryBytes"] / fitted == pytest.approx(1.0, abs=0.05), row["nodes"]
+    model = getattr(table.analyses.linear_static, solver)
+    usable = table.limit_memory_bytes * table.usable_memory_fraction
+    rows = json.loads((BENCHMARKS / "steps.json").read_text())["runs"]
+    checked = 0
+    for row in rows:
+        if row["solver"] != solver:
+            continue
+        limit = model.max_elements.order1 if row["order"] == 1 else model.max_elements.order2
+        if row["elements"] <= limit:
+            assert row["peakMemoryBytes"] * table.memory_margin <= usable, row["elements"]
+            checked += 1
+    assert checked >= 5
+
+
+def test_the_mesher_limit_in_the_fit_is_the_mesher_s() -> None:
+    from clearfea_worker.meshing.mesher import MAX_ELEMENTS
+
+    assert load_fit().MESHER_LIMIT == MAX_ELEMENTS

@@ -1,27 +1,103 @@
 {
-  "version": 1,
+  "version": 3,
   "source": "worker/benchmarks/solver/steps.json, fitted by worker/benchmarks/solver/fit.py",
   "analyses": {
     "linear_static": {
-      "solver": "SPOOLES on one thread (ADR-048), CalculiX 2.21",
-      "peakMemoryBytes": {
-        "constant": 9569530.0,
-        "coefficient": 516.893,
-        "exponent": 1.36685,
-        "largestRatio": 1.01899
+      "pastix": {
+        "solver": "PaStiX (mixed precision) on one thread, CalculiX 2.21",
+        "peakMemoryBytes": {
+          "constant": 119797000.0,
+          "coefficient": 1473.5,
+          "exponent": 1.2956,
+          "largestRatio": 1.04403
+        },
+        "jobSeconds": {
+          "constant": 1.01655,
+          "coefficient": 3.27287e-07,
+          "exponent": 1.69637,
+          "largestRatio": 1.28588
+        },
+        "fittedNodes": [
+          5212,
+          207025
+        ],
+        "maxElements": {
+          "order1": 1103000,
+          "order2": 142000
+        }
       },
-      "jobSeconds": {
-        "constant": 0.75445,
-        "coefficient": 4.66503e-08,
-        "exponent": 1.96927,
-        "largestRatio": 1.20906
+      "spooles": {
+        "solver": "SPOOLES on one thread (ADR-048), CalculiX 2.21",
+        "peakMemoryBytes": {
+          "constant": 115366000.0,
+          "coefficient": 421.163,
+          "exponent": 1.38531,
+          "largestRatio": 1.03335
+        },
+        "jobSeconds": {
+          "constant": 1.07535,
+          "coefficient": 3.9344e-08,
+          "exponent": 1.997,
+          "largestRatio": 1.1298
+        },
+        "fittedNodes": [
+          5212,
+          238391
+        ],
+        "maxElements": {
+          "order1": 461000,
+          "order2": 161000
+        }
       },
-      "fittedNodes": [
-        5212,
-        207025
-      ]
+      "iterative_cholesky": {
+        "solver": "iterative Cholesky (one thread), CalculiX 2.21",
+        "peakMemoryBytes": {
+          "constant": 102729000.0,
+          "coefficient": 7305.86,
+          "exponent": 0.952542,
+          "largestRatio": 1.12142
+        },
+        "jobSeconds": {
+          "constant": 0.71905,
+          "coefficient": 9.25422e-06,
+          "exponent": 1.33845,
+          "largestRatio": 1.18157
+        },
+        "fittedNodes": [
+          5212,
+          641997
+        ],
+        "maxElements": {
+          "order1": 461000,
+          "order2": 461000
+        }
+      },
+      "iterative_scaling": {
+        "solver": "iterative scaling (one thread), CalculiX 2.21",
+        "peakMemoryBytes": {
+          "constant": 102742000.0,
+          "coefficient": 7295.6,
+          "exponent": 0.952684,
+          "largestRatio": 1.12106
+        },
+        "jobSeconds": {
+          "constant": 1.0754,
+          "coefficient": 2.3005e-07,
+          "exponent": 1.70344,
+          "largestRatio": 1.47296
+        },
+        "fittedNodes": [
+          5212,
+          641997
+        ],
+        "maxElements": {
+          "order1": 461000,
+          "order2": 461000
+        }
+      }
     }
   },
   "memoryMargin": 1.25,
-  "usableMemoryFraction": 0.85
+  "usableMemoryFraction": 0.85,
+  "limitMemoryBytes": 17179869184
 }

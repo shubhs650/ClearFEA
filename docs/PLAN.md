@@ -155,7 +155,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 
 ## M9: Gate
 
-- [ ] M9.1 Demonstrate the 2-million-element target in the development environment; fix what breaks.
+- [ ] M9.1 Run a model at each solver's element limit (ADR-063) in the development environment; fix what breaks. (The 2-million-element target was dropped by ADR-063.)
 - [ ] M9.2 Set up and run on the laptop; demonstrate the laptop tier; fix viewer performance.
 - [ ] M9.3 User guide for the main flow; self-hosting instructions.
 - [ ] M9.4 Build the two acceptance models as original geometry that can be published.

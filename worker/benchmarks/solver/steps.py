@@ -1,19 +1,21 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """M2.12 job-step benchmark: wall time of each step of a solve job, and the solver's peak memory,
-on the M2.11 block meshed at several sizes with both element orders (ADR-049).
+on the M2.11 block meshed at several sizes with both element orders (ADR-049), for each equation
+solver a run can use (ADR-063).
 
 Script only, not part of the worker package or its tests. It runs the steps the worker's solve
 job runs (``clearfea_worker.jobs.run_solve``) in the same order and with the same functions,
-including ``run_calculix`` with the worker's solver environment (SPOOLES on one thread), so the
-times are what a run's billable phase spends apart from downloads and uploads. M2.12's estimator
-is fitted from the rows (``fit.py``).
+including ``run_calculix`` with the worker's solver environment (the equation solver on one
+thread), so the times are what a run's billable phase spends apart from downloads and uploads.
+The estimator and the element limits are fitted from the rows (``fit.py``). The ``ccx`` on PATH
+must be the worker image's build (``worker/ccx/build.sh``).
 
-    cd worker && uv run python benchmarks/solver/steps.py --out DIR 3000:2 25000:1 ...
+    cd worker && uv run python benchmarks/solver/steps.py --out DIR --solver pastix 3000:2 ...
         [--results benchmarks/solver/steps.json]
 
 Each argument is a target element count and an element order. One mesh is solved per process
 call, so the peak memory of the solver is that solve's alone; rows are added to the results
-file, replacing a row with the same target and order.
+file, replacing a row with the same target, order and solver.
 """
 
 import argparse
@@ -33,7 +35,7 @@ sys.path.insert(0, str(HERE))
 import bench  # noqa: E402  (the M2.11 script beside this one: the block, its spec, the machine)
 
 
-def solve_one(root: Path, target: int, order: int) -> dict[str, object]:
+def solve_one(root: Path, target: int, order: int, solver: str) -> dict[str, object]:
     from clearfea_worker.deck import generate_deck
     from clearfea_worker.geometry.importer import import_geometry
     from clearfea_worker.meshing.mesher import ELEMENTS_PER_SIZE_CUBED, mesh_geometry
@@ -58,6 +60,7 @@ def solve_one(root: Path, target: int, order: int) -> dict[str, object]:
         mesh_geometry(step, topology, mesh_dir, scaling=1.0, size=size, unit="mm", order=order)
     spec = bench.spec(fixed, loaded, size * 1000).model_dump(mode="json", by_alias=True)
     spec["mesh"] = {"size": {"value": size * 1000, "unit": "mm"}, "order": order}
+    spec["solver"] = solver
     spec = SimulationSpec.model_validate(spec)
 
     seconds: dict[str, float] = {}
@@ -90,6 +93,7 @@ def solve_one(root: Path, target: int, order: int) -> dict[str, object]:
     return {
         "targetElements": target,
         "order": order,
+        "solver": solver,
         "elements": mesh.element_count,
         "nodes": mesh.node_count,
         "stepSeconds": seconds,
@@ -107,14 +111,17 @@ def save_row(path: Path, row: dict[str, object]) -> None:
         json.loads(path.read_text())
         if path.exists()
         else {
-            "description": "M2.12 job-step benchmark (ADR-049). How it is measured: steps.py.",
+            "description": "Job-step benchmark (ADR-049, ADR-063). How it is measured: steps.py.",
             "runs": [],
         }
     )
-    key = (row["targetElements"], row["order"])
-    data["runs"] = [r for r in data["runs"] if (r["targetElements"], r["order"]) != key]
+
+    def key(r: dict[str, object]) -> tuple[object, ...]:
+        return (r["targetElements"], r["order"], r["solver"])
+
+    data["runs"] = [r for r in data["runs"] if key(r) != key(row)]
     data["runs"].append(row)
-    data["runs"].sort(key=lambda r: (r["order"], r["nodes"]))
+    data["runs"].sort(key=lambda r: (r["solver"], r["order"], r["nodes"]))
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
@@ -123,17 +130,31 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--results", type=Path, default=HERE / "steps.json")
     parser.add_argument("--one", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--solver",
+        default="pastix",
+        choices=("pastix", "spooles", "iterative_cholesky", "iterative_scaling"),
+    )
     parser.add_argument("cases", nargs="*", help="TARGET:ORDER, for example 25000:2")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     if args.one:
         target, order = (int(part) for part in args.one.split(":"))
-        print(json.dumps(solve_one(args.out, target, order)), flush=True)
+        print(json.dumps(solve_one(args.out, target, order, args.solver)), flush=True)
         return 0
     for case in args.cases:
         # A fresh process per solve, so the peak memory of its children is this solve's.
         found = subprocess.run(
-            [sys.executable, __file__, "--out", str(args.out), "--one", case],
+            [
+                sys.executable,
+                __file__,
+                "--out",
+                str(args.out),
+                "--solver",
+                args.solver,
+                "--one",
+                case,
+            ],
             check=True,
             capture_output=True,
             text=True,
@@ -141,7 +162,7 @@ def main() -> int:
         row = json.loads(found.stdout.strip().splitlines()[-1])
         save_row(args.results, row)
         print(
-            f"{case}: {row['elements']:,} elements, {row['nodes']:,} nodes, "
+            f"{args.solver} {case}: {row['elements']:,} elements, {row['nodes']:,} nodes, "
             f"job {row['jobSeconds']} s, solver peak {row['peakMemoryBytes'] / 2**30:.2f} GiB",
             flush=True,
         )

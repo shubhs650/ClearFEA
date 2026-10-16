@@ -5,6 +5,7 @@
 // in packages/spec (M1.12).
 
 import {
+  specSolver,
   type AnalysisType,
   type BondStatus,
   bodyLabels,
@@ -531,7 +532,12 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/** Whether the setup is still the one a run froze (M1.10). */
-export function sameSpec(a: SimulationSpec, b: SimulationSpec): boolean {
-  return canonical(a) === canonical(b);
+/**
+ * Whether the setup is still the one a run froze (M1.10). A run's spec without a solver was
+ * solved with SPOOLES, a setup without one would be solved with PaStiX (ADR-063).
+ */
+export function sameSpec(run: SimulationSpec, current: SimulationSpec): boolean {
+  return (
+    canonical({ ...run, solver: run.solver ?? "spooles" }) === canonical({ ...current, solver: specSolver(current) })
+  );
 }

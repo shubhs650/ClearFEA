@@ -60,7 +60,7 @@ from .loads.thermal import expansions, temperature_change
 from .loads.tie import Equation, body_groups, tied_bonds, ties
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
-DECK_FORMAT = 3
+DECK_FORMAT = 4
 
 #: CalculiX reads at most 16 entries on a data line.
 _PER_LINE = 16
@@ -225,9 +225,18 @@ def _constraint_groups(held: dict[int, Hold], skip: set[int]) -> list[_Group]:
     return list(groups.values())
 
 
-#: Equation solvers a deck may name (M2.11, ADR-048). None leaves the choice to the CalculiX
-#: build's default, which is what every run uses.
-SOLVERS = ("SPOOLES", "PASTIX", "ITERATIVE SCALING", "ITERATIVE CHOLESKY")
+#: CalculiX's name for each equation solver a spec may choose (ADR-063). Every deck names its
+#: solver on the step line, so the deck alone says what solved it, whatever the build's default.
+SOLVER_NAMES = {
+    "pastix": "PASTIX",
+    "spooles": "SPOOLES",
+    "iterative_cholesky": "ITERATIVE CHOLESKY",
+    "iterative_scaling": "ITERATIVE SCALING",
+}
+#: The solver of a spec saved before ADR-063, which has none.
+DEFAULT_SOLVER = "pastix"
+#: Equation solvers a deck may name (M2.11, ADR-048).
+SOLVERS = tuple(SOLVER_NAMES.values())
 
 
 def _check_nodes(mesh: VolumeMesh) -> None:
@@ -271,7 +280,7 @@ def _nodes_and_elements(
     return out
 
 
-def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str | None) -> str:
+def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> str:
     """CalculiX input for a steady-state thermal analysis (M5.1, ADR-064): conduction only,
     fixed temperatures on faces, every other face insulated. Temperatures in kelvin."""
     wrong = [*spec.supports, *(x for x in spec.loads if not isinstance(x, FixedTemperatureLoad))]
@@ -333,7 +342,7 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str | No
 
     out.append("*STEP")
     step = "*HEAT TRANSFER, STEADY STATE"
-    out.append(step if solver is None else f"{step}, SOLVER={solver}")
+    out.append(f"{step}, SOLVER={solver}")
     # CalculiX treats every heat transfer step as nonlinear and warns unless the first time
     # increment and the step time are given; a linear steady state needs one increment.
     out.append("1.0, 1.0")
@@ -350,11 +359,13 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
     """CalculiX input for the analysis of ``spec`` on ``mesh``: linear static, or steady-state
     thermal (M5.1).
 
-    ``solver`` names the equation solver on the step line (``*STATIC`` or ``*HEAT TRANSFER``);
-    None writes no name, so the build's default solves it. Raises DeckError when the spec is
-    incomplete or does not fit the mesh.
+    The step line (``*STATIC`` or ``*HEAT TRANSFER``) names the spec's equation solver
+    (ADR-063); ``solver``, a CalculiX name from SOLVERS, replaces it for the solver benchmark
+    (M2.11). Raises DeckError when the spec is incomplete or does not fit the mesh.
     """
-    if solver is not None and solver not in SOLVERS:
+    if solver is None:
+        solver = SOLVER_NAMES[spec.solver or DEFAULT_SOLVER]
+    elif solver not in SOLVERS:
         raise DeckError(f"Unknown equation solver '{solver}'.")
     if spec.analysis == "steady_thermal":
         return _heat_transfer_deck(spec, mesh, solver)
@@ -608,7 +619,7 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
         out.append("NALL, 0.0")
 
     out.append("*STEP")
-    out.append("*STATIC" if solver is None else f"*STATIC, SOLVER={solver}")
+    out.append(f"*STATIC, SOLVER={solver}")
     out.append("*BOUNDARY")
     for support, name in zip(spec.supports, support_sets, strict=True):
         if isinstance(support, FixedSupport):

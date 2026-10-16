@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 3. Generated from the simulation's
+** ClearFEA solver input, deck format 4. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
 ** Geometry 00000000-0000-4000-8000-000000000001
 *HEADING
@@ -74,7 +74,7 @@ ClearFEA linear static analysis
 3134401.558431408
 ** Force force-1 "Push", faces 4: (10.0 N, 100.0 N, -50.0 N) = (10.0, 100.0, -50.0) N, spread over the faces by area
 *STEP
-*STATIC
+*STATIC, SOLVER=PASTIX
 *BOUNDARY
 C1, 1, 1
 *CLOAD
