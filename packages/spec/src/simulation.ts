@@ -9,10 +9,12 @@ import type {
   Bond,
   BondStatus,
   ElementOrder,
+  ExpansionTable,
   IsotropicMaterial,
   LocalMeshScope,
   LocalSizeParams,
   Load,
+  PropertyTable,
   Quantity,
   SimulationSpec,
 } from "./generated/simulation";
@@ -180,6 +182,74 @@ export function solvesTemperature(spec: Pick<SimulationSpec, "analysis">): boole
 /** True for an analysis with a static step, which takes supports and solves displacements and stresses (M5.4). */
 export function solvesStress(spec: Pick<SimulationSpec, "analysis">): boolean {
   return spec.analysis !== "steady_thermal";
+}
+
+/**
+ * The material properties that may be given against temperature (M5.5, ADR-068): each table's
+ * key, the single value it stands in for, what messages call it, and its unit kind (none for
+ * Poisson's ratio).
+ */
+export const materialTables = [
+  { key: "youngsModulusTable", value: "youngsModulus", label: "Young's modulus", kind: "pressure" },
+  { key: "poissonsRatioTable", value: "poissonsRatio", label: "Poisson's ratio", kind: null },
+  { key: "thermalExpansionTable", value: "thermalExpansion", label: "thermal expansion", kind: "thermalExpansion" },
+  { key: "thermalConductivityTable", value: "thermalConductivity", label: "thermal conductivity", kind: "thermalConductivity" },
+] as const;
+
+/** A material property that may be given against temperature. */
+export type TableProperty = (typeof materialTables)[number]["value"];
+
+/** A material's table for a property, or null without one. */
+export function propertyTable(material: IsotropicMaterial, property: TableProperty): PropertyTable | ExpansionTable | null {
+  const entry = materialTables.find((t) => t.value === property);
+  return entry === undefined ? null : (material[entry.key] ?? null);
+}
+
+/**
+ * Whether the analysis uses a material's table in place of its single value: only analyses that
+ * solve temperatures know the temperature to read it at (M5.5, ADR-068); a linear static one uses
+ * the single value.
+ */
+export function usesTable(spec: Pick<SimulationSpec, "analysis">, material: IsotropicMaterial, property: TableProperty): boolean {
+  return solvesTemperature(spec) && propertyTable(material, property) !== null;
+}
+
+/** Whether a material has a property for the analysis: its table where the analysis uses it, else its single value. */
+export function hasProperty(spec: Pick<SimulationSpec, "analysis">, material: IsotropicMaterial, property: TableProperty): boolean {
+  return usesTable(spec, material, property) || (material[property] ?? null) !== null;
+}
+
+/**
+ * What a table still needs before a run, in plain language (M5.5): at least two rows, every row
+ * filled in, temperatures rising, values in range, and for thermal expansion the temperature its
+ * mean coefficients are measured from. `what` names it ("The thermal conductivity table of
+ * material "Steel"").
+ */
+export function tableProblems(table: PropertyTable | ExpansionTable, property: TableProperty, what: string): string[] {
+  const problems: string[] = [];
+  if (table.rows.length < 2) {
+    problems.push(`${what} has ${table.rows.length === 1 ? "one row" : "no rows"}. Give at least two, or delete the table.`);
+  }
+  table.rows.forEach((row, k) => {
+    if (row.temperature === null || row.value === null) {
+      problems.push(`${what}: row ${k + 1} is not complete. Fill it in, or delete the row.`);
+      return;
+    }
+    const before = table.rows[k - 1]?.temperature ?? null;
+    // Every temperature unit rises with the kelvin, so rows rise in their own unit.
+    if (before !== null && row.temperature <= before) {
+      problems.push(`${what}: row ${k + 1} is not hotter than row ${k}. List the rows in rising temperature.`);
+    }
+    if (property === "poissonsRatio") {
+      if (!(row.value > -1 && row.value < 0.5)) problems.push(`${what}: row ${k + 1} must be between -1 and 0.5.`);
+    } else if (property !== "thermalExpansion" && !(row.value > 0)) {
+      problems.push(`${what}: row ${k + 1} must be greater than zero.`);
+    }
+  });
+  if (property === "thermalExpansion" && (table as ExpansionTable).referenceTemperature === null) {
+    problems.push(`${what} has no reference temperature, the temperature its mean coefficients are measured from. Enter it.`);
+  }
+  return problems;
 }
 
 /** What a local mesh size applies to, as the setup and its messages name it (M2.8). */
@@ -381,6 +451,26 @@ export function materialProblems(material: IsotropicMaterial): string[] {
       `The thermal conductivity of material "${material.name}"`,
       true,
     ),
+    // Tables against temperature (M5.5): units of the right kind; their rows are checked before a run.
+    ...materialTables.flatMap((t) => {
+      const table = material[t.key] ?? null;
+      if (table === null) return [];
+      const what = `The ${t.label} table of material "${material.name}"`;
+      const temperatureUnits = unitsTable.kinds.temperature?.units ?? {};
+      return [
+        Object.hasOwn(temperatureUnits, table.temperatureUnit)
+          ? null
+          : `${what} gives temperatures in "${table.temperatureUnit}", which is not a temperature unit. Use one of: ${Object.keys(temperatureUnits).join(", ")}.`,
+        t.kind === null
+          ? table.unit === undefined
+            ? null
+            : `${what} has a unit, "${table.unit}"; Poisson's ratio has none. Remove it.`
+          : unitProblem({ value: 1, unit: table.unit ?? "" }, t.kind, what, false),
+        t.key === "thermalExpansionTable"
+          ? unitProblem(material.thermalExpansionTable?.referenceTemperature ?? null, "temperature", `The reference temperature of the ${t.label} table of material "${material.name}"`, false)
+          : null,
+      ];
+    }),
   ].filter((problem) => problem !== null);
 }
 

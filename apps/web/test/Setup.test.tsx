@@ -1812,6 +1812,46 @@ describe("steady-state thermal analysis (M5.1)", () => {
     );
   });
 
+  it("gives the conductivity as a table against temperature in place of its value (M5.5)", async () => {
+    const { sent, route } = saves();
+    const unset: SimulationSpec = {
+      ...thermalSpec,
+      materials: [{ ...thermalSpec.materials[0], thermalConductivity: null } as SimulationSpec["materials"][number]],
+    };
+    serve(routes([simulation(unset)], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+    fireEvent.click(tree().getByRole("button", { name: "Steel, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Vary thermal conductivity with temperature" }));
+    const table = within(settings().getByRole("group", { name: "Thermal conductivity against temperature" }));
+    expect(table.getByLabelText("Thermal conductivity table temperature unit")).toHaveProperty("value", "°C");
+    expect(table.getByLabelText("Thermal conductivity table unit")).toHaveProperty("value", "W/(m·°C)");
+    // Two empty rows to start with; the material lists what the table still needs.
+    expect(settings().getAllByText("The thermal conductivity table: row 1 is not complete. Fill it in, or delete the row.")).toHaveLength(1);
+    fireEvent.change(table.getByLabelText("Row 1 temperature"), { target: { value: "20" } });
+    fireEvent.change(table.getByLabelText("Row 1 Thermal conductivity"), { target: { value: "50" } });
+    fireEvent.change(table.getByLabelText("Row 2 temperature"), { target: { value: "400" } });
+    fireEvent.change(table.getByLabelText("Row 2 Thermal conductivity"), { target: { value: "38" } });
+    expect(tree().getByRole("button", { name: "Steel, complete" })).toBeTruthy();
+    fireEvent.click(table.getByRole("button", { name: "Add a row" }));
+    expect(tree().getByRole("button", { name: "Steel, incomplete" })).toBeTruthy();
+    fireEvent.click(table.getByRole("button", { name: "Remove row 3" }));
+    expect(tree().getByRole("button", { name: "Steel, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.materials[0]?.thermalConductivityTable).toEqual({
+        temperatureUnit: "°C",
+        unit: "W/(m·°C)",
+        rows: [
+          { temperature: 20, value: 50 },
+          { temperature: 400, value: 38 },
+        ],
+      }),
+    );
+    fireEvent.click(table.getByRole("button", { name: "Remove the table" }));
+    expect(tree().getByRole("button", { name: "Steel, incomplete" })).toBeTruthy();
+    await waitFor(() => expect(sent.at(-1)?.materials[0]?.thermalConductivityTable).toBeNull());
+  });
+
   it("sets up convection and radiation on the selected faces and heat generation in the bodies (M5.2)", async () => {
     const { sent, route } = saves();
     serve(routes([simulation(thermalSpec)], { "PUT /api/simulations/s1/spec": route }));

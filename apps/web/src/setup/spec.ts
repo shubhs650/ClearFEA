@@ -12,6 +12,7 @@ import {
   bondKey,
   displacementAxes,
   hasBodyLoad,
+  hasProperty,
   faceHeatConflicts,
   hasTemperatureChange,
   type IsotropicMaterial,
@@ -39,6 +40,10 @@ import {
   unheldBodies,
   unheldBodyMessages,
   wrongAnalysisMessage,
+  materialTables,
+  propertyTable,
+  tableProblems,
+  usesTable,
 } from "@clearfea/spec";
 import { toSi } from "../units/convert";
 
@@ -122,22 +127,28 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   const temperatureChange = hasTemperatureChange(spec);
   const materials = spec.materials.map((m) => {
     const missing: string[] = [];
+    // A table stands in for the single value where temperatures are solved (M5.5, ADR-068).
     if (thermal) {
-      if ((m.thermalConductivity ?? null) === null) {
+      if (!hasProperty(spec, m, "thermalConductivity")) {
         missing.push("Enter the thermal conductivity; a steady-state thermal analysis needs it.");
       }
     } else {
-      if (thermalStress && (m.thermalConductivity ?? null) === null) {
+      if (thermalStress && !hasProperty(spec, m, "thermalConductivity")) {
         missing.push("Enter the thermal conductivity; a thermal stress analysis needs it.");
       }
-      if (m.youngsModulus === null) missing.push("Enter Young's modulus.");
-      if (m.poissonsRatio === null) missing.push("Enter Poisson's ratio.");
+      if (!hasProperty(spec, m, "youngsModulus")) missing.push("Enter Young's modulus.");
+      if (!hasProperty(spec, m, "poissonsRatio")) missing.push("Enter Poisson's ratio.");
       if (bodyLoad && (m.density ?? null) === null) missing.push("Enter the density; gravity and centrifugal loads need it.");
-      if (thermalStress && (m.thermalExpansion ?? null) === null) {
+      if (thermalStress && !hasProperty(spec, m, "thermalExpansion")) {
         missing.push("Enter the thermal expansion; a thermal stress analysis needs it.");
       } else if (temperatureChange && (m.thermalExpansion ?? null) === null) {
         missing.push("Enter the thermal expansion; the temperature change needs it.");
       }
+    }
+    for (const t of materialTables) {
+      const table = propertyTable(m, t.value);
+      if (table === null || !usesTable(spec, m, t.value) || (thermal && t.value !== "thermalConductivity")) continue;
+      missing.push(...tableProblems(table, t.value, `The ${t.label} table`));
     }
     const s = status(errorsOf(m.id), missing);
     result.set(m.id, s);
@@ -492,6 +503,10 @@ export function editMaterial(spec: SimulationSpec, material: IsotropicMaterial, 
     "thermalExpansion",
     "thermalConductivity",
     "yieldStrength",
+    "youngsModulusTable",
+    "poissonsRatioTable",
+    "thermalExpansionTable",
+    "thermalConductivityTable",
   ] as const;
   if (values.some((key) => key in changes && changes[key] !== material[key])) delete next.source;
   return updateMaterial(spec, next);

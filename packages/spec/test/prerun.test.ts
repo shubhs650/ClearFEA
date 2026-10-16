@@ -645,3 +645,103 @@ describe("pre-run validation of a thermal stress analysis (M5.4)", () => {
     ]);
   });
 });
+
+describe("pre-run validation of temperature tables (M5.5)", () => {
+  const conductivity = {
+    temperatureUnit: "°C",
+    unit: "W/(m·K)",
+    rows: [
+      { temperature: 20, value: 50 },
+      { temperature: 400, value: 38 },
+    ],
+  };
+  function withTables(analysis: SimulationSpec["analysis"]): SimulationSpec {
+    const s = spec();
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    const thermal = analysis !== "linear_static";
+    return {
+      ...s,
+      analysis,
+      ...(analysis === "thermal_stress" ? { stressFreeTemperature: { value: 20, unit: "°C" } } : {}),
+      ...(analysis === "steady_thermal" ? { supports: [] } : {}),
+      materials: [
+        {
+          ...steel,
+          youngsModulus: null,
+          poissonsRatio: null,
+          youngsModulusTable: { temperatureUnit: "°C", unit: "GPa", rows: [{ temperature: 20, value: 200 }, { temperature: 400, value: 175 }] },
+          poissonsRatioTable: { temperatureUnit: "°C", rows: [{ temperature: 20, value: 0.29 }, { temperature: 400, value: 0.31 }] },
+          thermalExpansionTable: {
+            temperatureUnit: "°C",
+            unit: "µm/(m·K)",
+            referenceTemperature: { value: 20, unit: "°C" },
+            rows: [{ temperature: 100, value: 12 }, { temperature: 400, value: 13.5 }],
+          },
+          thermalConductivityTable: conductivity,
+        },
+      ],
+      loads: thermal ? [{ id: "hot", type: "fixed_temperature", name: "Hot", faces: [3], temperature: { value: 100, unit: "°C" } }] : s.loads,
+    };
+  }
+
+  it("takes tables in place of single values where temperatures are solved", () => {
+    expect(messages(withTables("thermal_stress"))).toEqual([]);
+    expect(messages(withTables("steady_thermal"))).toEqual([]);
+  });
+
+  it("asks a linear static analysis for the single values", () => {
+    expect(messages(withTables("linear_static"))).toEqual([
+      'Material "Structural steel" has no Young\'s modulus. Enter it. A linear static analysis uses the single value, not the table.',
+      'Material "Structural steel" has no Poisson\'s ratio. Enter it. A linear static analysis uses the single value, not the table.',
+    ]);
+  });
+
+  it("lists what a table still needs", () => {
+    const s = withTables("thermal_stress");
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    const broken: SimulationSpec = {
+      ...s,
+      materials: [
+        {
+          ...steel,
+          thermalConductivityTable: { ...conductivity, rows: [{ temperature: 20, value: 50 }, { temperature: 20, value: null }, { temperature: 10, value: 0 }] },
+          poissonsRatioTable: { temperatureUnit: "°C", rows: [{ temperature: 20, value: 0.5 }] },
+          thermalExpansionTable: { temperatureUnit: "°C", unit: "µm/(m·K)", referenceTemperature: null, rows: [] },
+        },
+      ],
+    };
+    expect(messages(broken)).toEqual([
+      'The Poisson\'s ratio table of material "Structural steel" has one row. Give at least two, or delete the table.',
+      'The Poisson\'s ratio table of material "Structural steel": row 1 must be between -1 and 0.5.',
+      'The thermal expansion table of material "Structural steel" has no rows. Give at least two, or delete the table.',
+      'The thermal expansion table of material "Structural steel" has no reference temperature, the temperature its mean coefficients are measured from. Enter it.',
+      'The thermal conductivity table of material "Structural steel": row 2 is not complete. Fill it in, or delete the row.',
+      'The thermal conductivity table of material "Structural steel": row 3 is not hotter than row 2. List the rows in rising temperature.',
+      'The thermal conductivity table of material "Structural steel": row 3 must be greater than zero.',
+    ]);
+  });
+
+  it("refuses units of the wrong kind when the setup is saved", () => {
+    const s = withTables("thermal_stress");
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    expect(
+      messages({
+        ...s,
+        materials: [
+          {
+            ...steel,
+            thermalConductivityTable: { ...conductivity, temperatureUnit: "mm", unit: "GPa" },
+            poissonsRatioTable: { temperatureUnit: "K", unit: "GPa", rows: [{ temperature: 300, value: 0.3 }, { temperature: 400, value: 0.3 }] },
+          },
+        ],
+      }),
+    ).toEqual([
+      'The Poisson\'s ratio table of material "Structural steel" has a unit, "GPa"; Poisson\'s ratio has none. Remove it.',
+      'The thermal conductivity table of material "Structural steel" gives temperatures in "mm", which is not a temperature unit. Use one of: K, °C, °F.',
+      'The thermal conductivity table of material "Structural steel" is given in "GPa", which is not a thermal conductivity unit. Use one of: W/(m·K), W/(m·°C), W/(mm·K), BTU/(h·ft·°F), BTU·in/(h·ft²·°F).',
+    ]);
+  });
+});
