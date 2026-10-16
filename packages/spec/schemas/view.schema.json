@@ -11,14 +11,13 @@
       "maxItems": 3
     },
     "ViewCamera": {
-      "description": "The camera looks from position at target, with up pointing up on screen. Its field of view is the viewer's own.",
+      "description": "The camera looks from position at target, with the y axis up on screen (the viewer orbits about y). Its field of view is the viewer's own.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["position", "target", "up"],
+      "required": ["position", "target"],
       "properties": {
         "position": { "$ref": "#/$defs/ViewPoint" },
-        "target": { "$ref": "#/$defs/ViewPoint" },
-        "up": { "$ref": "#/$defs/ViewPoint" }
+        "target": { "$ref": "#/$defs/ViewPoint" }
       }
     },
     "ResultQuantity": {

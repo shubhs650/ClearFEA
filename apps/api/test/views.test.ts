@@ -72,7 +72,7 @@ beforeEach(async () => {
 });
 
 const settings: ViewSettings = {
-  camera: { position: [0.3, 0.2, 0.4], target: [0.05, 0.025, 0.01], up: [0, 1, 0] },
+  camera: { position: [0.3, 0.2, 0.4], target: [0.05, 0.025, 0.01] },
   hiddenBodies: [2],
   result: { quantity: "principal1", deformation: "true", extremes: false, cut: { axis: 1, at: 0.25, flipped: true } },
 };
@@ -134,7 +134,7 @@ describe("saved views", () => {
     for (const body of [
       { name: "", settings },
       { name: "   ", settings },
-      { name: "x", settings: { ...settings, camera: { ...settings.camera, up: [0, 1] } } },
+      { name: "x", settings: { ...settings, camera: { ...settings.camera, target: [0, 1] } } },
       { name: "x", settings: { ...settings, result: { ...settings.result, quantity: "pressure" } } },
       { name: "x", settings: { ...settings, result: { ...settings.result, cut: { axis: 3, at: 0.5, flipped: false } } } },
     ]) {

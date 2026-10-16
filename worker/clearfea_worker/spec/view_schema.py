@@ -22,7 +22,7 @@ x, y, z in metres, in the geometry's axes.
 
 class ViewCamera(BaseModel):
     """
-    The camera looks from position at target, with up pointing up on screen. Its field of view is the viewer's own.
+    The camera looks from position at target, with the y axis up on screen (the viewer orbits about y). Its field of view is the viewer's own.
     """
 
     model_config = ConfigDict(
@@ -31,7 +31,6 @@ class ViewCamera(BaseModel):
     )
     position: ViewPoint
     target: ViewPoint
-    up: ViewPoint
 
 
 type ResultQuantity = Literal[

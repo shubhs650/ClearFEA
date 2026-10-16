@@ -10,13 +10,27 @@
 // results (M3.3) it marks the smallest and largest value of the quantity shown, and a click
 // adds a probe at the nearest surface node, listed with its value and position. A cut plane
 // (M3.4, ADR-053) across x, y or z hides the model on one side and colours the section the
-// plane makes through the run's volume mesh, from the run's values at every node.
+// plane makes through the run's volume mesh, from the run's values at every node. Bodies can
+// be hidden in every mode (M3.6, ADR-055), and the camera, hidden bodies and the result display
+// can be saved as named views of the simulation and brought back.
 
-import type { GeometryStatus, GeometryView, MeshView, RunView, TopologyEdge, TopologyFace } from "@clearfea/spec";
+import type {
+  Deformation as DeformationName,
+  GeometryStatus,
+  GeometryView,
+  MeshView,
+  RunView,
+  SavedView,
+  TopologyEdge,
+  TopologyFace,
+  ViewCut,
+  ViewSettings,
+} from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchDisplayMesh, fetchTopology } from "../api/geometries";
 import { fetchMeshDisplay } from "../api/meshes";
 import { fetchRunFields, fetchRunMesh, fetchRunNodeField, fetchRunSurface } from "../api/runs";
+import { useViews } from "../setup/useViews";
 import { fromSi } from "../units/convert";
 import { useSystemUnit } from "../units/system";
 import { type DisplayMesh, DisplayMeshError, parseDisplayMesh } from "../viewer/displayMesh";
@@ -52,8 +66,9 @@ import {
   VolumeMeshError,
 } from "../viewer/section";
 
-/** How the result view draws the shape: undeformed, at true scale, or exaggerated to be seen. */
-export type Deformation = "undeformed" | "true" | "auto";
+/** How the result view draws the shape: undeformed, at true scale, or exaggerated to be seen.
+ * Listed once in packages/spec/schemas/view.schema.json, since a saved view keeps one (M3.6). */
+export type Deformation = DeformationName;
 
 /** What the viewer shows of a succeeded run. */
 export type ResultDisplay = {
@@ -81,6 +96,8 @@ type Model = {
   faces: Map<number, TopologyFace>;
   /** The geometry's edges; null for a geometry imported before M2.8. */
   edges: TopologyEdge[] | null;
+  /** The geometry's body tags, ascending. */
+  bodies: number[];
   analysis: MeshView | null;
   /** The run's result fields when the model is a run's surface. */
   results: ResultFields | null;
@@ -101,6 +118,26 @@ export function toggleFace(selection: ReadonlySet<number>, tag: number): Set<num
   if (next.has(tag)) next.delete(tag);
   else next.add(tag);
   return next;
+}
+
+/** The faces to hide when these bodies are hidden: those whose every body is hidden, so a face
+ * two bodies share stays drawn while either is shown. */
+export function hiddenFacesOf(faces: ReadonlyMap<number, TopologyFace>, hiddenBodies: ReadonlySet<number>): Set<number> {
+  const hidden = new Set<number>();
+  if (hiddenBodies.size === 0) return hidden;
+  for (const face of faces.values()) {
+    if (face.bodies.length > 0 && face.bodies.every((body) => hiddenBodies.has(body))) hidden.add(face.tag);
+  }
+  return hidden;
+}
+
+/** 1 for each vertex of the display mesh on a face left shown, 0 on a hidden face. */
+function shownVertices(mesh: DisplayMesh, hiddenFaces: ReadonlySet<number>): Uint8Array {
+  const shown = new Uint8Array(mesh.positions.length / 3).fill(1);
+  for (const face of mesh.faces) {
+    if (hiddenFaces.has(face.tag)) shown.fill(0, face.firstVertex, face.firstVertex + face.vertexCount);
+  }
+  return shown;
 }
 
 const count = (n: number | null) => (n ?? 0).toLocaleString("en-US");
@@ -135,7 +172,8 @@ export function shapeOf(mesh: DisplayMesh, results: ResultFields, deformation: D
 }
 
 /** What a cut plane adds to the contour (M3.4): the quantity at each section vertex, and
- * which surface vertices the plane leaves standing (1) or cuts away (0). */
+ * which surface vertices are drawn (1) or not (0): cut away by the plane or, since M3.6, on a
+ * hidden body. Without a cut plane but with hidden bodies, there are no section values. */
 export type CutValues = { values: Float32Array; kept: Uint8Array };
 
 /** What the result view draws: band coordinates and the legend's figures. */
@@ -160,8 +198,9 @@ type Contour = {
 
 /**
  * The contour of one quantity on a run's surface drawn in `shape`, or a reason it cannot be
- * drawn. With a cut plane the bands span what is drawn: the surface left standing and the
- * section (ADR-053), so the legend and the min/max markers cover the same values.
+ * drawn. With a cut plane or hidden bodies the bands span what is drawn: the surface left
+ * standing and the section (ADR-053, ADR-055), so the legend and the min/max markers cover the
+ * same values.
  */
 export function contourOf(
   shape: Shape,
@@ -335,8 +374,8 @@ function Legend({ contour }: { contour: Contour }) {
 
 /** A cut plane across one axis (M3.4): where along the model it lies (0 at the smallest
  * coordinate, 1 at the largest) and which side it cuts away (the larger coordinates, unless
- * flipped). */
-export type CutSetting = { axis: 0 | 1 | 2; at: number; flipped: boolean };
+ * flipped). A saved view keeps one (M3.6). */
+export type CutSetting = ViewCut;
 
 const AXES = ["x", "y", "z"] as const;
 
@@ -488,6 +527,122 @@ function CutPanel({
   );
 }
 
+/** The geometry's bodies, each with a checkbox to show or hide it (M3.6). The last body shown
+ * cannot be hidden, so the model never disappears. */
+function BodiesPanel({
+  bodies,
+  hidden,
+  onChange,
+}: {
+  bodies: readonly number[];
+  hidden: ReadonlySet<number>;
+  onChange: (next: Set<number>) => void;
+}) {
+  const shownCount = bodies.length - hidden.size;
+  return (
+    <section className="viewer-panel viewer-bodies" aria-label="Bodies">
+      <ul>
+        {bodies.map((tag) => {
+          const shown = !hidden.has(tag);
+          return (
+            <li key={tag}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={shown}
+                  disabled={shown && shownCount === 1}
+                  onChange={(event) => {
+                    const next = new Set(hidden);
+                    if (event.target.checked) next.delete(tag);
+                    else next.add(tag);
+                    onChange(next);
+                  }}
+                />
+                Body {tag}
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      <button type="button" disabled={hidden.size === 0} onClick={() => onChange(new Set())}>
+        Show all
+      </button>
+    </section>
+  );
+}
+
+/** The simulation's saved views (M3.6): click one to go back to it; save the current view
+ * under a name (the same name replaces that view). */
+function ViewsPanel({
+  list,
+  onApply,
+  onSave,
+  onDelete,
+}: {
+  list: ReturnType<typeof useViews>["list"];
+  onApply: (view: SavedView) => void;
+  onSave: (name: string) => Promise<string | null>;
+  onDelete: (view: SavedView) => Promise<string | null>;
+}) {
+  const [name, setName] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const act = async (work: Promise<string | null>) => {
+    setBusy(true);
+    setNote(await work);
+    setBusy(false);
+  };
+  const trimmed = name.trim();
+  return (
+    <section className="viewer-panel viewer-views" aria-label="Saved views">
+      {list.kind === "loading" && <span className="viewer-hint">Loading the saved views…</span>}
+      {list.kind === "failed" && <span className="form-problem">{list.problem}</span>}
+      {list.kind === "ok" && list.views.length === 0 && (
+        <span className="viewer-hint">No saved views yet. Name the current view and save it.</span>
+      )}
+      {list.kind === "ok" && list.views.length > 0 && (
+        <ul>
+          {list.views.map((view) => (
+            <li key={view.id}>
+              <button type="button" className="viewer-view-name" onClick={() => onApply(view)}>
+                {view.name}
+              </button>
+              <button
+                type="button"
+                aria-label={`Delete the view "${view.name}"`}
+                disabled={busy}
+                onClick={() => void act(onDelete(view))}
+              >
+                Delete
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="viewer-views-save"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (trimmed !== "") void act(onSave(trimmed));
+        }}
+      >
+        <input
+          type="text"
+          aria-label="View name"
+          placeholder="View name"
+          maxLength={100}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+        />
+        <button type="submit" disabled={busy || trimmed === ""}>
+          Save view
+        </button>
+      </form>
+      {note !== null && <span className="viewer-views-note" role="status">{note}</span>}
+    </section>
+  );
+}
+
 export function Viewer({
   geometry,
   mesh = null,
@@ -497,6 +652,8 @@ export function Viewer({
   pickEdges = false,
   edgeSelection = NO_EDGES,
   onEdgeSelectionChange = ignoreEdges,
+  simulationId = null,
+  onResultChange,
   onSignedOut,
 }: {
   geometry: GeometryView | null;
@@ -510,6 +667,10 @@ export function Viewer({
   pickEdges?: boolean;
   edgeSelection?: ReadonlySet<number>;
   onEdgeSelectionChange?: (next: Set<number>) => void;
+  /** The open simulation, whose saved views the viewer lists (M3.6); null for none. */
+  simulationId?: string | null;
+  /** Shows another quantity or deformation, when a saved view brings them back. */
+  onResultChange?: (next: Pick<ResultDisplay, "quantity" | "deformation">) => void;
   onSignedOut: (problem: string) => void;
 }) {
   const canvasHost = useRef<HTMLDivElement>(null);
@@ -522,6 +683,11 @@ export function Viewer({
   const [extremes, setExtremes] = useState(true);
   /** The cut plane on the results, or null for none (M3.4). */
   const [cutSetting, setCutSetting] = useState<CutSetting | null>(null);
+  /** Hidden bodies of the geometry shown (M3.6). */
+  const [hiddenBodies, setHiddenBodies] = useState<ReadonlySet<number>>(new Set());
+  const [panel, setPanel] = useState<"bodies" | "views" | null>(null);
+  // Loaded when the panel opens, so opening a simulation asks nothing more of the API.
+  const views = useViews(panel === "views" ? simulationId : null, onSignedOut);
   const areaUnit = useSystemUnit("area");
 
   // The pick handler must see the latest selection without recreating the scene.
@@ -562,6 +728,12 @@ export function Viewer({
     ? `${geometry.id}:${geometry.scaling}:${runId !== null ? `run:${runId}` : (analysis?.id ?? "geometry")}`
     : null;
   const id = geometry?.id;
+  // Body tags belong to one geometry.
+  const [bodiesOf, setBodiesOf] = useState(id);
+  if (bodiesOf !== id) {
+    setBodiesOf(id);
+    setHiddenBodies(new Set());
+  }
   // Probes belong to the run they were placed on.
   const [probedRun, setProbedRun] = useState(runId);
   if (probedRun !== runId) {
@@ -595,7 +767,8 @@ export function Viewer({
         const results = values?.kind === "ok" ? parseResultFields(values.value) : null;
         const faces = new Map(topology.value.faces.map((face) => [face.tag, face]));
         const edges = topology.value.edges ?? null;
-        setLoad({ kind: "shown", key, model: { mesh: parsed, faces, edges, analysis: shownMesh, results } });
+        const bodies = topology.value.bodies.map((body) => body.tag).sort((a, b) => a - b);
+        setLoad({ kind: "shown", key, model: { mesh: parsed, faces, edges, bodies, analysis: shownMesh, results } });
       } catch (error) {
         if (!(error instanceof DisplayMeshError || error instanceof ResultFieldsError)) throw error;
         setLoad({ kind: "failed", problem: error.message });
@@ -607,6 +780,14 @@ export function Viewer({
   }, [key, id, runId, onSignedOut]);
 
   const model = load.kind === "shown" ? load.model : null;
+  // Hidden bodies the model has; a saved view may name bodies of nothing else.
+  const hiddenFaces = useMemo(
+    () => (model === null ? new Set<number>() : hiddenFacesOf(model.faces, hiddenBodies)),
+    [model, hiddenBodies],
+  );
+  useEffect(() => {
+    view.current?.setHiddenFaces(hiddenFaces);
+  }, [hiddenFaces]);
   const quantity = result?.quantity ?? "vonMises";
   const deformation = result?.deformation ?? "auto";
   const units = result?.units;
@@ -629,22 +810,27 @@ export function Viewer({
     [cutSetting, volumeBox],
   );
   const section = useMemo<Section | null>(
-    () => (plane === null || !volume?.mesh ? null : cutMesh(volume.mesh, plane)),
-    [plane, volume?.mesh],
+    () => (plane === null || !volume?.mesh ? null : cutMesh(volume.mesh, plane, hiddenBodies)),
+    [plane, volume?.mesh, hiddenBodies],
   );
   const nodeField = volume?.fields.get(quantityField);
   const cutValues = useMemo<CutValues | null>(() => {
-    if (section === null || plane === null || nodeField === undefined || !model) return null;
+    if (!model) return null;
+    const kept = hiddenFaces.size === 0 ? null : shownVertices(model.mesh, hiddenFaces);
+    // Until the section is ready (or when it cannot be made), hidden bodies alone decide.
+    if (cutSetting === null || section === null || plane === null || nodeField === undefined) {
+      return kept === null ? null : { values: new Float32Array(0), kept };
+    }
     const { component } = QUANTITIES[quantity];
     const values = sectionValues(section, quantityValues(nodeField, component));
     const p = model.mesh.positions;
     const [nx, ny, nz] = plane.normal;
-    const kept = new Uint8Array(p.length / 3);
-    for (let v = 0; v < kept.length; v++) {
-      kept[v] = nx * (p[3 * v] ?? 0) + ny * (p[3 * v + 1] ?? 0) + nz * (p[3 * v + 2] ?? 0) > plane.offset ? 0 : 1;
+    const drawn = kept ?? new Uint8Array(p.length / 3).fill(1);
+    for (let v = 0; v < drawn.length; v++) {
+      if (nx * (p[3 * v] ?? 0) + ny * (p[3 * v + 1] ?? 0) + nz * (p[3 * v + 2] ?? 0) > plane.offset) drawn[v] = 0;
     }
-    return { values, kept };
-  }, [section, plane, nodeField, model, quantity]);
+    return { values, kept: drawn };
+  }, [section, plane, nodeField, model, quantity, hiddenFaces, cutSetting]);
   const contour = useMemo(() => {
     if (!model?.results || !units || shape === null) return null;
     if (typeof shape === "string") return shape;
@@ -656,6 +842,7 @@ export function Viewer({
     if (contour.scale !== null && nodeDisplacement === undefined) return null;
     return sectionPositions(section, volume.mesh.positions, nodeDisplacement?.values ?? null, contour.scale ?? 0);
   }, [section, volume?.mesh, nodeDisplacement, contour]);
+  const legendShown = !!model?.results && contour !== null && typeof contour !== "string";
   // The model is rebuilt only when its shape changes; a new quantity or cut recolours it.
   const contourNow = useRef<Contour | null>(null);
   contourNow.current = contour !== null && typeof contour !== "string" ? contour : null;
@@ -723,6 +910,40 @@ export function Viewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [clear]);
 
+  const settingsNow = (): ViewSettings | null => {
+    const camera = view.current?.cameraView();
+    if (!camera || !model) return null;
+    return {
+      camera,
+      hiddenBodies: model.bodies.filter((tag) => hiddenBodies.has(tag)),
+      result: legendShown ? { quantity, deformation, extremes, cut: cutSetting } : null,
+    };
+  };
+  const saveView = async (name: string): Promise<string | null> => {
+    const settings = settingsNow();
+    if (settings === null) return "The view could not be read. Wait until the model is drawn and try again.";
+    const done = await views.save(name, settings);
+    return done.kind === "ok" ? done.message : done.problem;
+  };
+  const deleteView = async (saved: SavedView): Promise<string | null> => {
+    const done = await views.remove(saved);
+    return done.kind === "ok" ? done.message : done.problem;
+  };
+  /** Brings a saved view back: its camera and hidden bodies always, and on results its
+   * quantity, deformation, markers and cut plane. */
+  const applyView = (saved: SavedView) => {
+    const { camera, hiddenBodies: hide, result: shows } = saved.settings;
+    const bodies = new Set(model?.bodies ?? []);
+    const next = new Set(hide.filter((tag) => bodies.has(tag)));
+    setHiddenBodies(next.size < bodies.size ? next : new Set());
+    if (legendShown && shows !== null) {
+      onResultChange?.({ quantity: shows.quantity, deformation: shows.deformation });
+      setExtremes(shows.extremes);
+      setCutSetting(shows.cut);
+    }
+    view.current?.setCamera(camera);
+  };
+
   const lengthUnit = useSystemUnit("length");
   const describe = (tag: number) => {
     if (edges !== null) {
@@ -748,6 +969,7 @@ export function Viewer({
 
   const shown = webgl && model !== null && message === null;
   const legend = model?.results && contour !== null && typeof contour !== "string" ? contour : null;
+  const bodyList = model !== null && model.bodies.length > 1 ? model.bodies : null;
   const picking = edges !== null ? { one: "edge", many: "edges" } : { one: "face", many: "faces" };
   const sorted = [...(edges !== null ? edgeSelection : selection)].sort((a, b) => a - b);
 
@@ -790,10 +1012,35 @@ export function Viewer({
                 Cut plane
               </label>
             )}
+            {bodyList !== null && (
+              <button
+                type="button"
+                aria-pressed={panel === "bodies"}
+                onClick={() => setPanel(panel === "bodies" ? null : "bodies")}
+              >
+                Bodies{hiddenBodies.size > 0 ? ` (${bodyList.length - hiddenBodies.size} of ${bodyList.length})` : ""}
+              </button>
+            )}
+            {simulationId !== null && (
+              <button
+                type="button"
+                aria-pressed={panel === "views"}
+                onClick={() => setPanel(panel === "views" ? null : "views")}
+              >
+                Views
+              </button>
+            )}
             <button type="button" onClick={() => view.current?.resetView()}>
               Reset view
             </button>
           </div>
+          <div className="viewer-panels">
+          {panel === "bodies" && bodyList !== null && (
+            <BodiesPanel bodies={bodyList} hidden={hiddenBodies} onChange={setHiddenBodies} />
+          )}
+          {panel === "views" && simulationId !== null && (
+            <ViewsPanel list={views.list} onApply={applyView} onSave={saveView} onDelete={deleteView} />
+          )}
           {legend && cutSetting !== null && (
             <CutPanel
               setting={cutSetting}
@@ -816,6 +1063,7 @@ export function Viewer({
               }
             />
           )}
+          </div>
           {legend && model && (
             <Probes
               contour={legend}

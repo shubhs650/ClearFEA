@@ -402,6 +402,8 @@ export function App() {
         pickEdges={!showGeometry && spec !== null && localSizeOf(spec, selected)?.scope === "edges"}
         edgeSelection={edgeSelection}
         onEdgeSelectionChange={setEdgeSelection}
+        simulationId={setup.kind === "open" ? setup.id : null}
+        onResultChange={setResultChoice}
         onSignedOut={signedOut}
       />
       <SettingsPanel>

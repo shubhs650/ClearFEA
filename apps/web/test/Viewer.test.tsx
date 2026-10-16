@@ -3,9 +3,9 @@ import { emptySimulationSpec, type GeometryView, type RunView } from "@clearfea/
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type Deformation, toggleFace, Viewer } from "../src/layout/Viewer";
+import { type Deformation, hiddenFacesOf, toggleFace, Viewer } from "../src/layout/Viewer";
 import type { DisplayMesh } from "../src/viewer/displayMesh";
-import type { Cut, Marker, ModelViewEvents } from "../src/viewer/ModelView";
+import type { CameraView, Cut, Marker, ModelViewEvents } from "../src/viewer/ModelView";
 import type { Quantity } from "../src/viewer/resultFields";
 import { readFixture } from "./fixtures";
 import { encodeFields, twoFacesFields } from "./resultFiles";
@@ -25,6 +25,10 @@ type Recorded = {
   markers: Marker[][];
   /** Each setCut call (M3.4). */
   cuts: (Cut | null)[];
+  /** Each setHiddenFaces call (M3.6). */
+  hiddenFaces: number[][];
+  /** Each setCamera call (M3.6). */
+  cameras: CameraView[];
   disposed: boolean;
 };
 
@@ -35,7 +39,7 @@ vi.mock("../src/viewer/ModelView", () => ({
     record: Recorded;
     constructor(_host: HTMLElement, events: ModelViewEvents) {
       if (scene.failToStart) throw new Error("no WebGL");
-      this.record = { events, meshes: [], bands: [], selections: [], edges: [], edgeSelections: [], markers: [], cuts: [], disposed: false };
+      this.record = { events, meshes: [], bands: [], selections: [], edges: [], edgeSelections: [], markers: [], cuts: [], hiddenFaces: [], cameras: [], disposed: false };
       scene.instances.push(this.record);
     }
     setMesh(mesh: DisplayMesh, _edges?: string, _keep?: boolean, bands?: Float32Array) {
@@ -60,6 +64,15 @@ vi.mock("../src/viewer/ModelView", () => ({
     }
     setCut(cut: Cut | null) {
       this.record.cuts.push(cut);
+    }
+    setHiddenFaces(tags: ReadonlySet<number>) {
+      this.record.hiddenFaces.push([...tags].sort((a, b) => a - b));
+    }
+    cameraView(): CameraView {
+      return { position: [0.3, 0.2, 0.4], target: [0.05, 0.025, 0.01] };
+    }
+    setCamera(camera: CameraView) {
+      this.record.cameras.push(camera);
     }
     resetView() {}
     dispose() {
@@ -533,3 +546,195 @@ function readPositions(): number[] {
   const vertices = view.getUint32(8, true);
   return Array.from({ length: vertices * 3 }, (_, i) => view.getFloat32(20 + i * 4, true));
 }
+
+/** The test geometry made of two bodies: face 3 (vertices 0 to 2) is body 1's and face 7
+ * (vertices 3 to 6) body 2's. */
+const twoBodies = {
+  ...topology,
+  bodies: [
+    { tag: 1, faces: [3], volume: 0.00005 },
+    { tag: 2, faces: [7], volume: 0.00005 },
+  ],
+  faces: topology.faces.map((face) => ({ ...face, bodies: [face.tag === 3 ? 1 : 2] })),
+};
+
+const savedView = {
+  id: "v1",
+  name: "Body 1 from below",
+  settings: {
+    camera: { position: [0.1, -0.3, 0.05], target: [0.05, 0.025, 0] },
+    hiddenBodies: [2],
+    result: { quantity: "principal1", deformation: "true", extremes: false, cut: null },
+  },
+  updatedAt: "2026-10-16T05:00:00.000Z",
+};
+
+/** The viewer of an open simulation, with the result choice held in state as the app holds it. */
+function ViewsHarness({ onResult }: { onResult?: boolean }) {
+  const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
+  const [choice, setChoice] = useState<{ quantity: Quantity; deformation: Deformation }>({
+    quantity: "vonMises",
+    deformation: "undeformed",
+  });
+  return (
+    <>
+      <span data-testid="choice">{`${choice.quantity} ${choice.deformation}`}</span>
+      <Viewer
+        geometry={geometry({ bodyCount: 2 })}
+        result={onResult ? { run: succeeded, ...choice, units: UNITS } : null}
+        selection={selection}
+        onSelectionChange={setSelection}
+        simulationId="s1"
+        onResultChange={setChoice}
+        onSignedOut={() => {}}
+      />
+    </>
+  );
+}
+
+describe("hiding bodies (M3.6)", () => {
+  it("is offered only for a geometry of more than one body", async () => {
+    serve(shown);
+    render(<Harness view={geometry()} />);
+    await screen.findByText(/Click a face/);
+    expect(screen.queryByRole("button", { name: /^Bodies/ })).toBeNull();
+  });
+
+  it("hides a body's faces, keeps the last body shown, and shows all again", async () => {
+    serve({ ...shown, "/api/geometries/g1/topology": { status: 200, json: twoBodies } });
+    render(<Harness view={geometry({ bodyCount: 2 })} />);
+    await screen.findByText(/Click a face/);
+    const view = scene.instances[0];
+    fireEvent.click(screen.getByRole("button", { name: "Bodies" }));
+    const panel = screen.getByLabelText("Bodies");
+    const body = (tag: number) => screen.getByRole("checkbox", { name: `Body ${tag}` }) as HTMLInputElement;
+    expect(body(1).checked && body(2).checked).toBe(true);
+    fireEvent.click(body(2));
+    await vi.waitFor(() => expect(view?.hiddenFaces.at(-1)).toEqual([7]));
+    expect(screen.getByRole("button", { name: "Bodies (1 of 2)" })).toBeTruthy();
+    // Body 1 is the last one shown, so it cannot be hidden.
+    expect(body(1).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+    await vi.waitFor(() => expect(view?.hiddenFaces.at(-1)).toEqual([]));
+    expect(panel.isConnected).toBe(true);
+  });
+
+  it("keeps a face two bodies share while either is shown", () => {
+    const faces = new Map([
+      [1, { ...twoBodies.faces[0], tag: 1, bodies: [1] }],
+      [2, { ...twoBodies.faces[0], tag: 2, bodies: [1, 2] }],
+      [3, { ...twoBodies.faces[0], tag: 3, bodies: [2] }],
+    ] as const);
+    expect([...hiddenFacesOf(faces as never, new Set([2]))]).toEqual([3]);
+    expect([...hiddenFacesOf(faces as never, new Set([1, 2]))]).toEqual([1, 2, 3]);
+    expect([...hiddenFacesOf(faces as never, new Set())]).toEqual([]);
+  });
+
+  it("spans the legend and the min and max over the bodies shown", async () => {
+    serve({ ...results, "/api/geometries/g1/topology": { status: 200, json: twoBodies } });
+    serveViews();
+    render(<ViewsHarness onResult />);
+    const legend = await screen.findByLabelText("Legend");
+    fireEvent.click(screen.getByRole("button", { name: "Bodies" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Body 2" }));
+    // Body 1's face carries 0, 15 and 30 MPa.
+    await vi.waitFor(() => expect(legend.querySelector("li")?.textContent).toBe("26.67 to 30"));
+    const view = scene.instances[0];
+    await vi.waitFor(() =>
+      expect(view?.markers.at(-1)).toEqual([
+        { vertex: 2, kind: "max", text: "Max 30 MPa" },
+        { vertex: 0, kind: "min", text: "Min 0 MPa" },
+      ]),
+    );
+  });
+});
+
+/** Serves the simulation's views; returns what was posted. */
+function serveViews(views: unknown[] = []) {
+  const posted: unknown[] = [];
+  const before = globalThis.fetch;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === "/api/simulations/s1/views") {
+        if (init?.method === "POST") {
+          const body = JSON.parse(String(init.body)) as { name: string; settings: unknown };
+          posted.push(body);
+          return new Response(JSON.stringify({ view: { id: "v2", ...body, updatedAt: "2026-10-16T05:01:00.000Z" } }), {
+            status: 201,
+          });
+        }
+        return new Response(JSON.stringify({ views }), { status: 200 });
+      }
+      if (String(input) === "/api/simulations/s1/views/v1" && init?.method === "DELETE") {
+        return new Response(null, { status: 204 });
+      }
+      return before(input, init);
+    }),
+  );
+  return posted;
+}
+
+describe("saved views (M3.6)", () => {
+  it("saves the camera, the hidden bodies and the result display under a name", async () => {
+    serve({ ...results, "/api/geometries/g1/topology": { status: 200, json: twoBodies } });
+    const posted = serveViews();
+    render(<ViewsHarness onResult />);
+    await screen.findByLabelText("Legend");
+    fireEvent.click(screen.getByRole("button", { name: "Bodies" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Body 2" }));
+    fireEvent.click(screen.getByLabelText("Cut plane"));
+    fireEvent.click(screen.getByRole("button", { name: "Views" }));
+    expect(await screen.findByText(/No saved views yet/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("View name"), { target: { value: " Cut, body 1 " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save view" }));
+    expect(await screen.findByText('Saved the view "Cut, body 1".')).toBeTruthy();
+    expect(posted).toEqual([
+      {
+        name: "Cut, body 1",
+        settings: {
+          camera: { position: [0.3, 0.2, 0.4], target: [0.05, 0.025, 0.01] },
+          hiddenBodies: [2],
+          result: { quantity: "vonMises", deformation: "undeformed", extremes: true, cut: { axis: 0, at: 0.5, flipped: false } },
+        },
+      },
+    ]);
+    expect(screen.getByRole("button", { name: "Cut, body 1" })).toBeTruthy();
+  });
+
+  it("brings a view back: camera and hidden bodies, and on results what they show", async () => {
+    serve({ ...results, "/api/geometries/g1/topology": { status: 200, json: twoBodies } });
+    serveViews([savedView]);
+    render(<ViewsHarness onResult />);
+    await screen.findByLabelText("Legend");
+    fireEvent.click(screen.getByRole("button", { name: "Views" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Body 1 from below" }));
+    const view = scene.instances[0];
+    expect(view?.cameras.at(-1)).toEqual(savedView.settings.camera);
+    await vi.waitFor(() => expect(view?.hiddenFaces.at(-1)).toEqual([7]));
+    expect(screen.getByTestId("choice").textContent).toBe("principal1 true");
+    expect((screen.getByLabelText("Min and max") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("brings back only the camera and hidden bodies on the geometry", async () => {
+    serve({ ...shown, "/api/geometries/g1/topology": { status: 200, json: twoBodies } });
+    serveViews([savedView]);
+    render(<ViewsHarness />);
+    await screen.findByText(/Click a face/);
+    fireEvent.click(screen.getByRole("button", { name: "Views" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Body 1 from below" }));
+    await vi.waitFor(() => expect(scene.instances[0]?.hiddenFaces.at(-1)).toEqual([7]));
+    expect(screen.getByTestId("choice").textContent).toBe("vonMises undeformed");
+  });
+
+  it("deletes a view", async () => {
+    serve(shown);
+    serveViews([savedView]);
+    render(<ViewsHarness />);
+    await screen.findByText(/Click a face/);
+    fireEvent.click(screen.getByRole("button", { name: "Views" }));
+    fireEvent.click(await screen.findByRole("button", { name: 'Delete the view "Body 1 from below"' }));
+    expect(await screen.findByText('Deleted the view "Body 1 from below".')).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Body 1 from below" })).toBeNull();
+  });
+});

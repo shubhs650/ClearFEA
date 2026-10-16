@@ -4,6 +4,8 @@
 // (worker/clearfea_worker/results/surface.py); both sides are tested against
 // packages/spec/fixtures/result-fields-three-vertices.bin. Values are SI throughout.
 
+import type { ResultQuantity } from "@clearfea/spec";
+
 const MAGIC = "CFRF";
 const VERSION = 1;
 const HEADER_BYTES = 16;
@@ -69,26 +71,9 @@ export function parseResultFields(buffer: ArrayBuffer): ResultFields {
 }
 
 /** The quantities the result view can colour the model by (M1.9; components and principal
- * stresses since M3.1, ADR-050). */
-export type Quantity =
-  | "displacement"
-  | "vonMises"
-  | "principal1"
-  | "principal2"
-  | "principal3"
-  | "stressXX"
-  | "stressYY"
-  | "stressZZ"
-  | "stressXY"
-  | "stressYZ"
-  | "stressZX"
-  | "strainXX"
-  | "strainYY"
-  | "strainZZ"
-  | "strainXY"
-  | "strainYZ"
-  | "strainZX"
-  | "safetyFactor";
+ * stresses since M3.1, ADR-050). Listed once in packages/spec/schemas/view.schema.json, since
+ * a saved view keeps one (M3.6). */
+export type Quantity = ResultQuantity;
 
 export type QuantityGroup = "Displacement" | "Stress" | "Strain" | "Safety factor";
 

@@ -87,6 +87,21 @@ describe("cutting the mesh", () => {
     expect(cutMesh(mesh, { normal: [1, 0, 0], offset: 2 }).triangles.length).toBe(0);
   });
 
+  it("reads the bodies and leaves hidden bodies out of the section (M3.6)", () => {
+    const mesh = parseVolumeMesh(boxMesh(2, 2, true));
+    expect(mesh.bodies).toEqual([
+      { tag: 1, firstElement: 0, elementCount: 24 },
+      { tag: 2, firstElement: 24, elementCount: 24 },
+    ]);
+    const plane = { normal: [1, 0, 0], offset: 0.3 } as const;
+    expect(areaAndFacing(cutMesh(mesh, plane), plane.normal).area).toBeCloseTo(1, 10);
+    const upper = cutMesh(mesh, plane, new Set([1]));
+    expect(upper.elementsCut).toBe(12);
+    expect(areaAndFacing(upper, plane.normal).area).toBeCloseTo(0.5, 10);
+    expect(Math.min(...[...upper.points].filter((_, i) => i % 3 === 2))).toBeCloseTo(0.5, 10);
+    expect(cutMesh(mesh, plane, new Set([1, 2])).triangles.length).toBe(0);
+  });
+
   it("draws a linear field exactly and uses the mid-edge nodes' own values", () => {
     const mesh = parseVolumeMesh(boxMesh(2, 2));
     const field = (x: number, y: number, z: number) => 1 + 2 * x - 3 * y + 0.5 * z;

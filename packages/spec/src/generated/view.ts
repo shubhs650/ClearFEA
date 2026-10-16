@@ -60,7 +60,7 @@ export interface View {
   [k: string]: unknown;
 }
 /**
- * The camera looks from position at target, with up pointing up on screen. Its field of view is the viewer's own.
+ * The camera looks from position at target, with the y axis up on screen (the viewer orbits about y). Its field of view is the viewer's own.
  *
  * This interface was referenced by `View`'s JSON-Schema
  * via the `definition` "ViewCamera".
@@ -68,7 +68,6 @@ export interface View {
 export interface ViewCamera {
   position: ViewPoint;
   target: ViewPoint;
-  up: ViewPoint;
 }
 /**
  * A cut plane across one axis (M3.4): at is where along the model it lies, 0 at the smallest coordinate and 1 at the largest; it cuts away the larger coordinates unless flipped.
