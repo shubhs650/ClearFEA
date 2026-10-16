@@ -3,7 +3,8 @@
 // (M5.4). The setup takes the thermal stress analysis type and its stress-free temperature, a
 // material with both elastic and thermal values, a support, a fixed temperature and convection; the run
 // shows its stresses on the deformed shape and its temperatures, heat flows and heat balance,
-// and the temperature can be drawn from the same result.
+// and the temperature can be drawn from the same result. Since M5.5 the material's conductivity
+// and Young's modulus are also given as tables against temperature, which the run uses.
 //
 // The model is E-01's 40 × 20 × 10 mm block (e2e/block.py). Its top face, z = 10 mm, is held at
 // 120 °C, and its x = 40 mm end is fixed and cooled by convection to 20 °C, the stress-free
@@ -118,6 +119,34 @@ test("E-04: a thermal stress analysis from upload to results", async ({ page }) 
     await material.getByLabel("Thermal conductivity", { exact: true }).fill("45");
     await material.getByLabel("Thermal conductivity unit").selectOption("W/(m·K)");
     await saved(page);
+  });
+
+  await test.step("conductivity and Young's modulus against temperature (M5.5)", async () => {
+    const material = page.getByRole("region", { name: "Material", exact: true });
+    const rows = async (property: string, values: [string, string][]) => {
+      await material.getByRole("button", { name: `Vary ${property.charAt(0).toLowerCase()}${property.slice(1)} with temperature` }).click();
+      const table = material.getByRole("group", { name: `${property} against temperature` });
+      for (const [k, [temperature, value]] of values.entries()) {
+        await table.getByLabel(`Row ${k + 1} temperature`).fill(temperature);
+        await table.getByLabel(`Row ${k + 1} ${property}`).fill(value);
+      }
+      return table;
+    };
+    const conductivity = await rows("Thermal conductivity", [
+      ["20", "52"],
+      ["200", "45"],
+    ]);
+    await expect(conductivity.getByLabel("Thermal conductivity table temperature unit")).toHaveValue("°C");
+    await expect(conductivity.getByLabel("Thermal conductivity table unit")).toHaveValue("W/(m·K)");
+    const modulus = await rows("Young's modulus", [
+      ["20", "200"],
+      ["200", "186"],
+    ]);
+    await expect(modulus.getByLabel("Young's modulus table unit")).toHaveValue("GPa");
+    await saved(page);
+    await expect(treeRow(page, "Steel")).toHaveAccessibleName("Steel, complete");
+    await modulus.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${OUT}/e04-material-tables.png` });
   });
 
   const end = await faceWithBox(page, [0.04, 0, 0], [0.04, 0.02, 0.01]);
