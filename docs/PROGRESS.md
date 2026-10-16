@@ -5,8 +5,8 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M5 Thermal, not started (M4 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M5.1, once the maintainer gives the go for M5 (his autodrive covered M4)
+- **Current milestone:** M5 Thermal, in progress (M4 closed 2026-10-16 on a green phase-end run on main)
+- **Next task:** M5.2, under the maintainer's M5 autodrive
 - **Blocked on:** nothing
 
 ## Milestones
@@ -18,7 +18,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M2 | Structural setup | Done (phase-end run on main green, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) | 2026-10-16 |
 | M3 | Results tools | Done (phase-end run on main green, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) | 2026-10-16 |
 | M4 | Assemblies | Done (phase-end run on main green, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) | 2026-10-16 |
-| M5 | Thermal | Not started | |
+| M5 | Thermal | In progress | |
 | M6 | Modal | Not started | |
 | M7 | Report | Not started | |
 | M8 | Platform | Not started | |
@@ -91,6 +91,15 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M4.5 Report text noting reduced stress accuracy at tied interfaces (stored for M7)
 - [x] E-03 Multi-body browser test (listed for M4 in VERIFICATION.md, written after the M4 close)
 
+### M5 Thermal
+
+- [x] M5.1 Steady-state thermal analysis type; thermal material properties
+- [ ] M5.2 Fixed temperature, heat flux, convection, radiation to ambient, internal heat generation (fixed temperature came with M5.1)
+- [ ] M5.3 Temperature and heat-flux results; heat balance check (heat in against heat out)
+- [ ] M5.4 Thermal stress: thermal step then static step; temperature field visible in the structural result
+- [ ] M5.5 Temperature-dependent property tables in materials, UI and deck
+- [ ] M5.6 Thermal bonds across tied interfaces
+
 ## Maintainer to-do
 
 Things only the maintainer can do.
@@ -114,6 +123,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M5.1 (2026-10-16): steady-state thermal analysis (ADR-064, accepted under Shubham's M5 autodrive, pending his review). Physics-critical modules touched: units table (`units.json` v5, kind `thermalConductivity`), the deck generator (`deck/generator.py` `_heat_transfer_deck`, new `deck/loads/heat.py`) and the result reader (`results/fields.py` `read_thermal_fields`, `results/summary.py` `summarize_thermal`, `results/surface.py`). Spec: `analysis` takes `steady_thermal`; materials gain `thermalConductivity`; new load `fixed_temperature` (faces, absolute temperature), pulled forward from M5.2 because a thermal run needs one to be solvable and verified; `SolveResult`'s displacement, vonMises and reactions are now optional and a thermal run has `temperature` min/max; `view.schema.json` `ResultQuantity` gains `temperature`. `analysisLoads`, `isThermal`, `wrongAnalysisMessage`, `thermalBodyMessages` in `packages/spec`; `preRunProblems` has a thermal branch. Deck: `*HEAT TRANSFER, STEADY STATE` with data line `1.0, 1.0` (without it ccx warns about a nonlinear analysis), `*CONDUCTIVITY`, `*BOUNDARY` DOF 11 in K, `*NODE FILE` NT; static decks unchanged (DECK_FORMAT 3; new snapshots `heat-c3d10`, `heat-two-bodies-c3d4`). Refused: supports or structural loads in a thermal setup (and a fixed temperature in a static one), tied bonds between bodies (until M5.6), a body without a fixed temperature, two fixed temperatures meeting at a node with different values, ≤ 0 K. Results: fields.bin/nodes.bin hold `temperature` (K) only. Web: Analysis row in the tree, thermal marks, "Add a fixed temperature", conductivity on the material panel, temperature figures, contour (undeformed), cut planes, probes, units shown, CSV/VTK with a temperature column, saved views. Harness: `temperature` quantity; thermal cases skip the force balance rows. New V-13 plane wall (temperatures at faces and three depths, 0.01 %); `worker/spikes/heat_check` (every node of a bar against the linear profile, C3D4 and C3D10). The estimator uses the linear static law for thermal runs (high, the safe side; the solver thread owns it). For M5.2: add the other thermal loads to `analysisLoads` and `_heat_transfer_deck`; with radiation the deck needs `*PHYSICAL CONSTANTS`. For M5.3: add `HFL`/`RFL` output, V-13's flux check and the heat balance automatic check (VERIFICATION.md). Parked: conductivities in the material library. Screenshots in the project's `m5.1/` folder.
 
 > E-03 (2026-10-16): the multi-body browser test, listed for M4 and written after the M4 close. `apps/web/e2e/e03-multi-body.e2e.ts` signs in as `bob` (so E-01's lists stay apart) and uploads `apps/web/e2e/assembly.py`'s model: "Base" (40 × 20 × 10 mm) and "Lug" (30 × 20 × 10 mm) touching at x = 0, part names written into the STEP text as `worker/tests/step_models.py` `two_blocks` does. Steps: Bodies lists Base and Lug; Steel for both, then Aluminium for Lug from the Bodies group; Bonds shows one 200 mm² bond, Show selects its two faces, Accept; fixed support on Base's x = 40 mm end and 1 MPa on Lug's top, each face's hover naming its body; removing the bond blocks the run with the Lug message, restoring it clears it; the run's reaction is the 600 N carried through the bond, out of balance under 0.1 %; the "Stresses near bonded faces" note shows; hiding Lug in the viewer leaves Base. `infra/e2e.sh` writes both models and passes `CLEARFEA_E2E_ASSEMBLY`. No app code changed. Screenshots in the project's `e03/` folder. Next: M5.
 
@@ -246,6 +257,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M5.1: steady-state thermal analysis type, thermal conductivity and fixed temperatures (ADR-064); V-13 plane wall added; `make verify` coarse 177 of 177 checks in 16 cases.
 - E-03: browser test of a two-body bonded model from upload to results, part of `make e2e` (both E-01 and E-03 pass locally).
 - ADR-058 to ADR-062 marked accepted by the maintainer (he reviewed them after the M4 close).
 - M4 closed: phase-end workflow run by hand on main 6e722e0 ([run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) green, `make verify` full tier 169 of 169 checks in all 15 cases and `make e2e` E-01. Next: M5, waiting on the maintainer's go.
