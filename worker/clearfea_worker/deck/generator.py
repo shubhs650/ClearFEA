@@ -745,11 +745,21 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
     held = holds(spec, mesh)
     springs = _elastic_springs(spec, mesh)
     tie_list = ties(spec, mesh, node_frames(held))
+    held_springs = [s for _, group in springs for s in group]
     if not modal:
-        # A modal analysis finds the rigid-body modes of what nothing holds instead (ADR-070).
-        check_held(
-            mesh, held, [s for _, group in springs for s in group], body_groups(mesh, tie_list)
-        )
+        check_held(mesh, held, held_springs, body_groups(mesh, tie_list))
+    elif solver == "PASTIX":
+        # A modal analysis finds the rigid-body modes of what nothing holds instead, but only
+        # SPOOLES can: CalculiX factors K - 1·M, which a free body makes indefinite, and PaStiX
+        # then gives wrong frequencies or stops (ADR-070).
+        try:
+            check_held(mesh, held, held_springs, body_groups(mesh, tie_list))
+        except DeckError:
+            raise DeckError(
+                "PaStiX cannot find the natural frequencies of a body the supports leave free "
+                "to move: it gives wrong frequencies or stops. Choose SPOOLES as the equation "
+                "solver, or add supports that hold every body."
+            ) from None
     fixed_only = only_fixed_supports(spec)
     normals = {} if fixed_only else frictionless_normals(spec, mesh)
 

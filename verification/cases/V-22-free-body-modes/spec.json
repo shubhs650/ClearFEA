@@ -16,5 +16,6 @@
   "supports": [],
   "loads": [],
   "mesh": { "size": { "value": 4, "unit": "mm" } },
-  "modes": 8
+  "modes": 8,
+  "solver": "spooles"
 }

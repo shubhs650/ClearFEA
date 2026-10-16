@@ -224,7 +224,7 @@ function supportProblems(spec: SimulationSpec, add: (item: string, message: stri
  * supports' own values, and no load. A body no support holds is not a problem: it vibrates
  * freely, and its six rigid-body modes come out at or near zero.
  */
-function modalProblems(spec: SimulationSpec, add: (item: string, message: string) => void) {
+function modalProblems(spec: SimulationSpec, topology: TopologyTags | undefined, add: (item: string, message: string) => void) {
   if ((spec.modes ?? null) === null) {
     add("analysis", "There is no number of modes. Enter how many natural frequencies to find under Analysis.");
   }
@@ -233,6 +233,14 @@ function modalProblems(spec: SimulationSpec, add: (item: string, message: string
     add(
       "run",
       `${SOLVER_LABELS[solver]} cannot find natural frequencies: CalculiX's iterative solvers do not work in a modal analysis. Choose PaStiX or SPOOLES as the equation solver.`,
+    );
+  }
+  // CalculiX factors K - 1·M, which a free body makes indefinite; PaStiX then gives wrong
+  // frequencies or stops (ADR-070). The worker's deck check also catches partly held bodies.
+  if (solver === "pastix" && (spec.supports.length === 0 || unheldBodies(spec, topology).length > 0)) {
+    add(
+      "run",
+      "PaStiX cannot find the natural frequencies of a body no support holds: it gives wrong frequencies or stops. Choose SPOOLES as the equation solver, or add supports that hold every body.",
     );
   }
   for (const material of spec.materials) {
@@ -304,7 +312,7 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
     }
   }
   if (isModal(spec)) {
-    modalProblems(spec, add);
+    modalProblems(spec, topology, add);
     meshProblems(spec, add);
     return problems;
   }

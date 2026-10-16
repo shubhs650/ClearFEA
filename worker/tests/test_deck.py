@@ -574,9 +574,11 @@ def modal_held_spec() -> dict:
 
 def modal_free_spec() -> dict:
     """Two bonded bodies no support holds (M6.1): a free assembly, which a modal analysis takes
-    and a static one refuses; the bond is tied."""
+    and a static one refuses; the bond is tied. SPOOLES, since PaStiX cannot solve a free body
+    (ADR-070)."""
     spec = bonded_spec().model_dump(by_alias=True, exclude_none=True)
     spec["analysis"] = "modal"
+    spec["solver"] = "spooles"
     spec["supports"] = []
     spec["loads"] = []
     spec["modes"] = 8
@@ -1941,4 +1943,15 @@ def test_modal_takes_a_body_no_support_holds() -> None:
     # A static analysis of the same body is refused.
     spec.update(analysis="linear_static", loads=fixture_spec()["loads"])
     with pytest.raises(DeckError, match="free to move"):
+        deck(spec, two_tets(order=2))
+
+
+def test_modal_refuses_pastix_for_a_body_no_support_holds() -> None:
+    # CalculiX factors K - 1·M; a free body makes it indefinite and PaStiX gives wrong
+    # frequencies or stops (ADR-070). A held body still solves with PaStiX.
+    spec = modal_spec()
+    spec["solver"] = "pastix"
+    assert "*FREQUENCY, SOLVER=PASTIX" in deck(spec, two_tets(order=2))
+    spec["supports"] = []
+    with pytest.raises(DeckError, match="Choose SPOOLES"):
         deck(spec, two_tets(order=2))
