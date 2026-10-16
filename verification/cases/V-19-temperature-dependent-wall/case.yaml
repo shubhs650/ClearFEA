@@ -28,69 +28,69 @@ checks:
     quantity: heatFlux.x
     face: y0
     reference: { value: 421.8, unit: kW/m² }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.002, full: 0.001 }
   - name: Heat in through the hot face, q A
     quantity: heatFlow
     load: hot
     reference: { value: 168.72, unit: W }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.002, full: 0.001 }
   - name: Heat out through the cold face, − q A
     quantity: heatFlow
     load: cold
     reference: { value: -168.72, unit: W }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.002, full: 0.001 }
   - name: A quarter of the way through
     quantity: temperature
     face: y0
     box: { min: [10, 0, 0], max: [10, 0, 20] }
     reference: { value: 291.749058, unit: °C }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.001, full: 0.001 }
   - name: Halfway through, 16 K below the mean of the faces
     quantity: temperature
     face: y0
     box: { min: [20, 0, 0], max: [20, 0, 20] }
     reference: { value: 193.856137, unit: °C }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.001, full: 0.001 }
   - name: Three quarters of the way through
     quantity: temperature
     face: y0
     box: { min: [30, 0, 0], max: [30, 0, 20] }
     reference: { value: 103.817448, unit: °C }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.001, full: 0.001 }
   - name: Sideways stress at the hot face, − E ε / (1 − ν) at 400 °C
     quantity: stress.yy
     face: hot
     reference: { value: -1182.188406, unit: MPa }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.01, full: 0.005 }
   - name: Sideways stress halfway through
     quantity: stress.zz
     face: y0
     box: { min: [20, 0, 0], max: [20, 0, 20] }
     reference: { value: -481.183044, unit: MPa }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.01, full: 0.005 }
   - name: Sideways stress three quarters of the way through
     quantity: stress.zz
     face: y0
     box: { min: [30, 0, 0], max: [30, 0, 20] }
     reference: { value: -177.410879, unit: MPa }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.01, full: 0.005 }
   - name: Sideways stress at the cold face, below the stress-free temperature
     quantity: stress.yy
     face: cold
     reference: { value: 98.450704, unit: MPa }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.01, full: 0.005 }
   - name: von Mises stress at the hot face, |σ| with σxx = 0
     quantity: vonMises
     face: hot
     reference: { value: 1182.188406, unit: MPa }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.01, full: 0.005 }
   - name: Growth of the hot face, − ∫ ε (1 + ν) / (1 − ν) dx
     quantity: displacement.x
     face: hot
     reference: { value: -0.145252771, unit: mm }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.002, full: 0.001 }
   - name: Force on the wall y = 0, − H ∫ σ dx
     quantity: reaction.y
     support: wall-y0
     reference: { value: 401990.71, unit: N }
-    tolerance: { coarse: 0.5, full: 0.5 }
+    tolerance: { coarse: 0.002, full: 0.001 }

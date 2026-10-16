@@ -61,4 +61,6 @@ The solution is uniform across the wall, so the stresses at the faces x = 0 and 
 
 ## Tolerances
 
-TOLERANCES
+Temperature 0.1 percent of the value in °C on both tiers (the result files keep five significant digits), heat flux and heat flows 0.2 percent coarse and 0.1 percent full, stresses 1 percent coarse and 0.5 percent full, growth and force 0.2 percent coarse and 0.1 percent full. The profile is not a polynomial, so even ten-node elements only approach it, and every property is read at the integration points' temperatures; the stress is extrapolated from the integration points to the nodes.
+
+Measured while the case was written (2026-10-16, CalculiX 2.21, Gmsh 4.15.2, coarse, 5 mm, eight quadratic elements through the wall): temperatures, heat flux, heat flows, growth and force within 0.005 percent; stresses −0.02 % (hot face), −0.07 % and −0.25 % inside, +0.15 % (cold face), von Mises −0.06 %. Full (2.5 mm): temperatures, heat flux and heat flows within 0.005 percent, stresses −0.02 % to +0.04 %, growth and force within 0.005 percent. Before the conductivity table's deck asked CalculiX for tighter convergence (ADR-068 item 5), the coarse temperatures were 0.03 K to 0.04 K low and the heat balance 0.014 percent out.
