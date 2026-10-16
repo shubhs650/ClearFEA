@@ -36,6 +36,37 @@ def _write(path: Path, build: str) -> Path:
             # A 50 x 20 x 20 mm base and a 30 x 20 x 20 mm lug touching it at x = 50 mm.
             occ.addBox(0, 0, 0, 50, 20, 20)
             occ.addBox(50, 0, 0, 30, 20, 20)
+        elif build == "block_on_plate":
+            # Bond detection (M4.2). A 100 x 100 x 20 mm plate; an 80 x 80 x 30 mm block on it,
+            # overhanging two sides (40 x 40 mm touching); a 30 x 30 x 30 mm block touching the
+            # plate only along an edge.
+            occ.addBox(0, 0, 0, 100, 100, 20)
+            occ.addBox(60, 60, 20, 80, 80, 30)
+            occ.addBox(100, 0, 20, 30, 30, 30)
+        elif build == "blocks_with_gap":
+            # Two 20 x 20 mm faces 0.5 mm apart: a clearance, not a bond.
+            occ.addBox(0, 0, 0, 50, 20, 20)
+            occ.addBox(50.5, 0, 0, 30, 20, 20)
+        elif build == "pin_in_hole":
+            # A 20 mm pin, 40 mm long, through a 20 mm hole in a 60 x 60 x 20 mm block.
+            block = occ.addBox(-30, -30, 0, 60, 60, 20)
+            hole = occ.addCylinder(0, 0, -1, 0, 0, 22, 10)
+            occ.cut([(3, block)], [(3, hole)])
+            occ.addCylinder(0, 0, -10, 0, 0, 40, 10)
+        elif build == "pad_on_shell":
+            # A 30 mm thick pad, 100 mm tall and 120 mm wide, on the outside of a shell of
+            # 200 mm outer radius. The pad straddles the shell's seam, so its inner face is two.
+            shell = occ.addCylinder(0, 0, 0, 0, 0, 300, 200)
+            bore = occ.addCylinder(0, 0, -1, 0, 0, 302, 180)
+            occ.cut([(3, shell)], [(3, bore)])
+            ring = occ.addCylinder(0, 0, 100, 0, 0, 100, 230)
+            inner = occ.addCylinder(0, 0, 99, 0, 0, 102, 200)
+            (cut,), _ = occ.cut([(3, ring)], [(3, inner)])
+            occ.intersect([cut], [(3, occ.addBox(150, -60, 90, 200, 120, 120))])
+        elif build == "cylinder_on_plate":
+            # A 20 mm rod lying on a plate: a line contact, not a bond.
+            occ.addBox(0, 0, 0, 100, 100, 10)
+            occ.addCylinder(10, 50, 20, 80, 0, 0, 10)
         else:
             raise ValueError(build)
         occ.synchronize()
@@ -68,6 +99,12 @@ def two_blocks(path: Path, names: tuple[str, str, str] | None = None) -> Path:
             text = text.replace(placeholder, repr(name))
         path.write_text(text)
     return path
+
+
+def bond_model(path: Path, build: str) -> Path:
+    """A multi-body model for bond detection (M4.2): ``block_on_plate``, ``blocks_with_gap``,
+    ``pin_in_hole``, ``pad_on_shell`` or ``cylinder_on_plate``."""
+    return _write(path, build)
 
 
 def plate_surface(path: Path) -> Path:

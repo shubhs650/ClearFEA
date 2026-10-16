@@ -51,6 +51,20 @@
         }
       }
     },
+    "BondStatus": {
+      "description": "detected: found by bond detection and not yet reviewed; it is tied. accepted: the user reviewed it and keeps it; it is tied. removed: the user removed it; it is not tied, and stays listed so it can be restored.",
+      "enum": ["detected", "accepted", "removed"]
+    },
+    "Bond": {
+      "description": "A candidate bond of the geometry (topology.json bonds, M4.2) and what the user decided about it. A bond is identified by its two faces.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["faces", "status"],
+      "properties": {
+        "faces": { "description": "The two face tags of a candidate bond, smaller first.", "type": "array", "items": { "type": "integer" }, "minItems": 2, "maxItems": 2 },
+        "status": { "$ref": "#/$defs/BondStatus" }
+      }
+    },
     "IsotropicMaterial": {
       "description": "A linear elastic isotropic material. The spec holds its own copy of the values, so a run made from it never changes when a library material does.",
       "type": "object",
@@ -400,7 +414,7 @@
       }
     },
     "SimulationSpec": {
-      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
+      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the review of the bonds between touching bodies (M4.2). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
       "type": "object",
       "additionalProperties": false,
       "required": ["version", "analysis", "geometryId", "bodies", "materials", "supports", "loads", "mesh"],
@@ -412,7 +426,12 @@
         "materials": { "type": "array", "items": { "$ref": "#/$defs/IsotropicMaterial" } },
         "supports": { "type": "array", "items": { "$ref": "#/$defs/Support" } },
         "loads": { "type": "array", "items": { "$ref": "#/$defs/Load" } },
-        "mesh": { "$ref": "#/$defs/MeshSettings" }
+        "mesh": { "$ref": "#/$defs/MeshSettings" },
+        "bonds": {
+          "description": "Every candidate bond of the geometry with the user's review of it (M4.2), in the order of topology.json. Absent in specs saved before M4.2, where every candidate counts as detected.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/Bond" }
+        }
       }
     },
     "SimulationView": {
