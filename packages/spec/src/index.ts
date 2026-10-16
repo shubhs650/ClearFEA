@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 export * from "./generated";
-export { movesByDisplacement, preRunProblems } from "./prerun";
+export { movesByDisplacement, preRunProblems, unheldBodyMessages } from "./prerun";
 export {
   bodyLabels,
   bondIsTied,
@@ -22,6 +22,7 @@ export {
   type SpecProblem,
   simulationSpecProblems,
   specBonds,
+  unheldBodies,
   supportKinds,
   type TopologyBondTags,
   type TopologyTags,

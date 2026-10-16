@@ -332,3 +332,37 @@ def tie_forces(
                 for i in range(3):
                     f[i] -= term.coefficient * lam * axis[i]
     return {n: (f[0], f[1], f[2]) for n, f in sorted(out.items())}
+
+
+def body_groups(mesh: VolumeMesh, ties_: Sequence[Tie]) -> list[list[int]]:
+    """The bodies (tags) joined into one piece, each group sorted, groups in order of their
+    smallest tag (M4.4). The ties join bodies: a bond joins its two bodies only when at least
+    one of its nodes is tied by an equation, so one whose slave nodes are all held by supports
+    joins nothing. Bodies that share nodes are joined too; Gmsh meshes the bodies of an assembly
+    apart (ADR-058), but a mesh may share them."""
+    parent = {tag: tag for tag in mesh.bodies}
+
+    def root(tag: int) -> int:
+        while parent[tag] != tag:
+            parent[tag] = parent[parent[tag]]
+            tag = parent[tag]
+        return tag
+
+    def join(a: int, b: int) -> None:
+        a, b = root(a), root(b)
+        if a != b:
+            parent[max(a, b)] = min(a, b)
+
+    npe = NODES_PER_ELEMENT[mesh.order]
+    owner: dict[int, int] = {}
+    for tag, (first, count) in mesh.bodies.items():
+        for node in mesh.elements[first * npe : (first + count) * npe]:
+            if owner.setdefault(node, tag) != tag:
+                join(owner[node], tag)
+    for tie in ties_:
+        if tie.equations:
+            join(tie.slave_body, tie.master_body)
+    groups: dict[int, list[int]] = {}
+    for tag in sorted(mesh.bodies):
+        groups.setdefault(root(tag), []).append(tag)
+    return sorted(groups.values())

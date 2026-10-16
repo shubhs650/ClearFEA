@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M4 Assemblies, in progress under the maintainer's autodrive (M3 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M4.4
+- **Next task:** M4.5
 - **Blocked on:** nothing
 
 ## Milestones
@@ -87,7 +87,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M4.1 Multi-body import: bodies listed, per-body material assignment
 - [x] M4.2 Bond detection between touching faces with a tolerance; bond list with accept and remove; highlight in the viewer
 - [x] M4.3 Per-body meshing; tie constraints in the deck
-- [ ] M4.4 Validation: unbonded or unrestrained bodies reported before run
+- [x] M4.4 Validation: unbonded or unrestrained bodies reported before run
 - [ ] M4.5 Report text noting reduced stress accuracy at tied interfaces (stored for M7)
 
 ## Maintainer to-do
@@ -113,6 +113,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M4.4 (2026-10-16): bodies no support or bond reaches are refused before the run (ADR-061, accepted under Shubham's autodrive, pending his review). Physics-critical module touched: the deck generator's rigid-body check (`deck/constraints.py` `check_held`, `deck/loads/tie.py` `body_groups`, `deck/generator.py` now computes ties before the check); no deck text or snapshot changed. `unheldBodies` in `packages/spec` groups bodies by tied bonds and returns groups with no support face; `preRunProblems` adds one Bodies line per group (part names, and "restore a removed bond" when one touches it), so the API answers 409 and the Run panel lists it; the free body's row and the Bodies group are marked incomplete. The worker checks each bonded group on its own (joined by written equations or shared nodes), so a group held only partly, such as one frictionless face, is refused there, naming the body by tag. Not covered: a bond tied over too few nodes to stop relative turning. Screenshots in the project's `m4.4/` folder. For M4.5: report text on tied-interface stress accuracy (ADR-060 item 9 has the figures). Next: M4.5.
 
 > M4.3 (2026-10-16): bonds tied in the deck (ADR-060, accepted under Shubham's autodrive, pending his review). Physics-critical modules touched: the deck generator (`deck/generator.py`, `deck/constraints.py`), a new load translation module `deck/loads/tie.py`, and the result reader (`results/summary.py`). Every bond not removed ties the nodes of its finer face to the closest point of the other face as `*EQUATION` lines in each node's deck directions; the reader passes the tied nodes' printed forces on to held master nodes, so reactions balance (CalculiX's `*TIE` left 1.6e-4 of the load out of the reactions where symmetry planes cross a bond). Meshing was already per body (ADR-058), so the mesh job is unchanged. The API writes `specBonds` into each run's spec. New cases V-11 (V-02's cantilever as two bonded bodies) and V-12 (bi-material bar on symmetry planes crossing the bond); deck snapshots `bonded-c3d10` and `bonded-slide-c3d4`. Surprise: CalculiX's RF at a node in a tie or equation is the element force only; tie forces are not in it. For M4.4: the rigid-body check (`check_held`) still treats the model as one part; a body neither bonded nor held should be found before the run, and `ties()` tells which bodies are joined. For M4.5: stresses at a tie between unmatched meshes are off by up to about 12 percent one or two elements deep. Next: M4.4.
 
@@ -237,6 +239,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M4.4: a body no support or bond reaches is refused before the run, and the deck generator's rigid-body check looks at each group of bonded bodies (ADR-061). Learned: the whole-model check let a free body pass beside a held one.
 - M4.3: bonds not removed tied in the deck as equations between each finer face's nodes and the other face, with tie forces added back into reactions (ADR-060); V-11 and V-12 added. Learned: CalculiX's printed RF leaves out the tie forces at held nodes, for `*TIE` as for `*EQUATION`.
 - M4.2: bonds between touching bodies found at import within a tolerance, listed in a Bonds group with accept, remove and restore, and shown in the viewer (ADR-059). Learned: Gmsh's `getClosestPoint` ignores a face's trimming and `isInside` ignores distance off the surface; sampling every triangle vertex keeps edge and line contacts out.
 - M4.1: bodies of an assembly listed by their STEP part names in a new Bodies group, each with its material (ADR-058). Learned: Gmsh keeps STEP product names as entity labels (`getEntityName`), so no STEP parsing of our own is needed.

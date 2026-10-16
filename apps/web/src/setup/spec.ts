@@ -29,6 +29,8 @@ import {
   specBonds,
   supportKinds,
   type TopologyTags,
+  unheldBodies,
+  unheldBodyMessages,
 } from "@clearfea/spec";
 import { toSi } from "../units/convert";
 
@@ -105,7 +107,9 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   });
   // Bodies (M4.1): each body's row is incomplete until it has a material; problems with the body
   // list (an unknown material, a body listed twice) mark the group.
+  // A body no support or bond reaches (M4.4) is incomplete too, and so is the group.
   const labels = topology ? bodyLabels(topology) : new Map<number, string>();
+  const unheld = new Set(unheldBodies(spec, topology).flat());
   for (const b of spec.bodies) {
     const missing =
       b.material !== null
@@ -113,6 +117,9 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
         : spec.materials.length === 0
           ? ["Add a material under Materials, then pick it here."]
           : ["Pick its material."];
+    if (unheld.has(b.tag)) {
+      missing.push("No support holds it and no bond joins it to a held body. Add a support on one of its faces.");
+    }
     result.set(bodyItem(b.tag), status([], missing));
   }
   const unassigned = spec.bodies.filter((b) => b.material === null).map((b) => labels.get(b.tag) ?? `Body ${b.tag}`);
@@ -122,7 +129,7 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
       : spec.materials.length === 0
         ? ["Add a material under Materials, then pick each body's material here."]
         : [`Pick a material for ${unassigned.join(", ")}.`];
-  result.set("bodies", status(errorsOf("bodies"), bodiesMissing));
+  result.set("bodies", status(errorsOf("bodies"), [...bodiesMissing, ...unheldBodyMessages(spec, topology)]));
   // Bonds (M4.2): incomplete while a detected bond awaits review. Detected bonds are tied all the
   // same, so this is a reminder, not something a run waits for.
   const unreviewed = specBonds(spec, topology).filter((b) => b.status === "detected").length;

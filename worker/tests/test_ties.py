@@ -10,11 +10,18 @@ import pytest
 from clearfea_worker.deck import DeckError, generate_deck
 from clearfea_worker.deck.constraints import FREE, Frame, hold_frame, holds, node_frames
 from clearfea_worker.deck.linalg import cross
-from clearfea_worker.deck.loads.tie import Tie, closest_point, tie_forces, tied_bonds, ties
+from clearfea_worker.deck.loads.tie import (
+    Tie,
+    body_groups,
+    closest_point,
+    tie_forces,
+    tied_bonds,
+    ties,
+)
 from clearfea_worker.meshing.volume import VolumeMesh
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
-from .deck_meshes import bonded_tets
+from .deck_meshes import bonded_tets, two_tets
 
 
 def bonded_spec(status: str = "detected", **changes: object) -> SimulationSpec:
@@ -212,10 +219,48 @@ def test_the_deck_writes_each_tie_as_equations_and_prints_the_slave_forces() -> 
     assert text.splitlines().count("*EQUATION") == 1
     assert "*NSET, NSET=TIED" in text
     assert "*NODE PRINT, NSET=TIED, GLOBAL=YES\nRF\n*END STEP" in text
-    # Removed bonds leave the deck as it was before M4.3.
-    removed = generate_deck(bonded_spec("removed"), bonded_tets(2))
+    # Removed bonds leave the deck as it was before M4.3 (body 2 then needs its own support,
+    # M4.4).
+    both = [{"id": "fixed-1", "type": "fixed", "name": "Base", "faces": [2, 4]}]
+    removed = generate_deck(bonded_spec("removed", supports=both), bonded_tets(2))
     assert "*EQUATION" not in removed and "TIED" not in removed
-    assert removed == generate_deck(bonded_spec(bonds=None), bonded_tets(2))
+    assert removed == generate_deck(bonded_spec(bonds=None, supports=both), bonded_tets(2))
+
+
+def test_groups_bodies_by_their_ties_and_shared_nodes() -> None:
+    mesh = bonded_tets(2)
+    frames = node_frames(holds(bonded_spec(), mesh))
+    assert body_groups(mesh, ties(bonded_spec(), mesh, frames)) == [[1, 2]]
+    assert body_groups(mesh, ties(bonded_spec("removed"), mesh, frames)) == [[1], [2]]
+    assert body_groups(mesh, []) == [[1], [2]]
+    # The two-element test mesh's bodies share a face's nodes, so they are one piece.
+    assert body_groups(two_tets(1, bodies=2), []) == [[1, 2]]
+
+
+def test_refuses_a_body_no_bond_joins_to_a_held_body() -> None:
+    mesh = bonded_tets(2)
+    message = "No support holds body 2 and no bond joins it to a held body, so it is free to move."
+    for spec in (bonded_spec("removed"), bonded_spec(bonds=None)):
+        with pytest.raises(DeckError, match=message):
+            generate_deck(spec, mesh)
+    # A bond whose slave nodes are all held ties nothing, so it joins nothing: fixing the slave
+    # face (face 3, body 2) leaves body 1 free.
+    held_bond = [{"id": "fixed-1", "type": "fixed", "name": "Bond face", "faces": [3]}]
+    with pytest.raises(DeckError, match=message.replace("body 2", "body 1")):
+        generate_deck(bonded_spec(supports=held_bond), mesh)
+
+
+def test_names_the_motions_a_separate_body_is_still_free_in() -> None:
+    mesh = bonded_tets(2)
+    supports = [
+        {"id": "fixed-1", "type": "fixed", "name": "Base", "faces": [2]},
+        {"id": "slide-1", "type": "frictionless", "name": "Slide", "faces": [4]},
+    ]
+    with pytest.raises(DeckError) as raised:
+        generate_deck(bonded_spec("removed", supports=supports), mesh)
+    text = str(raised.value)
+    assert text.startswith("The supports do not hold body 2 in place: it can still ")
+    assert "body 1" not in text
 
 
 def test_refuses_bonds_that_do_not_fit_the_mesh() -> None:

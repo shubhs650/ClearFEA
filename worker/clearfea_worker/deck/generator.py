@@ -54,7 +54,7 @@ from .loads import (
 )
 from .loads.body import gravity_vector, rotation
 from .loads.thermal import expansions, temperature_change
-from .loads.tie import Equation, ties
+from .loads.tie import Equation, body_groups, ties
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
 DECK_FORMAT = 3
@@ -259,9 +259,9 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
         )
     held = holds(spec, mesh)
     springs = _elastic_springs(spec, mesh)
-    check_held(mesh, held, [s for _, group in springs for s in group])
-    fixed_only = only_fixed_supports(spec)
     tie_list = ties(spec, mesh, node_frames(held))
+    check_held(mesh, held, [s for _, group in springs for s in group], body_groups(mesh, tie_list))
+    fixed_only = only_fixed_supports(spec)
     normals = {} if fixed_only else frictionless_normals(spec, mesh)
 
     out = [
