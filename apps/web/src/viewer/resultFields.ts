@@ -213,3 +213,44 @@ export function deformedPositions(positions: Float32Array, displacement: ResultF
   }
   return out;
 }
+
+/** The vertices holding the smallest and the largest value (the first of each when several
+ * share it), for the min/max markers (M3.3, ADR-052); null when there are no values. */
+export function extremeVertices(values: Float32Array): { min: number; max: number } | null {
+  if (values.length === 0) return null;
+  let min = 0;
+  let max = 0;
+  for (let v = 1; v < values.length; v++) {
+    const value = values[v] ?? 0;
+    if (value < (values[min] ?? 0)) min = v;
+    if (value > (values[max] ?? 0)) max = v;
+  }
+  return { min, max };
+}
+
+/**
+ * The corner of a triangle nearest a point on it: the vertex a probe picks (M3.3, ADR-052), so
+ * the probe shows the node's own value from the solver rather than one interpolated for display.
+ */
+export function nearestCorner(
+  positions: Float32Array,
+  indices: Uint32Array,
+  triangle: number,
+  point: readonly [number, number, number],
+): number {
+  let best = indices[triangle * 3] ?? 0;
+  let distance = Number.POSITIVE_INFINITY;
+  for (let k = 0; k < 3; k++) {
+    const v = indices[triangle * 3 + k] ?? 0;
+    const d = Math.hypot(
+      (positions[v * 3] ?? 0) - point[0],
+      (positions[v * 3 + 1] ?? 0) - point[1],
+      (positions[v * 3 + 2] ?? 0) - point[2],
+    );
+    if (d < distance) {
+      distance = d;
+      best = v;
+    }
+  }
+  return best;
+}

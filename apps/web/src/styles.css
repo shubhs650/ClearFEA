@@ -712,3 +712,91 @@ fieldset.field {
 .mesh-reused {
   margin: 0 0 8px;
 }
+
+/* Min/max markers and probes on the result view (M3.3): a dot at the node with its label
+   beside it, drawn over the canvas. */
+.viewer-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.viewer-marker {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.viewer-marker::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid #fff;
+  background: #212529;
+}
+
+.viewer-marker span {
+  position: absolute;
+  left: 7px;
+  top: -20px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  font-size: 12px;
+  background: rgb(255 255 255 / 90%);
+  border: 1px solid #212529;
+  border-radius: 3px;
+}
+
+.viewer-marker-max::before {
+  background: #c92a2a;
+}
+
+.viewer-marker-max span {
+  border-color: #c92a2a;
+}
+
+.viewer-marker-min::before {
+  background: #1864ab;
+}
+
+.viewer-marker-min span {
+  border-color: #1864ab;
+}
+
+.viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.viewer-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.viewer-probes {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  max-width: 50%;
+  max-height: 40%;
+  overflow: auto;
+  padding: 8px 10px;
+  background: rgb(255 255 255 / 85%);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.viewer-probes ol {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  line-height: 18px;
+}

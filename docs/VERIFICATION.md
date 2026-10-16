@@ -132,7 +132,7 @@ Playwright drives the real UI against the local system on tiny models. `make e2e
 
 | Test | Covers | Added in |
 | --- | --- | --- |
-| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
+| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance, read the min/max markers and probe a node (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
 | E-02 | Unit entry in mixed units and display-unit switch | M2 |
 | E-03 | Multi-body upload, review bonds, run | M4 |
 | E-04 | Thermal stress setup and result | M5 |

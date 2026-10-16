@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // E-01 (docs/VERIFICATION.md): upload, select faces, material, support, pressure, mesh, run, see
-// the contour and switch to other result quantities (M3.1), all through the UI. The model is a
+// the contour and switch to other result quantities (M3.1), read reactions (M3.2), and read the
+// min/max markers and probe a node (M3.3), all through the UI. The model is a
 // 40 × 20 × 10 mm block (e2e/block.py), fixed at its x = 40 mm end and pressed on its top face,
 // z = 10 mm. Both faces look towards the viewer's starting camera, so they can be clicked
 // without turning the model.
@@ -180,5 +181,27 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await expect(results).toContainText(/Out of balance.*force [\d.e-]+ % of [\d.]+ N, moment [\d.e-]+ % of [\d.]+ N·mm/);
     await results.getByText("Out of balance").scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${OUT}/e01-reactions.png` });
+  });
+
+  await test.step("read the min/max markers and probe a node on the top face (M3.3)", async () => {
+    await settings.getByLabel("Quantity").selectOption("vonMises");
+    const legend = page.getByRole("region", { name: "Legend", exact: true });
+    await expect(legend).toContainText("Von Mises stress (MPa)");
+    const number = (text: string | null) => Number(/(-?[\d.e+-]+) MPa/.exec(text ?? "")?.[1]);
+    const max = page.locator(".viewer-marker-max");
+    const min = page.locator(".viewer-marker-min");
+    await expect(max).toHaveText(/^Max [\d.e+-]+ MPa$/);
+    await expect(min).toHaveText(/^Min [\d.e+-]+ MPa$/);
+    const probes = page.getByRole("region", { name: "Probes", exact: true });
+    await expect(probes).toHaveText("Click the model to probe the value at the nearest node.");
+    await clickFace(page, top);
+    // A node of the top face: its undeformed z is 10 mm.
+    const row = probes.getByRole("listitem");
+    await expect(row).toHaveText(/^1: [\d.e+-]+ MPa at \([\d.e+-]+, [\d.e+-]+, 10\) mm$/);
+    await expect(page.locator(".viewer-marker-probe")).toHaveText(/^1: [\d.e+-]+ MPa$/);
+    const value = number(await row.textContent());
+    expect(value).toBeGreaterThanOrEqual(number(await min.textContent()));
+    expect(value).toBeLessThanOrEqual(number(await max.textContent()));
+    await page.screenshot({ path: `${OUT}/e01-probe.png` });
   });
 });

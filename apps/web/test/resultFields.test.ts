@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import {
+  extremeVertices,
+  nearestCorner,
   autoScale,
   BANDS,
   bandCoordinate,
@@ -110,5 +112,23 @@ describe("result view helpers", () => {
     const field = { kind: "length", components: 3, values: new Float32Array([1, 0, 0, 0, -1, 0.5]) };
     const moved = deformedPositions(new Float32Array([0, 0, 0, 1, 1, 1]), field, 2);
     expect([...moved]).toEqual([2, 0, 0, 1, -1, 2]);
+  });
+});
+
+describe("min/max and probe helpers (M3.3)", () => {
+  it("finds the first vertex of the smallest and of the largest value", () => {
+    expect(extremeVertices(new Float32Array([3, -1, 7, -1, 7]))).toEqual({ min: 1, max: 2 });
+    expect(extremeVertices(new Float32Array([2]))).toEqual({ min: 0, max: 0 });
+    expect(extremeVertices(new Float32Array([]))).toBeNull();
+  });
+
+  it("picks the corner of the hit triangle nearest the hit point", () => {
+    // Two triangles sharing the edge from vertex 1 to vertex 2.
+    const positions = new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0]);
+    const indices = new Uint32Array([0, 1, 2, 1, 3, 2]);
+    expect(nearestCorner(positions, indices, 0, [0.1, 0.2, 0])).toBe(0);
+    expect(nearestCorner(positions, indices, 0, [0.7, 0.2, 0])).toBe(1);
+    expect(nearestCorner(positions, indices, 1, [0.9, 0.8, 0])).toBe(3);
+    expect(nearestCorner(positions, indices, 1, [0.2, 0.9, 0])).toBe(2);
   });
 });
