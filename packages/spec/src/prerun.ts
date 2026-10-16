@@ -81,7 +81,9 @@ export function unheldBodyMessages(spec: SimulationSpec, topology?: TopologyTags
  */
 export function wrongAnalysisMessage(spec: SimulationSpec, item: Support | Load): string | null {
   const isSupport = (Object.keys(supportKinds) as string[]).includes(item.type);
-  if (!isSupport && analysisLoads[spec.analysis].includes(item.type as Load["type"])) return null;
+  if (isSupport ? spec.analysis === "linear_static" : analysisLoads[spec.analysis].includes(item.type as Load["type"])) {
+    return null;
+  }
   const kind = isSupport ? supportKinds[item.type as Support["type"]] : loadKinds[item.type as Load["type"]];
   const other = spec.analysis === "steady_thermal" ? "linear_static" : "steady_thermal";
   return `${kind} "${item.name}" has no effect in a ${analysisKinds[spec.analysis].toLowerCase()} analysis. Delete it, or set the analysis type to ${analysisKinds[other].toLowerCase()}.`;

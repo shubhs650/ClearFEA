@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The simulation tree (M1.5): geometry, then its bodies (M4.1) and their bonds (M4.2), materials, supports and loads with their items,
-// then the mesh (M1.6) with its local sizes (M2.8) and the run (M1.8).
+// The simulation tree (M1.5): geometry, the analysis type (M5.1), then its bodies (M4.1) and their bonds (M4.2), materials, supports
+// and loads with their items, then the mesh (M1.6) with its local sizes (M2.8) and the run (M1.8). A steady-state thermal
+// analysis has no supports, so their group is left out unless the setup still lists some to delete.
 // Each row carries a complete / incomplete / error mark; selecting a row opens its settings.
 
-import type { GeometryStatus, GeometryView } from "@clearfea/spec";
+import { type GeometryStatus, type GeometryView, isThermal, type SimulationSpec } from "@clearfea/spec";
 import type { ReactNode } from "react";
 import { bodyItem, type Group, type ItemStatus, type Mark } from "../setup/spec";
 import type { SaveState, Setup } from "../setup/useSimulation";
@@ -72,6 +73,11 @@ const groups: { group: Group; label: string }[] = [
   { group: "loads", label: "Loads" },
 ];
 
+/** The groups the tree shows: supports only for a linear static analysis, or while some are left. */
+function shownGroups(spec: SimulationSpec) {
+  return groups.filter(({ group }) => group !== "supports" || !isThermal(spec) || spec.supports.length > 0);
+}
+
 export function SimulationTree({
   geometry,
   setup,
@@ -112,6 +118,11 @@ export function SimulationTree({
         </li>
         {setup.kind === "open" && (
           <li>
+            <Row id="analysis" label="Analysis" status={statuses.get("analysis")} selected={selected} onSelect={onSelect} />
+          </li>
+        )}
+        {setup.kind === "open" && (
+          <li>
             <Row id="bodies" label="Bodies" status={statuses.get("bodies")} selected={selected} onSelect={onSelect} />
             <ul className="tree">
               {setup.spec.bodies.map((body) => (
@@ -135,7 +146,7 @@ export function SimulationTree({
           </li>
         )}
         {setup.kind === "open" &&
-          groups.map(({ group, label }) => {
+          shownGroups(setup.spec).map(({ group, label }) => {
             const items =
               group === "materials" ? setup.spec.materials : group === "supports" ? setup.spec.supports : setup.spec.loads;
             return (

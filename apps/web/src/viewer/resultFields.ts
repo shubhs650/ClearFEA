@@ -4,7 +4,7 @@
 // (worker/clearfea_worker/results/surface.py); both sides are tested against
 // packages/spec/fixtures/result-fields-three-vertices.bin. Values are SI throughout.
 
-import type { ResultQuantity } from "@clearfea/spec";
+import { type Deformation, type ResultQuantity, ResultQuantityValues, type RunView } from "@clearfea/spec";
 
 const MAGIC = "CFRF";
 const VERSION = 1;
@@ -71,11 +71,17 @@ export function parseResultFields(buffer: ArrayBuffer): ResultFields {
 }
 
 /** The quantities the result view can colour the model by (M1.9; components and principal
- * stresses since M3.1, ADR-050). Listed once in packages/spec/schemas/view.schema.json, since
- * a saved view keeps one (M3.6). */
-export type Quantity = ResultQuantity;
+ * stresses since M3.1, ADR-050; the temperature of a steady-state thermal run since M5.1).
+ * Listed in packages/spec/schemas/view.schema.json, since a saved view keeps one (M3.6); the
+ * temperature is not listed there yet, so a view of it is saved without its result display. */
+export type Quantity = ResultQuantity | "temperature";
 
-export type QuantityGroup = "Displacement" | "Stress" | "Strain" | "Safety factor";
+export type QuantityGroup = "Displacement" | "Stress" | "Strain" | "Safety factor" | "Temperature";
+
+/** True for a quantity a saved view can keep (view.schema.json's ResultQuantity). */
+export function isViewQuantity(quantity: Quantity): quantity is ResultQuantity {
+  return (ResultQuantityValues as readonly string[]).includes(quantity);
+}
 
 export type QuantityInfo = {
   label: string;
@@ -127,7 +133,38 @@ export const QUANTITIES: Record<Quantity, QuantityInfo> = {
     component: null,
     smallestRed: true,
   },
+  temperature: { label: "Temperature", kind: "temperature", group: "Temperature", field: "temperature", components: 1, component: null },
 };
+
+/**
+ * True for a run of a steady-state thermal analysis (M5.1, ADR-064): its only field is the
+ * temperature, with no displacement, stress or reactions.
+ */
+export function isThermalRun(run: Pick<RunView, "spec" | "result">): boolean {
+  return run.spec.analysis === "steady_thermal" || run.result?.temperature !== undefined;
+}
+
+/** The quantities a run has fields for, in menu order: the temperature alone for a thermal run. */
+export function runQuantities(run: Pick<RunView, "spec" | "result">): Quantity[] {
+  const all = Object.keys(QUANTITIES) as Quantity[];
+  return isThermalRun(run) ? ["temperature"] : all.filter((q) => q !== "temperature");
+}
+
+/**
+ * What the result view shows of a run: the chosen quantity when the run has it, else the run's
+ * first (von Mises stress, or the temperature of a thermal run); a thermal run has no
+ * displacement, so it is always drawn undeformed.
+ */
+export function runChoice<T extends { quantity: Quantity; deformation: Deformation }>(
+  run: Pick<RunView, "spec" | "result">,
+  choice: T,
+): T {
+  const thermal = isThermalRun(run);
+  const quantities = runQuantities(run);
+  const quantity = quantities.includes(choice.quantity) ? choice.quantity : thermal ? "temperature" : "vonMises";
+  const deformation = thermal ? "undeformed" : choice.deformation;
+  return quantity === choice.quantity && deformation === choice.deformation ? choice : { ...choice, quantity, deformation };
+}
 
 /** The largest safety factor the worker keeps; larger ones and unstressed nodes read as this
  * (ADR-054, worker/clearfea_worker/results/safety.py). */

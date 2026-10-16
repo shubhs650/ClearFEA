@@ -22,7 +22,7 @@ import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { BodiesPanel, BodyPanel } from "./setup/BodyPanels";
 import { BondsPanel } from "./setup/BondPanels";
-import { GroupPanel, LoadPanel, MaterialPanel, SupportPanel } from "./setup/ItemPanels";
+import { AnalysisPanel, GroupPanel, LoadPanel, MaterialPanel, SupportPanel } from "./setup/ItemPanels";
 import { MaterialChooser } from "./setup/MaterialLibrary";
 import { LocalSizePanel, MeshPanel } from "./setup/MeshPanel";
 import { useDisplayUnits } from "./setup/displayUnits";
@@ -50,6 +50,7 @@ import { useMesh } from "./setup/useMesh";
 import { useRun } from "./setup/useRun";
 import { useSimulation } from "./setup/useSimulation";
 import { UnitSystemField } from "./units/QuantityInput";
+import { runChoice } from "./viewer/resultFields";
 import { UNIT_SYSTEMS, UnitSystemProvider } from "./units/system";
 import { useProject } from "./units/useProject";
 
@@ -122,6 +123,9 @@ export function App() {
     signedOut,
   );
   const { run } = runs;
+  // What the result view shows: the chosen quantity and shape, as far as the run has them (a
+  // steady-state thermal run, M5.1, has the temperature alone, undeformed).
+  const shownChoice = run?.status === "succeeded" ? runChoice(run, resultChoice) : resultChoice;
   const project = useProject(session.kind === "signedIn", signedOut);
   const materials = useMaterials(setup.kind === "open", signedOut);
   const { unitSystem } = project;
@@ -315,7 +319,7 @@ export function App() {
           requesting={runs.requesting}
           requestProblem={runs.requestProblem}
           onRun={(machineSize) => void runs.start(machineSize)}
-          choice={resultChoice}
+          choice={shownChoice}
           onChoiceChange={setResultChoice}
         />
       );
@@ -332,6 +336,9 @@ export function App() {
           onShow={(faces) => setSelection(new Set(faces))}
         />
       );
+    }
+    if (selected === "analysis") {
+      return <AnalysisPanel spec={spec} status={status} onChange={change} />;
     }
     if (selected === "bodies") {
       return <BodiesPanel spec={spec} labels={bodyLabels} status={status} onChange={change} onOpen={select} />;
@@ -356,7 +363,7 @@ export function App() {
     if (GROUPS.includes(selected)) {
       const group = selected as Group;
       return (
-        <GroupPanel group={group} status={status} onAdd={(type) => add(group, type)}>
+        <GroupPanel group={group} status={status} analysis={spec.analysis} onAdd={(type) => add(group, type)}>
           {group === "materials" && (
             <MaterialChooser list={materials.list} onAdd={addFrom} onDelete={materials.remove} />
           )}
@@ -446,7 +453,7 @@ export function App() {
         mesh={!showGeometry && selected === "mesh" ? mesh : null}
         result={
           !showGeometry && selected === "run" && run?.status === "succeeded"
-            ? { run, ...resultChoice, units: resultUnits }
+            ? { run, ...shownChoice, units: resultUnits }
             : null
         }
         selection={selection}

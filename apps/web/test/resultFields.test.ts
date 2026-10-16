@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+import { emptySimulationSpec, ResultQuantityValues } from "@clearfea/spec";
 import { describe, expect, it } from "vitest";
 import {
   extremeVertices,
+  isThermalRun,
+  isViewQuantity,
+  runChoice,
+  runQuantities,
   nearestCorner,
   autoScale,
   BANDS,
@@ -76,8 +81,9 @@ describe("result view helpers", () => {
     expect([...quantityValues(stress, QUANTITIES.stressXX.component)]).toEqual([1, -1]);
     expect([...quantityValues(stress, QUANTITIES.stressXY.component)]).toEqual([4, -4]);
     expect([...quantityValues(stress, QUANTITIES.stressZX.component)]).toEqual([6, -6]);
-    // Every quantity names a field and component the worker writes (result-fields.md).
-    const written: Record<string, number> = { displacement: 3, vonMises: 1, stress: 6, principalStress: 3, strain: 6, safetyFactor: 1 };
+    // Every quantity names a field and component the worker writes (result-fields.md); the
+    // temperature is the only field of a steady-state thermal run (M5.1).
+    const written: Record<string, number> = { displacement: 3, vonMises: 1, stress: 6, principalStress: 3, strain: 6, safetyFactor: 1, temperature: 1 };
     for (const q of Object.values(QUANTITIES)) {
       expect(written[q.field]).toBe(q.components);
       expect(q.component === null || q.component < q.components).toBe(true);
@@ -130,5 +136,32 @@ describe("min/max and probe helpers (M3.3)", () => {
     expect(nearestCorner(positions, indices, 0, [0.7, 0.2, 0])).toBe(1);
     expect(nearestCorner(positions, indices, 1, [0.9, 0.8, 0])).toBe(3);
     expect(nearestCorner(positions, indices, 1, [0.2, 0.9, 0])).toBe(2);
+  });
+});
+
+describe("quantities of a run (M5.1)", () => {
+  const spec = emptySimulationSpec("g1", { bodies: [{ tag: 1 }], faces: [{ tag: 1 }] });
+  const staticRun = { spec, result: null };
+  const thermalRun = { spec: { ...spec, analysis: "steady_thermal" as const }, result: null };
+
+  it("offers a thermal run its temperature alone, and a static run everything else", () => {
+    expect(isThermalRun(thermalRun)).toBe(true);
+    expect(isThermalRun(staticRun)).toBe(false);
+    expect(runQuantities(thermalRun)).toEqual(["temperature"]);
+    expect(runQuantities(staticRun)).not.toContain("temperature");
+    expect(runQuantities(staticRun)[0]).toBe("displacement");
+    expect(QUANTITIES.temperature).toMatchObject({ label: "Temperature", kind: "temperature", group: "Temperature", field: "temperature" });
+  });
+
+  it("shows a thermal run's temperature undeformed, and keeps a static run's choice", () => {
+    const choice = { quantity: "vonMises" as const, deformation: "auto" as const };
+    expect(runChoice(thermalRun, choice)).toEqual({ quantity: "temperature", deformation: "undeformed" });
+    expect(runChoice(staticRun, choice)).toBe(choice);
+    expect(runChoice(staticRun, { quantity: "temperature", deformation: "true" })).toEqual({ quantity: "vonMises", deformation: "true" });
+  });
+
+  it("saves only the quantities a saved view can keep", () => {
+    expect(isViewQuantity("vonMises")).toBe(true);
+    expect(isViewQuantity("temperature")).toBe((ResultQuantityValues as readonly string[]).includes("temperature"));
   });
 });

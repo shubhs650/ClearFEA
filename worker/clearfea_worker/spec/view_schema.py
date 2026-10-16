@@ -52,9 +52,10 @@ type ResultQuantity = Literal[
     "strainYZ",
     "strainZX",
     "safetyFactor",
+    "temperature",
 ]
 """
-A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts).
+A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1).
 """
 
 
