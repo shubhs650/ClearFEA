@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """V-11 geometry: V-02's cantilever cut across at x = 3 in into two touching bodies, in inches.
 
-    uv run --directory worker python ../verification/cases/V-11-bonded-cantilever/geometry.py OUT.step
+    uv run --directory worker python ../verification/cases/V-11-bonded-blocks/geometry.py OUT.step
 
 10 in long (x from 0 to 10), 1 in by 1 in (y and z from 0 to 1), as two parts of an assembly:
 a root block from x = 0 to 3 in and an outer block from 3 to 10 in. They touch over the

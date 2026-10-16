@@ -58,8 +58,8 @@ Stress is checked away from supports and load application points unless the case
 | V-08 | Bar with ends restrained (frictionless ends, two symmetry planes), uniform temperature rise | Axial stress −EαΔT (von Mises, σxx, σ3 and end reactions ±EαΔT·A); sideways growth and total strain (1 + ν)αΔT | M2 |
 | V-09 | Symmetry model against full model: a quarter of V-01's tube on leaning symmetry planes and a frictionless base | Quarter model results equal the full tube's Lamé values; hoop force p·a·L on each cut plane | M2 |
 | V-10 | Column under self-weight, standing on a fixed base | Base reaction equals weight; stress ρg(h − z) on the side and, from the values at every node, inside at a quarter of the height (M3.4); top shortening ρgh²/2E | M2 |
-| V-11 | Two bonded blocks against one block | Displacement and stress away from the interface match the single body | M4 |
-| V-12 | Bi-material bar in tension | Series stiffness; uniform stress | M4 |
+| V-11 | Two bonded blocks against one block: V-02's cantilever cut across at x = 3 in into two bodies, the root block meshed finer | V-02's single-body Timoshenko values: tip deflection, bending stress 2 in past the bond, clamp reaction through the bond | M4 |
+| V-12 | Bi-material bar in tension: a quarter of a bar of two materials with the same ν/E bonded end to end, on symmetry planes crossing the bond, meshed differently each side | Series stiffness: end displacement σ(L1/E1 + L2/E2); uniform stress F/A and strain σ/E in each body; equal sideways contraction; end reaction | M4 |
 | V-13 | Plane wall conduction | Linear temperature profile; flux kΔT/L | M5 |
 | V-14 | Cylinder wall conduction | Logarithmic profile; heat flow 2πkLΔT/ln(ro/ri) | M5 |
 | V-15 | Wall with convection on both sides | Flux ΔT/(1/h₁ + L/k + 1/h₂); surface temperatures | M5 |
