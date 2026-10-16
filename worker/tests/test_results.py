@@ -661,7 +661,7 @@ def test_modal_summary_gives_each_mode_in_hertz_and_rigid_body_modes_signed() ->
     spec = SimulationSpec.model_validate(modal_free_spec())
     mesh = bonded_tets(2)
     dat = MODAL / "modal-free-bonded-c3d10.dat"
-    fields, result = read_results(spec, mesh, MODAL / "absent.frd", dat, "2.21")
+    fields, result = read_results(spec, mesh, MODAL / "modal-free-bonded-c3d10.frd", dat, "2.21")
     assert isinstance(fields, ModalFields) and fields.node_count == mesh.node_count
     frequencies = result.frequencies
     assert frequencies is not None and len(frequencies) == 8
@@ -675,12 +675,78 @@ def test_modal_summary_gives_each_mode_in_hertz_and_rigid_body_modes_signed() ->
     assert result.displacement is None and result.reactions is None and result.balance is None
 
 
-def test_modal_run_writes_viewer_files_without_fields(tmp_path: Path) -> None:
+def test_modal_run_reads_each_mode_shape_scaled_to_one_and_signed() -> None:
+    # M6.2, ADR-071. Solved by ccx 2.21 (SPOOLES) from snapshot modal-c3d10: four modes.
+    from .test_deck import modal_spec
+
+    spec = SimulationSpec.model_validate(modal_spec())
+    mesh = two_tets(order=2)
+    fields, result = read_results(
+        spec, mesh, MODAL / "modal-c3d10.frd", MODAL / "modal-c3d10.dat", "2.21"
+    )
+    assert isinstance(fields, ModalFields) and len(fields.shapes) == 4
+    raw = read_nodal_blocks_all(MODAL / "modal-c3d10.frd", mesh.node_count)
+    for shape, block in zip(fields.shapes, raw, strict=True):
+        assert len(shape) == 3 * mesh.node_count
+        sizes = [math.hypot(*shape[3 * n : 3 * n + 3]) for n in range(mesh.node_count)]
+        assert max(sizes) == pytest.approx(1.0, rel=1e-6)
+        top = sizes.index(max(sizes))
+        assert max(shape[3 * top : 3 * top + 3], key=abs) > 0
+        # The same shape as CalculiX's eigenvector, to float32: one factor for every value.
+        k = max(range(len(block)), key=lambda i: abs(block[i]))
+        factor = shape[k] / block[k]
+        for a, b in zip(shape, block, strict=True):
+            assert a == pytest.approx(factor * b, abs=1e-6)
+    assert result.frequencies is not None and len(result.frequencies) == 4
+
+
+def read_nodal_blocks_all(path: Path, node_count: int) -> list[list[float]]:
+    from clearfea_worker.results.frd import iter_nodal_blocks
+
+    return [list(b.values) for b in iter_nodal_blocks(path, node_count, {"DISP"})]
+
+
+def test_normalized_shape_flips_a_mode_whose_largest_component_is_negative() -> None:
+    from array import array
+
+    from clearfea_worker.results.modal import normalized_shape
+
+    shape = normalized_shape(array("d", [0.0, 0.0, 0.5, 0.0, -2.0, 0.0]), 2)
+    assert list(shape) == [0.0, -0.0, -0.25, -0.0, 1.0, -0.0]
+    assert list(normalized_shape(array("d", [0.0] * 6), 2)) == [0.0] * 6
+
+
+def test_a_result_file_with_too_few_mode_shapes_is_refused() -> None:
+    from clearfea_worker.results.modal import read_mode_shapes
+
+    mesh = two_tets(order=2)
+    with pytest.raises(FrdError, match="4 mode shapes for 5 frequencies"):
+        read_mode_shapes(MODAL / "modal-c3d10.frd", mesh.node_count, 5)
+
+
+def test_modal_run_writes_one_field_per_mode(tmp_path: Path) -> None:
+    from .test_deck import modal_free_spec
+
+    spec = SimulationSpec.model_validate(modal_free_spec())
     mesh = bonded_tets(2)
-    files = write_viewer_files(mesh, ModalFields(mesh.node_count), tmp_path)
-    vertices, fields = read_fields_file(files.fields_path)
-    assert vertices > 0 and fields == []
-    assert read_fields_file(files.nodes_path) == (mesh.node_count, [])
+    fields, _ = read_results(
+        spec,
+        mesh,
+        MODAL / "modal-free-bonded-c3d10.frd",
+        MODAL / "modal-free-bonded-c3d10.dat",
+        "2.21",
+    )
+    files = write_viewer_files(mesh, fields, tmp_path)
+    vertices, surface = read_fields_file(files.fields_path)
+    assert vertices > 0
+    assert [(f.name, f.kind, f.components) for f in surface] == [
+        (f"mode{k}", "ratio", 3) for k in range(1, 9)
+    ]
+    count, nodes = read_fields_file(files.nodes_path)
+    assert count == mesh.node_count
+    assert isinstance(fields, ModalFields)
+    for field, shape in zip(nodes, fields.shapes, strict=True):
+        assert field.values == shape
 
 
 def test_a_dat_file_without_eigenvalues_is_refused() -> None:

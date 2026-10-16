@@ -17,6 +17,7 @@ Values are written as E12.5, so every value carries five significant digits.
 
 import math
 from array import array
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,13 +55,12 @@ def _floats(text: str, line_no: int) -> list[float]:
     return values
 
 
-def read_nodal_blocks(path: Path, node_count: int, names: set[str]) -> dict[str, NodalBlock]:
-    """The last block of each of ``names`` in the file, sized for ``node_count`` nodes.
+def iter_nodal_blocks(path: Path, node_count: int, names: set[str]) -> Iterator[NodalBlock]:
+    """Each block of ``names`` in the file, in file order, sized for ``node_count`` nodes.
 
-    For a linear static analysis there is one block of each; taking the last keeps the final
-    increment if there are more. Raises FrdError if a block is missing or malformed.
+    A modal run writes one ``DISP`` block per mode (M6.2), so the blocks are handed on one at
+    a time and only the current one is held. Raises FrdError if a block is malformed.
     """
-    found: dict[str, NodalBlock] = {}
     name: str | None = None
     components: list[str] = []
     width = _NODE_WIDTH[1]
@@ -121,8 +121,19 @@ def read_nodal_blocks(path: Path, node_count: int, names: set[str]) -> dict[str,
             elif key == " -3":
                 if values is not None and name is not None:
                     store()
-                    found[name] = NodalBlock(name, tuple(components), values)
+                    yield NodalBlock(name, tuple(components), values)
                 name, components, values, node, current = None, [], None, -1, []
+
+
+def read_nodal_blocks(path: Path, node_count: int, names: set[str]) -> dict[str, NodalBlock]:
+    """The last block of each of ``names`` in the file, sized for ``node_count`` nodes.
+
+    For a linear static analysis there is one block of each; taking the last keeps the final
+    increment if there are more. Raises FrdError if a block is missing or malformed.
+    """
+    found: dict[str, NodalBlock] = {}
+    for block in iter_nodal_blocks(path, node_count, names):
+        found[block.name] = block
     absent = sorted(names - set(found))
     if absent:
         raise FrdError(f"The result file has no {', '.join(absent)} block.")

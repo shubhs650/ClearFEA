@@ -55,7 +55,7 @@ class Check:
     support: str | None = None  # the spec support id of a reaction check
     inside: bool = False  # read at the mesh nodes in the box, not on a face (M3.4)
     load: str | None = None  # the spec load id of a heat flow check (M5.3)
-    mode: int | None = None  # the mode number of a frequency check, from 1 (M6.1)
+    mode: int | None = None  # the mode of a frequency (M6.1) or mode shape (M6.2) check, from 1
     relative_to: int | None = None  # a frequency check measured against this mode's frequency
 
 
@@ -83,9 +83,14 @@ TENSOR = ("xx", "yy", "zz", "xy", "yz", "zx")
 #: run's field (M3.5, ADR-054). The temperature is a steady-state thermal run's field, absolute,
 #: in kelvin (M5.1, ADR-064), and so is its heat flux, q = -k grad T, in W/m² (M5.3). A heat
 #: flow is one thermal load's net heat into the body in the run's result, in watts (M5.3). A
-#: frequency is one mode's natural frequency in a modal run's result, in hertz (M6.1).
+#: frequency is one mode's natural frequency in a modal run's result, in hertz (M6.1). A mode
+#: shape component is one mode's field of a modal run, scaled to a largest displacement of 1
+#: and signed so the largest component where it moves most is positive (M6.2, ADR-071).
 QUANTITIES = {
     "frequency": "frequency",
+    "modeShape.x": "ratio",
+    "modeShape.y": "ratio",
+    "modeShape.z": "ratio",
     "temperature": "temperature",
     "heatFlux": "heatFlux",
     "heatFlux.x": "heatFlux",
@@ -172,6 +177,12 @@ def load_case(folder: Path) -> Case:
                     f"{folder.name}: check {item['name']!r} has a zero reference; give relativeTo, "
                     "the mode its error is measured against."
                 )
+        elif quantity.startswith("modeShape.") and (
+            (mode := _mode(item, "mode", folder)) is None or item.get("face") not in faces
+        ):
+            raise CaseError(
+                f"{folder.name}: check {item['name']!r} must name its mode and a known face."
+            )
         elif quantity == "heatFlow":
             load = item.get("load")
             if load not in {x["id"] for x in spec["loads"]}:
@@ -270,8 +281,14 @@ def build_spec(case: Case, tags: dict[str, int], geometry_id: str, tier: str) ->
 
 
 def _value(
-    quantity: str, p: tuple[float, ...], fields: dict[str, list[tuple[float, ...]]], v: int
+    quantity: str,
+    p: tuple[float, ...],
+    fields: dict[str, list[tuple[float, ...]]],
+    v: int,
+    mode: int | None = None,
 ) -> float:
+    if quantity.startswith("modeShape."):
+        return fields[f"mode{mode}"][v]["xyz".index(quantity[-1])]
     if quantity in ("vonMises", "safetyFactor", "temperature"):
         return fields[quantity][v][0]
     field, _, part = quantity.partition(".")
@@ -304,7 +321,7 @@ def evaluate(
         for v in range(patch.first_vertex, patch.first_vertex + patch.vertex_count):
             p = surface.positions[v]
             if check.box is None or check.box.holds(p):
-                values.append(_value(check.quantity, p, fields, v))
+                values.append(_value(check.quantity, p, fields, v, check.mode))
     if not values:
         raise CaseError(
             f"No surface vertex of face {check.face} lies in the box of {check.name!r}."
@@ -321,7 +338,9 @@ def evaluate_inside(
     mesh.bin and nodes.bin: the values a cut plane draws (M3.4, ADR-053)."""
     assert check.inside and check.box is not None
     values = [
-        _value(check.quantity, p, fields, n) for n, p in enumerate(positions) if check.box.holds(p)
+        _value(check.quantity, p, fields, n, check.mode)
+        for n, p in enumerate(positions)
+        if check.box.holds(p)
     ]
     if not values:
         raise CaseError(f"No mesh node lies in the box of {check.name!r}.")

@@ -1,15 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-# V-20: natural frequencies of a cantilever (M6.1).
+# V-20: natural frequencies of a cantilever (M6.1) and its mode shapes (M6.2).
 # Reference values and their derivation: reference.md. Layout: verification/README.md.
 id: V-20
 title: Cantilever beam frequencies
 analysis: modal
-features: [modal analysis, fixed support, density, mixed input units]
+features: [modal analysis, mode shapes, fixed support, density, mixed input units]
 geometry:
   unit: mm
 # Each face by its bounding box, in the geometry's unit.
 faces:
   root: { min: [0, 0, 0], max: [0, 16, 8] }
+  top: { min: [0, 0, 8], max: [800, 16, 8] }
+  side: { min: [0, 16, 0], max: [800, 16, 8] }
 # Two and four elements through the 8 mm depth.
 mesh:
   coarse: { value: 4, unit: mm }
@@ -41,4 +43,27 @@ checks:
     quantity: frequency
     mode: 5
     reference: { value: 178.848477, unit: Hz }
+    tolerance: { coarse: 0.005, full: 0.003 }
+# Mode shapes (M6.2, ADR-071): each scaled to a largest displacement of 1, at the tip, signed
+# so the tip moves the positive way; read at mid-span, x from 396 to 404 mm.
+  - name: First bending mode in z, shape at mid-span
+    quantity: modeShape.z
+    mode: 1
+    face: top
+    box: { min: [396, 0, 8], max: [404, 16, 8] }
+    reference: { value: 0.3395231, unit: "1" }
+    tolerance: { coarse: 0.005, full: 0.003 }
+  - name: First bending mode in y, shape at mid-span
+    quantity: modeShape.y
+    mode: 2
+    face: side
+    box: { min: [396, 16, 0], max: [404, 16, 8] }
+    reference: { value: 0.3395231, unit: "1" }
+    tolerance: { coarse: 0.005, full: 0.003 }
+  - name: Second bending mode in z, shape at mid-span
+    quantity: modeShape.z
+    mode: 3
+    face: top
+    box: { min: [396, 0, 8], max: [404, 16, 8] }
+    reference: { value: -0.7136658, unit: "1" }
     tolerance: { coarse: 0.005, full: 0.003 }

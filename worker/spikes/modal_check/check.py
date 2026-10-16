@@ -7,7 +7,9 @@ reader, and compare the natural frequencies of a slender bar with Euler-Bernoull
 Script only, not part of the worker package or its tests (the fast tier runs no solver). It
 checks what the platform path cannot see exactly: the frequency step and its solver, the units
 of density and stiffness through to the eigenvalues, how the reader turns them into hertz, and
-the six rigid-body modes of a free body.
+the six rigid-body modes of a free body. Since M6.2 (ADR-071) it also checks the cantilever's
+mode shapes the reader keeps, scaled to a largest displacement of 1, at mid-span against the
+beam's.
 
     cd worker && uv run python spikes/modal_check/check.py [--out DIR] [--size MM]
 
@@ -92,7 +94,26 @@ def spec(supports: list[dict], modes: int) -> SimulationSpec:
     )
 
 
-def solve(setup: SimulationSpec, mesh, work: Path) -> list[float]:  # type: ignore[no-untyped-def]
+def cantilever_shape(beta_l: float, x: float) -> float:
+    """The Euler-Bernoulli cantilever's mode shape at x / L, over its value at the tip."""
+    b = beta_l
+    sigma = (math.cosh(b) + math.cos(b)) / (math.sinh(b) + math.sin(b))
+
+    def phi(t: float) -> float:
+        return math.cosh(b * t) - math.cos(b * t) - sigma * (math.sinh(b * t) - math.sin(b * t))
+
+    return phi(x) / phi(1.0)
+
+
+def mid_span(mesh, shape, axis: int) -> float:  # type: ignore[no-untyped-def]
+    """The mean of a mode shape's component along ``axis`` over the nodes within 2 mm of
+    mid-span."""
+    p = mesh.positions
+    near = [n for n in range(mesh.node_count) if abs(p[3 * n] - L / 2000) <= 0.002]
+    return sum(shape[3 * n + axis] for n in near) / len(near)
+
+
+def solve(setup: SimulationSpec, mesh, work: Path):  # type: ignore[no-untyped-def]
     work.mkdir(exist_ok=True)
     (work / "job.inp").write_text(generate_deck(setup, mesh, solver="SPOOLES"))
     run = subprocess.run(["ccx", "-i", "job"], cwd=work, capture_output=True, text=True)
@@ -101,9 +122,9 @@ def solve(setup: SimulationSpec, mesh, work: Path) -> list[float]:  # type: igno
     warnings = [line for line in run.stdout.splitlines() if "WARNING" in line]
     if warnings:
         raise RuntimeError(f"CalculiX warned: {warnings[:3]}")
-    _, result = read_results(setup, mesh, work / "job.frd", work / "job.dat", "check")
+    fields, result = read_results(setup, mesh, work / "job.frd", work / "job.dat", "check")
     assert result.frequencies is not None
-    return result.frequencies
+    return result.frequencies, fields
 
 
 def main() -> int:
@@ -140,7 +161,7 @@ def main() -> int:
     mesh = read_volume_mesh(out.mesh_path)
     print(f"C3D10, {mesh.element_count} elements of {args.size:g} mm")
     fixed = [{"id": "root", "type": "fixed", "name": "Root", "faces": [root_face]}]
-    f = solve(spec(fixed, 5), mesh, root / "cantilever")
+    f, shapes = solve(spec(fixed, 5), mesh, root / "cantilever")
     print(f"cantilever: {', '.join(f'{x:.5g}' for x in f)}")
     # Bending in z (depth H) then in y (depth B), interleaved: z1, y1, z2, y2, z3.
     expected = [
@@ -152,15 +173,28 @@ def main() -> int:
     ]
     for k, (value, reference) in enumerate(zip(f, expected, strict=True)):
         report(f"cantilever mode {k + 1}", value, reference, TOLERANCE)
+    # Mode shapes (M6.2): each scaled to 1 where it moves most, the tip, and signed so the tip
+    # moves the positive way.
+    for mode, beta_l, axis in ((1, CANTILEVER[0], 2), (2, CANTILEVER[0], 1), (3, CANTILEVER[1], 2)):
+        value = mid_span(mesh, shapes.shapes[mode - 1], axis)
+        reference = cantilever_shape(beta_l, 0.5)
+        error = value / reference - 1
+        ok = abs(error) <= TOLERANCE
+        failed |= not ok
+        print(
+            f"  {'ok  ' if ok else 'FAIL'} cantilever mode {mode} shape at mid-span, "
+            f"{'xyz'[axis]}: {value:.6g} against {reference:.6g} "
+            f"({100 * error:+.3f} %, tolerance {100 * TOLERANCE:g} %)"
+        )
     both = [*fixed, {"id": "tip", "type": "fixed", "name": "Tip", "faces": [tip_face]}]
-    f = solve(spec(both, 3), mesh, root / "clamped")
+    f, _ = solve(spec(both, 3), mesh, root / "clamped")
     print(f"clamped-clamped: {', '.join(f'{x:.5g}' for x in f)}")
     expected = [beam(CLAMPED[0], H), beam(CLAMPED[0], B), beam(CLAMPED[1], H)]
     for k, (value, reference) in enumerate(zip(f, expected, strict=True)):
         report(f"clamped-clamped mode {k + 1}", value, reference, TOLERANCE)
     # Free: six rigid-body modes, then the free-free bending modes, whose βL are the
     # clamped-clamped ones.
-    f = solve(spec([], 8), mesh, root / "free")
+    f, _ = solve(spec([], 8), mesh, root / "free")
     print(f"free: {', '.join(f'{x:.5g}' for x in f)}")
     rigid = max(abs(x) for x in f[:6])
     ok = rigid <= 1e-3 * f[6]

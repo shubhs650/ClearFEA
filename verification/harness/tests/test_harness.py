@@ -19,6 +19,7 @@ from harness.cases import (
     Case,
     CaseError,
     Check,
+    _value,
     applied_heat,
     applied_load,
     balance,
@@ -824,13 +825,46 @@ def test_modal_references_are_euler_bernoulli_beam_frequencies() -> None:
     for folder, modes in expected.items():
         case = load_case(CASES / folder)
         assert case.spec["analysis"] == "modal" and case.spec["modes"] == len(modes)
-        checks = sorted(case.checks, key=lambda c: c.mode or 0)
+        frequencies = [c for c in case.checks if c.quantity == "frequency"]
+        checks = sorted(frequencies, key=lambda c: c.mode or 0)
         assert [c.mode for c in checks] == list(range(1, len(modes) + 1))
         for check, mode in zip(checks, modes, strict=True):
             if mode is None:
                 assert check.reference == 0.0 and check.relative_to == 7
                 continue
             assert check.reference == pytest.approx(_bar_frequency(*mode, case.spec), rel=2e-8)
+
+
+def _cantilever_shape(beta_l: float, x: float) -> float:
+    """The Euler-Bernoulli cantilever's mode shape at x / L over its value at the tip."""
+    sigma = (math.cosh(beta_l) + math.cos(beta_l)) / (math.sinh(beta_l) + math.sin(beta_l))
+
+    def phi(t: float) -> float:
+        b = beta_l * t
+        return math.cosh(b) - math.cos(b) - sigma * (math.sinh(b) - math.sin(b))
+
+    return phi(x) / phi(1.0)
+
+
+def test_mode_shape_references_are_the_cantilevers_at_mid_span() -> None:
+    # M6.2, ADR-071: mode 1 bends in z, mode 2 in y, mode 3 is the second bending mode in z.
+    cantilever = _beam_roots(True)
+    case = load_case(CASES / "V-20-cantilever-frequencies")
+    shapes = {c.mode: c for c in case.checks if c.quantity.startswith("modeShape.")}
+    expected = {1: ("z", cantilever[0]), 2: ("y", cantilever[0]), 3: ("z", cantilever[1])}
+    assert sorted(shapes) == sorted(expected)
+    for mode, (axis, beta_l) in expected.items():
+        check = shapes[mode]
+        assert check.quantity == f"modeShape.{axis}"
+        assert check.box is not None
+        assert check.box.lo[0] == pytest.approx(0.396) and check.box.hi[0] == pytest.approx(0.404)
+        assert check.reference == pytest.approx(_cantilever_shape(beta_l, 0.5), rel=1e-6)
+
+
+def test_a_mode_shape_check_reads_its_modes_field() -> None:
+    check = Check("s", "modeShape.y", "top", None, 0.5, "1", {"coarse": 0.01}, mode=2)
+    fields = {"mode1": [(1.0, 0.0, 0.0)], "mode2": [(0.0, 0.25, 0.0)]}
+    assert _value(check.quantity, (0.0, 0.0, 0.0), fields, 0, check.mode) == 0.25
 
 
 def test_frequency_error_is_relative_or_against_another_mode() -> None:
@@ -853,6 +887,14 @@ def test_frequency_error_is_relative_or_against_another_mode() -> None:
         (
             "{name: f, quantity: frequency, mode: 1, reference: {value: 0, unit: Hz}}",
             "give relativeTo",
+        ),
+        (
+            "{name: s, quantity: modeShape.z, face: top, reference: {value: 1, unit: '1'}}",
+            "must name its mode and a known face",
+        ),
+        (
+            "{name: s, quantity: modeShape.z, mode: 1, reference: {value: 1, unit: '1'}}",
+            "must name its mode and a known face",
         ),
     ],
 )
