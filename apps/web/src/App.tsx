@@ -127,6 +127,7 @@ export function App() {
       force: systemUnit(unitSystem, "force"),
       moment: systemUnit(unitSystem, "moment"),
       strain: systemUnit(unitSystem, "strain"),
+      ratio: systemUnit(unitSystem, "ratio"),
     }),
     [unitSystem],
   );

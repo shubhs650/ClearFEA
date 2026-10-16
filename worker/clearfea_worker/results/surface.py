@@ -10,15 +10,17 @@ results pipeline step 3. Two files per run for the surface:
   and curved faces stay curved.
 - ``fields.bin`` (packages/spec/result-fields.md): the value of each field at each vertex of
   surface.bin, in SI, as float32: displacement (x, y, z), von Mises stress, and since M3.1 the
-  stress components, the principal stresses and the total strain components (ADR-050).
+  stress components, the principal stresses and the total strain components (ADR-050), and
+  since M3.5 the safety factor against yield when the setup gives every material a yield
+  strength (ADR-054).
 
 Since M3.4 a third file, ``nodes.bin``, holds the same fields at every node of the mesh in the
 same format (vertex v is mesh node v of mesh.bin), so the viewer can draw them on a cut plane
 (ADR-053).
 
 No value is computed here: each vertex takes its node's value from the result reader, so the
-viewer shows exactly the nodal values CalculiX wrote (and von Mises and the principal stresses
-derived from them).
+viewer shows exactly the nodal values CalculiX wrote (and von Mises, the principal stresses and
+the safety factor derived from them).
 """
 
 import struct
@@ -114,6 +116,11 @@ def node_fields(fields: NodalFields) -> list[SurfaceField]:
         SurfaceField("stress", "pressure", 6, array("f", fields.stress)),
         SurfaceField("principalStress", "pressure", 3, array("f", principal_field(fields))),
         SurfaceField("strain", "strain", 6, array("f", fields.strain)),
+        *(
+            [SurfaceField("safetyFactor", "ratio", 1, array("f", fields.safety_factor))]
+            if fields.safety_factor is not None
+            else []
+        ),
     ]
 
 

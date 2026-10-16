@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // E-01 (docs/VERIFICATION.md): upload, select faces, material, support, pressure, mesh, run, see
 // the contour and switch to other result quantities (M3.1), read reactions (M3.2), and read the
-// min/max markers and probe a node (M3.3), and cut it with a plane (M3.4), all through the UI. The model is a
+// min/max markers and probe a node (M3.3), cut it with a plane (M3.4) and show the safety factor against
+// yield (M3.5), all through the UI. The model is a
 // 40 × 20 × 10 mm block (e2e/block.py), fixed at its x = 40 mm end and pressed on its top face,
 // z = 10 mm. Both faces look towards the viewer's starting camera, so they can be clicked
 // without turning the model.
@@ -101,6 +102,8 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await material.getByLabel("Young's modulus", { exact: true }).fill("200");
     await material.getByLabel("Young's modulus unit").selectOption("GPa");
     await material.getByLabel("Poisson's ratio").fill("0.3");
+    await material.getByLabel("Yield strength", { exact: true }).fill("250");
+    await material.getByLabel("Yield strength unit").selectOption("MPa");
     await expect(material.getByRole("checkbox", { name: "Body 1" })).toBeChecked();
     await saved(page);
   });
@@ -221,5 +224,27 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await expect(cut).toContainText(/Cuts [\d,]+ elements\./);
     await expect(page.locator("body")).not.toContainText(/\b(PASS|FAIL)\b|compliant/i);
     await page.screenshot({ path: `${OUT}/e01-cut-y.png` });
+  });
+
+  await test.step("show the safety factor against yield (M3.5)", async () => {
+    await page.getByRole("checkbox", { name: "Cut plane", exact: true }).uncheck();
+    const quantity = settings.getByLabel("Quantity");
+    const max = page.locator(".viewer-marker-max");
+    const min = page.locator(".viewer-marker-min");
+    await quantity.selectOption("vonMises");
+    await expect(max).toHaveText(/^Max [\d.e+-]+ MPa$/);
+    const largestStress = Number(/Max ([\d.e+-]+) MPa/.exec((await max.textContent()) ?? "")?.[1]);
+    await quantity.selectOption("safetyFactor");
+    const legend = page.getByRole("region", { name: "Legend", exact: true });
+    await expect(legend).toContainText("Safety factor against yield");
+    await expect(legend).not.toContainText("Safety factor against yield (");
+    // A number without a unit; the smallest factor sits where von Mises is largest: 250 MPa over it.
+    await expect(min).toHaveText(/^Min [\d.e+-]+$/);
+    const smallest = Number(/Min ([\d.e+-]+)/.exec((await min.textContent()) ?? "")?.[1]);
+    expect(Math.abs(smallest - 250 / largestStress) / smallest).toBeLessThan(2e-3);
+    const results = settings.getByLabel("Run results");
+    await expect(results).toContainText(/Smallest safety factor against yield[\d.]+ at \(.*\) mm/);
+    await expect(page.locator("body")).not.toContainText(/\b(PASS|FAIL)\b|compliant/i);
+    await page.screenshot({ path: `${OUT}/e01-safety.png` });
   });
 });

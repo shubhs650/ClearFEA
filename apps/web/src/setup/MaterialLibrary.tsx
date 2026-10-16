@@ -39,6 +39,14 @@ export function MaterialValues({ material }: { material: IsotropicMaterial }) {
           "Not given; enter it for a temperature change."
         )}
       </dd>
+      <dt>Yield strength</dt>
+      <dd>
+        {material.yieldStrength ? (
+          <QuantityText quantity={material.yieldStrength} kind="pressure" />
+        ) : (
+          "Not given; enter it for the safety factor against yield."
+        )}
+      </dd>
       <dt>Source</dt>
       <dd>{material.source ?? "Not recorded"}</dd>
     </dl>
@@ -104,7 +112,7 @@ export function MaterialChooser({
       <MaterialValues material={material} />
       {!custom && (
         <p className="field-hint">
-          Generic values for linear analysis, not minimum or design values. Check them against your material's own data.
+          Generic values for linear analysis. The yield strength is the handbook's minimum for the product named in the source; other tempers and thicknesses differ. Check them against your material's own data.
         </p>
       )}
       <div className="field-actions">

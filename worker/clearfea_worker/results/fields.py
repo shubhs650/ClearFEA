@@ -26,12 +26,15 @@ STRAIN = ("EXX", "EYY", "EZZ", "EXY", "EYZ", "EZX")
 @dataclass(frozen=True)
 class NodalFields:
     """``displacement[3 n + i]`` (m), ``stress[6 n + i]`` (Pa, in STRESS order) and
-    ``strain[6 n + i]`` (m/m, in STRAIN order, tensor shear components) of node n."""
+    ``strain[6 n + i]`` (m/m, in STRAIN order, tensor shear components) of node n, and since
+    M3.5 ``safety_factor[n]``, its safety factor against yield (results.safety), when every
+    material of the setup has a yield strength."""
 
     node_count: int
     displacement: array
     stress: array
     strain: array
+    safety_factor: array | None = None
 
 
 def von_mises(sxx: float, syy: float, szz: float, sxy: float, syz: float, szx: float) -> float:

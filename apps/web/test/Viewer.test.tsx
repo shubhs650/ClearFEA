@@ -292,7 +292,7 @@ const results = {
   "/api/geometries/g1/topology": { status: 200, json: topology },
 };
 
-const UNITS = { length: "mm", pressure: "MPa", strain: "mm/mm" };
+const UNITS = { length: "mm", pressure: "MPa", strain: "mm/mm", ratio: "1" };
 
 function ResultHarness({ quantity, deformation }: { quantity: Quantity; deformation: Deformation }) {
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
@@ -375,6 +375,39 @@ describe("result view", () => {
     );
     rerender(<ResultHarness quantity="vonMises" deformation="auto" />);
     expect((await screen.findByLabelText("Legend")).textContent).toContain("Von Mises stress (MPa)");
+  });
+
+  it("draws the safety factor with the smallest values red, without a unit, and notes the cap", async () => {
+    serve({ ...results, "/api/runs/r1/fields": { status: 200, bytes: twoFacesFields({ safety: true }) } });
+    render(<ResultHarness quantity="safetyFactor" deformation="undeformed" />);
+    const legend = await screen.findByLabelText("Legend");
+    expect(legend.querySelector(".viewer-legend-title")?.textContent).toBe("Safety factor against yield");
+    const rows = [...legend.querySelectorAll("li")];
+    expect(rows[0]?.textContent).toBe("13.64 to 15");
+    expect(rows[8]?.textContent).toBe("2.778 to 4.136");
+    // The smallest band (bottom row) is red, the largest blue.
+    expect(rows[8]?.querySelector("span")?.getAttribute("style")).toContain("rgb(255, 0, 0)");
+    expect(rows[0]?.querySelector("span")?.getAttribute("style")).toContain("rgb(0, 0, 255)");
+    expect(legend.textContent).toContain("Factors of 15 and more are shown as 15");
+    expect(legend.textContent).not.toMatch(/pass|fail|complian|safe\b/i);
+    const view = scene.instances[0];
+    await vi.waitFor(() => expect(view?.markers.at(-1)).toHaveLength(2));
+    expect(view?.markers.at(-1)).toEqual([
+      { vertex: 0, kind: "max", text: "Max 15" },
+      { vertex: 6, kind: "min", text: "Min 2.778" },
+    ]);
+    // Reversed bands: the smallest factor (vertex 6) sits at the red end, coordinate 1.
+    const coordinates = [...(view?.bands.at(-1) ?? [])];
+    expect(coordinates[6]).toBe(1);
+    expect(coordinates[0]).toBe(0);
+  });
+
+  it("says why a run has no safety factor", async () => {
+    serve(results);
+    render(<ResultHarness quantity="safetyFactor" deformation="auto" />);
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "This run has no safety factor against yield. It needs a yield strength for every material, and runs solved before ClearFEA worked it out have none. Enter the yield strength under Materials and run the simulation again.",
+    );
   });
 
   it("marks the smallest and largest value of the quantity shown, and hides the marks on request", async () => {

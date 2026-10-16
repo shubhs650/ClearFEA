@@ -9,7 +9,8 @@
       "name": "Steel (case value)",
       "model": "isotropic_elastic",
       "youngsModulus": { "value": 29000, "unit": "ksi" },
-      "poissonsRatio": 0.29
+      "poissonsRatio": 0.29,
+      "yieldStrength": { "value": 36, "unit": "ksi" }
     }
   ],
   "supports": [

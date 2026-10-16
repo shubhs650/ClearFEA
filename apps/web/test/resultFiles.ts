@@ -33,8 +33,10 @@ export function encodeFields(vertexCount: number, fields: TestField[]): ArrayBuf
 /** Fields for the 7 vertices of display-two-faces.bin: x displacement 0 to 0.6 mm, von Mises
  * 0 to 90 MPa, both rising with the vertex index. Unless `before31`, also the M3.1 fields:
  * σxx 0 to 60 MPa and τxy 0 to -6 MPa, principal stresses σ1 = σxx, σ3 = τxy, and εxx 0 to
- * 6e-4 with εxy 0 to 1.2e-4. A run solved before M3.1 has only displacement and von Mises. */
-export function twoFacesFields({ before31 = false } = {}): ArrayBuffer {
+ * 6e-4 with εxy 0 to 1.2e-4. A run solved before M3.1 has only displacement and von Mises.
+ * With `safety`, also the safety factor of a 250 MPa yield strength, 250 / (v * 15) capped at
+ * 15 (ADR-054): 15, 15, 8.333, 5.556, 4.167, 3.333, 2.778. */
+export function twoFacesFields({ before31 = false, safety = false } = {}): ArrayBuffer {
   const vertices = 7;
   const each = (row: (v: number) => number[]) => Array.from({ length: vertices }, (_, v) => row(v)).flat();
   const m31: TestField[] = [
@@ -42,8 +44,10 @@ export function twoFacesFields({ before31 = false } = {}): ArrayBuffer {
     { name: "principalStress", kind: "pressure", components: 3, values: each((v) => [v * 10e6, 0, -v * 1e6]) },
     { name: "strain", kind: "strain", components: 6, values: each((v) => [v * 1e-4, 0, 0, v * 2e-5, 0, 0]) },
   ];
+  const factor = (v: number) => (v * 15 * 15 <= 250 ? 15 : 250 / (v * 15));
   return encodeFields(vertices, [
     ...(before31 ? [] : m31),
+    ...(safety ? [{ name: "safetyFactor", kind: "ratio", components: 1, values: each((v) => [factor(v)]) }] : []),
     {
       name: "displacement",
       kind: "length",

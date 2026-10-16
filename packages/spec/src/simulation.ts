@@ -198,14 +198,15 @@ function listTags(tags: readonly number[]): string {
 }
 
 /**
- * What is wrong with a material's values (units of the wrong kind, a modulus or density of zero
- * or less), in plain language; empty when nothing is. Missing values are not wrong here.
+ * What is wrong with a material's values (units of the wrong kind, a modulus, density or yield
+ * strength of zero or less), in plain language; empty when nothing is. Missing values are not wrong here.
  */
 export function materialProblems(material: IsotropicMaterial): string[] {
   return [
     unitProblem(material.youngsModulus, "pressure", `Young's modulus of material "${material.name}"`, true),
     unitProblem(material.density ?? null, "density", `The density of material "${material.name}"`, true),
     unitProblem(material.thermalExpansion ?? null, "thermalExpansion", `The thermal expansion of material "${material.name}"`, false),
+    unitProblem(material.yieldStrength ?? null, "pressure", `The yield strength of material "${material.name}"`, true),
   ].filter((problem) => problem !== null);
 }
 

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Generic library materials (M2.9, ADR-046). Each value is copied exactly as printed in the cited table, in the table's own units, and converted to SI only by the units table. Thermal expansion is given only where the table prints a number; where it refers to a figure, it is left empty for the user to enter for their temperature range.",
+  "description": "Generic library materials (M2.9, ADR-046). Each value is copied exactly as printed in the cited table, in the table's own units, and converted to SI only by the units table. Yield strength (M3.5, ADR-054) is the handbook's tensile yield allowable Fty for one named product, temper and thickness (A basis where printed, otherwise S), the smaller of its L and LT values; it is a minimum, not a typical value. Thermal expansion is given only where the table prints a number; where it refers to a figure, it is left empty for the user to enter for their temperature range.",
   "references": [
     {
       "id": "MIL-HDBK-5G",
@@ -26,7 +26,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 2.2.1.0(b), page 2-7: AISI 1025 sheet, strip, plate, tubing and bar."
+      "yieldStrength": {
+        "value": 36,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 2.2.1.0(b), page 2-7: AISI 1025 sheet, strip, plate, tubing and bar. Yield strength Fty from Table 2.2.1.0(b), page 2-7: sheet, strip and plate, annealed, S basis, L and LT."
     },
     {
       "id": "lib-steel-4130",
@@ -42,7 +46,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 2.3.1.0(c), page 2-15: low-alloy steels, normalized or quenched and tempered."
+      "yieldStrength": {
+        "value": 75,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 2.3.1.0(c), page 2-15: low-alloy steels, normalized or quenched and tempered. Yield strength Fty from Table 2.3.1.0(c), page 2-15: sheet, strip, plate and tubing, normalized, 0.187 in and under, S basis (70 ksi over 0.187 in)."
     },
     {
       "id": "lib-steel-301-annealed",
@@ -58,7 +66,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 2.7.1.0(b), page 2-214: AISI 301 and other annealed stainless steels (footnote a lists 302, 303, 304, 321 and 347)."
+      "yieldStrength": {
+        "value": 26,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 2.7.1.0(b), page 2-214: AISI 301 and other annealed stainless steels (footnote a lists 302, 303, 304, 321 and 347). Yield strength Fty from Table 2.7.1.0(b), page 2-214: sheet and strip, annealed, 0.187 in and under, S basis, L (LT 30)."
     },
     {
       "id": "lib-steel-17-4ph",
@@ -74,7 +86,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 2.6.8.0(b), page 2-187: 17-4PH sheet, strip and plate; density for H1075 (0.282 for H900, 0.284 for H1150)."
+      "yieldStrength": {
+        "value": 125,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 2.6.8.0(b), page 2-187: 17-4PH sheet, strip and plate; density for H1075 (0.282 for H900, 0.284 for H1150). Yield strength Fty from Table 2.6.8.0(b), page 2-187: H1075, S basis, LT (H900 170, H1150 105 ksi)."
     },
     {
       "id": "lib-steel-15-5ph",
@@ -90,7 +106,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 2.6.6.0(b), page 2-158: 15-5PH bar and forging."
+      "yieldStrength": {
+        "value": 145,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 2.6.6.0(b), page 2-158: 15-5PH bar and forging. Yield strength Fty from Table 2.6.6.0(b), page 2-158: bar and forging, H1025, S basis, L and T (H900 170, H1150 105 ksi)."
     },
     {
       "id": "lib-al-2014",
@@ -106,7 +126,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.2.1.0(d), page 3-30: 2014 bar, rod and shapes, T6 and T651."
+      "yieldStrength": {
+        "value": 53,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.2.1.0(d), page 3-30: 2014 bar, rod and shapes, T6 and T651. Yield strength Fty from Table 3.2.1.0(d), page 3-30: rolled or drawn bar, T6 and T651, up to 1.000 in, S basis, LT (L 55)."
     },
     {
       "id": "lib-al-2024-sheet",
@@ -122,7 +146,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.2.3.0(b3) and 3.2.3.0(d), page 3-71 and 3-72: bare 2024 sheet and plate, modulus and Poisson's ratio for 0.010 to 0.249 in."
+      "yieldStrength": {
+        "value": 42,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.2.3.0(b3) and 3.2.3.0(d), page 3-71 and 3-72: bare 2024 sheet and plate, modulus and Poisson's ratio for 0.010 to 0.249 in. Yield strength Fty from Table 3.2.3.0(b1), page 3-69: bare sheet, T3, 0.010 to 0.128 in, A basis, LT (L 47)."
     },
     {
       "id": "lib-al-2219",
@@ -138,7 +166,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.2.7.0(b2), page 3-161: 2219 sheet, T87."
+      "yieldStrength": {
+        "value": 51,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.2.7.0(b2), page 3-161: 2219 sheet, T87. Yield strength Fty from Table 3.2.7.0(b2), page 3-161: sheet, T87, 0.020 to 0.249 in, A basis, L (LT 52)."
     },
     {
       "id": "lib-al-5052",
@@ -154,7 +186,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.5.1.0(b1), page 3-202: 5052 sheet and plate."
+      "yieldStrength": {
+        "value": 22,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.5.1.0(b1), page 3-202: 5052 sheet and plate. Yield strength Fty from Table 3.5.1.0(b1), page 3-202: sheet and plate, H32, S basis, LT (L 23; O 9.5, H34 25 ksi)."
     },
     {
       "id": "lib-al-5083",
@@ -170,7 +206,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.5.2.0(c), page 3-215: 5083 extrusion."
+      "yieldStrength": {
+        "value": 24,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.5.2.0(c), page 3-215: 5083 extrusion. Yield strength Fty from Table 3.5.2.0(c), page 3-215: extrusion, H111, under 0.500 in, S basis (O and H112 16 ksi)."
     },
     {
       "id": "lib-al-5086",
@@ -189,7 +229,11 @@
         "value": 13.2,
         "unit": "µin/(in·°F)"
       },
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.5.3.0(b), page 3-220: 5086 sheet, plate and extrusion; thermal expansion is the mean from 68 to 212 °F."
+      "yieldStrength": {
+        "value": 26,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.5.3.0(b), page 3-220: 5086 sheet, plate and extrusion; thermal expansion is the mean from 68 to 212 °F. Yield strength Fty from Table 3.5.3.0(b), page 3-220: sheet and plate, H32, A basis, LT (L 28; O 14 ksi)."
     },
     {
       "id": "lib-al-6061",
@@ -205,7 +249,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.6.2.0(b1), page 3-244: 6061 sheet, T4, T42, T6 and T62."
+      "yieldStrength": {
+        "value": 35,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.6.2.0(b1), page 3-244: 6061 sheet, T4, T42, T6 and T62. Yield strength Fty from Table 3.6.2.0(b1), page 3-244: sheet, T6 and T62, A basis, LT (L 36; T4 16 ksi)."
     },
     {
       "id": "lib-al-7050",
@@ -224,7 +272,11 @@
         "value": 12.8,
         "unit": "µin/(in·°F)"
       },
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.7.2.0(b1) (as printed; the 7050 section is 3.7.3), page 3-300: 7050 plate, T7451; thermal expansion is the mean from 68 to 212 °F."
+      "yieldStrength": {
+        "value": 64,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.7.2.0(b1) (as printed; the 7050 section is 3.7.3), page 3-300: 7050 plate, T7451; thermal expansion is the mean from 68 to 212 °F. Yield strength Fty from Table 3.7.2.0(b1), page 3-300: plate, T7451, 0.250 to 1.500 in, A row (S basis), L and LT."
     },
     {
       "id": "lib-al-7075",
@@ -240,7 +292,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.7.4.0(b1), page 3-339: 7075 sheet and plate, T6, T62 and T651."
+      "yieldStrength": {
+        "value": 68,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.7.4.0(b1), page 3-339: 7075 sheet and plate, T6, T62 and T651. Yield strength Fty from Table 3.7.4.0(b1), page 3-339: sheet, T6 and T62, 0.040 to 0.125 in, A basis, LT (L 70)."
     },
     {
       "id": "lib-al-356-cast",
@@ -256,7 +312,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.9.4.0(b), page 3-467: 356.0-T6 sand, investment and permanent mould castings."
+      "yieldStrength": {
+        "value": 16,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.9.4.0(b), page 3-467: 356.0-T6 sand, investment and permanent mould castings. Yield strength Fty from Table 3.9.4.0(b), page 3-467: investment and permanent mould castings, T6, S basis."
     },
     {
       "id": "lib-al-a356-cast",
@@ -272,7 +332,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 3.9.5.0(b), page 3-470: A356.0-T6 castings."
+      "yieldStrength": {
+        "value": 22,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 3.9.5.0(b), page 3-470: A356.0-T6 castings. Yield strength Fty from Table 3.9.5.0(b), page 3-470: class 12, nondesignated area, S basis (classes 1 to 11: 27 to 34 ksi)."
     },
     {
       "id": "lib-mg-az31b",
@@ -288,7 +352,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 4.2.1.0(b), page 4-8: AZ31B sheet and plate, O and H24."
+      "yieldStrength": {
+        "value": 29,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 4.2.1.0(b), page 4-8: AZ31B sheet and plate, O and H24. Yield strength Fty from Table 4.2.1.0(b), page 4-8: sheet, H24, 0.016 to 0.249 in, S basis, L (LT 32; O 15 ksi)."
     },
     {
       "id": "lib-ti-6al-4v",
@@ -304,7 +372,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 5.4.1.0(b), page 5-53: Ti-6Al-4V sheet, strip and plate, annealed or solution treated and aged."
+      "yieldStrength": {
+        "value": 126,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 5.4.1.0(b), page 5-53: Ti-6Al-4V sheet, strip and plate, annealed or solution treated and aged. Yield strength Fty from Table 5.4.1.0(b), page 5-53: sheet, annealed, 0.1875 in and under, A basis, L and LT (STA 145 ksi)."
     },
     {
       "id": "lib-ni-a286",
@@ -320,7 +392,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 6.2.1.0(b), page 6-5: A-286, solution treated and aged."
+      "yieldStrength": {
+        "value": 95,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 6.2.1.0(b), page 6-5: A-286, solution treated and aged. Yield strength Fty from Table 6.2.1.0(b), page 6-5: sheet, strip and plate, AMS 5525, S basis, LT."
     },
     {
       "id": "lib-ni-hastelloy-x",
@@ -336,7 +412,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.1.0(b), page 6-22: Hastelloy X sheet and plate, solution treated."
+      "yieldStrength": {
+        "value": 44,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.1.0(b), page 6-22: Hastelloy X sheet and plate, solution treated. Yield strength Fty from Table 6.3.1.0(b), page 6-22: sheet, 0.020 to 0.100 in, A basis, LT."
     },
     {
       "id": "lib-ni-inconel-600",
@@ -352,7 +432,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.2.0(b), page 6-28: Inconel 600, annealed or cold drawn."
+      "yieldStrength": {
+        "value": 35,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.2.0(b), page 6-28: Inconel 600, annealed or cold drawn. Yield strength Fty from Table 6.3.2.0(b), page 6-28: sheet, strip and plate, annealed, S basis, LT."
     },
     {
       "id": "lib-ni-inconel-625",
@@ -368,7 +452,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.3.0(b), page 6-34: Inconel 625 sheet and plate, annealed."
+      "yieldStrength": {
+        "value": 56,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.3.0(b), page 6-34: Inconel 625 sheet and plate, annealed. Yield strength Fty from Table 6.3.3.0(b), page 6-34: sheet, 0.062 in and under, A basis, L (LT 57)."
     },
     {
       "id": "lib-ni-inconel-718",
@@ -384,7 +472,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.5.0(b), page 6-52: Inconel 718, solution treated and aged."
+      "yieldStrength": {
+        "value": 145,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 6.3.5.0(b), page 6-52: Inconel 718, solution treated and aged. Yield strength Fty from Table 6.3.5.0(b), page 6-52: sheet, 0.010 to 0.187 in, A basis, L (LT 147)."
     },
     {
       "id": "lib-cu-c17200",
@@ -400,7 +492,11 @@
         "unit": "lb/in³"
       },
       "thermalExpansion": null,
-      "source": "MIL-HDBK-5G (1 November 1994), Table 7.3.2.0(d), page 7-16: C17200 rod and bar, TF00."
+      "yieldStrength": {
+        "value": 140,
+        "unit": "ksi"
+      },
+      "source": "MIL-HDBK-5G (1 November 1994), Table 7.3.2.0(d), page 7-16: C17200 rod and bar, TF00. Yield strength Fty from Table 7.3.2.0(d), page 7-16: rod and bar, TF00, 1.500 in and under, S basis, L."
     }
   ]
 }

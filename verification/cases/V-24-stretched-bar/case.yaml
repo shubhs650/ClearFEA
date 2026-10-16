@@ -76,3 +76,9 @@ checks:
     face: side-y
     reference: { value: -0.000145, unit: in/in }
     tolerance: { coarse: 0.001, full: 0.001 }
+# Safety factor against yield (M3.5, ADR-054): Sy / σvm with the case's Sy = 36 ksi.
+  - name: Safety factor against yield along the side (Sy / σvm)
+    quantity: safetyFactor
+    face: side-y
+    reference: { value: 2.4828, unit: "1" }
+    tolerance: { coarse: 0.001, full: 0.001 }

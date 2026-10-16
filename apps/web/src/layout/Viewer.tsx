@@ -37,7 +37,9 @@ import {
   parseResultFields,
   quantityValues,
   range,
+  SAFETY_FACTOR_CAP,
   scalarValues,
+  withUnit,
 } from "../viewer/resultFields";
 import {
   cutMesh,
@@ -147,6 +149,10 @@ type Contour = {
   unit: string;
   label: string;
   scale: number | null;
+  /** Smallest values drawn red, largest blue (the safety factor, ADR-054). */
+  smallestRed: boolean;
+  /** The safety factor's cap when the largest value drawn reaches it, so the legend says so. */
+  cap: number | null;
   /** With a cut plane: band coordinates and values (SI) of the section's vertices, and the
    * surface vertices left standing. */
   cut: { coordinates: Float32Array; values: Float32Array; kept: Uint8Array } | null;
@@ -163,8 +169,11 @@ export function contourOf(
   display: Pick<ResultDisplay, "quantity" | "units">,
   cut: CutValues | null = null,
 ): Contour | string {
-  const { label, kind, field: name, components, component } = QUANTITIES[display.quantity];
+  const { label, kind, field: name, components, component, smallestRed = false } = QUANTITIES[display.quantity];
   const field = results.fields.get(name);
+  if (!field && name === "safetyFactor") {
+    return "This run has no safety factor against yield. It needs a yield strength for every material, and runs solved before ClearFEA worked it out have none. Enter the yield strength under Materials and run the simulation again.";
+  }
   if (!field) {
     // Runs solved before M3.1 kept displacement and von Mises stress only.
     return `This run was solved before ClearFEA kept stress components, principal stresses and strains, so it has no ${label.toLowerCase()}. Run the simulation again to see it.`;
@@ -180,7 +189,8 @@ export function contourOf(
     min = anyKept ? Math.min(min, inside.min) : inside.min;
     max = anyKept ? Math.max(max, inside.max) : inside.max;
   }
-  const coordinates = values.map((v) => bandCoordinate(v, min, max));
+  const band = (v: number) => (smallestRed ? 1 - bandCoordinate(v, min, max) : bandCoordinate(v, min, max));
+  const coordinates = values.map(band);
   const unit = display.units[kind] ?? "";
   return {
     mesh: shape.mesh,
@@ -191,16 +201,15 @@ export function contourOf(
     unit,
     label,
     scale: shape.scale,
-    cut:
-      cut === null
-        ? null
-        : { coordinates: cut.values.map((v) => bandCoordinate(v, min, max)), values: cut.values, kept: cut.kept },
+    smallestRed,
+    cap: name === "safetyFactor" && max >= SAFETY_FACTOR_CAP ? SAFETY_FACTOR_CAP : null,
+    cut: cut === null ? null : { coordinates: cut.values.map(band), values: cut.values, kept: cut.kept },
   };
 }
 
 /** A value in SI of the contour's quantity in its display unit, to four significant figures. */
 function shown(contour: Contour, value: number): string {
-  return `${shortNumber(fromSi(value, contour.unit, contour.kind))} ${contour.unit}`;
+  return withUnit(shortNumber(fromSi(value, contour.unit, contour.kind)), contour.unit);
 }
 
 /** The value of the contour's quantity at a surface vertex, in its display unit. */
@@ -300,16 +309,19 @@ function Legend({ contour }: { contour: Contour }) {
   return (
     <section className="viewer-legend" aria-label="Legend">
       <div className="viewer-legend-title">
-        {contour.label} ({contour.unit})
+        {contour.unit === "1" ? contour.label : `${contour.label} (${contour.unit})`}
       </div>
       <ol>
         {rows.map((k) => (
           <li key={k}>
-            <span className="viewer-legend-swatch" style={{ background: BAND_COLOURS[k] }} />
+            <span className="viewer-legend-swatch" style={{ background: BAND_COLOURS[contour.smallestRed ? BANDS - 1 - k : k] }} />
             {shortNumber(contour.edges[k] ?? 0)} to {shortNumber(contour.edges[k + 1] ?? 0)}
           </li>
         ))}
       </ol>
+      {contour.cap !== null && (
+        <div className="viewer-legend-note">{`Factors of ${contour.cap} and more are shown as ${contour.cap}`}</div>
+      )}
       <div className="viewer-legend-note">
         {contour.scale === null
           ? "Undeformed shape"

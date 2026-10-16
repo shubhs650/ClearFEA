@@ -33,6 +33,10 @@ describe("the material library", () => {
       expect(material.poissonsRatio, name).toBeLessThanOrEqual(0.36);
       expect(material.density && si(material.density, "density"), name).toBeGreaterThan(1500);
       expect(material.density && si(material.density, "density"), name).toBeLessThan(9000);
+      // Fty of the weakest library product (356.0-T6 castings, 16 ksi) to 17-4PH H1075 (125 ksi)
+      // and Inconel 718 (145 ksi); every library material has one (ADR-054).
+      expect(material.yieldStrength && si(material.yieldStrength, "pressure"), name).toBeGreaterThan(100e6);
+      expect(material.yieldStrength && si(material.yieldStrength, "pressure"), name).toBeLessThan(1100e6);
       if (material.thermalExpansion) {
         expect(si(material.thermalExpansion, "thermalExpansion"), name).toBeGreaterThan(5e-6);
         expect(si(material.thermalExpansion, "thermalExpansion"), name).toBeLessThan(30e-6);
@@ -47,6 +51,7 @@ describe("the material library", () => {
       poissonsRatio: 0.33,
       density: { value: 0.098, unit: "lb/in³" },
       thermalExpansion: null,
+      yieldStrength: { value: 35, unit: "ksi" },
     });
     expect(si(al6061?.youngsModulus ?? { value: 0, unit: "ksi" }, "pressure")).toBeCloseTo(68.258e9, -6);
     const al7050 = materialLibrary.materials.find((m) => m.id === "lib-al-7050");

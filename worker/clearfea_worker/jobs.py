@@ -249,7 +249,8 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     files.upload("surface.bin", viewer.surface_path)
     files.upload("fields.bin", viewer.fields_path)
     files.upload("nodes.bin", viewer.nodes_path)
-    return result.model_dump(mode="json", by_alias=True)
+    # Optional parts of the summary (the safety factor) are left out when absent, not null.
+    return result.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 HANDLERS: dict[str, Handler] = {

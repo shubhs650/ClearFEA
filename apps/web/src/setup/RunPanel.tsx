@@ -21,7 +21,7 @@ import { credits } from "../billing/credits";
 import { duration, memory } from "../billing/estimate";
 import type { Deformation } from "../layout/Viewer";
 import { fromSi } from "../units/convert";
-import { QUANTITIES, type Quantity, type QuantityGroup } from "../viewer/resultFields";
+import { QUANTITIES, type Quantity, type QuantityGroup, SAFETY_FACTOR_CAP } from "../viewer/resultFields";
 import { Notes } from "./ItemPanels";
 import { type ItemStatus, sameSpec } from "./spec";
 import type { EstimateState } from "./useEstimate";
@@ -30,7 +30,7 @@ import type { EstimateState } from "./useEstimate";
 export type ResultUnits = Readonly<Record<"length" | "pressure" | "force" | "moment" | "strain", string>>;
 
 /** The headings of the quantity list, in order. */
-const QUANTITY_GROUPS: readonly QuantityGroup[] = ["Displacement", "Stress", "Strain"];
+const QUANTITY_GROUPS: readonly QuantityGroup[] = ["Displacement", "Stress", "Strain", "Safety factor"];
 
 /** One reason the setup cannot be run now, and the tree item that fixes it (null for none). */
 export interface RunBlocker {
@@ -155,6 +155,11 @@ const DEFORMATIONS: Record<Deformation, string> = {
 
 function figure(value: number, unit: string, kind: string): string {
   return `${Number(fromSi(value, unit, kind).toPrecision(4))} ${unit}`;
+}
+
+/** A safety factor to three figures; the worker keeps none above SAFETY_FACTOR_CAP (ADR-054). */
+function safetyFactorText(value: number): string {
+  return value >= SAFETY_FACTOR_CAP ? `${SAFETY_FACTOR_CAP} or more` : `${Number(value.toPrecision(3))}`;
 }
 
 function at(position: number[], unit: string): string {
@@ -458,6 +463,17 @@ export function RunPanel({
           </dd>
           <dt>Smallest von Mises stress</dt>
           <dd>{figure(result.vonMises.min.value, units.pressure, "pressure")}</dd>
+          <dt>Smallest safety factor against yield</dt>
+          <dd>
+            {result.safetyFactor ? (
+              <>
+                {safetyFactorText(result.safetyFactor.min.value)}{" "}
+                <span className="field-hint">{at(result.safetyFactor.min.position, units.length)}</span>
+              </>
+            ) : (
+              "None: it needs a yield strength for every material. Enter them under Materials and run again."
+            )}
+          </dd>
           {run !== null && <Reactions result={result} spec={run.spec} units={units} />}
         </dl>
       )}

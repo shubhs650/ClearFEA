@@ -110,6 +110,10 @@ class IsotropicMaterial(BaseModel):
     """
     Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.
     """
+    yield_strength: Annotated[Quantity | None, Field(alias="yieldStrength")] = None
+    """
+    Tensile yield strength, a pressure quantity greater than zero (M3.5, ADR-054). Needed only for the safety factor against yield, which the result shows when every material of the setup has one; absent or null until entered.
+    """
     source: Annotated[str | None, Field(max_length=500, min_length=1)] = None
     """
     Where the values came from, as text: a library material's citation, or a note the user saved with a custom material (M2.9, ADR-046). Information only; the setup drops it when a value is changed, since the values then no longer match it. Absent when unknown.
@@ -740,6 +744,18 @@ class VonMises(BaseModel):
     max: NodeValue
 
 
+class SafetyFactor(BaseModel):
+    """
+    Smallest safety factor against yield over every node of the mesh: the yield strength of the node's material over its von Mises stress, at most 15 (ADR-054). Absent when a material of the setup has no yield strength, and for runs solved before M3.5.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    min: NodeValue
+
+
 class Software2(BaseModel):
     """
     Versions that solved the run.
@@ -784,6 +800,10 @@ class SolveResult(BaseModel):
     balance: BalanceCheck | None = None
     """
     Absent for runs solved before M3.2.
+    """
+    safety_factor: Annotated[SafetyFactor | None, Field(alias="safetyFactor")] = None
+    """
+    Smallest safety factor against yield over every node of the mesh: the yield strength of the node's material over its von Mises stress, at most 15 (ADR-054). Absent when a material of the setup has no yield strength, and for runs solved before M3.5.
     """
     software: Annotated[Software2, Field(title="SolveSoftware")]
     """

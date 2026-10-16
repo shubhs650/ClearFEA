@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The solve job's result summary (ADR-030, ADR-051). Physics-critical.
 
-Largest displacement magnitude, smallest and largest von Mises stress with the node and
-position where each occurs, the reaction force and moment of every support, each load's total
-force and moment, and the balance check of the two. SI throughout.
+Largest displacement magnitude, smallest and largest von Mises stress and (M3.5) the smallest
+safety factor against yield with the node and position where each occurs, the reaction force
+and moment of every support, each load's total force and moment, and the balance check of the
+two. SI throughout.
 """
 
 import math
 from array import array
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ..deck import REACTION_SET, support_set_names
@@ -20,6 +21,7 @@ from ..meshing.volume import VolumeMesh
 from ..spec.simulation_schema import ElasticSupport, SimulationSpec, SolveResult
 from .dat import DatError, read_node_displacements, read_node_forces
 from .fields import NodalFields, displacement_magnitude, read_fields, von_mises_field
+from .safety import safety_factor_field
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,11 @@ def summarize(
                 for load, total in zip(spec.loads, loads, strict=True)
             ],
             "balance": balance(mesh, loads, reactions),
+            **(
+                {"safetyFactor": {"min": _at(mesh, factor, _argmin(factor))}}
+                if (factor := fields.safety_factor) is not None
+                else {}
+            ),
             "software": {"calculix": calculix},
         }
     )
@@ -135,8 +142,10 @@ def summarize(
 def read_results(
     spec: SimulationSpec, mesh: VolumeMesh, frd: Path, dat: Path, calculix: str
 ) -> tuple[NodalFields, SolveResult]:
-    """Reads the solver output of a deck made from ``spec`` and ``mesh``."""
+    """Reads the solver output of a deck made from ``spec`` and ``mesh``, with the safety
+    factor against yield when every material has a yield strength (ADR-054)."""
     fields = read_fields(frd, mesh.node_count)
+    fields = replace(fields, safety_factor=safety_factor_field(spec, mesh, fields))
     return fields, summarize(spec, mesh, fields, read_reactions(spec, mesh, dat), calculix)
 
 
