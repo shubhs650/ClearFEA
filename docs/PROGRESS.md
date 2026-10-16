@@ -98,7 +98,7 @@ Things only the maintainer can do.
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 145 of 145 checks (M3.4) |
-| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1) |
+| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4) |
 | Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step |
 | Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main b355155, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635); closed M2) | Green: full tier 116 of 116 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26); E-01 |
 
