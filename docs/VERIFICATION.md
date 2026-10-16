@@ -94,7 +94,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Gravity | V-10 |
 | Centrifugal load | V-06 |
 | Uniform temperature change | V-08 |
-| Bonded interface (structural) | V-11, V-12 |
+| Bonded interface (structural) | V-11, V-12; E-03 runs a bonded two-body model through the UI |
 | Bonded interface (thermal) | to be added in M5 |
 | Fixed temperature | V-13, V-14 |
 | Heat flux | V-16 |
@@ -138,7 +138,7 @@ Playwright drives the real UI against the local system on tiny models. `make e2e
 | --- | --- | --- |
 | E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance, read the min/max markers and probe a node, cut it across x and y with a cut plane, show the safety factor against yield, save a view and bring it back, show the result in other units after a reload, export CSV and VTK files (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
 | E-02 | Unit entry in mixed units and display-unit switch | M2 |
-| E-03 | Multi-body upload, review bonds, run | M4 |
+| E-03 | Multi-body upload: bodies listed by part name with a material each, the bond found reviewed and shown, a body held only by a removed bond refused before the run, run with the bond tied, reactions balancing the load carried through the bond, the note on stresses near bonded faces, one body hidden in the result view (`e03-multi-body.e2e.ts`, two blocks touching end to end; signs in as the second test user) | M4 (written after the M4 close) |
 | E-04 | Thermal stress setup and result | M5 |
 | E-05 | Report generation and download | M7 |
 | E-06 | Cancel a running job; stop limit reached | M8 |

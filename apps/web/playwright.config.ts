@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Browser end-to-end tests (docs/VERIFICATION.md). Run them with `make e2e`, which starts a fresh
-// API, worker and dev server and sets CLEARFEA_E2E_URL, CLEARFEA_E2E_MODEL and CLEARFEA_E2E_OUT.
+// API, worker and dev server and sets CLEARFEA_E2E_URL, CLEARFEA_E2E_MODEL,
+// CLEARFEA_E2E_ASSEMBLY and CLEARFEA_E2E_OUT.
 import { defineConfig } from "@playwright/test";
 
 const out = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
