@@ -612,7 +612,7 @@ M2.12 adds the estimate before a run and the machine-size recommendation that DE
 8. **The laptop tier.** DECISIONS' Model size row says the laptop tier is about 300,000 to 500,000 elements with the direct solver. This estimator, like ADR-048, puts a 16 GB machine at about 170,000 stocky second-order elements with SPOOLES. The row is not changed here. PaStiX (ADR-048 item 7) would not move it: it is faster but needs about 1.25 times SPOOLES's memory, and when it is adopted the estimator is refitted for it.
 
 ### ADR-050: Stress components, principal stresses and total strain components as new viewer fields; CalculiX's tensor shear strains
-2026-10-16 · Accepted (under Shubham's standing M3 instruction; pending his later review).
+2026-10-16 · Accepted (under Shubham's standing M3 instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M3.1 adds principal stresses and the stress and strain components to the results (DECISIONS product table, Results row; ARCHITECTURE section 7, results pipeline steps 1 and 2). Choices it needed:
 
@@ -625,7 +625,7 @@ M3.1 adds principal stresses and the stress and strain components to the results
 7. **Verification.** The harness gains the quantities `stress.<c>`, `principal.<k>` and `strain.<c>`, read from the run's `fields.bin` like the rest. New checks: V-24 (σxx and σ1 = Eε, εxx = δ/L, εyy = −νδ/L, 0.1 percent), V-08 (σxx and σ3 = −EαΔT, total strain (1 + ν)αΔT across the width and thickness, 0.1 percent; a total strain of zero along the held length is not checked because a relative tolerance needs a reference other than zero) and V-01 (Lamé: σ1 hoop at the bore and the outside, τxy = (σr − σθ)/2 and εxy = τxy (1 + ν)/E at 45 degrees on the bore, with V-01's stress tolerances). V-01's σ3 = −p at the bore was tried and left out: the extrapolated nodal radial stress there, where it changes fastest, read 4.9 percent (coarse) and 1.7 percent (full) short, converging, so it would need a tolerance too wide to mean anything; V-08 checks σ3 instead. `worker/spikes/solve_check` adds the total strain and principal stresses of the ν = 0 bar at every node and checks that the new viewer fields carry the reader's nodal values.
 
 ### ADR-051: Reactions from every held node with every applied load taken out; moments about each support's centroid; load totals and a balance check in the result
-2026-10-16 · Accepted (under Shubham's standing M3 instruction; pending his later review).
+2026-10-16 · Accepted (under Shubham's standing M3 instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M3.2 adds reaction moments per support, applied-load totals and a balance check shown on every result (DECISIONS product table, Results and Report rows; ARCHITECTURE results pipeline step 5). Choices it needed:
 
@@ -638,7 +638,7 @@ M3.2 adds reaction moments per support, applied-load totals and a balance check 
 7. **Verification.** The harness gains the quantities `moment.x`, `moment.y` and `moment.z` (a support's reaction moment about its centroid) and an automatic row on every case: the run's own balance check, force and moment, within the 0.1 percent of the existing balance row (which stays, as an independent check from the surface triangles). V-04 checks the clamp's torque −120 N·m and bending moment −127.79 N·m (the remote point's lever included) to 0.1 percent. `worker/spikes/solve_check` checks the cantilever clamp's whole load, its moment W L/2 about the clamped face's centre and the balance to 1e-6; `spikes/load_check` adds the pressed ring; `spikes/deck_check` sums the per-node reactions.
 
 ### ADR-052: Min/max markers on the surface the legend covers; a probe reads the nearest surface node's own value
-2026-10-16 · Accepted (under Shubham's standing M3 instruction; pending his later review).
+2026-10-16 · Accepted (under Shubham's standing M3 instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M3.3 adds min/max markers and a probe at a picked point to the result view (DECISIONS product table, Results row; ARCHITECTURE section 9, Viewer). Choices it needed:
 
@@ -649,7 +649,7 @@ M3.3 adds min/max markers and a probe at a picked point to the result view (DECI
 5. **Verification.** Unit tests (`resultFields.test.ts`, `Viewer.test.tsx`) cover the helpers, the marker texts per quantity and the probe list. E-01 adds a step: the markers show, a click on the block's top face lists a probe whose position has z = 10 mm and whose value lies between the markers' (screenshot `e01-probe.png`). No physics-critical module changed; values are read as before.
 
 ### ADR-053: Cut planes are cut in the browser from the run's mesh and its values at every node, fetched a field at a time; no server-side slice at any size
-2026-10-16 · Accepted (under Shubham's standing M3 instruction; pending his later review).
+2026-10-16 · Accepted (under Shubham's standing M3 instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M3.4 adds cut planes to the result view (DECISIONS product table, Results row; Model size row: the viewer shows the outer surface and cut planes) and settles the open question in ARCHITECTURE section 7 of how large models are cut. Choices it needed:
 
