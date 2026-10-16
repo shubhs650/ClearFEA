@@ -5,6 +5,8 @@ The solve job writes two files for the viewer next to a run's solver output (ARC
 - `surface.bin`: the outer surface of the run's mesh in the display mesh format (`display-mesh.md`). It holds every element face that mesh.bin lists under a face tag, oriented outwards. A 10-node element face is drawn as four triangles through its mid-edge nodes, so every surface node of the mesh is a vertex. Served by `GET /api/runs/:id/surface`.
 - `fields.bin`: the result values at each vertex of that `surface.bin`, described here. Served by `GET /api/runs/:id/fields`.
 
+Since M3.4 the solve job also writes `nodes.bin` in the same format with `vertexCount` equal to the mesh's node count: vertex v is node v of the run's `mesh.bin` (`volume-mesh.md`), interior nodes included, with the same fields in the same order. It is what a cut plane draws (ADR-053). `GET /api/runs/:id/nodes` serves it whole, and `GET /api/runs/:id/nodes?field=<name>` serves a file in this format holding that one field (the header's `fieldCount` is 1), read from storage by range, so the viewer downloads only the fields it draws. Runs solved before M3.4 have no `nodes.bin` and cannot be cut.
+
 Writer and reader: `worker/clearfea_worker/results/surface.py`; the viewer's reader is `apps/web/src/viewer/resultFields.ts`. Both are tested against `fixtures/result-fields-three-vertices.bin`.
 
 Version 1, little-endian, no padding:

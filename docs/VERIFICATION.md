@@ -57,7 +57,7 @@ Stress is checked away from supports and load application points unless the case
 | V-07 | Block on an elastic support, pressed by a force on its top, sliding stopped by two symmetry planes | Base settlement F/(k·A), top displacement adding F·H/(E·A), uniform stress F/A, foundation reaction F | M2 |
 | V-08 | Bar with ends restrained (frictionless ends, two symmetry planes), uniform temperature rise | Axial stress −EαΔT (von Mises, σxx, σ3 and end reactions ±EαΔT·A); sideways growth and total strain (1 + ν)αΔT | M2 |
 | V-09 | Symmetry model against full model: a quarter of V-01's tube on leaning symmetry planes and a frictionless base | Quarter model results equal the full tube's Lamé values; hoop force p·a·L on each cut plane | M2 |
-| V-10 | Column under self-weight, standing on a fixed base | Base reaction equals weight; stress ρg(h − z); top shortening ρgh²/2E | M2 |
+| V-10 | Column under self-weight, standing on a fixed base | Base reaction equals weight; stress ρg(h − z) on the side and, from the values at every node, inside at a quarter of the height (M3.4); top shortening ρgh²/2E | M2 |
 | V-11 | Two bonded blocks against one block | Displacement and stress away from the interface match the single body | M4 |
 | V-12 | Bi-material bar in tension | Series stiffness; uniform stress | M4 |
 | V-13 | Plane wall conduction | Linear temperature profile; flux kΔT/L | M5 |
@@ -110,6 +110,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | First-order elements | V-26 |
 | Stress components | V-01, V-08, V-24 |
 | Principal stresses | V-01, V-08, V-24 |
+| Values inside the body (cut planes) | V-10; E-01 draws a cut |
 | Strain components (total strain, tensor shear) | V-01, V-08, V-24 |
 | Mixed input units | all |
 
@@ -132,7 +133,7 @@ Playwright drives the real UI against the local system on tiny models. `make e2e
 
 | Test | Covers | Added in |
 | --- | --- | --- |
-| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance, read the min/max markers and probe a node (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
+| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance, read the min/max markers and probe a node, cut it across x and y with a cut plane (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
 | E-02 | Unit entry in mixed units and display-unit switch | M2 |
 | E-03 | Multi-body upload, review bonds, run | M4 |
 | E-04 | Thermal stress setup and result | M5 |

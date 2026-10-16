@@ -133,6 +133,29 @@ def viewer_rows(mesh, fields, result, faces, work: Path) -> list[Row]:  # type: 
             worst < 1e-6,
         )
     )
+    # M3.4: nodes.bin holds every field at every mesh node, in mesh order, for cut planes.
+    count, every = read_fields(files.nodes_path)
+    at_nodes = {f.name: f.values for f in every}
+    worst = 0.0
+    for name, nodal in (
+        ("displacement", fields.displacement),
+        ("stress", fields.stress),
+        ("principalStress", principal),
+        ("strain", fields.strain),
+    ):
+        scale = max(abs(x) for x in nodal)
+        worst = max(
+            worst,
+            max(abs(at_nodes[name][i] - nodal[i]) for i in range(len(nodal))) / scale,
+        )
+    rows.append(
+        (
+            "viewer: nodes.bin, every field at every node",
+            f"{mesh.node_count} nodes, the nodal values, to float32",
+            f"{count} nodes, worst {worst:.2g} of the largest",
+            count == mesh.node_count and worst < 1e-6,
+        )
+    )
     return rows
 
 

@@ -1,6 +1,6 @@
 # Volume mesh file (`mesh.bin`)
 
-The mesh job writes the analysis mesh of a geometry as one binary file (ARCHITECTURE.md section 3, step 5; ADR-028). It holds the nodes, the tetrahedra grouped by body, and for every face tag the element faces that lie on it, so the deck generator (M1.7) can turn a face tag into a CalculiX surface without Gmsh. Writer and reader: `worker/clearfea_worker/meshing/volume.py`. The file never leaves the worker side; the viewer draws the mesh from its own display file (`display.bin` of the mesh, same format as `display-mesh.md`).
+The mesh job writes the analysis mesh of a geometry as one binary file (ARCHITECTURE.md section 3, step 5; ADR-028). It holds the nodes, the tetrahedra grouped by body, and for every face tag the element faces that lie on it, so the deck generator (M1.7) can turn a face tag into a CalculiX surface without Gmsh. Writer and reader: `worker/clearfea_worker/meshing/volume.py`. The viewer draws the mesh from its own display file (`display.bin` of the mesh, same format as `display-mesh.md`). Since M3.4 the API also serves a run's `mesh.bin` (`GET /api/runs/:id/mesh`) for cut planes, which the viewer reads with `apps/web/src/viewer/section.ts` (ADR-053).
 
 Version 1, little-endian, no padding:
 
