@@ -1653,18 +1653,33 @@ describe("steady-state thermal analysis (M5.1)", () => {
     ],
   };
 
-  /** Routes of a succeeded thermal run whose only field is the temperature: 20 °C to 100 °C. */
-  function thermalRun(): Record<string, Route> {
+  /** Routes of a succeeded thermal run: temperatures from 20 °C to 100 °C and, unless solved
+   * before M5.3, a heat flux of 4 kW/m² along -x, 25 W in through the hot face and out
+   * through the cold one. */
+  function thermalRun(beforeHeatFlux = false): Record<string, Route> {
     const result: SolveResult = {
       nodes: 7108,
       temperature: {
         min: { value: 293.15, node: 3, position: [0.1, 0.05, 0] },
         max: { value: 373.15, node: 40, position: [0, 0, 0] },
       },
+      ...(beforeHeatFlux
+        ? {}
+        : {
+            heatFlux: { max: { value: 4000, node: 12, position: [0.05, 0, 0] } },
+            heatFlows: [
+              { loadId: "fixed_temperature-1", heat: 25 },
+              { loadId: "fixed_temperature-2", heat: -24.9999 },
+            ],
+            heatBalance: { heatIn: 25, heatOut: 24.9999, scale: 25, ratio: 4e-6 },
+          }),
       software: { calculix: "2.21" },
     };
     const fields = encodeFields(7, [
       { name: "temperature", kind: "temperature", components: 1, values: Array.from({ length: 7 }, (_, v) => 293.15 + (80 * v) / 6) },
+      ...(beforeHeatFlux
+        ? []
+        : [{ name: "heatFlux", kind: "heatFlux", components: 3, values: Array.from({ length: 21 }, (_, k) => (k % 3 === 0 ? -4000 : 0)) }]),
     ]);
     return {
       "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
@@ -1873,21 +1888,29 @@ describe("steady-state thermal analysis (M5.1)", () => {
 
     const quantity = settings().getByLabelText("Quantity") as HTMLSelectElement;
     expect(quantity.value).toBe("temperature");
-    expect([...quantity.options].map((o) => o.textContent)).toEqual(["Temperature"]);
-    expect([...quantity.querySelectorAll("optgroup")].map((g) => g.label)).toEqual(["Temperature"]);
+    expect([...quantity.options].map((o) => o.textContent)).toEqual([
+      "Temperature",
+      "Heat flux magnitude",
+      "Heat flux qx",
+      "Heat flux qy",
+      "Heat flux qz",
+    ]);
+    expect([...quantity.querySelectorAll("optgroup")].map((g) => g.label)).toEqual(["Temperature", "Heat flux"]);
     expect(settings().queryByLabelText("Shape")).toBeNull();
 
     const figures = within(settings().getByLabelText("Run results"));
     expect(figures.getByText("Highest temperature").nextElementSibling?.textContent).toBe("100 °C at (0, 0, 0) mm");
     expect(figures.getByText("Lowest temperature").nextElementSibling?.textContent).toBe("20 °C at (100, 50, 0) mm");
-    expect(figures.queryByText(/displacement|von Mises|Reaction|Applied|balance|safety factor/i)).toBeNull();
+    expect(figures.queryByText(/displacement|von Mises|Reaction|Applied|safety factor/i)).toBeNull();
 
-    // The units shown are the length and the temperature only; kelvin and fahrenheit convert
-    // with their offsets.
+    // The units shown are the length, the temperature, the heat flux and the heat flow (M5.3);
+    // kelvin and fahrenheit convert with their offsets.
     const units = within(settings().getByRole("group", { name: "Units shown" }));
     expect(units.getAllByRole("combobox").map((c) => c.closest("label")?.firstChild?.textContent)).toEqual([
       "Length",
       "Temperature",
+      "Heat flux",
+      "Heat flow",
     ]);
     fireEvent.change(settings().getByLabelText("Temperature"), { target: { value: "K" } });
     expect(legend.textContent).toContain("Temperature (K)");
@@ -1900,7 +1923,50 @@ describe("steady-state thermal analysis (M5.1)", () => {
     expect(exports.getByRole("button", { name: "Results at every node (CSV)" })).toHaveProperty("disabled", false);
     expect(exports.getByRole("button", { name: "Mesh and results (VTK)" })).toHaveProperty("disabled", false);
     expect(exports.queryByRole("button", { name: "Reactions and loads (CSV)" })).toBeNull();
+    expect(exports.getByRole("button", { name: "Heat flows (CSV)" })).toHaveProperty("disabled", false);
     expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
+    window.localStorage.clear();
+  });
+
+  it("shows a thermal run's heat flux, each load's heat flow and the heat balance (M5.3)", async () => {
+    window.localStorage.clear();
+    serve(routes([simulation(heated)], thermalRun()));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const legend = await screen.findByLabelText("Legend");
+    const figures = within(settings().getByLabelText("Run results"));
+    expect(figures.getByText("Largest heat flux").nextElementSibling?.textContent).toBe("4000 W/m² at (50, 0, 0) mm");
+    expect(figures.getByText("Heat flow, Hot").nextElementSibling?.textContent).toBe("25 W in");
+    expect(figures.getByText("Heat flow, Cold").nextElementSibling?.textContent).toBe("25 W out");
+    expect(figures.getByText("Heat balance").nextElementSibling?.textContent).toBe("in 25 W, out 25 W");
+    expect(figures.getByText("Out of balance").nextElementSibling?.textContent).toBe("0.0004 % of 25 W");
+
+    // Heat flux along x, drawn in kW/m², and heat flows in BTU/h, without a rerun.
+    fireEvent.change(settings().getByLabelText("Quantity"), { target: { value: "heatFluxX" } });
+    expect(legend.textContent).toContain("Heat flux qx (W/m²)");
+    fireEvent.change(settings().getByLabelText("Heat flux"), { target: { value: "kW/m²" } });
+    expect(legend.textContent).toContain("Heat flux qx (kW/m²)");
+    expect(figures.getByText("Largest heat flux").nextElementSibling?.textContent).toBe("4 kW/m² at (50, 0, 0) mm");
+    fireEvent.change(settings().getByLabelText("Heat flow"), { target: { value: "BTU/h" } });
+    expect(figures.getByText("Heat flow, Hot").nextElementSibling?.textContent).toBe("85.3 BTU/h in");
+    expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
+    window.localStorage.clear();
+  });
+
+  it("asks for a rerun to see heat flux on a thermal run solved before M5.3", async () => {
+    window.localStorage.clear();
+    serve(routes([simulation(heated)], thermalRun(true)));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    await screen.findByLabelText("Legend");
+    const figures = within(settings().getByLabelText("Run results"));
+    expect(figures.getByText("Heat flows").nextElementSibling?.textContent).toBe(
+      "Run again to see the heat flux, each load's heat flow and the heat balance.",
+    );
+    fireEvent.change(settings().getByLabelText("Quantity"), { target: { value: "heatFlux" } });
+    expect(await screen.findByText(/solved before ClearFEA kept heat fluxes/)).toBeTruthy();
+    const exports = within(settings().getByRole("region", { name: "Export" }));
+    expect(exports.getByRole("button", { name: "Heat flows (CSV)" })).toHaveProperty("disabled", true);
     window.localStorage.clear();
   });
 });

@@ -1,6 +1,6 @@
-# M5.1 and M5.2 heat check
+# M5.1 to M5.3 heat check
 
-Script only, not part of the worker package or its tests. It solves steady-state thermal decks written by the deck generator (`clearfea_worker/deck/`) with CalculiX and reads them back with the result reader (`clearfea_worker/results/`), so the choices only they make (the temperature degree of freedom, the offsets of °C and °F, the conductivity's unit, the sign, unit and keyword of each thermal load, the `NDTEMP` block) are shown right by a solver at every node, not just by snapshots (ADR-064, ADR-065). Run it by hand after changes to the thermal deck or the temperature reader, beside `make verify`.
+Script only, not part of the worker package or its tests. It solves steady-state thermal decks written by the deck generator (`clearfea_worker/deck/`) with CalculiX and reads them back with the result reader (`clearfea_worker/results/`), so the choices only they make (the temperature degree of freedom, the offsets of °C and °F, the conductivity's unit, the sign, unit and keyword of each thermal load, the `NDTEMP` block, and since M5.3 the `FLUX` block and the heat flows the reader works out) are shown right by a solver at every node, not just by snapshots (ADR-064, ADR-065, ADR-066). Run it by hand after changes to the thermal deck or the temperature reader, beside `make verify`.
 
 ```
 cd worker
@@ -20,3 +20,5 @@ The model is a 200 × 20 × 20 mm bar written as STEP in millimetres, imported a
 | 100 °C at both ends, 3000 kW/m³ generated | T₀ + q‴ x (L − x) / 2k, a 333 K rise | 0.01 K (10-node); 2 K (4-node elements are linear in a quadratic profile) |
 
 The linear profiles are represented exactly by both element orders, so what remains is the `.frd` file's five significant digits (0.01 K at 300 K).
+
+Since M5.3 each case also checks the heat flux at every node against the exact one (largest error as a fraction of the largest exact flux: 0.001, except four-node elements with heat generation, 0.1, since their one gradient per element lags a flux that changes along the bar), each load's heat flow against the exact one (0.001 of the largest), and the run's heat balance (1e-5). A last case puts every thermal load on the bar at once (a fixed end, a flux into one side, convection from the opposite side, radiation from the far end and heat generation) and checks the heat balance alone, since it has no closed form.

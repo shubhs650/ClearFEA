@@ -36,3 +36,20 @@ checks:
     box: { min: [20, 0, 0], max: [20, 0, 60] }
     reference: { value: 120.956980, unit: °C }
     tolerance: { coarse: 0.0001, full: 0.0001 }
+  # M5.3: the heat flux through the wall and the heat each film exchanges, q times the
+  # 60 × 60 mm face.
+  - name: Heat flux along x, ΔT / (1/h1 + L/k + 1/h2)
+    quantity: heatFlux.x
+    face: side
+    reference: { value: 4.560174, unit: kW/m² }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Heat in from the hot gas, q A
+    quantity: heatFlow
+    load: hot
+    reference: { value: 16.416627, unit: W }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Heat out to the room air, − q A
+    quantity: heatFlow
+    load: cold
+    reference: { value: -56.015858, unit: BTU/h }
+    tolerance: { coarse: 0.0001, full: 0.0001 }

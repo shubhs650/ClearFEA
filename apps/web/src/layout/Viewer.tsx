@@ -228,6 +228,9 @@ export function contourOf(
   if (!field && name === "temperature") {
     return "This run has no temperatures. Only a steady-state thermal analysis solves them; set the analysis type under Analysis and run the simulation again.";
   }
+  if (!field && name === "heatFlux") {
+    return "This run was solved before ClearFEA kept heat fluxes, so it has none. Run the simulation again to see the heat flux.";
+  }
   if (!field && name === "displacement") {
     return "This run has no displacement. A steady-state thermal analysis solves temperatures only; show the temperature instead.";
   }

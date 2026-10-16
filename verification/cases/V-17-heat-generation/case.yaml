@@ -42,3 +42,21 @@ checks:
     face: left
     reference: { value: 122, unit: °F }
     tolerance: { coarse: 0.0001, full: 0.0001 }
+  # M5.3: the heat flux −q‴ (L − x) at x from the left face (L the half-thickness), and all
+  # the heat generated, q‴ times the 40 × 60 × 60 mm volume, out through the cooled faces.
+  - name: Heat flux at the left face, − q‴ L
+    quantity: heatFlux.x
+    face: left
+    reference: { value: -200, unit: kW/m² }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Heat flux a quarter of the way through, − q‴ L / 2
+    quantity: heatFlux.x
+    face: side
+    box: { min: [10, 0, 0], max: [10, 0, 60] }
+    reference: { value: -100, unit: kW/m² }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Heat out through the cooled faces, − q‴ V
+    quantity: heatFlow
+    load: faces
+    reference: { value: -1.44, unit: kW }
+    tolerance: { coarse: 0.0001, full: 0.0001 }

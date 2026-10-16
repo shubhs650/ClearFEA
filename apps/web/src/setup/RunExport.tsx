@@ -7,11 +7,11 @@
 import type { RunView, SolveResult } from "@clearfea/spec";
 import { useState } from "react";
 import { fetchRunMesh, fetchRunNodes } from "../api/runs";
-import { type ExportUnits, nodeCsvChunks, reactionsCsv, vtuParts } from "../viewer/resultExport";
+import { type ExportUnits, heatFlowsCsv, nodeCsvChunks, reactionsCsv, vtuParts } from "../viewer/resultExport";
 import { parseResultFields } from "../viewer/resultFields";
 import { parseVolumeMesh } from "../viewer/section";
 
-type Kind = "nodes" | "reactions" | "vtk";
+type Kind = "nodes" | "reactions" | "heatFlows" | "vtk";
 
 /** Saves Blob parts as a file through a temporary link. */
 function save(parts: BlobPart[], type: string, name: string): void {
@@ -43,7 +43,8 @@ export function RunExport({
   run: RunView;
   result: SolveResult;
   units: ExportUnits;
-  /** A steady-state thermal run (M5.1): temperatures at the nodes, and no reactions or loads. */
+  /** A steady-state thermal run (M5.1): temperatures and heat fluxes at the nodes, and heat
+   * flows instead of reactions and loads (M5.3). */
   thermal?: boolean;
 }) {
   const [busy, setBusy] = useState<Kind | null>(null);
@@ -55,6 +56,10 @@ export function RunExport({
     setBusy(kind);
     setProblem(null);
     const work = async () => {
+      if (kind === "heatFlows") {
+        save([heatFlowsCsv(result, run.spec, units)], "text/csv;charset=utf-8", `${base}-heat-flows.csv`);
+        return;
+      }
       if (kind === "reactions") {
         save([reactionsCsv(result, run.spec, units)], "text/csv;charset=utf-8", `${base}-reactions.csv`);
         return;
@@ -88,12 +93,14 @@ export function RunExport({
       <h3 className="pane-subtitle">Export</h3>
       <div className="export-buttons">
         {button("nodes", "Results at every node (CSV)", !hasNodes)}
-        {!thermal && button("reactions", "Reactions and loads (CSV)")}
+        {thermal
+          ? button("heatFlows", "Heat flows (CSV)", result.heatFlows === undefined)
+          : button("reactions", "Reactions and loads (CSV)")}
         {button("vtk", "Mesh and results (VTK)", !hasNodes)}
       </div>
       <p className="field-hint">
         {thermal
-          ? "The CSV file is in the units shown above, one row per mesh node numbered as in the solver input. The VTK file (.vtu) holds the mesh and the temperature at its nodes in SI units (m, K)."
+          ? "CSV files are in the units shown above, the results one row per mesh node numbered as in the solver input. The VTK file (.vtu) holds the mesh and the temperature and heat flux at its nodes in SI units (m, K, W/m²)."
           : hasNodes
             ? "CSV files are in the units shown above, one row per mesh node numbered as in the solver input. The VTK file (.vtu) holds the undeformed mesh and every result at its nodes in SI units (m, Pa, m/m); warp by displacement to see the deformed shape."
             : "This run was solved before node values were kept, so only the reactions can be exported. Run again to export the results at every node."}

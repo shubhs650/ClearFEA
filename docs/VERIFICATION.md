@@ -105,6 +105,8 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Thermal stress | V-18 |
 | Temperature-dependent properties | V-19 |
 | Modal | V-20, V-21, V-22 |
+| Heat flux results | V-13, V-15, V-16, V-17 (heat flux along the wall, M5.3) |
+| Heat flows and heat balance check | V-13, V-15, V-16, V-17 (each load's heat flow); the run's own heat balance on every thermal case (M5.3) |
 | Reaction balance check | V-04, V-05, V-06, V-07, V-08, V-10, V-25, V-03, V-26; the run's own balance check, force and moment, on every case (M3.2) |
 | Reaction moments | V-04 |
 | Local mesh refinement | V-03 |
@@ -123,7 +125,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 Besides its own reference values, every case asserts:
 
 - Reactions balance applied loads within 0.1 percent (structural), both as the harness integrates the loads over the run's surface and as the run's own balance check reports them, force and moment (M3.2, ADR-051).
-- Heat in equals heat out within 0.1 percent (thermal; from M5.3, which adds heat-flow results. Until then a thermal case has no force balance rows, since it has no forces).
+- Heat in equals heat out within 0.1 percent (thermal, since M5.3): the run's own heat balance, and, where the case has a heat flux or heat generation, the heat those bring in against the case's own integration over the run's surface (ADR-066). A thermal case has no force balance rows, since it has no forces.
 - The solver log contains no unexpected warnings.
 - Billable seconds were recorded and one ledger entry was written.
 

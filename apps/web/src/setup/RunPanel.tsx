@@ -75,6 +75,8 @@ const KIND_LABELS: Record<DisplayKind, string> = {
   moment: "Moment",
   strain: "Strain",
   temperature: "Temperature",
+  heatFlux: "Heat flux",
+  heatFlow: "Heat flow",
 };
 
 /**
@@ -125,7 +127,7 @@ function DisplayUnits({
 }
 
 /** The headings of the quantity list, in order. */
-const QUANTITY_GROUPS: readonly QuantityGroup[] = ["Displacement", "Stress", "Strain", "Safety factor", "Temperature"];
+const QUANTITY_GROUPS: readonly QuantityGroup[] = ["Displacement", "Stress", "Strain", "Safety factor", "Temperature", "Heat flux"];
 
 /** One reason the setup cannot be run now, and the tree item that fixes it (null for none). */
 export interface RunBlocker {
@@ -383,10 +385,18 @@ function Reactions({ result, spec, units }: { result: SolveResult; spec: Simulat
   );
 }
 
+/** A heat flow into the body, or out of it, as a positive figure with its direction. */
+function heatFlowText(heat: number, unit: string): string {
+  const size = figure(Math.abs(heat), unit, "heatFlow");
+  return heat > 0 ? `${size} in` : heat < 0 ? `${size} out` : size;
+}
+
 /** The figures of a steady-state thermal run (M5.1): its highest and lowest temperature, where
- * they are. Absolute temperatures, converted with their offset. Numbers only. */
-function ThermalFigures({ result, units }: { result: SolveResult; units: ResultUnits }) {
-  const { temperature } = result;
+ * they are, and since M5.3 its largest heat flux, the heat each thermal load brings in or takes
+ * out, and the heat balance. Absolute temperatures, converted with their offset. Numbers only. */
+function ThermalFigures({ result, spec, units }: { result: SolveResult; spec: SimulationSpec; units: ResultUnits }) {
+  const { temperature, heatFlux, heatFlows, heatBalance } = result;
+  const loadName = new Map(spec.loads.map((l) => [l.id, l.name]));
   return (
     <dl className="geometry-facts" aria-label="Run results">
       {temperature === undefined ? (
@@ -405,6 +415,35 @@ function ThermalFigures({ result, units }: { result: SolveResult; units: ResultU
           <dd>
             {figure(temperature.min.value, units.temperature, "temperature")}{" "}
             <span className="field-hint">{at(temperature.min.position, units.length)}</span>
+          </dd>
+        </>
+      )}
+      {heatFlux === undefined || heatFlows === undefined || heatBalance === undefined ? (
+        <>
+          <dt>Heat flows</dt>
+          <dd className="field-hint">Run again to see the heat flux, each load's heat flow and the heat balance.</dd>
+        </>
+      ) : (
+        <>
+          <dt>Largest heat flux</dt>
+          <dd>
+            {figure(heatFlux.max.value, units.heatFlux, "heatFlux")}{" "}
+            <span className="field-hint">{at(heatFlux.max.position, units.length)}</span>
+          </dd>
+          {heatFlows.map((flow) => (
+            <Fragment key={flow.loadId}>
+              <dt>Heat flow, {loadName.get(flow.loadId) ?? flow.loadId}</dt>
+              <dd>{heatFlowText(flow.heat, units.heatFlow)}</dd>
+            </Fragment>
+          ))}
+          <dt>Heat balance</dt>
+          <dd>
+            in {figure(heatBalance.heatIn, units.heatFlow, "heatFlow")}, out{" "}
+            {figure(heatBalance.heatOut, units.heatFlow, "heatFlow")}
+          </dd>
+          <dt>Out of balance</dt>
+          <dd>
+            {percent(heatBalance.ratio)} of {figure(heatBalance.scale, units.heatFlow, "heatFlow")}
           </dd>
         </>
       )}
@@ -666,7 +705,7 @@ export function RunPanel({
           Solved with {SOLVER_LABELS[runSolver(run)]}. {ITERATIVE_ACCURACY_NOTE}
         </p>
       )}
-      {result && thermal && <ThermalFigures result={result} units={units} />}
+      {result && thermal && run !== null && <ThermalFigures result={result} spec={run.spec} units={units} />}
       {result && !thermal && (
         <dl className="geometry-facts" aria-label="Run results">
           {result.displacement && (

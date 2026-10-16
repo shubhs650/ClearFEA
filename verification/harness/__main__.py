@@ -29,11 +29,13 @@ from .cases import (
     Case,
     CaseError,
     Check,
+    applied_heat,
     applied_load,
     balance,
     build_spec,
     evaluate,
     evaluate_inside,
+    heat_flow,
     load_case,
     name_faces,
     reaction,
@@ -124,6 +126,44 @@ def balance_rows(
     )
 
 
+def heat_balance_rows(
+    outcome: Outcome, spec: dict[str, Any], surface: Surface, run: dict[str, Any]
+) -> None:
+    """The heat balance rows of a steady-state thermal run (M5.3): the heat its fluxes and
+    generations bring in, from the case's own integration against the run's, and the run's own
+    heat in against heat out."""
+    flows = run["result"].get("heatFlows")
+    check = run["result"].get("heatBalance")
+    if flows is None or check is None:
+        raise CaseError("The run's result has no heat flows or heat balance.")
+    expected = applied_heat(spec, surface)
+    if expected:
+        got = {f["loadId"]: f["heat"] for f in flows}
+        miss = sum(abs(got.get(k, 0.0) - v) for k, v in expected.items())
+        size = sum(abs(v) for v in expected.values())
+        off = miss / size
+        outcome.rows.append(
+            Row(
+                "Heat flux and generation bring in what the setup gives",
+                f"{sum(expected.values()):.5g} W",
+                f"{sum(got.get(k, 0.0) for k in expected):.5g} W",
+                f"{100 * off:.4f} % of {size:.5g} W",
+                f"{100 * BALANCE_TOLERANCE:g} %",
+                off <= BALANCE_TOLERANCE,
+            )
+        )
+    outcome.rows.append(
+        Row(
+            "The run's heat balance closes",
+            f"heat in {check['heatIn']:.5g} W",
+            f"heat out {check['heatOut']:.5g} W",
+            f"{100 * check['ratio']:.4f} % of {check['scale']:.5g} W",
+            f"{100 * BALANCE_TOLERANCE:g} %",
+            check["ratio"] <= BALANCE_TOLERANCE,
+        )
+    )
+
+
 def run_case(
     api: Client, case: Case, tier: str, work: Path, persist_to: Path, timeout: float
 ) -> Outcome:
@@ -206,7 +246,10 @@ def run_case(
         )
 
     for check in case.checks:
-        if check.support is not None:
+        if check.load is not None:
+            value = heat_flow(check, run["result"].get("heatFlows", []))
+            where = f"load {check.load}"
+        elif check.support is not None:
             value, where = reaction(check, run["result"]["reactions"]), f"support {check.support}"
         elif check.inside:
             assert nodes is not None
@@ -228,9 +271,11 @@ def run_case(
             )
         )
 
-    # Automatic checks on every case (docs/VERIFICATION.md). A steady-state thermal run has no
-    # forces; its heat balance comes with M5.3.
-    if spec["analysis"] != "steady_thermal":
+    # Automatic checks on every case (docs/VERIFICATION.md): the force balance of a structural
+    # run, the heat balance of a steady-state thermal one (M5.3).
+    if spec["analysis"] == "steady_thermal":
+        heat_balance_rows(outcome, spec, surface, run)
+    else:
         balance_rows(outcome, spec, surface, run)
     warnings = unexpected_warnings(log, case.allowed_warnings)
     outcome.rows.append(

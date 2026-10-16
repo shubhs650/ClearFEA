@@ -27,3 +27,19 @@ checks:
     face: back
     reference: { value: 623.387981, unit: °F }
     tolerance: { coarse: 0.0001, full: 0.0001 }
+  # M5.3: the flux through the plate and the heat radiated, q times the 80 × 80 mm face.
+  - name: Heat flux at the radiating face, q
+    quantity: heatFlux.x
+    face: front
+    reference: { value: 1500, unit: BTU/(h·ft²) }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Heat in from the heater, q A
+    quantity: heatFlow
+    load: heater
+    reference: { value: 30.284071, unit: W }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Heat radiated to the room, − q A
+    quantity: heatFlow
+    load: room
+    reference: { value: -103.33354, unit: BTU/h }
+    tolerance: { coarse: 0.0001, full: 0.0001 }

@@ -48,3 +48,25 @@ checks:
     box: { min: [30, 0, 0], max: [30, 0, 60] }
     reference: { value: 126, unit: °F }
     tolerance: { coarse: 0.0001, full: 0.0001 }
+  # M5.3: the heat flux k (Th − Tc) / L and the heat flow through each fixed face, the flux
+  # times the 60 × 60 mm face, into the body at the hot face and out at the cold one.
+  - name: Heat flux along x, k (Th − Tc) / L
+    quantity: heatFlux.x
+    face: side
+    reference: { value: 45963.84, unit: BTU/(h·ft²) }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Heat flux magnitude at the cold face
+    quantity: heatFlux
+    face: cold
+    reference: { value: 144.997104, unit: kW/m² }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Heat in through the hot face, q A
+    quantity: heatFlow
+    load: hot
+    reference: { value: 521.989575, unit: W }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Heat out through the cold face, − q A
+    quantity: heatFlow
+    load: cold
+    reference: { value: -1781.102362, unit: BTU/h }
+    tolerance: { coarse: 0.0001, full: 0.0001 }

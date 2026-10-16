@@ -18,12 +18,14 @@ from harness.cases import (
     Case,
     CaseError,
     Check,
+    applied_heat,
     applied_load,
     balance,
     build_spec,
     distance_integral,
     evaluate,
     evaluate_inside,
+    heat_flow,
     load_case,
     name_faces,
     reaction,
@@ -675,3 +677,92 @@ def test_v13_references_are_a_linear_profile_between_the_fixed_temperatures() ->
         ("Three quarters of the way through, Tc + (Th − Tc) / 4", 0.75),
     ):
         assert checks[name].reference == pytest.approx(hot - (hot - cold) * x, rel=1e-8)
+
+
+# --- Heat flux, heat flows and the heat balance (M5.3) ---
+
+
+def test_evaluates_heat_flux_magnitude_and_components() -> None:
+    s = surface()
+    n = len(s.positions)
+    fields = {"heatFlux": [(3.0, -4.0, 0.0)] * n}
+    box = Box((0.05, 0, 0), (0.1, 0.05, 0))
+    size = Check("q", "heatFlux", "plate", box, 1.0, "W/m²", {})
+    along_y = Check("qy", "heatFlux.y", "plate", box, 1.0, "W/m²", {})
+    assert evaluate(size, s, fields, {"plate": 7}) == (pytest.approx(5.0), 2)
+    assert evaluate(along_y, s, fields, {"plate": 7}) == (pytest.approx(-4.0), 2)
+
+
+def test_reads_a_loads_heat_flow_from_the_run() -> None:
+    check = Check("q", "heatFlow", None, None, 1.0, "W", {}, load="hot")
+    flows = [{"loadId": "cold", "heat": -5.0}, {"loadId": "hot", "heat": 5.0}]
+    assert heat_flow(check, flows) == 5.0
+    with pytest.raises(CaseError, match="no heat flow for load hot"):
+        heat_flow(check, flows[:1])
+
+
+def test_a_heat_flow_check_must_name_a_load(tmp_path: Path) -> None:
+    folder = tmp_path / "V-99"
+    folder.mkdir()
+    (folder / "spec.json").write_text(json.dumps({"loads": [{"id": "hot"}], "supports": []}))
+    (folder / "case.yaml").write_text(
+        "id: V-99\ntitle: t\ngeometry: {unit: mm}\nfaces: {}\n"
+        "mesh: {coarse: {value: 1, unit: mm}, full: {value: 1, unit: mm}}\n"
+        "checks:\n  - {name: q, quantity: heatFlow, load: warm, reference: {value: 1, unit: W},"
+        " tolerance: {coarse: 0.1, full: 0.1}}\n"
+    )
+    with pytest.raises(CaseError, match="must name a load id"):
+        load_case(folder)
+
+
+def test_applied_heat_is_flux_times_area_and_generation_times_volume() -> None:
+    s = surface()
+    area = 0.1 * 0.05  # face 7
+    spec = {
+        "bodies": [{"tag": 1}],
+        "loads": [
+            {"id": "q", "type": "heat_flux", "faces": [7], "flux": {"value": 2, "unit": "kW/m²"}},
+            {"id": "t", "type": "fixed_temperature", "faces": [7]},
+        ],
+    }
+    # float32 positions in surface.bin.
+    assert applied_heat(spec, s) == {"q": pytest.approx(2000 * area, rel=1e-6)}
+
+
+def test_thermal_cases_check_heat_flux_and_heat_flows_against_closed_forms() -> None:
+    # V-13: k (Th − Tc) / L through the 40 mm wall, times its 60 × 60 mm faces.
+    k = 26 * 1055.05585262 / (3600 * 0.3048) * 9 / 5
+    q = k * ((300 + 459.67) * 5 / 9 - 293.15) / 0.04
+    checks = by_name(load_case(CASES / "V-13-plane-wall"))
+    assert checks["Heat flux along x, k (Th − Tc) / L"].reference == pytest.approx(q, rel=1e-8)
+    assert checks["Heat flux magnitude at the cold face"].reference == pytest.approx(q, rel=1e-8)
+    assert checks["Heat in through the hot face, q A"].reference == pytest.approx(
+        q * 0.0036, rel=1e-8
+    )
+    assert checks["Heat out through the cold face, − q A"].reference == pytest.approx(
+        -q * 0.0036, rel=1e-8
+    )
+    # V-15: the films and the wall in series.
+    h2 = 20 * 1055.05585262 / (3600 * 0.3048**2) * 9 / 5
+    q = 180 / (1 / 250 + 0.04 / 1.5 + 1 / h2)
+    checks = by_name(load_case(CASES / "V-15-convection-wall"))
+    assert checks["Heat flux along x, ΔT / (1/h1 + L/k + 1/h2)"].reference == pytest.approx(
+        q, rel=1e-6
+    )
+    assert checks["Heat in from the hot gas, q A"].reference == pytest.approx(q * 0.0036, rel=1e-7)
+    assert checks["Heat out to the room air, − q A"].reference == pytest.approx(
+        -q * 0.0036, rel=1e-7
+    )
+    # V-16: what the heater brings in is radiated from the front face.
+    q = 1500 * 1055.05585262 / (3600 * 0.3048**2)
+    checks = by_name(load_case(CASES / "V-16-radiating-plate"))
+    assert checks["Heat in from the heater, q A"].reference == pytest.approx(q * 0.0064, rel=1e-7)
+    assert checks["Heat radiated to the room, − q A"].reference == pytest.approx(
+        -q * 0.0064, rel=1e-7
+    )
+    # V-17: 0.01 W/mm³ in the 40 × 60 × 60 mm slab leaves through its two cooled faces.
+    checks = by_name(load_case(CASES / "V-17-heat-generation"))
+    assert checks["Heat out through the cooled faces, − q‴ V"].reference == pytest.approx(
+        -1e7 * 0.04 * 0.0036, rel=1e-12
+    )
+    assert checks["Heat flux at the left face, − q‴ L"].reference == -1e7 * 0.02
