@@ -334,6 +334,9 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str | No
     out.append("*STEP")
     step = "*HEAT TRANSFER, STEADY STATE"
     out.append(step if solver is None else f"{step}, SOLVER={solver}")
+    # CalculiX treats every heat transfer step as nonlinear and warns unless the first time
+    # increment and the step time are given; a linear steady state needs one increment.
+    out.append("1.0, 1.0")
     out.append("*BOUNDARY")
     # Degree of freedom 11 is the temperature.
     out.extend(f"T{j + 1}, 11, 11, {_number(item.kelvin)}" for j, item in enumerate(held))

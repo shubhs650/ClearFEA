@@ -1038,11 +1038,10 @@ def test_refuses_an_unknown_solver_name() -> None:
 def test_heat_transfer_deck_holds_fixed_temperatures_in_kelvin() -> None:
     lines = deck(heat_spec(), two_tets(order=2)).splitlines()
     step = lines.index("*STEP")
-    assert lines[step + 1] == "*HEAT TRANSFER, STEADY STATE"
-    assert lines[step + 2] == "*BOUNDARY"
+    assert lines[step + 1 : step + 4] == ["*HEAT TRANSFER, STEADY STATE", "1.0, 1.0", "*BOUNDARY"]
     # 100 °C and 373.15 K are the same temperature, so the shared edge is held consistently.
-    assert lines[step + 3 : step + 5] == ["T1, 11, 11, 373.15", "T2, 11, 11, 373.15"]
-    assert lines[step + 5 :] == ["*NODE FILE", "NT", "*END STEP"]
+    assert lines[step + 4 : step + 6] == ["T1, 11, 11, 373.15", "T2, 11, 11, 373.15"]
+    assert lines[step + 6 :] == ["*NODE FILE", "NT", "*END STEP"]
     assert not any(x.startswith(("*STATIC", "*ELASTIC", "*EL FILE")) for x in lines)
 
 
