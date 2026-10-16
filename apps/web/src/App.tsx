@@ -125,6 +125,7 @@ export function App() {
       length: systemUnit(unitSystem, "length"),
       pressure: systemUnit(unitSystem, "pressure"),
       force: systemUnit(unitSystem, "force"),
+      moment: systemUnit(unitSystem, "moment"),
       strain: systemUnit(unitSystem, "strain"),
     }),
     [unitSystem],
@@ -292,7 +293,6 @@ export function App() {
           blockers={runBlockers()}
           onOpen={select}
           units={resultUnits}
-          supportNames={new Map(spec.supports.map((s) => [s.id, s.name]))}
           estimate={estimate}
           requesting={runs.requesting}
           requestProblem={runs.requestProblem}

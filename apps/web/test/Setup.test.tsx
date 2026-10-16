@@ -926,18 +926,34 @@ const supported: SimulationSpec = {
   loads: [{ id: "pressure-1", type: "pressure", name: "Top", faces: [7], magnitude: { value: 1, unit: "MPa" } }],
 };
 
-/** Routes of a setup whose run has succeeded, with its result files. */
-function finishedRun(): Record<string, Route> {
-  const result: SolveResult = {
+/** Routes of a setup whose run has succeeded, with its result files; ``beforeM32`` leaves out
+ * what runs solved before M3.2 lack (reaction moments, load totals, the balance check). */
+function finishedRun(beforeM32 = false): Record<string, Route> {
+  const full: SolveResult = {
     nodes: 7108,
     displacement: { max: { value: 1.2e-4, node: 17, position: [0.1, 0.05, 0.02] } },
     vonMises: {
       min: { value: 1.5e3, node: 3, position: [0, 0.05, 0] },
       max: { value: 2.4e8, node: 40, position: [0, 0, 0] },
     },
-    reactions: [{ supportId: "fixed-1", force: [0, 0, -400] }],
+    reactions: [{ supportId: "fixed-1", force: [0, 0, -400], moment: [2, -1.5, 0], point: [0, 0.05, 0.01] }],
+    loads: [{ loadId: "pressure-1", force: [0, 0, 400.0001], moment: [20, -40, 0] }],
+    balance: {
+      appliedForce: [0, 0, 400.0001],
+      appliedMoment: [20, -40, 0],
+      reactionForce: [0, 0, -400],
+      reactionMoment: [-20, 40.00001, 0],
+      forceScale: 400.0001,
+      momentScale: 48,
+      forceRatio: 2.5e-7,
+      momentRatio: 2.1e-7,
+    },
     software: { calculix: "2.21" },
   };
+  const { loads: _loads, balance: _balance, ...older } = full;
+  const result: SolveResult = beforeM32
+    ? { ...older, reactions: full.reactions.map(({ supportId, force }) => ({ supportId, force })) }
+    : full;
   return {
     "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
     "GET /api/simulations/s1/runs": {
@@ -1097,9 +1113,26 @@ describe("run", () => {
     expect(figures.getByText("0.0015 MPa")).toBeTruthy();
     expect(figures.getByText("Reaction, Base")).toBeTruthy();
     expect(figures.getByText("(0, 0, -400) N")).toBeTruthy();
+    // Moments in N·mm about the support's faces' centre; the load's total; the balance (M3.2).
+    expect(figures.getByText(/moment \(2000, -1500, 0\) N·mm about the faces' centre at \(0, 50, 10\) mm/)).toBeTruthy();
+    expect(figures.getByText("Applied, Top")).toBeTruthy();
+    expect(figures.getByText("(0, 0, 400) N")).toBeTruthy();
+    expect(figures.getByText("Out of balance").nextElementSibling?.textContent).toBe(
+      "force 0.000025 % of 400 N, moment 0.000021 % of 48000 N·mm",
+    );
     expect(within(settings().getByLabelText("Run record")).getByText("0.003611 credits for 13 s")).toBeTruthy();
     expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
     expect(settings().getByRole("button", { name: "Run again" })).toHaveProperty("disabled", false);
+  });
+
+  it("asks to run again for reaction moments and the balance on a run solved before them", async () => {
+    serve(routes([simulation(supported)], finishedRun(true)));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const figures = within(await settings().findByLabelText("Run results"));
+    expect(figures.getByText("(0, 0, -400) N")).toBeTruthy();
+    expect(figures.queryByText(/about the faces/)).toBeNull();
+    expect(figures.getByText("Run again to see reaction moments and the balance of loads and reactions.")).toBeTruthy();
   });
 
   it("shows the run record with its versions and links to view and download the deck and log", async () => {
