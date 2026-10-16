@@ -14,15 +14,19 @@ from collections.abc import Iterable
 from ..meshing.volume import NODES_PER_ELEMENT, VolumeMesh
 from ..spec.simulation_schema import (
     CentrifugalLoad,
+    ConvectionLoad,
     ElasticSupport,
     FixedSupport,
     FixedTemperatureLoad,
     ForceLoad,
     GravityLoad,
+    HeatFluxLoad,
+    HeatGenerationLoad,
     HydrostaticLoad,
     PrescribedDisplacement,
     PressureLoad,
     Quantity,
+    RadiationLoad,
     RemoteLoad,
     SimulationSpec,
     TemperatureLoad,
@@ -55,7 +59,17 @@ from .loads import (
     remote_vectors,
 )
 from .loads.body import gravity_vector, rotation
-from .loads.heat import conductivities, fixed_temperatures
+from .loads.heat import (
+    FACE_LOAD_KINDS,
+    check_face_heat_loads,
+    conductivities,
+    convections,
+    element_face_fluxes,
+    face_heat_loads,
+    fixed_temperatures,
+    heat_generation,
+    radiations,
+)
 from .loads.thermal import expansions, temperature_change
 from .loads.tie import Equation, body_groups, tied_bonds, ties
 
@@ -271,23 +285,36 @@ def _nodes_and_elements(
     return out
 
 
+#: The Stefan-Boltzmann constant, W/(m²·K⁴): CODATA 2018, exact since the 2019 SI redefinition.
+STEFAN_BOLTZMANN = 5.670374419e-8
+
+#: The loads a steady-state thermal analysis takes (M5.1, M5.2).
+_THERMAL_LOADS = (FixedTemperatureLoad, HeatGenerationLoad, *FACE_LOAD_KINDS)
+
+
 def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str | None) -> str:
-    """CalculiX input for a steady-state thermal analysis (M5.1, ADR-064): conduction only,
-    fixed temperatures on faces, every other face insulated. Temperatures in kelvin."""
-    wrong = [*spec.supports, *(x for x in spec.loads if not isinstance(x, FixedTemperatureLoad))]
+    """CalculiX input for a steady-state thermal analysis (M5.1, ADR-064; M5.2, ADR-065):
+    conduction, with fixed temperatures, heat fluxes, convection and radiation on faces and
+    heat generation in bodies; every other face insulated. Temperatures in kelvin."""
+    wrong = [*spec.supports, *(x for x in spec.loads if not isinstance(x, _THERMAL_LOADS))]
     if wrong:
         raise DeckError(
             f'"{wrong[0].name}" has no effect in a steady-state thermal analysis. Delete it, or '
             "set the analysis type to linear static."
         )
     fixed = [x for x in spec.loads if isinstance(x, FixedTemperatureLoad)]
-    if not fixed:
+    face_loads = face_heat_loads(spec)
+    # Convection and radiation tie the temperature to their ambient, as a fixed temperature does.
+    anchors = [*fixed, *(x for x in face_loads if not isinstance(x, HeatFluxLoad))]
+    if not anchors:
         raise DeckError(
-            "The setup has no fixed temperature, so the temperatures are not set anywhere. Add "
-            "a fixed temperature."
+            "The setup has no fixed temperature, convection or radiation, so the temperatures "
+            "are not set anywhere. Add a fixed temperature, or convection or radiation to the "
+            "surroundings."
         )
-    for load in fixed:
+    for load in [*fixed, *face_loads]:
         _check_faces(mesh, load.faces, f"{load.name}")
+    check_face_heat_loads(spec)
     if len(mesh.bodies) > 1 and tied_bonds(spec):
         raise DeckError(
             "Bonds do not carry heat in a steady-state thermal analysis yet, so bonded bodies "
@@ -297,14 +324,20 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str | No
     k = conductivities(spec, mesh)
     _check_nodes(mesh)
     held = fixed_temperatures(spec, mesh)
-    # Bodies share no nodes (ADR-058), so each needs a fixed temperature of its own, or its
-    # temperature is undetermined and the equations singular.
+    flux = element_face_fluxes(spec, mesh)
+    films = convections(spec, mesh)
+    radiates = radiations(spec, mesh)
+    generated = heat_generation(spec, mesh)
+    # Bodies share no nodes (ADR-058), so each needs a fixed temperature, convection or
+    # radiation of its own, or its temperature is undetermined and the equations singular.
     nodes = {n for item in held for n in item.nodes}
+    for item in [*films, *radiates]:
+        nodes.update(fixed_support_nodes(mesh, item.load.faces))
     unset = [tag for tag, _, _ in bodies if not nodes & body_nodes(mesh, [tag])]
     if unset:
         raise DeckError(
-            f"Body {', '.join(str(t) for t in unset)} has no fixed temperature, so its "
-            "temperature is not set. Add a fixed temperature on one of its faces."
+            f"Body {', '.join(str(t) for t in unset)} has no fixed temperature, convection or "
+            "radiation, so its temperature is not set. Add one on one of its faces."
         )
 
     out = _nodes_and_elements(spec, mesh, bodies, "ClearFEA steady-state thermal analysis")
@@ -330,6 +363,57 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str | No
         out.append(_number(k[material.id]))
     for tag, _, name in bodies:
         out.append(f"*SOLID SECTION, ELSET=B{tag}, MATERIAL={name}")
+    for load in spec.loads:
+        if isinstance(load, HeatFluxLoad):
+            entered = load.flux
+            assert entered is not None  # element_face_fluxes refuses a missing flux
+            out.append(
+                f'** Heat flux {load.id} "{_label(load.name)}", faces '
+                + ", ".join(str(f) for f in load.faces)
+                + f": {_number(entered.value)} {entered.unit} = "
+                + f"{_number(si(entered, 'heatFlux', load.name))} W/m² into the body"
+            )
+        elif isinstance(load, HeatGenerationLoad):
+            entered = load.power
+            assert entered is not None  # heat_generation refuses a missing value
+            out.append(
+                f'** Heat generation {load.id} "{_label(load.name)}", bodies '
+                + ", ".join(str(b) for b in load.bodies)
+                + f": {_number(entered.value)} {entered.unit} = "
+                + f"{_number(si(entered, 'heatGeneration', load.name))} W/m³"
+            )
+    for item in films:
+        load = item.load
+        assert isinstance(load, ConvectionLoad) and load.coefficient is not None
+        assert load.ambient_temperature is not None  # convections() refuses missing values
+        h, t = load.coefficient, load.ambient_temperature
+        out.append(
+            f'** Convection {load.id} "{_label(load.name)}", faces '
+            + ", ".join(str(f) for f in load.faces)
+            + f": {_number(h.value)} {h.unit} = {_number(item.value)} W/(m²·K) to "
+            + f"{_number(t.value)} {t.unit} = {_number(item.ambient)} K"
+        )
+    for item in radiates:
+        load = item.load
+        assert isinstance(load, RadiationLoad) and load.ambient_temperature is not None
+        t = load.ambient_temperature
+        out.append(
+            f'** Radiation {load.id} "{_label(load.name)}", faces '
+            + ", ".join(str(f) for f in load.faces)
+            + f": emissivity {_number(item.value)} to {_number(t.value)} {t.unit} = "
+            + f"{_number(item.ambient)} K"
+        )
+    if radiates:
+        # Temperatures are in kelvin. Radiation makes the step nonlinear, and CalculiX starts
+        # its iterations from the initial temperature, 0 unless given (the linearised
+        # radiation is then zero and the first iteration diverges; checked with ccx 2.21), so
+        # every node starts at the mean of the setup's fixed and ambient temperatures.
+        out.append(
+            f"*PHYSICAL CONSTANTS, ABSOLUTE ZERO=0.0, STEFAN BOLTZMANN={_number(STEFAN_BOLTZMANN)}"
+        )
+        known = [x.kelvin for x in held] + [x.ambient for x in [*films, *radiates]]
+        out.append("*INITIAL CONDITIONS, TYPE=TEMPERATURE")
+        out.append(f"NALL, {_number(sum(known) / len(known))}")
 
     out.append("*STEP")
     step = "*HEAT TRANSFER, STEADY STATE"
@@ -340,6 +424,27 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str | No
     out.append("*BOUNDARY")
     # Degree of freedom 11 is the temperature.
     out.extend(f"T{j + 1}, 11, 11, {_number(item.kelvin)}" for j, item in enumerate(held))
+    # Heat fluxes on the same element face add up, so each face gets one line.
+    if flux or generated:
+        out.append("*DFLUX")
+        out.extend(
+            f"{element + 1}, S{face}, {_number(value)}" for (element, face), value in flux.items()
+        )
+        out.extend(f"B{tag}, BF, {_number(value)}" for tag, value in generated.items())
+    if films:
+        out.append("*FILM")
+        for item in films:
+            out.extend(
+                f"{element + 1}, F{face}, {_number(item.ambient)}, {_number(item.value)}"
+                for element, face in item.faces
+            )
+    if radiates:
+        out.append("*RADIATE")
+        for item in radiates:
+            out.extend(
+                f"{element + 1}, R{face}, {_number(item.ambient)}, {_number(item.value)}"
+                for element, face in item.faces
+            )
     out.append("*NODE FILE")
     out.append("NT")
     out.append("*END STEP")
@@ -360,11 +465,13 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
         return _heat_transfer_deck(spec, mesh, solver)
     if spec.analysis != "linear_static":
         raise DeckError(f"Analysis type '{spec.analysis}' is not supported.")
-    thermal_loads = [x for x in spec.loads if isinstance(x, FixedTemperatureLoad)]
+    thermal_loads = [x for x in spec.loads if isinstance(x, _THERMAL_LOADS)]
     if thermal_loads:
+        kind = {FixedTemperatureLoad: "Fixed temperature", HeatGenerationLoad: "Heat generation"}
+        what = (kind | FACE_LOAD_KINDS)[type(thermal_loads[0])]
         raise DeckError(
-            f'Fixed temperature "{thermal_loads[0].name}" has no effect in a linear static '
-            "analysis. Delete it, or set the analysis type to steady-state thermal."
+            f'{what} "{thermal_loads[0].name}" has no effect in a linear static analysis. '
+            "Delete it, or set the analysis type to steady-state thermal."
         )
     if not spec.supports:
         raise DeckError("The setup has no supports, so the part is free to move. Add a support.")

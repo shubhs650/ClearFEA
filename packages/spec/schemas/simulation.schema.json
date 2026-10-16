@@ -35,7 +35,7 @@
       "uniqueItems": true
     },
     "AnalysisType": {
-      "description": "linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064); it solves temperatures only, so it uses thermal loads and no supports.",
+      "description": "linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports.",
       "enum": ["linear_static", "steady_thermal"]
     },
     "BodyAssignment": {
@@ -293,6 +293,62 @@
         "temperature": { "$ref": "#/$defs/OptionalQuantity" }
       }
     },
+    "HeatFluxLoad": {
+      "description": "A uniform heat flux through faces in a steady-state thermal analysis (M5.2). flux is a heatFlux quantity, positive into the body and negative out of it, null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces", "flux"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "heat_flux" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" },
+        "flux": { "$ref": "#/$defs/OptionalQuantity" }
+      }
+    },
+    "ConvectionLoad": {
+      "description": "Convection from faces to a surrounding fluid in a steady-state thermal analysis (M5.2): the heat leaving a face is coefficient x (surface temperature - ambientTemperature). coefficient is a heatTransferCoefficient quantity greater than zero; ambientTemperature an absolute temperature quantity above 0 K; each null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces", "coefficient", "ambientTemperature"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "convection" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" },
+        "coefficient": { "$ref": "#/$defs/OptionalQuantity" },
+        "ambientTemperature": { "$ref": "#/$defs/OptionalQuantity" }
+      }
+    },
+    "RadiationLoad": {
+      "description": "Radiation from faces to surroundings at one temperature in a steady-state thermal analysis (M5.2): the heat leaving a face is emissivity x Stefan-Boltzmann constant x (surface temperature^4 - ambientTemperature^4), every face seeing only the surroundings. emissivity is dimensionless, above 0 and at most 1; ambientTemperature an absolute temperature quantity above 0 K; each null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces", "emissivity", "ambientTemperature"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "radiation" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" },
+        "emissivity": {
+          "oneOf": [{ "type": "number", "exclusiveMinimum": 0, "maximum": 1 }, { "type": "null" }]
+        },
+        "ambientTemperature": { "$ref": "#/$defs/OptionalQuantity" }
+      }
+    },
+    "HeatGenerationLoad": {
+      "description": "Heat produced uniformly inside bodies in a steady-state thermal analysis (M5.2). bodies are body tags of the geometry, empty until picked; power is a heatGeneration quantity (per unit of volume), negative for heat absorbed, null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "bodies", "power"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "heat_generation" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "bodies": { "type": "array", "items": { "type": "integer" }, "uniqueItems": true },
+        "power": { "$ref": "#/$defs/OptionalQuantity" }
+      }
+    },
     "AxisPoint": {
       "description": "A point in global coordinates; each coordinate a length quantity, null until entered.",
       "type": "object",
@@ -388,7 +444,11 @@
         { "$ref": "#/$defs/GravityLoad" },
         { "$ref": "#/$defs/CentrifugalLoad" },
         { "$ref": "#/$defs/TemperatureLoad" },
-        { "$ref": "#/$defs/FixedTemperatureLoad" }
+        { "$ref": "#/$defs/FixedTemperatureLoad" },
+        { "$ref": "#/$defs/HeatFluxLoad" },
+        { "$ref": "#/$defs/ConvectionLoad" },
+        { "$ref": "#/$defs/RadiationLoad" },
+        { "$ref": "#/$defs/HeatGenerationLoad" }
       ]
     },
     "LocalMeshScope": {
@@ -432,7 +492,7 @@
       }
     },
     "SimulationSpec": {
-      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), and the mesh settings: a global size, the element order and local sizes (M2.8), and the review of the bonds between touching bodies (M4.2). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
+      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), and the mesh settings: a global size, the element order and local sizes (M2.8), and the review of the bonds between touching bodies (M4.2). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
       "type": "object",
       "additionalProperties": false,
       "required": ["version", "analysis", "geometryId", "bodies", "materials", "supports", "loads", "mesh"],

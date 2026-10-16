@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "kinds": {
     "length": {
       "description": "Lengths and coordinates.",
@@ -325,6 +325,72 @@
         }
       }
     },
+    "heatFlux": {
+      "description": "Heat flux: heat flow per unit of area (M5.2).",
+      "si": "W/m²",
+      "units": {
+        "W/m²": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "kW/m²": {
+          "factor": 1000,
+          "definition": "1 kW/m² = 1000 W/m² exactly"
+        },
+        "W/mm²": {
+          "factor": 1000000,
+          "definition": "1 W/mm² = 1e6 W/m² exactly"
+        },
+        "BTU/(h·ft²)": {
+          "factor": 3.154590745063049,
+          "definition": "BTU (International Table) = 1055.05585262 J, h = 3600 s, ft = 0.3048 m: 1055.05585262 / (3600 x 0.3048²) = 3.1545907450... W/m² (nearest double)"
+        }
+      }
+    },
+    "heatTransferCoefficient": {
+      "description": "Convection (film) coefficient: heat flow per unit of area and of temperature difference (M5.2).",
+      "si": "W/(m²·K)",
+      "units": {
+        "W/(m²·K)": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "W/(m²·°C)": {
+          "factor": 1,
+          "definition": "1 W/(m²·°C) = 1 W/(m²·K) exactly"
+        },
+        "W/(mm²·K)": {
+          "factor": 1000000,
+          "definition": "1 W/(mm²·K) = 1e6 W/(m²·K) exactly"
+        },
+        "BTU/(h·ft²·°F)": {
+          "factor": 5.678263341113488,
+          "definition": "BTU (International Table) = 1055.05585262 J, h = 3600 s, ft = 0.3048 m, °F = 5/9 K: 1055.05585262 x 9 / (3600 x 0.3048² x 5) = 5.6782633411... W/(m²·K) (nearest double)"
+        }
+      }
+    },
+    "heatGeneration": {
+      "description": "Internal heat generation: heat produced per unit of volume (M5.2).",
+      "si": "W/m³",
+      "units": {
+        "W/m³": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "kW/m³": {
+          "factor": 1000,
+          "definition": "1 kW/m³ = 1000 W/m³ exactly"
+        },
+        "W/mm³": {
+          "factor": 1000000000,
+          "definition": "1 W/mm³ = 1e9 W/m³ exactly"
+        },
+        "BTU/(h·ft³)": {
+          "factor": 10.349707168842023,
+          "definition": "BTU (International Table) = 1055.05585262 J, h = 3600 s, ft = 0.3048 m: 1055.05585262 / (3600 x 0.3048³) = 10.349707168... W/m³ (nearest double)"
+        }
+      }
+    },
     "strain": {
       "description": "Strains: change of length per unit of length, dimensionless.",
       "si": "m/m",
@@ -379,6 +445,9 @@
         "temperatureDifference": "°C",
         "thermalExpansion": "1/°C",
         "thermalConductivity": "W/(m·°C)",
+        "heatFlux": "W/m²",
+        "heatTransferCoefficient": "W/(m²·°C)",
+        "heatGeneration": "W/m³",
         "strain": "mm/mm",
         "ratio": "1"
       }
@@ -399,6 +468,9 @@
         "temperatureDifference": "K",
         "thermalExpansion": "1/K",
         "thermalConductivity": "W/(m·K)",
+        "heatFlux": "W/m²",
+        "heatTransferCoefficient": "W/(m²·K)",
+        "heatGeneration": "W/m³",
         "strain": "m/m",
         "ratio": "1"
       }
@@ -419,6 +491,9 @@
         "temperatureDifference": "°F",
         "thermalExpansion": "1/°F",
         "thermalConductivity": "BTU/(h·ft·°F)",
+        "heatFlux": "BTU/(h·ft²)",
+        "heatTransferCoefficient": "BTU/(h·ft²·°F)",
+        "heatGeneration": "BTU/(h·ft³)",
         "strain": "in/in",
         "ratio": "1"
       }

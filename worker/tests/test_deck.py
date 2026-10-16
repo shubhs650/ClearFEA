@@ -333,6 +333,55 @@ def heat_spec() -> dict:
     }
 
 
+def heat_loads_spec() -> dict:
+    """heat_spec with every load of M5.2 (ADR-065), each in a unit other than SI: face 1 held at
+    100 °C, 2 W/cm² (as 20 kW/m²) and 0.5 W/cm² into face 2 (they add up), convection from
+    face 3 at 5 BTU/(h·ft²·°F) to 68 °F, radiation from face 4 with emissivity 0.8 to 300 K,
+    and 1 W/cm³ (as 1000 kW/m³) generated in body 1."""
+    spec = heat_spec()
+    spec["loads"] = [
+        spec["loads"][0],
+        {
+            "id": "q-1",
+            "type": "heat_flux",
+            "name": "Heater",
+            "faces": [2],
+            "flux": {"value": 20, "unit": "kW/m²"},
+        },
+        {
+            "id": "q-2",
+            "type": "heat_flux",
+            "name": "Second heater",
+            "faces": [2],
+            "flux": {"value": 0.005, "unit": "W/mm²"},
+        },
+        {
+            "id": "h-1",
+            "type": "convection",
+            "name": "Air",
+            "faces": [3],
+            "coefficient": {"value": 5, "unit": "BTU/(h·ft²·°F)"},
+            "ambientTemperature": {"value": 68, "unit": "°F"},
+        },
+        {
+            "id": "r-1",
+            "type": "radiation",
+            "name": "Sky",
+            "faces": [4],
+            "emissivity": 0.8,
+            "ambientTemperature": {"value": 300, "unit": "K"},
+        },
+        {
+            "id": "g-1",
+            "type": "heat_generation",
+            "name": "Coil",
+            "bodies": [1],
+            "power": {"value": 1000, "unit": "kW/m³"},
+        },
+    ]
+    return spec
+
+
 def heat_two_bodies_spec() -> dict:
     """heat_spec on the bonded mesh with its bond removed, a material per body (the second in
     W/(mm·K)), and each body's own fixed temperature: 100 °C under body 1 and 68 °F on top of
@@ -440,6 +489,7 @@ SNAPSHOT_CASES = {
     "bonded-slide-c3d4": (bonded_slide_spec, lambda: bonded_tets(1)),
     "heat-c3d10": (heat_spec, lambda: two_tets(order=2)),
     "heat-two-bodies-c3d4": (heat_two_bodies_spec, lambda: bonded_tets(1)),
+    "heat-loads-c3d10": (heat_loads_spec, lambda: two_tets(order=2)),
 }
 
 
@@ -1162,4 +1212,157 @@ def test_refuses_a_fixed_temperature_in_a_static_analysis() -> None:
     spec = fixture_spec()
     spec["loads"].append(heat_spec()["loads"][0])
     with pytest.raises(DeckError, match='"Hot side" has no effect in a linear static analysis'):
+        deck(spec, two_tets(order=2))
+
+
+# --- Heat flux, convection, radiation and heat generation (M5.2, ADR-065) ---
+
+
+def test_thermal_loads_are_written_in_si_on_their_element_faces() -> None:
+    lines = deck(heat_loads_spec(), two_tets(order=2)).splitlines()
+    step = lines.index("*STEP")
+    # Face 2 is element 1's Gmsh local face 0, CalculiX face 1; the two fluxes add up.
+    assert lines[step + 5 : step + 8] == ["*DFLUX", "1, S1, 25000.0", "B1, BF, 1000000.0"]
+    # Face 3 is element 2's local faces 1 and 2, CalculiX faces 2 and 4 (CCX_FACE_NUMBER).
+    film = lines.index("*FILM")
+    h = 5 * 5.678263341113488
+    rows = [x.split(", ") for x in lines[film + 1 : film + 3]]
+    assert [x[:2] for x in rows] == [["2", "F2"], ["2", "F4"]]
+    # 68 °F is 293.15 K and the coefficient in W/(m²·K).
+    assert [float(x[2]) for x in rows] == pytest.approx([293.15, 293.15], rel=1e-15)
+    assert [float(x[3]) for x in rows] == pytest.approx([h, h], rel=1e-15)
+    radiate = lines.index("*RADIATE")
+    assert lines[radiate + 1 : radiate + 3] == ["1, R2, 300.0, 0.8", "2, R3, 300.0, 0.8"]
+    assert lines[radiate + 3 :] == ["*NODE FILE", "NT", "*END STEP"]
+
+
+def test_radiation_sets_the_constants_and_starts_from_the_mean_known_temperature() -> None:
+    lines = deck(heat_loads_spec(), two_tets(order=2)).splitlines()
+    step = lines.index("*STEP")
+    assert lines[step - 3] == (
+        "*PHYSICAL CONSTANTS, ABSOLUTE ZERO=0.0, STEFAN BOLTZMANN=5.670374419e-08"
+    )
+    assert lines[step - 2] == "*INITIAL CONDITIONS, TYPE=TEMPERATURE"
+    # The mean of 373.15 K (fixed), 293.15 K (convection) and 300 K (radiation).
+    assert float(lines[step - 1].split(", ")[1]) == pytest.approx((373.15 + 293.15 + 300) / 3)
+
+
+def test_a_deck_without_radiation_has_no_constants_or_initial_temperature() -> None:
+    spec = heat_loads_spec()
+    spec["loads"] = [x for x in spec["loads"] if x["type"] != "radiation"]
+    text = deck(spec, two_tets(order=2))
+    assert "*PHYSICAL CONSTANTS" not in text
+    assert "*INITIAL CONDITIONS" not in text
+    assert "*RADIATE" not in text
+
+
+def test_convection_or_radiation_alone_sets_the_temperature() -> None:
+    spec = heat_loads_spec()
+    spec["loads"] = spec["loads"][1:]  # no fixed temperature
+    lines = deck(spec, two_tets(order=2)).splitlines()
+    assert not any(x.startswith("T1, 11") for x in lines)
+    step = lines.index("*STEP")
+    assert float(lines[step - 1].split(", ")[1]) == pytest.approx((293.15 + 300) / 2)
+
+
+def test_heat_generation_sums_per_body_and_goes_on_each_body_set() -> None:
+    spec = heat_loads_spec()
+    spec["bodies"] = [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
+    spec["bonds"] = [{"faces": [1, 3], "status": "removed"}]
+    spec["loads"] = [
+        spec["loads"][0] | {"faces": [2]},
+        spec["loads"][3] | {"faces": [6]},
+        spec["loads"][5] | {"bodies": [1, 2]},
+        spec["loads"][5] | {"id": "g-2", "bodies": [2], "power": {"value": -1, "unit": "W/m³"}},
+    ]
+    lines = deck(spec, bonded_tets(2)).splitlines()
+    dflux = lines.index("*DFLUX")
+    assert lines[dflux + 1 : dflux + 3] == ["B1, BF, 1000000.0", "B2, BF, 999999.0"]
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            lambda s: s.update(loads=s["loads"][1:2]),
+            "no fixed temperature, convection or radiation",
+        ),
+        (lambda s: s["loads"][1].update(faces=[]), "Heater has no faces"),
+        (lambda s: s["loads"][3].update(faces=[9]), "uses faces [9], which the mesh does not"),
+        (lambda s: s["loads"][1].update(flux=None), 'Heat flux "Heater" has no value'),
+        (
+            lambda s: s["loads"][1].update(flux={"value": 1, "unit": "W/(m²·K)"}),
+            "not a heat flux unit",
+        ),
+        (
+            lambda s: s["loads"][1].update(faces=[1]),
+            'Heat flux "Heater" acts on face 1, which fixed temperature "Hot side" holds',
+        ),
+        (
+            lambda s: s["loads"][3].update(faces=[1]),
+            'Convection "Air" acts on face 1, which fixed temperature "Hot side" holds',
+        ),
+        (
+            lambda s: s["loads"].append(s["loads"][3] | {"id": "h-2", "name": "Wind"}),
+            'Convection "Air" and "Wind" both act on face 3',
+        ),
+        (
+            lambda s: s["loads"].append(s["loads"][4] | {"id": "r-2", "name": "Sun"}),
+            'Radiation "Sky" and "Sun" both act on face 4',
+        ),
+        (lambda s: s["loads"][3].update(coefficient=None), '"Air": coefficient has no value'),
+        (
+            lambda s: s["loads"][3].update(coefficient={"value": 0, "unit": "W/(m²·K)"}),
+            "the coefficient must be greater than zero",
+        ),
+        (
+            lambda s: s["loads"][3].update(ambientTemperature=None),
+            '"Air": ambient temperature has no value',
+        ),
+        (
+            lambda s: s["loads"][4].update(ambientTemperature={"value": -500, "unit": "°F"}),
+            'Radiation "Sky": the ambient temperature is at or below absolute zero',
+        ),
+        (lambda s: s["loads"][4].update(emissivity=None), 'Radiation "Sky" has no emissivity'),
+        (lambda s: s["loads"][5].update(bodies=[]), '"Coil" has no bodies'),
+        (lambda s: s["loads"][5].update(bodies=[7]), "uses bodies [7], which the mesh does not"),
+        (lambda s: s["loads"][5].update(power=None), 'Heat generation "Coil" has no value'),
+    ],
+)
+def test_refuses_thermal_loads_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
+    spec = heat_loads_spec()
+    change(spec)
+    with pytest.raises(DeckError, match=re.escape(message)):
+        deck(spec, two_tets(order=2))
+
+
+def test_refuses_a_body_reached_only_by_a_heat_flux() -> None:
+    spec = heat_spec()
+    spec["bodies"] = [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
+    spec["bonds"] = [{"faces": [1, 3], "status": "removed"}]
+    spec["loads"] = [
+        spec["loads"][0] | {"faces": [2]},
+        heat_loads_spec()["loads"][1] | {"faces": [6]},
+    ]
+    with pytest.raises(DeckError, match="Body 2 has no fixed temperature, convection or radiation"):
+        deck(spec, bonded_tets(2))
+
+
+def test_a_body_with_convection_needs_no_fixed_temperature() -> None:
+    spec = heat_spec()
+    spec["bodies"] = [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
+    spec["bonds"] = [{"faces": [1, 3], "status": "removed"}]
+    spec["loads"] = [
+        spec["loads"][0] | {"faces": [2]},
+        heat_loads_spec()["loads"][3] | {"faces": [6]},
+    ]
+    assert "*FILM" in deck(spec, bonded_tets(2))
+
+
+@pytest.mark.parametrize("load", [1, 3, 4, 5])
+def test_refuses_thermal_loads_in_a_static_analysis(load: int) -> None:
+    spec = fixture_spec()
+    item = heat_loads_spec()["loads"][load]
+    spec["loads"].append(item)
+    with pytest.raises(DeckError, match=f'"{item["name"]}" has no effect in a linear static'):
         deck(spec, two_tets(order=2))
