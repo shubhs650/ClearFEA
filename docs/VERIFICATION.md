@@ -165,4 +165,4 @@ Both models must be original geometry created for this project, so they can be p
 
 ## Benchmarks
 
-Separate from correctness. A fixed set of models from 100,000 to 2 million elements records mesh time, solve time, peak memory and result-file sizes per solver option and machine size. The estimator is fitted to these numbers, and gate condition 3 (estimate accuracy) is measured on them.
+Separate from correctness. A fixed set of meshes of one block, each solver up to the memory a 16 GB machine allows (ADR-058), records the solve job's step times and the solver's peak memory per solver option and element order (`worker/benchmarks/solver/steps.py`). The estimator is fitted to these numbers, and gate condition 3 (estimate accuracy) is measured on them.

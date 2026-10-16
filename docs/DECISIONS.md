@@ -28,7 +28,7 @@ Product decisions for ClearFEA, from the interview of 2026-10-13, followed by a 
 | Report | PDF and Word. Sections: project and revision, geometry and units, materials, mesh statistics, each load and support with a picture, solver settings and versions, result plots, reaction check, min/max tables, run warnings. User selects sections and saved views; title block, company name, logo |
 | Solver input | Generated input file, solver log, solver version and mesh are viewable and downloadable. Not editable |
 | Interface | SimScale-style workbench: simulation tree, central 3D viewer, settings panel. Status mark per tree item. Run disabled with a plain list of what is missing |
-| Model size | Design target about 2 million second-order tetrahedra. Laptop tier about 300,000 to 500,000 with the direct solver. Viewer shows outer surface and cut planes, never the full volume mesh |
+| Model size | Phase 0 supports what a 16 GB machine solves: a run is refused above its solver's measured element limit for the element order, so it cannot run out of memory (ADR-058). The 2-million-element target is dropped; larger machines (Phase 1, on AWS) get their own limits when they are benchmarked. Viewer shows outer surface and cut planes, never the full volume mesh |
 
 ## Platform decisions
 
@@ -70,7 +70,7 @@ Product decisions for ClearFEA, from the interview of 2026-10-13, followed by a 
 1. Both acceptance cases are completed entirely through the UI on the laptop (i5 10th gen class, 16 GB RAM), with reactions balanced, results within tolerance of hand checks and the FreeCAD run, and a report fit to hand to a reviewer.
 2. The full verification suite is green, with every gate load and support type covered.
 3. Cost estimates are within the agreed margin of measured cost on the benchmark set, and the wallet ledger reconciles exactly.
-4. The 2-million-element target is demonstrated in the development environment, and the laptop tier on the laptop, with a responsive viewer.
+4. A model at each solver's element limit (ADR-058) is run on the laptop, with a responsive viewer.
 5. A fresh clone starts the whole system with one documented command.
 6. Data isolation between test users is proven by automated tests.
 7. A short user guide covers the main flow.
@@ -172,7 +172,7 @@ Gmsh has a first-class Python API, and Python has mature libraries for numerical
 ### ADR-010: Start with the distribution CalculiX build; choose the production solver build by benchmark
 2026-10-13 · accepted 2026-10-14
 
-Milestone M1 uses a packaged `ccx` (SPOOLES). A benchmark task in M2 compares SPOOLES, PaStiX and the iterative solver for speed and memory, then fixes the build for the 2-million-element target. Building CalculiX with PaStiX is known to be fiddly, so it is isolated as its own task.
+Milestone M1 uses a packaged `ccx` (SPOOLES). A benchmark task in M2 compares SPOOLES, PaStiX and the iterative solver for speed and memory, then fixes the build for the 2-million-element target. Building CalculiX with PaStiX is known to be fiddly, so it is isolated as its own task. (ADR-058 replaced the packaged build with one including PaStiX, the default solver, and dropped the 2-million-element target.)
 
 ### ADR-011: Report figures are captured in the browser
 2026-10-13 · accepted 2026-10-14

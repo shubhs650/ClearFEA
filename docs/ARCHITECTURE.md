@@ -172,7 +172,7 @@ The worker returns a cause code; the API maps it to who pays.
 
 A function from mesh statistics (nodes, elements, order, analysis type, number of modes) to predicted memory, run time and cost per machine size, and a recommended size. It starts as a fitted formula with coefficients in a versioned JSON file, calibrated from benchmark runs, and is re-fitted as measured runs accumulate. Recommendations are deliberately conservative on memory, because the platform pays when its recommendation is too small.
 
-As built in M2.12 (ADR-049): `packages/spec/estimator.json` holds, per analysis type, two fitted laws in the mesh's node count, `constant + coefficient × nodes^exponent`: the solver's peak memory and the solve job's time. `worker/benchmarks/solver/fit.py` writes it from the job-step benchmark (`steps.py`, `steps.json`), and a test fails if the file and the data disagree. `packages/spec/src/estimator.ts` evaluates the laws; `apps/api/src/billing/estimate.ts` prices the time on every machine size with the cost arithmetic of metering and recommends the cheapest size whose usable memory (85 percent) holds the peak times a margin of 1.25. `GET /api/simulations/{id}/estimate` returns it for the current ready mesh; the Run panel shows it with a machine-size choice; a run is queued on the chosen size (else the recommended one) and keeps the estimate in its record. The solver runs on one thread on every size (ADR-048), so the time is the same on each and only memory and rate differ. Element count, order and modes are not inputs yet: per node, first- and second-order meshes measured about the same, and modal runs come with M6.3.
+As built in M2.12 (ADR-049), per solver since ADR-058: `packages/spec/estimator.json` holds, per analysis type and equation solver, two fitted laws in the mesh's node count, `constant + coefficient × nodes^exponent`: the solver's peak memory and the solve job's time. `worker/benchmarks/solver/fit.py` writes it from the job-step benchmark (`steps.py`, `steps.json`), and a test fails if the file and the data disagree. `packages/spec/src/estimator.ts` evaluates the laws; `apps/api/src/billing/estimate.ts` prices the time on every machine size with the cost arithmetic of metering and recommends the cheapest size whose usable memory (85 percent) holds the peak times a margin of 1.25. `GET /api/simulations/{id}/estimate` returns it for the current ready mesh and the spec's solver (or `?solver=`); the Run panel shows it with a machine-size choice; a run is queued on the chosen size (else the recommended one) and keeps the estimate in its record. The solver runs on one thread on every size (ADR-048), so the time is the same on each and only memory and rate differ. Element count, order and modes are not inputs yet: per node, first- and second-order meshes measured about the same, and modal runs come with M6.3.
 
 ## 7. Worker internals
 
@@ -216,8 +216,9 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 ### Solver configuration
 
 - Second-order tetrahedra (`C3D10`) by default; first-order (`C3D4`) selectable with a warning about stiffness.
-- Linear solver choice (direct or iterative) is made by the platform from model size and analysis type, shown to the user and recorded in the run.
-- The CalculiX build for production is chosen by benchmark (ADR-010).
+- The equation solver is the user's choice in the Run panel, PaStiX by default, with SPOOLES and CalculiX's two iterative solvers as options; the iterative ones carry an accuracy note wherever they are chosen or used. It is stored in the spec, written on the deck's `*STATIC` line and frozen with the run (ADR-058).
+- Each solver has an element limit per element order on a 16 GiB machine, in `packages/spec/estimator.json`, fitted from the job-step benchmark; the API refuses a run above it and the Run panel lists it as a blocker (ADR-058).
+- The CalculiX build is 2.21 from Ubuntu's source package, built with PaStiX by `worker/ccx/build.sh` in the worker image (ADR-010, ADR-058).
 
 ### Results pipeline
 
