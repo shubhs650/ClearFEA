@@ -70,6 +70,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M2.10 Mesh reuse across runs by settings hash
 - [x] M2.11 Benchmark: solver build (PaStiX measured in a follow-up PR; adopted as the default and the 2M target dropped for 16 GB limits per solver, ADR-063)
 - [x] M2.12 Estimator v1 fitted from the benchmark data; estimate shown before run; machine size recommendation
+- [x] E-02 Mixed-unit entry browser test (listed for M2 in VERIFICATION.md, written during M6)
 
 ### M3 Results tools
 
@@ -118,12 +119,14 @@ Things only the maintainer can do.
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 23 cases, 271 of 271 checks (M5.6: new V-14 tube wall and V-27 two-layer tube); before that 249 of 249 (M5.5: new V-19); 230 of 230 (M5.4: new V-18 thermal stress cylinder); V-08, V-12, V-18 and V-24 61 of 61 again after the no-load balance scale change |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4); V-18 16 of 16 (M5.4); V-19 19 of 19 (2026-10-16, M5.5); V-14 and V-27 22 of 22 (M5.6) |
-| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 (one body, every result step to M3.8), E-03 (two bonded bodies; also as thermal stress with heat across the bond since M5.6) and E-04 (thermal stress, M5.4; with conductivity and Young's modulus tables since M5.5); E-01 also checks the ADR-063 solver choice |
+| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 (one body, every result step to M3.8), E-02 (mixed-unit entry, written during M6), E-03 (two bonded bodies; also as thermal stress with heat across the bond since M5.6) and E-04 (thermal stress, M5.4; with conductivity and Young's modulus tables since M5.5); E-01 also checks the ADR-063 solver choice |
 | Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main 94eb5e6, [run 38931101479](https://github.com/shubhs650/ClearFEA/actions/runs/38931101479); closed M5) | Green: full tier 271 of 271 checks in all 23 cases (V-01 to V-19, V-24 to V-27); E-01, E-03 and E-04 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> E-02 (2026-10-16): the mixed-unit entry browser test, listed for M2 and written during M6 at the maintainer's request. `apps/web/e2e/e02-mixed-units.e2e.ts` signs in as `alice` after E-01, picks the US (in, lbf, psi) system, uploads E-01's millimetre block and enters Young's modulus 200 GPa, yield strength 36 ksi, 0.5 MPa and a -100 lbf force on the top and a 5 mm mesh, checking that each empty field offered the system's unit first. It checks the stored spec keeps each value as typed, the fields after a reload, the top face's hover area (1.24 in²), the deck's `*ELASTIC` modulus in Pa, the applied totals and reaction in lbf (balance under 0.1 %), and after switching back to metric the totals in N with the typed units unchanged; it ends with alice on metric again. Every factor comes from `units.json`. The display-unit switch stays E-01's (M3.7). No app code changed. Found: the project's unit system loads after sign-in and overwrites a choice made before it lands (`apps/web/src/units/useProject.ts`); the test waits for `/api/project`, and the app race is parked. Screenshots in the project's `e02/` folder.
 
 > M5 close (2026-10-16): M5 closed on a green manual phase-end run on main (see the Milestones table). Every M5 task, verification case (V-13 to V-19, V-27) and browser test listed for M5 (E-04; E-03's thermal step) is in; the exit (hot-inside, cool-outside thick tube) is covered by V-14 (temperature profile) and V-18 (thermal stress). Next is M6 in PLAN.md order, which waits for the maintainer's go. The maintainer reviewed and accepted ADR-064 to ADR-069 (M5) after the close. E-02 (mixed-unit entry, listed for M2) is still not written.
 
@@ -265,6 +268,7 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 - Shrink the worker image (about 2.1 GB since ADR-063): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use, and PaStiX needs the CUDA runtime libraries (no GPU is used).
 - A rigid (kinematic) option for remote loads, which keeps the loaded faces' shape (ADR-041 item 2), and drawing a remote load's reference point in the viewer. Needs the maintainer's decision on the option.
 - A 64-bit-integer PaStiX build and per-size limits for machines above 16 GB (ADR-063 item 10), when larger machines are benchmarked.
+- Keep a unit system picked before the project has loaded (`apps/web/src/units/useProject.ts` draws the loaded system over it right after sign-in; found by E-02, which waits for the load).
 
 ## Log
 
@@ -272,6 +276,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- E-02: browser test of values entered in mixed units, part of `make e2e` (E-01 to E-04 pass locally). Learned: a unit system picked right after sign-in is drawn over when the project loads.
 - ADR-064 to ADR-069 (M5) reviewed and accepted by the maintainer; their status lines in DECISIONS.md updated.
 - M5 closed: phase-end workflow run by hand on main 94eb5e6 ([run 38931101479](https://github.com/shubhs650/ClearFEA/actions/runs/38931101479)) green, `make verify` full tier 271 of 271 checks in all 23 cases and `make e2e` E-01, E-03 and E-04. Next: M6, waiting on the maintainer's go.
 - M5.6: bonds carry heat in thermal and thermal stress analyses (ADR-069); V-14 and V-27 added, E-03 runs heat across its bond; `make verify` coarse 271 of 271 checks in 23 cases, V-14 and V-27 full 22 of 22, `make e2e` E-01, E-03 and E-04 green. Learned: ccx's `RFL` at a fixed-temperature node leaves out the heat tie equations pass to it, as RF leaves out tie forces.
