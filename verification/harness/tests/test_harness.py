@@ -7,11 +7,12 @@ No API, worker or solver: those run in `make verify`.
 import json
 import math
 import re
+import struct
 from pathlib import Path
 
 import pytest
 
-from harness.binfiles import Patch, Surface, read_fields, read_surface
+from harness.binfiles import Patch, Surface, read_fields, read_mesh_positions, read_surface
 from harness.cases import (
     Box,
     Case,
@@ -22,6 +23,7 @@ from harness.cases import (
     build_spec,
     distance_integral,
     evaluate,
+    evaluate_inside,
     load_case,
     name_faces,
     reaction,
@@ -253,6 +255,50 @@ def test_a_reaction_check_must_name_a_support_of_the_spec(tmp_path: Path) -> Non
     assert load_case(folder).checks[0].reference == 1000.0
 
 
+def test_a_check_inside_the_body_needs_a_box_and_no_face(tmp_path: Path) -> None:
+    folder = tmp_path / "V-99-x"
+    folder.mkdir()
+    (folder / "spec.json").write_text(json.dumps({"supports": [], "loads": []}))
+    raw = (
+        "id: V-99\ntitle: x\ngeometry: {unit: mm}\nfaces: {}\n"
+        "mesh: {coarse: {value: 1, unit: mm}, full: {value: 1, unit: mm}}\n"
+        "checks:\n  - {name: s, quantity: stress.zz, inside: true,"
+        " reference: {value: 1, unit: MPa}, tolerance: {coarse: 0.1, full: 0.1}}\n"
+    )
+    (folder / "case.yaml").write_text(raw)
+    with pytest.raises(CaseError, match="needs a box and no face"):
+        load_case(folder)
+    (folder / "case.yaml").write_text(
+        raw.replace("inside: true,", "inside: true, box: {min: [0, 0, 0], max: [1, 1, 1]},")
+    )
+    check = load_case(folder).checks[0]
+    assert check.inside and check.face is None and check.box is not None
+
+
+def _mesh_bin(positions: list[tuple[float, float, float]]) -> bytes:
+    """A mesh.bin of first-order elements over the nodes (volume-mesh.md), one element."""
+    header = struct.pack("<4sIIIIIII", b"CFVM", 1, 1, len(positions), 1, 0, 0, 0)
+    flat = [x for p in positions for x in p]
+    return header + struct.pack(f"<{len(flat)}d", *flat) + struct.pack("<4I", 0, 1, 2, 3)
+
+
+def test_evaluates_the_mean_over_the_mesh_nodes_inside_a_box() -> None:
+    positions = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)]
+    assert read_mesh_positions(_mesh_bin(positions)) == positions
+    with pytest.raises(ValueError, match="length does not match"):
+        read_mesh_positions(_mesh_bin(positions)[:-4])
+    fields = {
+        "displacement": [(0.0, 0.0, 0.0)] * 4,
+        "stress": [(0, 0, 10.0 * n, 0, 0, 0) for n in range(4)],
+    }
+    check = Check("s", "stress.zz", None, Box((0, 0, 0), (1, 1, 0)), 1.0, "Pa", {}, inside=True)
+    # Nodes 0, 1 and 2 lie in the box z = 0.
+    assert evaluate_inside(check, positions, fields) == (pytest.approx(10.0), 3)
+    far = Check("s", "stress.zz", None, Box((5, 5, 5), (6, 6, 6)), 1.0, "Pa", {}, inside=True)
+    with pytest.raises(CaseError, match="No mesh node"):
+        evaluate_inside(far, positions, fields)
+
+
 def test_reports_warnings_the_case_does_not_expect() -> None:
     log = "ok\n *WARNING in e_c3d: nonpositive jacobian\n *warning: expected one\n"
     assert unexpected_warnings(log, [re.compile("expected one")]) == [
@@ -476,6 +522,9 @@ def test_v10_references_are_a_column_under_its_weight() -> None:
     assert checks["Axial stress at mid-height (ρ g h/2)"].reference == pytest.approx(
         rho * g * height / 2, rel=1e-12
     )
+    inside = checks["Axial stress inside at quarter height (ρ g 3h/4)"]
+    assert inside.inside and inside.face is None
+    assert inside.reference == pytest.approx(-rho * g * height * 3 / 4, rel=1e-12)
     assert checks["Top shortens by ρ g h²/(2E)"].reference == pytest.approx(
         -rho * g * height**2 / (2 * e), rel=1e-5
     )

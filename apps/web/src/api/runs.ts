@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Client for a simulation's runs and /api/runs (M1.8), a run's result files (M1.9) and its
-// solver input and log (M1.10), and the estimate before a run (M2.12). Shapes:
-// simulation.schema.json.
+// solver input and log (M1.10), the estimate before a run (M2.12), and its mesh and values at
+// every node for cut planes (M3.4). Shapes: simulation.schema.json.
 
 import {
   type RunEstimate,
@@ -58,6 +58,18 @@ export function fetchRunSurface(runId: string): Promise<ApiResult<ArrayBuffer>> 
 /** The run's result values per surface vertex (packages/spec/result-fields.md), unparsed. */
 export function fetchRunFields(runId: string): Promise<ApiResult<ArrayBuffer>> {
   return apiBinary(`/api/runs/${encodeURIComponent(runId)}/fields`);
+}
+
+/** The volume mesh the run was solved on (packages/spec/volume-mesh.md), unparsed, for cut
+ * planes (M3.4). */
+export function fetchRunMesh(runId: string): Promise<ApiResult<ArrayBuffer>> {
+  return apiBinary(`/api/runs/${encodeURIComponent(runId)}/mesh`);
+}
+
+/** One result field at every node of the run's mesh, as a result-fields file
+ * (packages/spec/result-fields.md) with that field alone, unparsed, for cut planes (M3.4). */
+export function fetchRunNodeField(runId: string, field: string): Promise<ApiResult<ArrayBuffer>> {
+  return apiBinary(`/api/runs/${encodeURIComponent(runId)}/nodes?field=${encodeURIComponent(field)}`);
 }
 
 /**

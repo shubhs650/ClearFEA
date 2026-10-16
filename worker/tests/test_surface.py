@@ -13,6 +13,7 @@ from clearfea_worker.results import read_fields as read_nodal_fields
 from clearfea_worker.results.surface import (
     SurfaceField,
     extract_surface,
+    node_fields,
     read_fields,
     surface_fields,
     write_fields,
@@ -68,7 +69,7 @@ def test_each_vertex_takes_its_nodes_displacement_stress_and_strain() -> None:
     mesh = two_tets(order=2)
     nodal = read_nodal_fields(SOLVE / "job.frd", mesh.node_count)
     surface = extract_surface(mesh)
-    displacement, mises, stress, principal, strain = surface_fields(surface, nodal)
+    displacement, mises, stress, principal, strain = surface_fields(surface, node_fields(nodal))
     assert (displacement.name, displacement.kind, displacement.components) == (
         "displacement",
         "length",
@@ -109,8 +110,40 @@ def test_writes_the_surface_and_fields_the_viewer_reads(tmp_path: Path) -> None:
         "principalStress",
         "strain",
     ]
-    expected = surface_fields(extract_surface(mesh), nodal)
+    expected = surface_fields(extract_surface(mesh), node_fields(nodal))
     assert [f.values for f in fields] == [f.values for f in expected]
+
+
+def test_nodes_file_holds_every_field_at_every_mesh_node_in_mesh_order(tmp_path: Path) -> None:
+    # M3.4 (ADR-053): vertex v of nodes.bin is node v of mesh.bin, for cut planes.
+    mesh = two_tets(order=2)
+    nodal = read_nodal_fields(SOLVE / "job.frd", mesh.node_count)
+    files = write_viewer_files(mesh, nodal, tmp_path)
+    count, fields = read_fields(files.nodes_path)
+    assert count == mesh.node_count == 14
+    by_name = {f.name: f for f in fields}
+    assert [(f.name, f.kind, f.components) for f in fields] == [
+        ("displacement", "length", 3),
+        ("vonMises", "pressure", 1),
+        ("stress", "pressure", 6),
+        ("principalStress", "pressure", 3),
+        ("strain", "strain", 6),
+    ]
+    for node in range(mesh.node_count):
+        tensor = nodal.stress[6 * node : 6 * node + 6]
+        assert list(by_name["displacement"].values[3 * node : 3 * node + 3]) == pytest.approx(
+            nodal.displacement[3 * node : 3 * node + 3], rel=1e-6
+        )
+        assert by_name["vonMises"].values[node] == pytest.approx(von_mises(*tensor), rel=1e-6)
+        assert list(by_name["stress"].values[6 * node : 6 * node + 6]) == pytest.approx(
+            tensor, rel=1e-6
+        )
+        assert list(by_name["principalStress"].values[3 * node : 3 * node + 3]) == pytest.approx(
+            principal_stresses(*tensor), rel=1e-6
+        )
+        assert list(by_name["strain"].values[6 * node : 6 * node + 6]) == pytest.approx(
+            nodal.strain[6 * node : 6 * node + 6], rel=1e-6
+        )
 
 
 # The fields in packages/spec/fixtures/result-fields-three-vertices.bin. The web viewer's

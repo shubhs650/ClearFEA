@@ -21,7 +21,7 @@ from typing import Any
 
 from clearfea_worker.units import from_si
 
-from .binfiles import read_fields, read_surface
+from .binfiles import read_fields, read_mesh_positions, read_surface
 from .cases import (
     BALANCE_TOLERANCE,
     QUANTITIES,
@@ -33,6 +33,7 @@ from .cases import (
     balance,
     build_spec,
     evaluate,
+    evaluate_inside,
     load_case,
     name_faces,
     reaction,
@@ -143,10 +144,36 @@ def run_case(
     surface = read_surface(api.bytes(f"/api/runs/{rid}/surface"))
     fields = read_fields(api.bytes(f"/api/runs/{rid}/fields"), len(surface.positions))
     log = api.bytes(f"/api/runs/{rid}/files/solver.log").decode("utf-8", "replace")
+    # Checks inside the body read the run's mesh and its values at every node (M3.4).
+    nodes = None
+    if any(check.inside for check in case.checks):
+        positions = read_mesh_positions(api.bytes(f"/api/runs/{rid}/mesh"))
+        whole = api.bytes(f"/api/runs/{rid}/nodes")
+        nodes = read_fields(whole, len(positions), "nodes.bin", "mesh.bin")
+        # The viewer fetches one field at a time; each must be the whole file's.
+        served = [
+            read_fields(api.bytes(f"/api/runs/{rid}/nodes?field={name}"), len(positions), name)
+            for name in nodes
+        ]
+        same = all(one == {name: nodes[name]} for one, name in zip(served, nodes, strict=True))
+        outcome.rows.append(
+            Row(
+                "Node values served per field match nodes.bin",
+                f"{len(nodes)} fields",
+                f"{len(positions)} nodes",
+                "equal" if same else "differ",
+                "equal",
+                same,
+            )
+        )
 
     for check in case.checks:
         if check.support is not None:
             value, where = reaction(check, run["result"]["reactions"]), f"support {check.support}"
+        elif check.inside:
+            assert nodes is not None
+            value, count = evaluate_inside(check, positions, nodes)
+            where = f"{count} nodes inside"
         else:
             value, count = evaluate(check, surface, fields, tags)
             where = f"{count} vertices"

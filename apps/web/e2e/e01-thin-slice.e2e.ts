@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // E-01 (docs/VERIFICATION.md): upload, select faces, material, support, pressure, mesh, run, see
 // the contour and switch to other result quantities (M3.1), read reactions (M3.2), and read the
-// min/max markers and probe a node (M3.3), all through the UI. The model is a
+// min/max markers and probe a node (M3.3), and cut it with a plane (M3.4), all through the UI. The model is a
 // 40 × 20 × 10 mm block (e2e/block.py), fixed at its x = 40 mm end and pressed on its top face,
 // z = 10 mm. Both faces look towards the viewer's starting camera, so they can be clicked
 // without turning the model.
@@ -203,5 +203,23 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     expect(value).toBeGreaterThanOrEqual(number(await min.textContent()));
     expect(value).toBeLessThanOrEqual(number(await max.textContent()));
     await page.screenshot({ path: `${OUT}/e01-probe.png` });
+  });
+
+  await test.step("cut the model across x and then y (M3.4)", async () => {
+    await page.getByRole("button", { name: "Clear probes" }).click();
+    await page.getByLabel("Cut plane", { exact: true }).check();
+    const cut = page.getByRole("region", { name: "Cut plane", exact: true });
+    // Across x through the middle of the block, x = 20 mm.
+    await expect(cut).toContainText("x = 20 mm");
+    await expect(cut).toContainText(/Cuts [\d,]+ elements\./, { timeout: 60_000 });
+    const legend = page.getByRole("region", { name: "Legend", exact: true });
+    await expect(legend.getByRole("listitem")).toHaveCount(9);
+    await expect(page.locator(".viewer-marker-max")).toHaveText(/^Max [\d.e+-]+ MPa$/);
+    await page.screenshot({ path: `${OUT}/e01-cut.png` });
+    await cut.getByLabel("y", { exact: true }).check();
+    await expect(cut).toContainText("y = 10 mm");
+    await expect(cut).toContainText(/Cuts [\d,]+ elements\./);
+    await expect(page.locator("body")).not.toContainText(/\b(PASS|FAIL)\b|compliant/i);
+    await page.screenshot({ path: `${OUT}/e01-cut-y.png` });
   });
 });

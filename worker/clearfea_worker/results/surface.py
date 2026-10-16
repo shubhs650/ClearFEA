@@ -2,7 +2,7 @@
 """Viewer result files: the mesh's outer surface and the nodal fields on it (ADR-031).
 
 Physics-critical: these files are what the user sees as the result. ARCHITECTURE.md section 7,
-results pipeline step 3. Two files per run:
+results pipeline step 3. Two files per run for the surface:
 
 - ``surface.bin`` in the display mesh format (packages/spec/display-mesh.md): every element
   face listed under a face tag in mesh.bin, oriented outwards. A 10-node element face is drawn
@@ -11,6 +11,10 @@ results pipeline step 3. Two files per run:
 - ``fields.bin`` (packages/spec/result-fields.md): the value of each field at each vertex of
   surface.bin, in SI, as float32: displacement (x, y, z), von Mises stress, and since M3.1 the
   stress components, the principal stresses and the total strain components (ADR-050).
+
+Since M3.4 a third file, ``nodes.bin``, holds the same fields at every node of the mesh in the
+same format (vertex v is mesh node v of mesh.bin), so the viewer can draw them on a cut plane
+(ADR-053).
 
 No value is computed here: each vertex takes its node's value from the result reader, so the
 viewer shows exactly the nodal values CalculiX wrote (and von Mises and the principal stresses
@@ -101,19 +105,26 @@ def extract_surface(mesh: VolumeMesh) -> Surface:
     return Surface(patches, nodes)
 
 
-def surface_fields(surface: Surface, fields: NodalFields) -> list[SurfaceField]:
-    """Every result field at every vertex of ``surface``, in the order of result-fields.md."""
+def node_fields(fields: NodalFields) -> list[SurfaceField]:
+    """Every result field at every node of the mesh, in the order of result-fields.md: what
+    nodes.bin holds for cut planes (M3.4, ADR-053)."""
+    return [
+        SurfaceField("displacement", "length", 3, array("f", fields.displacement)),
+        SurfaceField("vonMises", "pressure", 1, array("f", von_mises_field(fields))),
+        SurfaceField("stress", "pressure", 6, array("f", fields.stress)),
+        SurfaceField("principalStress", "pressure", 3, array("f", principal_field(fields))),
+        SurfaceField("strain", "strain", 6, array("f", fields.strain)),
+    ]
 
-    def at(values: array, width: int) -> array:
+
+def surface_fields(surface: Surface, fields: list[SurfaceField]) -> list[SurfaceField]:
+    """The fields of node_fields at every vertex of ``surface``."""
+
+    def at(f: SurfaceField) -> array:
+        width, values = f.components, f.values
         return array("f", (values[width * n + i] for n in surface.nodes for i in range(width)))
 
-    return [
-        SurfaceField("displacement", "length", 3, at(fields.displacement, 3)),
-        SurfaceField("vonMises", "pressure", 1, at(von_mises_field(fields), 1)),
-        SurfaceField("stress", "pressure", 6, at(fields.stress, 6)),
-        SurfaceField("principalStress", "pressure", 3, at(principal_field(fields), 3)),
-        SurfaceField("strain", "strain", 6, at(fields.strain, 6)),
-    ]
+    return [SurfaceField(f.name, f.kind, f.components, at(f)) for f in fields]
 
 
 def _little(values: array) -> bytes:
@@ -169,13 +180,17 @@ def read_fields(path: Path) -> tuple[int, list[SurfaceField]]:
 class ViewerFiles:
     surface_path: Path
     fields_path: Path
+    nodes_path: Path
 
 
 def write_viewer_files(mesh: VolumeMesh, fields: NodalFields, out_dir: Path) -> ViewerFiles:
-    """Writes surface.bin and fields.bin for the viewer into ``out_dir``."""
+    """Writes surface.bin, fields.bin and (for cut planes, M3.4) nodes.bin into ``out_dir``."""
     surface = extract_surface(mesh)
     surface_path = out_dir / "surface.bin"
     write_display(surface_path, surface.patches)
+    every_node = node_fields(fields)
     fields_path = out_dir / "fields.bin"
-    write_fields(fields_path, len(surface.nodes), surface_fields(surface, fields))
-    return ViewerFiles(surface_path, fields_path)
+    write_fields(fields_path, len(surface.nodes), surface_fields(surface, every_node))
+    nodes_path = out_dir / "nodes.bin"
+    write_fields(nodes_path, fields.node_count, every_node)
+    return ViewerFiles(surface_path, fields_path, nodes_path)

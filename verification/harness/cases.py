@@ -47,12 +47,13 @@ class Box:
 class Check:
     name: str
     quantity: str
-    face: str | None  # None for a reaction check
+    face: str | None  # None for a reaction check and a check inside the body
     box: Box | None
     reference: float  # SI
     unit: str  # the reference's unit as entered, used for the table
     tolerance: dict[str, float]  # tier -> relative tolerance
     support: str | None = None  # the spec support id of a reaction check
+    inside: bool = False  # read at the mesh nodes in the box, not on a face (M3.4)
 
 
 @dataclass(frozen=True)
@@ -141,6 +142,12 @@ def load_case(folder: Path) -> Case:
                 raise CaseError(
                     f"{folder.name}: check {item['name']!r} must name a support id of spec.json."
                 )
+        elif item.get("inside"):
+            if "box" not in item or "face" in item:
+                raise CaseError(
+                    f"{folder.name}: check {item['name']!r} inside the body "
+                    "needs a box and no face."
+                )
         elif item.get("face") not in faces:
             raise CaseError(f"{folder.name}: check {item['name']!r} names an unknown face.")
         ref = item["reference"]
@@ -155,6 +162,7 @@ def load_case(folder: Path) -> Case:
                 unit=ref["unit"],
                 tolerance=tolerance,
                 support=support,
+                inside=bool(item.get("inside", False)),
             )
         )
     allowed = [re.compile(p) for p in raw.get("allowedWarnings", [])]
@@ -253,6 +261,22 @@ def evaluate(
         raise CaseError(
             f"No surface vertex of face {check.face} lies in the box of {check.name!r}."
         )
+    return sum(values) / len(values), len(values)
+
+
+def evaluate_inside(
+    check: Check,
+    positions: list[tuple[float, float, float]],
+    fields: dict[str, list[tuple[float, ...]]],
+) -> tuple[float, int]:
+    """Mean of the check's quantity over the mesh nodes inside its box, from the run's
+    mesh.bin and nodes.bin: the values a cut plane draws (M3.4, ADR-053)."""
+    assert check.inside and check.box is not None
+    values = [
+        _value(check.quantity, p, fields, n) for n, p in enumerate(positions) if check.box.holds(p)
+    ]
+    if not values:
+        raise CaseError(f"No mesh node lies in the box of {check.name!r}.")
     return sum(values) / len(values), len(values)
 
 

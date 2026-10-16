@@ -6,6 +6,10 @@
 // Given the geometry's edges (M2.8), it draws them and picks edges instead of faces. While it
 // shows results, a click probes the surface vertex nearest the pointer, and labelled markers
 // (min/max and probes, M3.3) are drawn as an HTML layer over the canvas at their vertices.
+// Given a cut plane (M3.4, ADR-053), it hides the model on the plane's far side and draws the
+// section there. The cut is made on the undeformed shape, so the model is clipped by each
+// point's undeformed position (a `reference` attribute) and the section meets it exactly on
+// the deformed shape too.
 
 import {
   AmbientLight,
@@ -14,9 +18,11 @@ import {
   Color,
   DataTexture,
   DirectionalLight,
+  DoubleSide,
   LineBasicMaterial,
   LineSegments,
   Mesh,
+  type Material,
   MeshStandardMaterial,
   NearestFilter,
   PerspectiveCamera,
@@ -31,6 +37,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { type DisplayFace, type DisplayMesh, faceAtTriangle, faceOutlines, triangleEdges } from "./displayMesh";
 import { type EdgePolyline, type EdgeSegments, edgeSegments, nearestEdge } from "./edges";
 import { BAND_COLOURS, nearestCorner } from "./resultFields";
+import type { Plane } from "./section";
 
 const COLOURS = {
   background: new Color("#e9ecef"),
@@ -79,8 +86,30 @@ export type ModelViewEvents = {
   onProbe?: (vertex: number) => void;
 };
 
-/** A labelled point on the model: the smallest or largest value, or a probe (M3.3). */
-export type Marker = { vertex: number; kind: "min" | "max" | "probe"; text: string };
+/** A labelled point on the model: the smallest or largest value, or a probe (M3.3). The vertex
+ * is the model's, or with `onSection` the cut plane section's (M3.4). */
+export type Marker = { vertex: number; kind: "min" | "max" | "probe"; text: string; onSection?: boolean };
+
+/** What a cut plane shows (M3.4): the plane, on the undeformed shape, and the section drawn
+ * where it cuts the model, coloured like the model by band coordinates. */
+export type Cut = {
+  plane: Plane;
+  /** x, y, z per section vertex, on the shape drawn (deformed or not). */
+  positions: Float32Array;
+  /** Three section vertex indices per triangle, counter-clockwise seen from the cut-away side. */
+  indices: Uint32Array;
+  coordinates: Float32Array;
+};
+
+/** Texture coordinates for band coordinates: u along the band texture, v in its middle. */
+function bandUv(coordinates: Float32Array): Float32Array {
+  const uv = new Float32Array(coordinates.length * 2);
+  coordinates.forEach((u, v) => {
+    uv[v * 2] = u;
+    uv[v * 2 + 1] = 0.5;
+  });
+  return uv;
+}
 
 export class ModelView {
   private readonly renderer: WebGLRenderer;
@@ -107,6 +136,16 @@ export class ModelView {
   private picking = true;
   private readonly markerLayer: HTMLDivElement;
   private markers: { marker: Marker; element: HTMLDivElement }[] = [];
+  /** Undeformed position of each model vertex, which the cut plane clips by. */
+  private reference: Float32Array | null = null;
+  private section: Mesh<BufferGeometry, MeshStandardMaterial> | null = null;
+  private plane: Plane | null = null;
+  /** Shared by every clipped material's shader; cutOn is 0 while there is no cut. */
+  private readonly clip = {
+    cutNormal: { value: new Vector3() },
+    cutOffset: { value: 0 },
+    cutOn: { value: 0 },
+  };
 
   /** Throws if the browser cannot create a WebGL context. */
   constructor(
@@ -146,24 +185,28 @@ export class ModelView {
    * Replaces the model. The camera is framed on it unless `keepView` is set, which a switch
    * between a geometry, its mesh and its results uses so the user keeps looking where they were.
    * With `bandCoordinates` (0 for the smallest value to 1 for the largest, one per vertex) the
-   * model is coloured in result bands and clicks no longer pick faces.
+   * model is coloured in result bands and clicks no longer pick faces. `reference` is each
+   * vertex's undeformed position when the mesh is drawn deformed; a cut plane clips by it.
    */
-  setMesh(mesh: DisplayMesh, edges: Edges = "outlines", keepView = false, bandCoordinates?: Float32Array): void {
+  setMesh(
+    mesh: DisplayMesh,
+    edges: Edges = "outlines",
+    keepView = false,
+    bandCoordinates?: Float32Array,
+    reference: Float32Array = mesh.positions,
+  ): void {
     this.clearModel();
     this.mesh = mesh;
+    this.reference = reference;
     this.facesByTag = new Map(mesh.faces.map((face) => [face.tag, face]));
     this.picking = bandCoordinates === undefined;
 
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new BufferAttribute(mesh.positions, 3));
+    geometry.setAttribute("reference", new BufferAttribute(reference, 3));
     geometry.setAttribute("color", new BufferAttribute(new Float32Array(mesh.positions.length), 3));
     if (bandCoordinates !== undefined) {
-      const uv = new Float32Array(bandCoordinates.length * 2);
-      bandCoordinates.forEach((u, v) => {
-        uv[v * 2] = u;
-        uv[v * 2 + 1] = 0.5;
-      });
-      geometry.setAttribute("uv", new BufferAttribute(uv, 2));
+      geometry.setAttribute("uv", new BufferAttribute(bandUv(bandCoordinates), 2));
       this.bands ??= bandTexture();
     }
     geometry.setIndex(new BufferAttribute(mesh.indices, 1));
@@ -182,13 +225,15 @@ export class ModelView {
         polygonOffsetUnits: 1,
       }),
     );
+    this.clipped(this.surface.material);
     this.scene.add(this.surface);
 
     const lines = new BufferGeometry();
-    const segments = edges === "elements" ? triangleEdges(mesh) : faceOutlines(mesh);
-    lines.setAttribute("position", new BufferAttribute(segments, 3));
+    const segmentsOf = edges === "elements" ? triangleEdges : faceOutlines;
+    lines.setAttribute("position", new BufferAttribute(segmentsOf(mesh), 3));
+    lines.setAttribute("reference", new BufferAttribute(segmentsOf({ ...mesh, positions: reference }), 3));
     const colour = edges === "elements" ? COLOURS.elementEdge : COLOURS.outline;
-    this.outlines = new LineSegments(lines, new LineBasicMaterial({ color: colour }));
+    this.outlines = new LineSegments(lines, this.clipped(new LineBasicMaterial({ color: colour })));
     this.scene.add(this.outlines);
 
     this.paintAll();
@@ -266,6 +311,53 @@ export class ModelView {
     this.requestRender();
   }
 
+  /** Recolours the model given to setMesh with new band coordinates, one per vertex. */
+  setBands(coordinates: Float32Array): void {
+    const uv = this.surface?.geometry.getAttribute("uv");
+    if (!(uv instanceof BufferAttribute) || uv.count !== coordinates.length) return;
+    uv.copyArray(bandUv(coordinates));
+    uv.needsUpdate = true;
+    this.requestRender();
+  }
+
+  /**
+   * Hides the model beyond the cut plane and draws the section, or with null shows the whole
+   * model again. setMesh clears it, so call this after it.
+   */
+  setCut(cut: Cut | null): void {
+    this.clearSection();
+    this.plane = cut?.plane ?? null;
+    this.clip.cutOn.value = cut === null ? 0 : 1;
+    if (cut !== null) {
+      this.clip.cutNormal.value.set(...cut.plane.normal);
+      this.clip.cutOffset.value = cut.plane.offset;
+      const geometry = new BufferGeometry();
+      geometry.setAttribute("position", new BufferAttribute(cut.positions, 3));
+      geometry.setAttribute("uv", new BufferAttribute(bandUv(cut.coordinates), 2));
+      // Flat: every point of the section faces the cut-away side.
+      const normals = new Float32Array(cut.positions.length);
+      for (let v = 0; v < normals.length; v += 3) normals.set(cut.plane.normal, v);
+      geometry.setAttribute("normal", new BufferAttribute(normals, 3));
+      geometry.setIndex(new BufferAttribute(cut.indices, 1));
+      geometry.computeBoundingSphere();
+      this.bands ??= bandTexture();
+      this.section = new Mesh(
+        geometry,
+        new MeshStandardMaterial({
+          map: this.bands,
+          roughness: 0.75,
+          metalness: 0.05,
+          side: DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: 1,
+          polygonOffsetUnits: 1,
+        }),
+      );
+      this.scene.add(this.section);
+    }
+    this.requestRender();
+  }
+
   dispose(): void {
     cancelAnimationFrame(this.frame);
     this.resize.disconnect();
@@ -311,8 +403,47 @@ export class ModelView {
     attribute.needsUpdate = true;
   }
 
+  /**
+   * Makes a material discard what lies beyond the cut plane, judged by the undeformed position
+   * in the geometry's `reference` attribute.
+   */
+  private clipped<T extends Material>(material: T): T {
+    material.onBeforeCompile = (shader) => {
+      Object.assign(shader.uniforms, this.clip);
+      shader.vertexShader = shader.vertexShader
+        .replace("#include <common>", "#include <common>\nattribute vec3 reference;\nvarying vec3 vReference;")
+        .replace("#include <begin_vertex>", "#include <begin_vertex>\nvReference = reference;");
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          "#include <common>\nuniform vec3 cutNormal;\nuniform float cutOffset;\nuniform float cutOn;\nvarying vec3 vReference;",
+        )
+        .replace("void main() {", "void main() {\nif (cutOn > 0.5 && dot(cutNormal, vReference) > cutOffset) discard;");
+    };
+    return material;
+  }
+
+  /** Whether an undeformed point is cut away by the cut plane. */
+  private cutAway(x: number, y: number, z: number): boolean {
+    if (this.plane === null) return false;
+    const [nx, ny, nz] = this.plane.normal;
+    return nx * x + ny * y + nz * z > this.plane.offset;
+  }
+
+  private clearSection(): void {
+    if (this.section) {
+      this.scene.remove(this.section);
+      this.section.geometry.dispose();
+      this.section.material.dispose();
+    }
+    this.section = null;
+  }
+
   private clearModel(): void {
     this.clearEdges();
+    this.clearSection();
+    this.plane = null;
+    this.clip.cutOn.value = 0;
     for (const object of [this.surface, this.outlines]) {
       if (!object) continue;
       this.scene.remove(object);
@@ -350,12 +481,24 @@ export class ModelView {
   /** Moves each marker's element over its vertex as drawn now; hides it behind the camera. */
   private placeMarkers(): void {
     const positions = this.surface?.geometry.getAttribute("position");
+    const onSection = this.section?.geometry.getAttribute("position");
     if (!positions || this.markers.length === 0) return;
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
     const point = new Vector3();
+    const r = this.reference;
     for (const { marker, element } of this.markers) {
-      point.fromBufferAttribute(positions, marker.vertex).project(this.camera);
+      const from = marker.onSection ? onSection : positions;
+      // A marker on a part the cut plane hides is hidden with it.
+      const away =
+        !marker.onSection &&
+        r !== null &&
+        this.cutAway(r[marker.vertex * 3] ?? 0, r[marker.vertex * 3 + 1] ?? 0, r[marker.vertex * 3 + 2] ?? 0);
+      if (!from || marker.vertex >= from.count || away) {
+        element.hidden = true;
+        continue;
+      }
+      point.fromBufferAttribute(from, marker.vertex).project(this.camera);
       element.hidden = point.z > 1;
       element.style.left = `${((point.x + 1) / 2) * width}px`;
       element.style.top = `${((1 - point.y) / 2) * height}px`;
@@ -395,7 +538,18 @@ export class ModelView {
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
-    return this.raycaster.intersectObject(this.surface, false)[0];
+    // The first hit on a part the cut plane leaves standing, unless the section is in front.
+    const r = this.reference;
+    const hit = this.raycaster.intersectObject(this.surface, false).find((h) => {
+      if (r === null || this.plane === null || !h.face || !h.barycoord) return true;
+      const { a, b, c } = h.face;
+      const w = h.barycoord;
+      const at = (axis: number) => w.x * (r[a * 3 + axis] ?? 0) + w.y * (r[b * 3 + axis] ?? 0) + w.z * (r[c * 3 + axis] ?? 0);
+      return !this.cutAway(at(0), at(1), at(2));
+    });
+    const section = this.section ? this.raycaster.intersectObject(this.section, false)[0] : undefined;
+    if (hit && section && section.distance < hit.distance) return undefined;
+    return hit;
   }
 
   /** The face tag under a pointer position, or null. */

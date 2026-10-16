@@ -26,6 +26,12 @@ checks:
     box: { min: [4, 0, 19], max: [4, 4, 21] }
     reference: { value: 5.68, unit: psi }
     tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Axial stress inside at quarter height (ρ g 3h/4)
+    quantity: stress.zz
+    inside: true
+    box: { min: [0, 0, 9.5], max: [4, 4, 10.5] }
+    reference: { value: -8.52, unit: psi }
+    tolerance: { coarse: 0.01, full: 0.005 }
   - name: Top shortens by ρ g h²/(2E)
     quantity: displacement.z
     face: top

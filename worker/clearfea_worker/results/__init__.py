@@ -5,11 +5,12 @@ from .dat import DatError, read_node_displacements, read_node_forces
 from .fields import NodalFields, principal_stresses, read_fields, von_mises
 from .frd import FrdError
 from .summary import read_results, summarize
-from .surface import extract_surface, surface_fields, write_viewer_files
+from .surface import extract_surface, node_fields, surface_fields, write_viewer_files
 
 __all__ = [
     "DatError",
     "extract_surface",
+    "node_fields",
     "surface_fields",
     "write_viewer_files",
     "FrdError",

@@ -192,7 +192,7 @@ def run_mesh(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
 
 def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     """Solves a run: deck from the frozen spec and the mesh, CalculiX, results (M1.8), and the
-    viewer's surface and field files (M1.9)."""
+    viewer's surface and field files (M1.9) and the fields at every node for cut planes (M3.4)."""
     from .deck import DeckError, generate_deck
     from .meshing.volume import read_volume_mesh
     from .results import DatError, FrdError, read_results, write_viewer_files
@@ -248,6 +248,7 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     files.upload("results.dat", dat)
     files.upload("surface.bin", viewer.surface_path)
     files.upload("fields.bin", viewer.fields_path)
+    files.upload("nodes.bin", viewer.nodes_path)
     return result.model_dump(mode="json", by_alias=True)
 
 
