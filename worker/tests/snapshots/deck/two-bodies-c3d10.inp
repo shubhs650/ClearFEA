@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 2. Generated from the simulation's
+** ClearFEA solver input, deck format 3. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
 ** Geometry 00000000-0000-4000-8000-000000000002
 *HEADING
@@ -31,6 +31,8 @@ ClearFEA linear static analysis
 ** Fixed support fixed-2 "Side", faces 4
 *NSET, NSET=S2
 1, 2, 3, 4, 5, 6, 9, 10, 11, 13, 14
+*NSET, NSET=RALL
+1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 13, 14
 ** Material steel "Steel (US units)"
 *MATERIAL, NAME=M2
 *ELASTIC
@@ -56,8 +58,6 @@ S2, 1, 3
 U
 *EL FILE
 S, E
-*NODE PRINT, NSET=S1, TOTALS=ONLY
-RF
-*NODE PRINT, NSET=S2, TOTALS=ONLY
+*NODE PRINT, NSET=RALL, GLOBAL=YES
 RF
 *END STEP

@@ -663,7 +663,7 @@ class NodeValue(BaseModel):
 
 class SupportReaction(BaseModel):
     """
-    Total reaction force of one support, in newtons: CalculiX's total for the support's node set when every support is fixed, otherwise the sum over its nodes of the force along the directions it holds, shared with other supports at nodes they also hold (ADR-039).
+    Total reaction of one support: the sum over its nodes of the force along the directions it holds, shared with other supports at nodes they also hold (ADR-039), with the loads applied at those nodes taken out (ADR-040, ADR-051); an elastic support's is its springs' force (ADR-043). Forces in newtons, moment in newton metres, point in metres. Runs solved before M3.2 have no moment or point.
     """
 
     model_config = ConfigDict(
@@ -672,6 +672,47 @@ class SupportReaction(BaseModel):
     )
     support_id: Annotated[ItemId, Field(alias="supportId")]
     force: XYZ
+    moment: XYZ | None = None
+    """
+    Moment of the reaction about point.
+    """
+    point: XYZ | None = None
+    """
+    The area centroid of the support's faces, which the moment is taken about.
+    """
+
+
+class LoadTotal(BaseModel):
+    """
+    Total force (N) of one load as the solver applies it, and its moment about the origin (N·m) (ADR-051). A temperature change applies none.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    load_id: Annotated[ItemId, Field(alias="loadId")]
+    force: XYZ
+    moment: XYZ
+
+
+class BalanceCheck(BaseModel):
+    """
+    Applied loads against reactions, both about the origin (ADR-051). The imbalance is applied plus reactions; forceRatio is its size over forceScale, the larger of the applied force's size and the sum of the reactions' sizes, and momentRatio its moment's size over momentScale, the largest of the applied moment's size, the sum of the reactions' moment sizes about the origin and forceScale times the mesh's bounding-box diagonal. Numbers only; no verdict.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    applied_force: Annotated[XYZ, Field(alias="appliedForce")]
+    applied_moment: Annotated[XYZ, Field(alias="appliedMoment")]
+    reaction_force: Annotated[XYZ, Field(alias="reactionForce")]
+    reaction_moment: Annotated[XYZ, Field(alias="reactionMoment")]
+    force_scale: Annotated[float, Field(alias="forceScale", ge=0.0)]
+    moment_scale: Annotated[float, Field(alias="momentScale", ge=0.0)]
+    force_ratio: Annotated[float, Field(alias="forceRatio", ge=0.0)]
+    moment_ratio: Annotated[float, Field(alias="momentRatio", ge=0.0)]
 
 
 class Displacement(BaseModel):
@@ -735,6 +776,14 @@ class SolveResult(BaseModel):
     reactions: list[SupportReaction]
     """
     One entry per support, in spec order.
+    """
+    loads: list[LoadTotal] | None = None
+    """
+    One entry per load, in spec order. Absent for runs solved before M3.2.
+    """
+    balance: BalanceCheck | None = None
+    """
+    Absent for runs solved before M3.2.
     """
     software: Annotated[Software2, Field(title="SolveSoftware")]
     """

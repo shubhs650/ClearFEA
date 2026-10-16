@@ -275,16 +275,27 @@ def share_reaction(
     return {k: (v[0], v[1], v[2]) for k, v in shares.items()}
 
 
+def support_node_reactions(
+    spec: SimulationSpec, mesh: VolumeMesh, forces: dict[int, Vector]
+) -> list[dict[int, Vector]]:
+    """Each support's reaction at each of its held nodes (0-based node -> newtons), in spec
+    order, from the reaction force at each held node. ValueError if a held node has no force."""
+    out: list[dict[int, Vector]] = [{} for _ in spec.supports]
+    for node, constraints in node_constraints(spec, mesh).items():
+        if node not in forces:
+            raise ValueError(f"The solver gave no reaction force for node {node + 1}.")
+        for k, share in share_reaction(spec, constraints, forces[node]).items():
+            out[k][node] = share
+    return out
+
+
 def support_reactions(
     spec: SimulationSpec, mesh: VolumeMesh, forces: dict[int, Vector]
 ) -> list[Vector]:
     """Total reaction of each support, in spec order, from the reaction force at each held
     node (0-based node -> newtons). ValueError if a held node has no force."""
-    totals = [[0.0, 0.0, 0.0] for _ in spec.supports]
-    for node, constraints in node_constraints(spec, mesh).items():
-        if node not in forces:
-            raise ValueError(f"The solver gave no reaction force for node {node + 1}.")
-        for k, share in share_reaction(spec, constraints, forces[node]).items():
-            for i in range(3):
-                totals[k][i] += share[i]
-    return [(t[0], t[1], t[2]) for t in totals]
+    totals = []
+    for shares in support_node_reactions(spec, mesh, forces):
+        t = [sum(f[i] for f in shares.values()) for i in range(3)]
+        totals.append((t[0], t[1], t[2]))
+    return totals

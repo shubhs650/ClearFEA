@@ -90,6 +90,20 @@ export type MeshStatus = "meshing" | "ready" | "failed";
  */
 export type XYZ = [number, number, number];
 /**
+ * x, y and z components.
+ *
+ * @minItems 3
+ * @maxItems 3
+ */
+export type XYZ1 = [number, number, number];
+/**
+ * x, y and z components.
+ *
+ * @minItems 3
+ * @maxItems 3
+ */
+export type XYZ2 = [number, number, number];
+/**
  * solving while the solve job is queued or running; succeeded or failed once it ends.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -738,7 +752,7 @@ export interface NodeValue {
   position: XYZ;
 }
 /**
- * Total reaction force of one support, in newtons: CalculiX's total for the support's node set when every support is fixed, otherwise the sum over its nodes of the force along the directions it holds, shared with other supports at nodes they also hold (ADR-039).
+ * Total reaction of one support: the sum over its nodes of the force along the directions it holds, shared with other supports at nodes they also hold (ADR-039), with the loads applied at those nodes taken out (ADR-040, ADR-051); an elastic support's is its springs' force (ADR-043). Forces in newtons, moment in newton metres, point in metres. Runs solved before M3.2 have no moment or point.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SupportReaction".
@@ -746,6 +760,35 @@ export interface NodeValue {
 export interface SupportReaction {
   supportId: ItemId;
   force: XYZ;
+  moment?: XYZ1;
+  point?: XYZ2;
+}
+/**
+ * Total force (N) of one load as the solver applies it, and its moment about the origin (N·m) (ADR-051). A temperature change applies none.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "LoadTotal".
+ */
+export interface LoadTotal {
+  loadId: ItemId;
+  force: XYZ;
+  moment: XYZ;
+}
+/**
+ * Applied loads against reactions, both about the origin (ADR-051). The imbalance is applied plus reactions; forceRatio is its size over forceScale, the larger of the applied force's size and the sum of the reactions' sizes, and momentRatio its moment's size over momentScale, the largest of the applied moment's size, the sum of the reactions' moment sizes about the origin and forceScale times the mesh's bounding-box diagonal. Numbers only; no verdict.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "BalanceCheck".
+ */
+export interface BalanceCheck {
+  appliedForce: XYZ;
+  appliedMoment: XYZ;
+  reactionForce: XYZ;
+  reactionMoment: XYZ;
+  forceScale: number;
+  momentScale: number;
+  forceRatio: number;
+  momentRatio: number;
 }
 /**
  * Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons.
@@ -775,7 +818,25 @@ export interface SolveResult {
    * One entry per support, in spec order.
    */
   reactions: SupportReaction[];
+  /**
+   * One entry per load, in spec order. Absent for runs solved before M3.2.
+   */
+  loads?: LoadTotal[];
+  balance?: BalanceCheck1;
   software: SolveSoftware;
+}
+/**
+ * Absent for runs solved before M3.2.
+ */
+export interface BalanceCheck1 {
+  appliedForce: XYZ;
+  appliedMoment: XYZ;
+  reactionForce: XYZ;
+  reactionMoment: XYZ;
+  forceScale: number;
+  momentScale: number;
+  forceRatio: number;
+  momentRatio: number;
 }
 /**
  * Versions that solved the run.
@@ -1048,6 +1109,8 @@ export const validateSolveParams = validator<SolveParams>(schema, "SolveParams")
 export const validateXYZ = validator<XYZ>(schema, "XYZ");
 export const validateNodeValue = validator<NodeValue>(schema, "NodeValue");
 export const validateSupportReaction = validator<SupportReaction>(schema, "SupportReaction");
+export const validateLoadTotal = validator<LoadTotal>(schema, "LoadTotal");
+export const validateBalanceCheck = validator<BalanceCheck>(schema, "BalanceCheck");
 export const validateSolveResult = validator<SolveResult>(schema, "SolveResult");
 export const RunStatusValues = ["solving", "succeeded", "failed"] as const satisfies readonly RunStatus[];
 export const validateRunStatus = validator<RunStatus>(schema, "RunStatus");

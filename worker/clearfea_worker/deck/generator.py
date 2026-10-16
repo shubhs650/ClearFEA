@@ -44,23 +44,23 @@ from .loads import (
     densities,
     elastic_springs,
     elastic_stiffness,
+    element_face_pressures,
     fixed_support_nodes,
     force_vector,
     hydrostatic_values,
-    pressure_faces,
     remote_vectors,
 )
 from .loads.body import gravity_vector, rotation
 from .loads.thermal import expansions, temperature_change
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
-DECK_FORMAT = 2
+DECK_FORMAT = 3
 
 #: CalculiX reads at most 16 entries on a data line.
 _PER_LINE = 16
 
-#: The node set whose reaction forces are printed node by node when a setup has supports other
-#: than fixed ones; the result reader shares them between supports (constraints.py).
+#: The node set of every held node, whose reaction forces are printed node by node; the result
+#: reader shares them between supports (constraints.py) and takes their moments (M3.2).
 REACTION_SET = "RALL"
 
 __all__ = [
@@ -148,9 +148,9 @@ def support_set_names(spec: SimulationSpec) -> list[str]:
 
 def only_fixed_supports(spec: SimulationSpec) -> bool:
     """True when every support that holds nodes is fixed (elastic supports hold none): the
-    deck then holds each fixed support's node set in all three directions and prints its total
-    reaction (the M1 layout, ADR-029). Otherwise nodes are held through constraint groups and
-    reactions are printed node by node (ADR-039)."""
+    deck then holds each fixed support's node set in all three directions (the M1 layout,
+    ADR-029). Otherwise nodes are held through constraint groups (ADR-039). Either way the
+    reaction force of every held node is printed (M3.2)."""
     return all(isinstance(s, (FixedSupport, ElasticSupport)) for s in spec.supports)
 
 
@@ -331,7 +331,7 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
         if transform is not None:
             out.append(f"*TRANSFORM, NSET=C{k + 1}, TYPE=R")
             out.append(transform)
-    if not fixed_only:
+    if held:
         out.append(f"*NSET, NSET={REACTION_SET}")
         out.extend(_lines(n + 1 for n in held))
 
@@ -401,8 +401,6 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
         out.append(str(dof))
         out.append(stiffness)
 
-    # Pressures on the same element face add up (linear analysis), so each face gets one line.
-    pressure: dict[tuple[int, int], float] = {}
     for load in spec.loads:
         if isinstance(load, PressureLoad):
             value = _si(load.magnitude, "pressure", f"{load.name}: magnitude")
@@ -413,8 +411,6 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
                 + ", ".join(str(f) for f in load.faces)
                 + f": {_number(entered.value)} {entered.unit} = {_number(value)} Pa"
             )
-            for key in pressure_faces(mesh, load.faces):
-                pressure[key] = pressure.get(key, 0.0) + value
         elif isinstance(load, ForceLoad):
             out.append(
                 f'** Force {load.id} "{_label(load.name)}", faces '
@@ -476,6 +472,8 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
             )
             out.append(f"** ({_vector(r.point)}) m along ({_vector(r.axis)})")
     cloads = force_loads(spec, mesh)
+    # Pressures on the same element face add up (linear analysis), so each face gets one line.
+    pressure = element_face_pressures(spec, mesh)
     if thermal is not None:
         out.append("*INITIAL CONDITIONS, TYPE=TEMPERATURE")
         out.append("NALL, 0.0")
@@ -526,14 +524,10 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
     for k, _ in springs:
         out.append(f"*NODE PRINT, NSET={support_sets[k]}, GLOBAL=YES")
         out.append("U")
-    if fixed_only:
-        for support, name in zip(spec.supports, support_sets, strict=True):
-            if isinstance(support, FixedSupport):
-                out.append(f"*NODE PRINT, NSET={name}, TOTALS=ONLY")
-                out.append("RF")
-    else:
+    if held:
         # Node by node, in global axes (a transformed node's forces are otherwise printed in
-        # its own axes; checked with ccx 2.21).
+        # its own axes; checked with ccx 2.21), for reaction moments and so that a node two
+        # supports share is counted once (M3.2, ADR-051).
         out.append(f"*NODE PRINT, NSET={REACTION_SET}, GLOBAL=YES")
         out.append("RF")
     out.append("*END STEP")

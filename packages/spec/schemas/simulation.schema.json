@@ -586,13 +586,42 @@
       }
     },
     "SupportReaction": {
-      "description": "Total reaction force of one support, in newtons: CalculiX's total for the support's node set when every support is fixed, otherwise the sum over its nodes of the force along the directions it holds, shared with other supports at nodes they also hold (ADR-039).",
+      "description": "Total reaction of one support: the sum over its nodes of the force along the directions it holds, shared with other supports at nodes they also hold (ADR-039), with the loads applied at those nodes taken out (ADR-040, ADR-051); an elastic support's is its springs' force (ADR-043). Forces in newtons, moment in newton metres, point in metres. Runs solved before M3.2 have no moment or point.",
       "type": "object",
       "additionalProperties": false,
       "required": ["supportId", "force"],
       "properties": {
         "supportId": { "$ref": "#/$defs/ItemId" },
-        "force": { "$ref": "#/$defs/XYZ" }
+        "force": { "$ref": "#/$defs/XYZ" },
+        "moment": { "description": "Moment of the reaction about point.", "$ref": "#/$defs/XYZ" },
+        "point": { "description": "The area centroid of the support's faces, which the moment is taken about.", "$ref": "#/$defs/XYZ" }
+      }
+    },
+    "LoadTotal": {
+      "description": "Total force (N) of one load as the solver applies it, and its moment about the origin (N·m) (ADR-051). A temperature change applies none.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["loadId", "force", "moment"],
+      "properties": {
+        "loadId": { "$ref": "#/$defs/ItemId" },
+        "force": { "$ref": "#/$defs/XYZ" },
+        "moment": { "$ref": "#/$defs/XYZ" }
+      }
+    },
+    "BalanceCheck": {
+      "description": "Applied loads against reactions, both about the origin (ADR-051). The imbalance is applied plus reactions; forceRatio is its size over forceScale, the larger of the applied force's size and the sum of the reactions' sizes, and momentRatio its moment's size over momentScale, the largest of the applied moment's size, the sum of the reactions' moment sizes about the origin and forceScale times the mesh's bounding-box diagonal. Numbers only; no verdict.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appliedForce", "appliedMoment", "reactionForce", "reactionMoment", "forceScale", "momentScale", "forceRatio", "momentRatio"],
+      "properties": {
+        "appliedForce": { "$ref": "#/$defs/XYZ" },
+        "appliedMoment": { "$ref": "#/$defs/XYZ" },
+        "reactionForce": { "$ref": "#/$defs/XYZ" },
+        "reactionMoment": { "$ref": "#/$defs/XYZ" },
+        "forceScale": { "type": "number", "minimum": 0 },
+        "momentScale": { "type": "number", "minimum": 0 },
+        "forceRatio": { "type": "number", "minimum": 0 },
+        "momentRatio": { "type": "number", "minimum": 0 }
       }
     },
     "SolveResult": {
@@ -617,6 +646,8 @@
           "properties": { "min": { "$ref": "#/$defs/NodeValue" }, "max": { "$ref": "#/$defs/NodeValue" } }
         },
         "reactions": { "description": "One entry per support, in spec order.", "type": "array", "items": { "$ref": "#/$defs/SupportReaction" } },
+        "loads": { "description": "One entry per load, in spec order. Absent for runs solved before M3.2.", "type": "array", "items": { "$ref": "#/$defs/LoadTotal" } },
+        "balance": { "description": "Absent for runs solved before M3.2.", "$ref": "#/$defs/BalanceCheck" },
         "software": {
           "title": "SolveSoftware",
           "description": "Versions that solved the run.",

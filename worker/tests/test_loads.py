@@ -10,10 +10,17 @@ from pathlib import Path
 
 import pytest
 
-from clearfea_worker.deck.applied import applied_nodal_loads, force_loads
+from clearfea_worker.deck.applied import applied_nodal_loads, force_loads, load_resultants
 from clearfea_worker.deck.common import DeckError
 from clearfea_worker.deck.elements import CCX_NODE_ORDER, FACE_NODES
-from clearfea_worker.deck.loads import BodyLoad, body_nodal_forces, fixed_support_nodes
+from clearfea_worker.deck.loads import (
+    BodyLoad,
+    body_nodal_forces,
+    element_face_pressures,
+    fixed_support_nodes,
+    force_nodal_loads,
+    pressure_nodal_loads,
+)
 from clearfea_worker.deck.loads.body import RULES, shape
 from clearfea_worker.deck.loads.force import face_node_weights
 from clearfea_worker.deck.loads.hydrostatic import hydrostatic_nodal_loads
@@ -182,21 +189,37 @@ def test_applied_loads_add_force_and_body_loads_at_the_asked_nodes() -> None:
     assert total == pytest.approx([0.0, 0.0, 10.0 - weight], abs=1e-12)
 
 
-def test_reactions_have_the_loads_on_held_nodes_taken_out(tmp_path: Path) -> None:
-    # A .dat total of exactly what the held nodes carry means no reaction at all.
+def pressure(faces: list[int], value: float, unit: str = "MPa") -> dict:
+    return {
+        "id": "p",
+        "type": "pressure",
+        "name": "P",
+        "faces": faces,
+        "magnitude": {"value": value, "unit": unit},
+    }
+
+
+def write_node_forces(path: Path, forces: dict[int, tuple[float, float, float]]) -> None:
+    """A .dat block of reaction forces per node of RALL, as CalculiX writes it."""
+    lines = [" forces (fx,fy,fz) for set RALL and time  0.1000000E+01", ""]
+    lines += [f"{n + 1:>10} " + " ".join(f"{v:.15E}" for v in f) for n, f in forces.items()]
+    path.write_text("\n".join(lines) + "\n")
+
+
+# Face 2 (and the pressed face 3's edge) touch the fixed face 1.
+@pytest.mark.parametrize("load", [force([2], 1, 2, 3), pressure([2, 3], 5)])
+def test_reactions_have_the_loads_on_held_nodes_taken_out(tmp_path: Path, load: dict) -> None:
+    # Held nodes whose RF is exactly the load applied there carry no reaction at all.
     mesh = two_tets(order=2)
-    spec = loaded_spec(loads=[force([2], 1, 2, 3)])  # face 2 touches the fixed face 1
+    spec = loaded_spec(loads=[load])
     held = fixed_support_nodes(mesh, [1])
-    on_held = [sum(f[i] for f in applied_nodal_loads(spec, mesh, held).values()) for i in range(3)]
-    assert math.dist(on_held, (0, 0, 0)) > 0.1
+    applied = applied_nodal_loads(spec, mesh, held)
+    assert math.dist([sum(f[i] for f in applied.values()) for i in range(3)], (0, 0, 0)) > 0.1
     dat = tmp_path / "job.dat"
-    dat.write_text(
-        " total force (fx,fy,fz) for set S1 and time  0.1000000E+01\n\n"
-        + "  ".join(f"{v:.15E}" for v in on_held)
-        + "\n"
-    )
+    write_node_forces(dat, {n: applied.get(n, (0.0, 0.0, 0.0)) for n in held})
     (reaction,) = read_reactions(spec, mesh, dat)
-    assert reaction == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
+    assert reaction.force == pytest.approx((0.0, 0.0, 0.0), abs=1e-9)
+    assert reaction.moment == pytest.approx((0.0, 0.0, 0.0), abs=1e-12)
 
 
 def remote(
@@ -400,3 +423,101 @@ def test_applied_loads_include_hydrostatic_loads() -> None:
     applied = applied_nodal_loads(spec, mesh, range(mesh.node_count))
     total = [sum(f[i] for f in applied.values()) for i in range(3)]
     assert total == pytest.approx([0.0, 0.0, 10.0 + wet_force(0.02)], rel=1e-12)
+
+
+# --- Uniform pressure as nodal loads, load totals (M3.2, ADR-051) ---
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_pressure_nodal_loads_on_a_flat_face_push_into_the_body(order: int) -> None:
+    mesh = two_tets(order=order)
+    spec = loaded_spec(loads=[pressure([1], 2)])  # face 1 is x = 0, 50 mm²
+    loads = pressure_nodal_loads(mesh, element_face_pressures(spec, mesh))
+    force, _ = resultant(mesh, loads, (0.0, 0.0, 0.0))
+    assert force == pytest.approx([2e6 * 5e-5, 0.0, 0.0], abs=1e-12)
+    # A flat six-node triangle's corners carry nothing, its mid-edge nodes a third each.
+    corners = {0, 2, 3}
+    for node, f in loads.items():
+        expected = (0.0 if node in corners else 100.0 / 3) if order == 2 else 100.0 / 3
+        assert f[0] == pytest.approx(expected, abs=1e-12)
+
+
+@pytest.mark.parametrize("mesh", [two_tets(order=1), two_tets(order=2), bent(two_tets(order=2))])
+def test_a_pressure_all_round_a_closed_surface_adds_up_to_nothing(mesh: VolumeMesh) -> None:
+    # The three-point rule integrates n dA exactly on curved six-node faces too.
+    spec = loaded_spec(loads=[pressure([1, 2, 3, 4], 7)])
+    loads = pressure_nodal_loads(mesh, element_face_pressures(spec, mesh))
+    force, _ = resultant(mesh, loads, (0.0, 0.0, 0.0))
+    assert force == pytest.approx([0.0, 0.0, 0.0], abs=1e-12 * 7e6 * 1e-4)
+
+
+def test_applied_loads_include_pressures_at_the_asked_nodes() -> None:
+    mesh = bent(two_tets(order=2))
+    spec = loaded_spec(loads=[pressure([2, 3], 5)])
+    every = pressure_nodal_loads(mesh, element_face_pressures(spec, mesh))
+    assert applied_nodal_loads(spec, mesh, [0, 6, 9]) == {
+        n: every[n] for n in (0, 6, 9) if n in every
+    }
+
+
+@pytest.mark.parametrize("mesh", [two_tets(order=1), bent(two_tets(order=2))])
+def test_load_totals_are_their_nodal_loads_added_up(mesh: VolumeMesh) -> None:
+    gravity = {
+        "id": "g",
+        "type": "gravity",
+        "name": "G",
+        "x": {"value": 1, "unit": "m/s²"},
+        "y": {"value": -2, "unit": "m/s²"},
+        "z": {"value": -9.81, "unit": "m/s²"},
+    }
+
+    def mm(v: float) -> dict:
+        return {"value": v, "unit": "mm"}
+
+    spin = {
+        "id": "w",
+        "type": "centrifugal",
+        "name": "W",
+        "angularVelocity": {"value": 3000, "unit": "rpm"},
+        "axisPoint": {
+            a: {"value": v, "unit": "mm"} for a, v in zip("xyz", (2, -1, 0), strict=False)
+        },
+        "axisDirection": {"x": 0.6, "y": 0.0, "z": 0.8},
+    }
+    loads = [
+        pressure([2, 3], 5),
+        force([4], 1, 2, 3),
+        remote([1], (0.02, 0.0, 0.0), (5.0, 0.0, -2.0), (1.0, 2.0, 3.0)),
+        gravity,
+        spin,
+    ]
+    spec = loaded_spec(loads=loads)
+    totals = load_resultants(spec, mesh)
+    origin = (0.0, 0.0, 0.0)
+    rho = {1: 7850.0}
+    expected = [
+        resultant(mesh, pressure_nodal_loads(mesh, element_face_pressures(spec, mesh)), origin),
+        resultant(mesh, force_nodal_loads(mesh, spec.loads[1]), origin),
+        resultant(mesh, remote_nodal_loads(mesh, spec.loads[2]), origin),
+        resultant(mesh, body_nodal_forces(mesh, rho, BodyLoad((1.0, -2.0, -9.81))), origin),
+    ]
+    omega2 = (3000 * 2 * math.pi / 60) ** 2
+    turning = BodyLoad((0.0, 0.0, 0.0), omega2, (0.002, -0.001, 0.0), (0.6, 0.0, 0.8))
+    expected.append(resultant(mesh, body_nodal_forces(mesh, rho, turning), origin))
+    for (f, m), (ef, em) in zip(totals, expected, strict=True):
+        size = max(map(abs, ef), default=0.0) + 1e-30
+        assert list(f) == pytest.approx(ef, abs=1e-12 * size)
+        assert list(m) == pytest.approx(em, abs=1e-12 * size)
+    # A force adds up to itself; a remote load has its moment about the origin, M + P × F.
+    assert list(totals[1][0]) == pytest.approx([1.0, 2.0, 3.0], abs=1e-12)
+    assert list(totals[2][1]) == pytest.approx([1.0, 2.0 + 0.04, 3.0], abs=1e-12)
+
+
+def test_a_temperature_change_has_no_load_total() -> None:
+    mesh = two_tets(order=2)
+    spec = loaded_spec(
+        loads=[
+            {"id": "t", "type": "temperature", "name": "T", "change": {"value": 50, "unit": "K"}}
+        ]
+    )
+    assert load_resultants(spec, mesh) == [((0.0, 0.0, 0.0), (0.0, 0.0, 0.0))]

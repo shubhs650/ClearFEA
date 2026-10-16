@@ -104,6 +104,20 @@ def face_node_weights(mesh: VolumeMesh, faces: list[int]) -> dict[int, float]:
     return weights
 
 
+def faces_centroid(mesh: VolumeMesh, faces: list[int]) -> Vector:
+    """The area centroid of ``faces`` (m), over the curved element faces; DeckError when the
+    faces have no area in the mesh."""
+    area = 0.0
+    moment = [0.0, 0.0, 0.0]
+    for _, _, da, x in face_points(mesh, faces):
+        area += da
+        for i in range(3):
+            moment[i] += x[i] * da
+    if not area > 0.0:
+        raise DeckError("A support's faces have no area in the mesh. Mesh the simulation again.")
+    return (moment[0] / area, moment[1] / area, moment[2] / area)
+
+
 def force_vector(load: ForceLoad) -> Vector:
     """The load's total force in newtons; DeckError when a component is missing."""
     what = f'Force "{load.name}"'

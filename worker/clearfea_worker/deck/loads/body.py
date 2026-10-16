@@ -236,3 +236,44 @@ def body_nodal_forces(
                     for i in range(3):
                         f[i] += n[k] * scale * a[i]
     return {node: (f[0], f[1], f[2]) for node, f in sorted(out.items())}
+
+
+def body_load_resultant(
+    mesh: VolumeMesh, density: dict[int, float], load: BodyLoad
+) -> tuple[Vector, Vector]:
+    """Total force (N) and its moment about the origin (N·m) of ``load``: the sum of
+    body_nodal_forces and of their moments, integrated directly (the shape functions add up
+    to one and interpolate the position, so the two are the same, with less work)."""
+    npe = NODES_PER_ELEMENT[mesh.order]
+    order = CCX_NODE_ORDER[mesh.order]
+    rule = [(w, *shape(mesh.order, r, s, t)) for r, s, t, w in RULES[mesh.order]]
+    p = mesh.positions
+    force = [0.0, 0.0, 0.0]
+    moment = [0.0, 0.0, 0.0]
+    for tag, (first, count) in sorted(mesh.bodies.items()):
+        rho = density.get(tag, 0.0)
+        if rho == 0.0:
+            continue
+        for e in range(first, first + count):
+            ids = [mesh.elements[e * npe + k] for k in order]
+            xyz = [(p[3 * n], p[3 * n + 1], p[3 * n + 2]) for n in ids]
+            for weight, n, d in rule:
+                j = [
+                    [sum(d[k][c] * xyz[k][row] for k in range(npe)) for c in range(3)]
+                    for row in range(3)
+                ]
+                det = (
+                    j[0][0] * (j[1][1] * j[2][2] - j[1][2] * j[2][1])
+                    - j[0][1] * (j[1][0] * j[2][2] - j[1][2] * j[2][0])
+                    + j[0][2] * (j[1][0] * j[2][1] - j[1][1] * j[2][0])
+                )
+                x = tuple(sum(n[k] * xyz[k][i] for k in range(npe)) for i in range(3))
+                a = load.acceleration((x[0], x[1], x[2]))
+                scale = rho * weight * abs(det)
+                f = (scale * a[0], scale * a[1], scale * a[2])
+                for i in range(3):
+                    force[i] += f[i]
+                moment[0] += x[1] * f[2] - x[2] * f[1]
+                moment[1] += x[2] * f[0] - x[0] * f[2]
+                moment[2] += x[0] * f[1] - x[1] * f[0]
+    return (force[0], force[1], force[2]), (moment[0], moment[1], moment[2])
