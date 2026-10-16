@@ -33,6 +33,14 @@ The fixed end holds the tube's radial growth and disturbs the stress near it. Th
 
 Measured while the case was written (2026-10-15, CalculiX 2.21, Gmsh 4.15.2): coarse, bore −1.15 % and outside −0.53 % in von Mises, −0.04 % and −0.02 % in radial displacement; full, −0.39 % and −0.16 % in von Mises, below 0.01 % in radial displacement.
 
+## Principal stresses and components (M3.1)
+
+With σz = 0 between σr and σθ, the principal stresses are σ1 = σθ and σ3 = σr. The checks read σ1 at the bore (26 MPa) and the outside (16 MPa) in the same box as von Mises, with the same tolerances. Near 45 degrees on the bore, τxy = (σr − σθ) sin θ cos θ = −18 MPa and the tensor shear strain εxy = τxy / 2G = τxy (1 + ν) / E = −117 µε (CalculiX's EXY is half the engineering γxy, ADR-050). They are read on the bore with x and y between 27.5 and 29.1 mm (θ within 1.7 degrees of 45, where sin 2θ ≥ 0.998) and z from 150 to 290 mm (6/β or more from the fixed end), which gives the coarse mesh 25 vertices; same tolerances as the stresses.
+
+σ3 = −p at the bore is not checked. The radial stress rises from −p to 0 across the wall as 1/r², fastest at the bore, and the nodal value there is extrapolated from the integration points of two (coarse) or four (full) quadratic elements through the wall. Measured 2026-10-16 (CalculiX 2.21, Gmsh 4.15.2): −9.507 MPa coarse (−4.9 %), −9.834 MPa full (−1.7 %), converging with the mesh, while σ1 at the same vertices is within 0.07 %. A tolerance wide enough to pass it would say nothing, so the minimum principal stress is checked on V-08 instead.
+
+Measured with the M3.1 checks: coarse, σ1 +0.07 % (bore) and +0.03 % (outside), τxy and εxy −1.85 %; full, +0.02 %, +0.01 % and −0.47 %.
+
 ## Reaction balance
 
 The pressure on the bore adds up to no net force, and so must the reaction of the fixed end. CalculiX leaves out of its reaction total the part of a pressure that lands on nodes the support holds (ADR-029); here those are the bore's nodes on the fixed end's edge, whose loads also add up to nothing by symmetry, so the balance check is unaffected.

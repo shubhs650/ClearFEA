@@ -122,7 +122,7 @@ export function contourOf(
   const field = results.fields.get(name);
   const displacement = results.fields.get("displacement");
   const vertices = mesh.positions.length / 3;
-  if (!displacement || displacement.components !== 3 || results.vertexCount !== vertices) {
+  if (displacement?.components !== 3 || results.vertexCount !== vertices) {
     return "The result files of this run do not belong together. Run the simulation again; if it happens again, report it as a bug.";
   }
   if (!field) {

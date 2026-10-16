@@ -12,6 +12,7 @@ The supports hold only what a uniformly stretched bar does anyway: no face is ke
 - σx = E ε = 14.5 ksi, the only stress, so von Mises = 14.5 ksi everywhere
 - ux = ε x, so 0.002 in at the end
 - uy = −ν ε y and uz = −ν ε z, so −0.29 × 5 × 10⁻⁴ × 0.5 in = −7.25 × 10⁻⁵ in on the sides y = 0.5 in and z = 0.5 in
+- the strains are εx = 5 × 10⁻⁴ (500 µε) and εy = εz = −ν ε = −1.45 × 10⁻⁴, with no shear; the largest principal stress σ1 is σx and the other two are zero (M3.1, read as σxx, σ1, εxx and εyy along the side y = 0.5 in)
 - the end's reaction is σ A = 14.5 ksi × 0.25 in² = 3.625 kip along +x, the start's the same along −x, and the symmetry planes carry nothing
 
 ## Tolerances

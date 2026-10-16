@@ -419,8 +419,6 @@ def test_v01_references_are_lame_with_open_ends() -> None:
         [first] = [c for c in checks.values() if c.face == face and c.quantity == "principal.1"]
         assert first.reference == pytest.approx(st, rel=1e-12)
         if face == "bore":
-            [third] = [c for c in checks.values() if c.quantity == "principal.3"]
-            assert third.reference == pytest.approx(sr, rel=1e-12)
             # At 45 degrees: tau_xy = (sr - st) sin cos, and the tensor strain tau / 2G.
             shear = (sr - st) / 2
             assert checks["Shear stress τxy at 45 degrees on the bore"].reference == pytest.approx(

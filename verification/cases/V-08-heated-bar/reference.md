@@ -15,11 +15,14 @@ with σy = σz = 0, because the sides are free and the symmetry planes hold only
 - Each end pushes back on the bar with |σx| A = 116.969557 MPa × 200 mm² = 23.3939115 kN: the start face towards +x and the end face towards −x. They balance each other; the symmetry planes carry nothing.
 - Across the section, εy = εz = α ΔT − ν σx / E = (1 + ν) α ΔT = 7.605 × 10⁻⁴, so the side y = 20 mm moves by 0.01521 mm along +y and the top z = 10 mm by 0.007605 mm along +z.
 
+- The strain the result view shows is the total strain, elastic plus thermal (ADR-050): εy = εz = (1 + ν) α ΔT = 7.605 × 10⁻⁴ (760.5 µε, 0.07605 %), and εx = 0 along the held length. The principal stresses are 0, 0 and σx, so the smallest, σ3, is −116.969557 MPa.
+
 ## Where the results are read
 
 - Stress: the mean von Mises stress over the side face y = 20 mm.
 - Reactions: each end support's total reaction along x.
 - Growth: the mean y displacement over the side face and the mean z displacement over the top face.
+- Components (M3.1): the mean σxx, σ3 and εy over the side face and εz over the top face. εx = 0 and σ1 = σ2 = 0 are not checked, since a relative tolerance needs a reference other than zero; the sign of σxx and the size of εy, which together tell total strain from elastic strain (the elastic part alone would be −ν σx / E = ν α ΔT = 1.755 × 10⁻⁴), are.
 
 ## Tolerances
 
