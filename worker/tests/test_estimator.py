@@ -50,7 +50,9 @@ def test_the_fit_covers_what_the_m2_11_benchmark_measured() -> None:
     table = EstimatorTable.model_validate_json(ESTIMATOR.read_text())
     memory = table.analyses.linear_static.peak_memory_bytes
     rows = json.loads((BENCHMARKS / "results.json").read_text())["runs"]
-    solved = [r for r in rows if (r["solver"], r["threads"], r["status"]) == ("SPOOLES", 1, "ok")]
+    # The production build only: results.json also holds PaStiX rows (ADR-048 item 7).
+    production = ("ubuntu-2.21-1", "SPOOLES", 1, "ok")
+    solved = [r for r in rows if (r["build"], r["solver"], r["threads"], r["status"]) == production]
     assert solved
     for row in solved:
         fitted = memory.constant + memory.coefficient * row["nodes"] ** memory.exponent
