@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-13: conduction through a flat wall between two fixed temperatures (M5.1).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-13
+title: Plane wall conduction
+analysis: steady_thermal
+features: [steady-state thermal analysis, fixed temperature, thermal conductivity, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  hot: { min: [0, 0, 0], max: [0, 60, 60] }
+  cold: { min: [40, 0, 0], max: [40, 60, 60] }
+  side: { min: [0, 0, 0], max: [40, 0, 60] }
+# Both sizes divide the 40 mm thickness, so the mesh has nodes on the side face's edges at
+# x = 10, 20 and 30 mm, where the checks read the profile.
+mesh:
+  coarse: { value: 10, unit: mm }
+  full: { value: 2.5, unit: mm }
+# The profile is linear in x, which the mesh represents exactly (reference.md); the result
+# files keep five significant digits, 0.01 K at 300 K, so every check is tight on both tiers.
+checks:
+  - name: Hot face at 300 °F
+    quantity: temperature
+    face: hot
+    reference: { value: 148.888889, unit: °C }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Cold face at 20 °C
+    quantity: temperature
+    face: cold
+    reference: { value: 20, unit: °C }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: A quarter of the way through, Th − (Th − Tc) / 4
+    quantity: temperature
+    face: side
+    box: { min: [10, 0, 0], max: [10, 0, 60] }
+    reference: { value: 116.666667, unit: °C }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Halfway through, the mean of Th and Tc
+    quantity: temperature
+    face: side
+    box: { min: [20, 0, 0], max: [20, 0, 60] }
+    reference: { value: 84.444444, unit: °C }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Three quarters of the way through, Tc + (Th − Tc) / 4
+    quantity: temperature
+    face: side
+    box: { min: [30, 0, 0], max: [30, 0, 60] }
+    reference: { value: 126, unit: °F }
+    tolerance: { coarse: 0.0001, full: 0.0001 }

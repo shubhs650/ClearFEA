@@ -77,8 +77,10 @@ TENSOR = ("xx", "yy", "zz", "xy", "yz", "zx")
 #: its reaction moment about the centroid of the support's faces (M3.2). Stress and strain
 #: components and principal stresses (σ1 ≥ σ2 ≥ σ3) are the run's fields as written (M3.1);
 #: shear strains are tensor components, half of γ. The safety factor against yield is the
-#: run's field (M3.5, ADR-054).
+#: run's field (M3.5, ADR-054). The temperature is a steady-state thermal run's field, absolute,
+#: in kelvin (M5.1, ADR-064).
 QUANTITIES = {
+    "temperature": "temperature",
     "vonMises": "pressure",
     **{f"stress.{c}": "pressure" for c in TENSOR},
     **{f"principal.{k}": "pressure" for k in (1, 2, 3)},
@@ -229,14 +231,14 @@ def build_spec(case: Case, tags: dict[str, int], geometry_id: str, tier: str) ->
 def _value(
     quantity: str, p: tuple[float, ...], fields: dict[str, list[tuple[float, ...]]], v: int
 ) -> float:
-    u = fields["displacement"][v]
-    if quantity in ("vonMises", "safetyFactor"):
+    if quantity in ("vonMises", "safetyFactor", "temperature"):
         return fields[quantity][v][0]
     field, _, part = quantity.partition(".")
     if field in ("stress", "strain"):
         return fields[field][v][TENSOR.index(part)]
     if field == "principal":
         return fields["principalStress"][v][int(part) - 1]
+    u = fields["displacement"][v]
     if quantity == "displacement":
         return math.sqrt(sum(c * c for c in u))
     if quantity == "displacement.radial":
