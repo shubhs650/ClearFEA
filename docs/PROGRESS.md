@@ -5,8 +5,8 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M4 Assemblies, in progress under the maintainer's autodrive (M3 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M4 close (ADR list for review, phase-end run)
+- **Current milestone:** M5 Thermal, not started (M4 closed 2026-10-16 on a green phase-end run on main)
+- **Next task:** M5.1, once the maintainer gives the go for M5 (his autodrive covered M4)
 - **Blocked on:** nothing
 
 ## Milestones
@@ -17,7 +17,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M1 | Thin slice | Done (phase-end run on main green, [run 38695124436](https://github.com/shubhs650/ClearFEA/actions/runs/38695124436); maintainer waived the hand exit check) | 2026-10-15 |
 | M2 | Structural setup | Done (phase-end run on main green, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) | 2026-10-16 |
 | M3 | Results tools | Done (phase-end run on main green, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) | 2026-10-16 |
-| M4 | Assemblies | In progress | |
+| M4 | Assemblies | Done (phase-end run on main green, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) | 2026-10-16 |
 | M5 | Thermal | Not started | |
 | M6 | Modal | Not started | |
 | M7 | Report | Not started | |
@@ -108,11 +108,13 @@ Things only the maintainer can do.
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 146 of 146 checks (M3.5) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4) |
 | Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step, the M3.5 safety factor step and the M3.6 saved view step |
-| Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main df2a895, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035); closed M3) | Green: full tier 146 of 146 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26); E-01 |
+| Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main 6e722e0, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547); closed M4) | Green: full tier 169 of 169 checks in all 15 cases (V-01 to V-12, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M4 close (2026-10-16): M4 closed on a green manual phase-end run on main (see the Milestones table), after PR #59 fixed E-01's one-body check that M4.1's tree row had broken. The M4 exit (a three-body shell, nozzle and pad model runs with balanced reactions) was checked locally through `make verify` as a scratch case; its files and result table are in the project's `m4-close/` folder, not the repository. Next is M5 in PLAN.md order, which waits for the maintainer's go. Still waiting on the maintainer: review of ADR-058 to ADR-062 (M4, accepted under the autodrive). E-03 (multi-body upload, bonds, run; listed for M4 in VERIFICATION.md) is not written; E-01 is still one body.
 
 > M4.5 (2026-10-16): report text on stress accuracy at tied interfaces, stored for M7 (ADR-062, accepted under Shubham's autodrive, pending his review). No physics-critical module touched. `packages/spec/report-notes.json` (schema `report-notes.schema.json`, Pydantic model generated) holds the note "Stresses near bonded faces" with ADR-060 item 9's measured figures; `runReportNotes(spec)` in `packages/spec/src/report.ts` returns the notes a run's frozen spec calls for (any bond not removed). The Run panel shows them under a succeeded run's results. For M7: the report job reads the same file (M7.5 can add the other standing statements to it, bumping `version` on any text change). Screenshot in the project's `m4.5/` folder. Next: M4 close (ADR list for review and a green manual phase-end run).
 
@@ -241,6 +243,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M4 closed: phase-end workflow run by hand on main 6e722e0 ([run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) green, `make verify` full tier 169 of 169 checks in all 15 cases and `make e2e` E-01. Next: M5, waiting on the maintainer's go.
 - M4 close, part 1: the first phase-end run on main b4280bf ([run 38889867749](https://github.com/shubhs650/ClearFEA/actions/runs/38889867749)) failed in `make e2e`: E-01's M3.6 step expected no button named "Bodies…" on a one-body model, and M4.1's Bodies row in the simulation tree is one. The step now looks only in the 3D viewer, the check it meant. M4's exit (a three-body shell, nozzle and pad model runs with balanced reactions) was run locally through `make verify` as a scratch case, not committed: 65,881 elements, reactions balance the applied load to 0.0014 %, the run's own balance check to 1.2e-7 %, membrane stress away from the nozzle 48.48 MPa against Lamé's 48.51 MPa. Next: re-run the phase-end workflow on main.
 - M4.5: the report's note on stress accuracy near bonded faces is stored in `packages/spec/report-notes.json` and shown under the results of runs that tied bonds (ADR-062). Learned: the no-verdict test caught "pass through" in the first draft, so notes avoid the word in any sense.
 - M4.4: a body no support or bond reaches is refused before the run, and the deck generator's rigid-body check looks at each group of bonded bodies (ADR-061). Learned: the whole-model check let a free body pass beside a held one.
