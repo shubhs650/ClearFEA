@@ -220,6 +220,14 @@ def test_reads_a_reaction_component_of_the_named_support() -> None:
     assert reaction(check, reactions) == 5.0
 
 
+def test_reads_a_reaction_moment_component_and_refuses_a_run_without_moments() -> None:
+    check = Check("m", "moment.z", None, None, 1.0, "N·m", {"coarse": 0.1, "full": 0.1}, "b")
+    reactions = [{"supportId": "b", "force": [4, 5, 6], "moment": [7, 8, 9], "point": [0, 0, 0]}]
+    assert reaction(check, reactions) == 9.0
+    with pytest.raises(CaseError, match="no reaction moment for support b"):
+        reaction(check, [{"supportId": "b", "force": [4, 5, 6]}])
+
+
 def test_balance_without_a_load_is_measured_against_the_reactions() -> None:
     assert balance([0.0, 0.0, -10.0], 10.0, [[0.0, 0.0, 9.0]]) == pytest.approx((1.0, 10.0))
     miss, size = balance(

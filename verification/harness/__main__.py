@@ -179,6 +179,22 @@ def run_case(
             imbalance <= BALANCE_TOLERANCE,
         )
     )
+    # The run's own balance check (M3.2, ADR-051): its applied-load totals against its
+    # reactions, forces and moments, both from the worker.
+    check = run["result"].get("balance")
+    if check is None:
+        raise CaseError("The run's result has no balance check.")
+    worst = max(check["forceRatio"], check["momentRatio"])
+    outcome.rows.append(
+        Row(
+            "The run's balance check closes",
+            "force and moment",
+            f"force {100 * check['forceRatio']:.2g} %, moment {100 * check['momentRatio']:.2g} %",
+            f"{100 * worst:.4f} %",
+            f"{100 * BALANCE_TOLERANCE:g} %",
+            worst <= BALANCE_TOLERANCE,
+        )
+    )
     warnings = unexpected_warnings(log, case.allowed_warnings)
     outcome.rows.append(
         Row(
