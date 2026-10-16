@@ -43,6 +43,7 @@ from ..deck.loads.body import BodyLoad, body_load_resultant, body_nodal_forces
 from ..deck.loads.force import _triangle_nodes, _triangle_shape
 from ..deck.loads.heat import conductivities, convections, fixed_temperatures, radiations
 from ..deck.loads.pressure import _LOCAL_FACE, _RULE
+from ..deck.materials import Table
 from ..meshing.volume import NODES_PER_ELEMENT, VolumeMesh
 from ..spec.simulation_schema import (
     ConvectionLoad,
@@ -211,10 +212,14 @@ def heat_balance(flows: list[HeatFlow], floor: float) -> dict[str, float]:
 
 def balance_floor(spec: SimulationSpec, mesh: VolumeMesh, temperature: Sequence[float]) -> float:
     """The smallest scale the heat balance is measured against (W): 1e-12 of the heat a
-    conductivity k carries across the model's size L at its highest absolute temperature T,
-    k T L, about what rounding leaves in CalculiX's nodal heat flows (1e-13 W for k = 50
-    W/(m·K), T = 373 K, L = 1 cm, ratio 4e-16), and far below any heat flow worth showing."""
-    k = max(conductivities(spec, mesh).values(), default=0.0)
+    conductivity k (a table's largest, M5.5) carries across the model's size L at its highest
+    absolute temperature T, k T L, about what rounding leaves in CalculiX's nodal heat flows
+    (1e-13 W for k = 50 W/(m·K), T = 373 K, L = 1 cm, ratio 4e-16), and far below any heat
+    flow worth showing."""
+    k = max(
+        (v.largest if isinstance(v, Table) else v for v in conductivities(spec, mesh).values()),
+        default=0.0,
+    )
     p = mesh.positions
     lo = [min(p[i::3]) for i in range(3)]
     hi = [max(p[i::3]) for i in range(3)]

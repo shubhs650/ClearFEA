@@ -964,3 +964,45 @@ fieldset.field {
 .viewer-cut-status {
   color: var(--muted, #495057);
 }
+
+/* A material property against temperature (M5.5): a small table of temperature and value. */
+.property-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.property-table table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.property-table th,
+.property-table td {
+  text-align: left;
+  font-weight: normal;
+  padding: 2px 4px 2px 0;
+}
+
+.property-table thead th {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.property-table td input {
+  width: 100%;
+  min-width: 0;
+}
+
+.property-table td input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

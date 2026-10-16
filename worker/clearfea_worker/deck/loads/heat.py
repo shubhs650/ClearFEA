@@ -26,6 +26,7 @@ from ...spec.simulation_schema import (
     SimulationSpec,
 )
 from ..common import DeckError, si
+from ..materials import Property, positive, table
 from .fixed import fixed_support_nodes
 from .pressure import pressure_faces
 
@@ -71,12 +72,13 @@ def fixed_temperatures(spec: SimulationSpec, mesh: VolumeMesh) -> list[FixedTemp
     return out
 
 
-def conductivities(spec: SimulationSpec, mesh: VolumeMesh) -> dict[str, float]:
+def conductivities(spec: SimulationSpec, mesh: VolumeMesh) -> dict[str, Property]:
     """Thermal conductivity (W/(m·K)) of every material a body of the mesh uses, by material
-    id; DeckError for a material without one or with one of zero or less."""
+    id: its table against temperature where it has one (M5.5, ADR-068), else its one value.
+    DeckError for a material without either, or with a value of zero or less."""
     material = {m.id: m for m in spec.materials}
     assigned = {b.tag: b.material for b in spec.bodies}
-    out = {}
+    out: dict[str, Property] = {}
     for tag in sorted(mesh.bodies):
         m = material.get(assigned.get(tag) or "")
         if m is None:
@@ -84,6 +86,14 @@ def conductivities(spec: SimulationSpec, mesh: VolumeMesh) -> dict[str, float]:
         if m.id in out:
             continue
         what = f'Material "{m.name}"'
+        if m.thermal_conductivity_table is not None:
+            out[m.id] = table(
+                m.thermal_conductivity_table,
+                "thermalConductivity",
+                f"{what}: thermal conductivity table",
+                positive,
+            )
+            continue
         if m.thermal_conductivity is None:
             raise DeckError(
                 f"{what} has no thermal conductivity. A thermal analysis needs it; enter it."

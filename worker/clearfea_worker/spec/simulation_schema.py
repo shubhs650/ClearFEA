@@ -104,46 +104,46 @@ Poisson's ratio, dimensionless, between -1 and 0.5 exclusive; null until entered
 """
 
 
-class IsotropicMaterial(BaseModel):
+class PropertyTableRow(BaseModel):
     """
-    A linear elastic isotropic material. The spec holds its own copy of the values, so a run made from it never changes when a library material does.
+    One row of a property table: a temperature and the property's value there, as typed in the table's units; either is null until entered.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         populate_by_name=True,
     )
-    id: ItemId
-    name: ItemName
-    model: Literal["isotropic_elastic"]
-    youngs_modulus: Annotated[Quantity | None, Field(alias="youngsModulus")]
+    temperature: float | None
+    value: float | None
+
+
+class PropertyTable(BaseModel):
     """
-    Young's modulus, a pressure quantity greater than zero; null until entered.
+    A material property that varies with temperature (M5.5, ADR-068): rows of a temperature and the value there, in rising temperature, at least two. Between rows the value is interpolated linearly; below the first row and above the last it is the first and last value (as CalculiX does). temperatureUnit is a temperature unit and unit a unit of the property's kind from packages/spec/units.json; unit is absent for Poisson's ratio. Used in place of the material's single value by steady-state thermal and thermal stress analyses, whose temperatures are solved; a linear static analysis uses the single value.
     """
-    poissons_ratio: Annotated[PoissonsRatio | None, Field(alias="poissonsRatio")]
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    temperature_unit: Annotated[str, Field(alias="temperatureUnit", max_length=20, min_length=1)]
+    unit: Annotated[str | None, Field(max_length=20, min_length=1)] = None
+    rows: Annotated[list[PropertyTableRow], Field(max_length=50)]
+
+
+class ExpansionTable(BaseModel):
     """
-    Poisson's ratio, dimensionless, between -1 and 0.5 exclusive; null until entered.
+    A thermal expansion coefficient that varies with temperature (M5.5, ADR-068): a PropertyTable of mean (secant) coefficients, each measured from referenceTemperature, as handbooks print them: the thermal strain at T is alpha(T) (T - referenceTemperature), counted from the stress-free temperature. referenceTemperature is a temperature quantity, null until entered.
     """
-    density: Quantity | None = None
-    """
-    Mass density, a density quantity greater than zero (M2.3). Needed only by gravity and centrifugal loads; absent or null until entered.
-    """
-    thermal_expansion: Annotated[Quantity | None, Field(alias="thermalExpansion")] = None
-    """
-    Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change and a thermal stress analysis; absent or null until entered.
-    """
-    thermal_conductivity: Annotated[Quantity | None, Field(alias="thermalConductivity")] = None
-    """
-    Thermal conductivity, a thermalConductivity quantity greater than zero (M5.1, ADR-064). Needed only by a steady-state thermal and a thermal stress analysis; absent or null until entered.
-    """
-    yield_strength: Annotated[Quantity | None, Field(alias="yieldStrength")] = None
-    """
-    Tensile yield strength, a pressure quantity greater than zero (M3.5, ADR-054). Needed only for the safety factor against yield, which the result shows when every material of the setup has one; absent or null until entered.
-    """
-    source: Annotated[str | None, Field(max_length=500, min_length=1)] = None
-    """
-    Where the values came from, as text: a library material's citation, or a note the user saved with a custom material (M2.9, ADR-046). Information only; the setup drops it when a value is changed, since the values then no longer match it. Absent when unknown.
-    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    temperature_unit: Annotated[str, Field(alias="temperatureUnit", max_length=20, min_length=1)]
+    unit: Annotated[str, Field(max_length=20, min_length=1)]
+    rows: Annotated[list[PropertyTableRow], Field(max_length=50)]
+    reference_temperature: Annotated[OptionalQuantity, Field(alias="referenceTemperature")]
 
 
 class MaterialReference(BaseModel):
@@ -158,58 +158,6 @@ class MaterialReference(BaseModel):
     id: Annotated[str, Field(min_length=1)]
     citation: Annotated[str, Field(min_length=1)]
     links: list[str]
-
-
-class MaterialLibrary(BaseModel):
-    """
-    packages/spec/library/materials.json, the generic library materials (M2.9, ADR-046). Each material holds its values exactly as its source prints them, and its source names the table they come from.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    version: Literal[1]
-    description: str
-    references: list[MaterialReference]
-    materials: list[IsotropicMaterial]
-
-
-class MaterialsResponse(BaseModel):
-    """
-    Answer to GET /api/materials: the library's materials in library order, and the signed-in user's own materials by name (M2.9, ADR-046). A material is copied into a simulation with a new id; later changes to either side do not reach the other.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    library: list[IsotropicMaterial]
-    custom: list[IsotropicMaterial]
-
-
-class SaveMaterialRequest(BaseModel):
-    """
-    Body of POST /api/materials: a material to keep among the user's own materials, usable in every simulation of theirs. Its id is ignored and a new one given. Young's modulus and Poisson's ratio must be entered; its name must not be one of theirs already.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    material: IsotropicMaterial
-
-
-class MaterialResponse(BaseModel):
-    """
-    Answer to POST /api/materials (HTTP 201): the saved material with its new id.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    material: IsotropicMaterial
 
 
 class FixedSupport(BaseModel):
@@ -1180,6 +1128,120 @@ class RunLogResponse(BaseModel):
     next: Annotated[int, Field(ge=0)]
 
 
+class IsotropicMaterial(BaseModel):
+    """
+    A linear elastic isotropic material. The spec holds its own copy of the values, so a run made from it never changes when a library material does.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: ItemId
+    name: ItemName
+    model: Literal["isotropic_elastic"]
+    youngs_modulus: Annotated[Quantity | None, Field(alias="youngsModulus")]
+    """
+    Young's modulus, a pressure quantity greater than zero; null until entered.
+    """
+    poissons_ratio: Annotated[PoissonsRatio | None, Field(alias="poissonsRatio")]
+    """
+    Poisson's ratio, dimensionless, between -1 and 0.5 exclusive; null until entered.
+    """
+    density: Quantity | None = None
+    """
+    Mass density, a density quantity greater than zero (M2.3). Needed only by gravity and centrifugal loads; absent or null until entered.
+    """
+    thermal_expansion: Annotated[Quantity | None, Field(alias="thermalExpansion")] = None
+    """
+    Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change and a thermal stress analysis; absent or null until entered.
+    """
+    thermal_conductivity: Annotated[Quantity | None, Field(alias="thermalConductivity")] = None
+    """
+    Thermal conductivity, a thermalConductivity quantity greater than zero (M5.1, ADR-064). Needed only by a steady-state thermal and a thermal stress analysis; absent or null until entered.
+    """
+    youngs_modulus_table: Annotated[PropertyTable | None, Field(alias="youngsModulusTable")] = None
+    """
+    Young's modulus against temperature (M5.5, ADR-068), a PropertyTable of pressures; absent or null when it does not vary.
+    """
+    poissons_ratio_table: Annotated[PropertyTable | None, Field(alias="poissonsRatioTable")] = None
+    """
+    Poisson's ratio against temperature (M5.5, ADR-068), a PropertyTable without unit; absent or null when it does not vary.
+    """
+    thermal_expansion_table: Annotated[
+        ExpansionTable | None, Field(alias="thermalExpansionTable")
+    ] = None
+    """
+    Thermal expansion against temperature (M5.5, ADR-068), an ExpansionTable; absent or null when it does not vary.
+    """
+    thermal_conductivity_table: Annotated[
+        PropertyTable | None, Field(alias="thermalConductivityTable")
+    ] = None
+    """
+    Thermal conductivity against temperature (M5.5, ADR-068), a PropertyTable of thermal conductivities; absent or null when it does not vary.
+    """
+    yield_strength: Annotated[Quantity | None, Field(alias="yieldStrength")] = None
+    """
+    Tensile yield strength, a pressure quantity greater than zero (M3.5, ADR-054). Needed only for the safety factor against yield, which the result shows when every material of the setup has one; absent or null until entered.
+    """
+    source: Annotated[str | None, Field(max_length=500, min_length=1)] = None
+    """
+    Where the values came from, as text: a library material's citation, or a note the user saved with a custom material (M2.9, ADR-046). Information only; the setup drops it when a value is changed, since the values then no longer match it. Absent when unknown.
+    """
+
+
+class MaterialLibrary(BaseModel):
+    """
+    packages/spec/library/materials.json, the generic library materials (M2.9, ADR-046). Each material holds its values exactly as its source prints them, and its source names the table they come from.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    version: Literal[1]
+    description: str
+    references: list[MaterialReference]
+    materials: list[IsotropicMaterial]
+
+
+class MaterialsResponse(BaseModel):
+    """
+    Answer to GET /api/materials: the library's materials in library order, and the signed-in user's own materials by name (M2.9, ADR-046). A material is copied into a simulation with a new id; later changes to either side do not reach the other.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    library: list[IsotropicMaterial]
+    custom: list[IsotropicMaterial]
+
+
+class SaveMaterialRequest(BaseModel):
+    """
+    Body of POST /api/materials: a material to keep among the user's own materials, usable in every simulation of theirs. Its id is ignored and a new one given. Young's modulus and Poisson's ratio must be entered; its name must not be one of theirs already.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    material: IsotropicMaterial
+
+
+class MaterialResponse(BaseModel):
+    """
+    Answer to POST /api/materials (HTTP 201): the saved material with its new id.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    material: IsotropicMaterial
+
+
 class MeshSettings(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -1201,7 +1263,7 @@ class MeshSettings(BaseModel):
 
 class SimulationSpec(BaseModel):
     """
-    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), or one thermal stress analysis with its stress-free temperature (M5.4), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), or one thermal stress analysis with its stress-free temperature (M5.4), material properties against temperature (M5.5), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
     """
 
     model_config = ConfigDict(

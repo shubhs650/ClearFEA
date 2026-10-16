@@ -66,7 +66,7 @@ Stress is checked away from supports and load application points unless the case
 | V-16 | Heated plate radiating to ambient | Surface temperature from εσ(T⁴ − T∞⁴) balance | M5 |
 | V-17 | Slab with internal heat generation | Centre temperature rise q‴L²/2k | M5 |
 | V-18 | Thick cylinder, radial temperature gradient | Closed-form thermal stress (Timoshenko and Goodier) | M5 |
-| V-19 | Wall with temperature-dependent conductivity | Flux from conductivity at mean temperature (linear k(T)) | M5 |
+| V-19 | Wall with temperature-dependent conductivity, elasticity and expansion, held sideways between frictionless walls (M5.5) | Flux from conductivity at mean temperature (linear k(T)) and the exact profile; sideways stress −E(T) ε(T)/(1 − ν(T)) from mean expansion coefficients with their own reference temperature; growth of the free face | M5 |
 | V-20 | Cantilever beam frequencies | Euler-Bernoulli, first three bending modes | M6 |
 | V-21 | Fixed-fixed beam frequencies | Euler-Bernoulli, first two bending modes | M6 |
 | V-22 | Unrestrained body | Six rigid-body modes near zero, first elastic mode against reference | M6 |
@@ -103,7 +103,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Radiation to ambient | V-16 |
 | Internal heat generation | V-17 |
 | Thermal stress | V-18 |
-| Temperature-dependent properties | V-19 |
+| Temperature-dependent properties | V-19 (conductivity, Young's modulus, Poisson's ratio and expansion tables, M5.5); `worker/spikes/heat_check` checks a conductivity table at every node |
 | Modal | V-20, V-21, V-22 |
 | Heat flux results | V-13, V-15, V-16, V-17 (heat flux along the wall, M5.3) |
 | Heat flows and heat balance check | V-13, V-15, V-16, V-17 (each load's heat flow), V-18; the run's own heat balance on every thermal case (M5.3) |
@@ -142,7 +142,7 @@ Playwright drives the real UI against the local system on tiny models. `make e2e
 | E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance, read the min/max markers and probe a node, cut it across x and y with a cut plane, show the safety factor against yield, save a view and bring it back, show the result in other units after a reload, export CSV and VTK files (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
 | E-02 | Unit entry in mixed units and display-unit switch | M2 |
 | E-03 | Multi-body upload: bodies listed by part name with a material each, the bond found reviewed and shown, a body held only by a removed bond refused before the run, run with the bond tied, reactions balancing the load carried through the bond, the note on stresses near bonded faces, one body hidden in the result view (`e03-multi-body.e2e.ts`, two blocks touching end to end; signs in as the second test user) | M4 (written after the M4 close) |
-| E-04 | Thermal stress setup: the analysis type and its stress-free temperature, a material with elastic and thermal values, a fixed support and two fixed temperatures; run, see the von Mises stress on the deformed shape, the highest and lowest temperature, each fixed temperature's heat flow and the heat balance, draw the temperature of the same result and find both the reactions and the heat flows exports (`e04-thermal-stress.e2e.ts`, E-01's block, hot top and cold fixed end; signs in as the second test user) | M5 (M5.4) |
+| E-04 | Thermal stress setup: the analysis type and its stress-free temperature, a material with elastic and thermal values and, since M5.5, conductivity and Young's modulus tables against temperature, a fixed support, a fixed temperature and convection; run, see the von Mises stress on the deformed shape, the highest and lowest temperature, each fixed temperature's heat flow and the heat balance, draw the temperature of the same result and find both the reactions and the heat flows exports (`e04-thermal-stress.e2e.ts`, E-01's block, hot top and cold fixed end; signs in as the second test user) | M5 (M5.4, M5.5) |
 | E-05 | Report generation and download | M7 |
 | E-06 | Cancel a running job; stop limit reached | M8 |
 | E-07 | Second user cannot open first user's project or share-revoked link | M8 |

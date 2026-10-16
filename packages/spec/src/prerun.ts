@@ -16,19 +16,25 @@ import {
   displacementAxes,
   faceHeatConflicts,
   hasBodyLoad,
+  hasProperty,
   hasTemperatureChange,
   isThermal,
   loadHasFaces,
   loadKinds,
   localScopes,
+  materialTables,
+  propertyTable,
   setsTemperature,
   type SpecProblem,
   simulationSpecProblems,
   solvesStress,
   specBonds,
   supportKinds,
+  type TableProperty,
   type TopologyTags,
+  tableProblems,
   unheldBodies,
+  usesTable,
 } from "./simulation";
 
 /** True when the setup moves something by itself: a prescribed displacement other than zero. */
@@ -140,7 +146,7 @@ export function thermalBodyMessages(spec: SimulationSpec, topology?: TopologyTag
 function thermalProblems(spec: SimulationSpec, topology: TopologyTags | undefined, add: (item: string, message: string) => void) {
   for (const message of thermalBodyMessages(spec, topology)) add("bodies", message);
   for (const material of spec.materials) {
-    if ((material.thermalConductivity ?? null) === null) {
+    if (!hasProperty(spec, material, "thermalConductivity")) {
       add(material.id, `Material "${material.name}" has no thermal conductivity, which a thermal analysis needs. Enter it.`);
     }
   }
@@ -212,6 +218,18 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
       );
     }
   }
+  // The rows of every table the analysis reads (M5.5, ADR-068); a steady-state thermal
+  // analysis reads only conductivity.
+  for (const material of spec.materials) {
+    for (const t of materialTables) {
+      if (isThermal(spec) && t.value !== "thermalConductivity") continue;
+      const table = propertyTable(material, t.value);
+      if (table === null || !usesTable(spec, material, t.value)) continue;
+      for (const message of tableProblems(table, t.value, `The ${t.label} table of material "${material.name}"`)) {
+        add(material.id, message);
+      }
+    }
+  }
   if (isThermal(spec)) {
     thermalProblems(spec, topology, add);
     for (const load of spec.loads) {
@@ -244,19 +262,26 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
   const bodyLoad = hasBodyLoad(spec);
   const temperatureChange = hasTemperatureChange(spec);
   for (const material of spec.materials) {
-    if (material.youngsModulus === null) {
-      add(material.id, `Material "${material.name}" has no Young's modulus. Enter it.`);
+    // A table is read only where temperatures are solved (M5.5, ADR-068); a linear static
+    // analysis asks for the single value even when one is there.
+    const onlyTable = (property: TableProperty) =>
+      propertyTable(material, property) === null ? "" : " A linear static analysis uses the single value, not the table.";
+    if (!hasProperty(spec, material, "youngsModulus")) {
+      add(material.id, `Material "${material.name}" has no Young's modulus. Enter it.${onlyTable("youngsModulus")}`);
     }
-    if (material.poissonsRatio === null) {
-      add(material.id, `Material "${material.name}" has no Poisson's ratio. Enter it.`);
+    if (!hasProperty(spec, material, "poissonsRatio")) {
+      add(material.id, `Material "${material.name}" has no Poisson's ratio. Enter it.${onlyTable("poissonsRatio")}`);
     }
     if (bodyLoad && (material.density ?? null) === null) {
       add(material.id, `Material "${material.name}" has no density, which gravity and centrifugal loads need. Enter it.`);
     }
-    if (thermalStress && (material.thermalExpansion ?? null) === null) {
+    if (thermalStress && !hasProperty(spec, material, "thermalExpansion")) {
       add(material.id, `Material "${material.name}" has no thermal expansion, which a thermal stress analysis needs. Enter it.`);
     } else if (temperatureChange && (material.thermalExpansion ?? null) === null) {
-      add(material.id, `Material "${material.name}" has no thermal expansion, which a temperature change needs. Enter it.`);
+      add(
+        material.id,
+        `Material "${material.name}" has no thermal expansion, which a temperature change needs. Enter it.${onlyTable("thermalExpansion")}`,
+      );
     }
   }
 

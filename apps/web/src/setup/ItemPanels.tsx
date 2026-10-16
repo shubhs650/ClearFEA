@@ -28,6 +28,7 @@ import { type ReactNode, useState } from "react";
 import { QuantityInput } from "../units/QuantityInput";
 import type { QuantityKind } from "../units/system";
 import { BodiesField, FacesField, NumberField, TextField } from "./fields";
+import { PropertyTableField } from "./PropertyTableField";
 import {
   assignMaterial,
   editMaterial,
@@ -257,12 +258,25 @@ export function MaterialPanel({
         value={material.youngsModulus}
         onChange={(youngsModulus) => set({ youngsModulus })}
       />
+      <PropertyTableField
+        label="Young's modulus"
+        kind="pressure"
+        table={material.youngsModulusTable ?? null}
+        unit={material.youngsModulus?.unit}
+        onChange={(youngsModulusTable) => set({ youngsModulusTable })}
+      />
       <NumberField
         label="Poisson's ratio"
         value={material.poissonsRatio}
         hint="Between -1 and 0.5, for example 0.3."
         range={{ above: -1, below: 0.5 }}
         onChange={(poissonsRatio) => set({ poissonsRatio })}
+      />
+      <PropertyTableField
+        label="Poisson's ratio"
+        kind={null}
+        table={material.poissonsRatioTable ?? null}
+        onChange={(poissonsRatioTable) => set({ poissonsRatioTable })}
       />
       <QuantityInput
         label="Density"
@@ -279,6 +293,14 @@ export function MaterialPanel({
         hint="Coefficient of linear thermal expansion, for example 12e-6 1/°C for steel. Needed for a temperature change and a thermal stress analysis."
         onChange={(thermalExpansion) => set({ thermalExpansion })}
       />
+      <PropertyTableField
+        label="Thermal expansion"
+        kind="thermalExpansion"
+        expansion
+        table={material.thermalExpansionTable ?? null}
+        unit={material.thermalExpansion?.unit}
+        onChange={(thermalExpansionTable) => set({ thermalExpansionTable })}
+      />
       <QuantityInput
         label="Thermal conductivity"
         positive
@@ -286,6 +308,13 @@ export function MaterialPanel({
         value={material.thermalConductivity ?? null}
         hint="For example 45 W/(m·K) for carbon steel. Needed for a steady-state thermal and a thermal stress analysis."
         onChange={(thermalConductivity) => set({ thermalConductivity })}
+      />
+      <PropertyTableField
+        label="Thermal conductivity"
+        kind="thermalConductivity"
+        table={material.thermalConductivityTable ?? null}
+        unit={material.thermalConductivity?.unit}
+        onChange={(thermalConductivityTable) => set({ thermalConductivityTable })}
       />
       <QuantityInput
         label="Yield strength"

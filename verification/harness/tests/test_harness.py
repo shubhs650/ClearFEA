@@ -630,7 +630,9 @@ def test_spec_templates_use_mixed_units() -> None:
     units = set()
     for folder in CASES.iterdir():
         spec = json.loads((folder / "spec.json").read_text())
-        units.add(spec["materials"][0]["youngsModulus"]["unit"])
+        material = spec["materials"][0]
+        # V-19 (M5.5) gives Young's modulus as a table against temperature only.
+        units.add((material["youngsModulus"] or material["youngsModulusTable"])["unit"])
         if "density" in spec["materials"][0]:
             units.add(spec["materials"][0]["density"]["unit"])
         for load in spec["loads"]:

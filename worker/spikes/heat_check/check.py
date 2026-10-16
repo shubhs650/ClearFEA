@@ -5,7 +5,9 @@ profile (ADR-064, ADR-065): fixed temperatures, a heat flux, convection, radiati
 generation. Since M5.3 also the heat flux at every node, each load's heat flow and the run's
 heat balance, and a bar with every thermal load on it at once for the balance. Since M5.4 the
 thermal stress decks of the linear profiles (ADR-067): the bar held on every side and at one
-end, so its stresses and displacements have a closed form at every node.
+end, so its stresses and displacements have a closed form at every node. Since M5.5 a
+conductivity that varies with temperature, given as a table (ADR-068), against the exact
+profile of a linear k(T) at every node.
 
 Script only, not part of the worker package or its tests (the fast tier runs no solver). It
 checks what the platform path cannot see exactly: the temperature degree of freedom, the
@@ -380,6 +382,46 @@ def every_load(hot: int, cold: int, low: int, high: int) -> list[dict]:
     ]
 
 
+#: M5.5: a conductivity table, 60 W/(m·K) at 250 K falling to 30 W/(m·K) at 400 K, linear
+#: between; the bar's temperatures (293.15 to 373.15 K) lie inside it.
+TABLE = [(250.0, 60.0), (400.0, 30.0)]
+
+
+def k_of(t: float) -> float:
+    (t0, k0), (t1, k1) = TABLE
+    return k0 + (k1 - k0) * (t - t0) / (t1 - t0)
+
+
+def k_integral(t: float) -> float:
+    """∫ k dT from COLD_K to t (the Kirchhoff transform), exact for the linear k."""
+    return (k_of(COLD_K) + k_of(t)) / 2 * (t - COLD_K)
+
+
+def table_profile(x: float) -> float:
+    """The exact temperature at x: the Kirchhoff transform falls linearly from the hot end to
+    the cold one, k_integral(T(x)) = k_integral(HOT_K) (1 - x / L); solved by bisection."""
+    target = k_integral(HOT_K) * (1 - x / LM)
+    lo, hi = COLD_K, HOT_K
+    for _ in range(100):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if k_integral(mid) < target else (lo, mid)
+    return (lo + hi) / 2
+
+
+def table_spec(hot: int, cold: int) -> SimulationSpec:
+    """spec() between the two fixed temperatures, with the conductivity as TABLE."""
+    setup = spec([fixed(hot, HOT), fixed(cold, COLD)]).model_dump(by_alias=True)
+    setup["materials"][0] |= {
+        "thermalConductivity": None,
+        "thermalConductivityTable": {
+            "temperatureUnit": "K",
+            "unit": "W/(m·K)",
+            "rows": [{"temperature": t, "value": k} for t, k in TABLE],
+        },
+    }
+    return SimulationSpec.model_validate(setup)
+
+
 #: The largest heat balance ratio allowed: the solver's equations hold to its tolerance and
 #: the printed digits.
 BALANCE = 1e-5
@@ -470,6 +512,49 @@ def main() -> int:
                     f"| {label} | thermal stress, {case.name} | {what} | {value:.3g} {unit} | "
                     f"{allowed:g} | {'ok' if ok else 'off'} |"
                 )
+        # M5.5: the conductivity table. The flux is the same everywhere, k_integral(HOT_K) / L.
+        fields, result = solve(table_spec(hot, cold), mesh, root / f"table-p{order}")
+        flux = k_integral(HOT_K) / LM
+        q = fields.heat_flux
+        got = [f.heat for f in result.heat_flows or []]
+        assert result.heat_balance is not None
+        checks = [
+            (
+                "temperature",
+                max(
+                    abs(fields.temperature[n] - table_profile(p[3 * n]))
+                    for n in range(mesh.node_count)
+                ),
+                # The profile is not polynomial; four-node elements are linear across 10 mm.
+                _pick((0.05, 0.005), order),
+                "K",
+            ),
+            (
+                "heat flux",
+                max(
+                    max(abs(q[3 * n] - flux), abs(q[3 * n + 1]), abs(q[3 * n + 2]))
+                    for n in range(mesh.node_count)
+                )
+                / flux,
+                _pick((0.01, 1e-3), order),
+                "of the largest",
+            ),
+            (
+                "heat flow of each load",
+                max(abs(a - b) for a, b in zip(got, [flux * AREA, -flux * AREA], strict=True))
+                / (flux * AREA),
+                1e-3,
+                "of the largest",
+            ),
+            ("heat balance", result.heat_balance.ratio, BALANCE, ""),
+        ]
+        for what, value, allowed, unit in checks:
+            ok = value <= allowed
+            failed |= not ok
+            rows.append(
+                f"| {label} | conductivity table, fixed temperatures | {what} | {value:.3g} "
+                f"{unit} | {allowed:g} | {'ok' if ok else 'off'} |"
+            )
         _, result = solve(
             spec(every_load(hot, cold, low, high)), mesh, root / f"solve-p{order}-all"
         )

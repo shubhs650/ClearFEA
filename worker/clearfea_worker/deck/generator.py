@@ -17,6 +17,7 @@ from ..spec.simulation_schema import (
     CentrifugalLoad,
     ConvectionLoad,
     ElasticSupport,
+    ExpansionTable,
     FixedSupport,
     FixedTemperatureLoad,
     ForceLoad,
@@ -26,6 +27,7 @@ from ..spec.simulation_schema import (
     HydrostaticLoad,
     PrescribedDisplacement,
     PressureLoad,
+    PropertyTable,
     Quantity,
     RadiationLoad,
     RemoteLoad,
@@ -73,6 +75,7 @@ from .loads.heat import (
 )
 from .loads.thermal import expansions, stress_free_temperature, temperature_change
 from .loads.tie import Equation, body_groups, tied_bonds, ties
+from .materials import Property, Table, expansion_reference, poisson, positive, rows, table
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
 DECK_FORMAT = 5
@@ -177,6 +180,17 @@ def _materials(spec: SimulationSpec, mesh: VolumeMesh) -> list[tuple[int, int, s
             raise DeckError(f"Body {tag} uses material '{material}', which is not in the setup.")
         rows.append((tag, index[material], f"M{index[material] + 1}"))
     return rows
+
+
+def _table_comment(what: str, entered: PropertyTable | ExpansionTable) -> list[str]:
+    """Comment lines giving a property table as entered, in its units."""
+    unit = "" if entered.unit is None else f" {entered.unit}"
+    values = "; ".join(
+        f"{_number(row.temperature or 0.0)} {entered.temperature_unit}: "
+        f"{_number(row.value or 0.0)}{unit}"
+        for row in entered.rows
+    )
+    return [f"** {what} against temperature: {values}"]
 
 
 def support_set_names(spec: SimulationSpec) -> list[str]:
@@ -451,12 +465,22 @@ def _heat_parts(
     for material in spec.materials:
         if material.id not in k:
             continue
+        conductivity = k[material.id]
+        if isinstance(conductivity, Table):
+            entered_table = material.thermal_conductivity_table
+            assert entered_table is not None  # conductivities() took the table from it
+            parts.materials[material.id] = [
+                *_table_comment("Thermal conductivity", entered_table),
+                "*CONDUCTIVITY",
+                *(f"{_number(v)}, {_number(t)}" for t, v in conductivity.points),
+            ]
+            continue
         entered = material.thermal_conductivity
         assert entered is not None  # conductivities() refuses a missing one
         parts.materials[material.id] = [
             f"** Thermal conductivity {_number(entered.value)} {entered.unit}",
             "*CONDUCTIVITY",
-            _number(k[material.id]),
+            _number(conductivity),
         ]
     out = parts.comments
     for load in spec.loads:
@@ -500,14 +524,19 @@ def _heat_parts(
             + f"{_number(item.ambient)} K"
         )
     out = parts.prelude
-    if radiates:
+    varies = any(isinstance(v, Table) for v in k.values())
+    if radiates or varies:
         # Temperatures are in kelvin. Radiation makes the step nonlinear, and CalculiX starts
         # its iterations from the initial temperature, 0 unless given (the linearised
         # radiation is then zero and the first iteration diverges; checked with ccx 2.21), so
         # every node starts at the mean of the setup's fixed and ambient temperatures.
-        out.append(
-            f"*PHYSICAL CONSTANTS, ABSOLUTE ZERO=0.0, STEFAN BOLTZMANN={_number(STEFAN_BOLTZMANN)}"
-        )
+        # A conductivity that varies with temperature (M5.5) makes the step nonlinear too, and
+        # its first iteration uses the conductivity at the starting temperature.
+        if radiates:
+            out.append(
+                "*PHYSICAL CONSTANTS, ABSOLUTE ZERO=0.0, "
+                f"STEFAN BOLTZMANN={_number(STEFAN_BOLTZMANN)}"
+            )
         if initial is None:
             known = [x.kelvin for x in held] + [x.ambient for x in [*films, *radiates]]
             initial = sum(known) / len(known)
@@ -522,6 +551,13 @@ def _heat_parts(
     # CalculiX treats every heat transfer step as nonlinear and warns unless the first time
     # increment and the step time are given; a linear steady state needs one increment.
     out.append("1.0, 1.0")
+    if varies:
+        # A conductivity table makes the step nonlinear. CalculiX stops iterating when the heat
+        # flux residual is 0.005 and the temperature correction 0.01 of their averages, which
+        # left a bar's heat flows 1e-4 out of balance; at 1e-5 of each it was 1.5e-7, in two
+        # more iterations (checked with ccx 2.21; ADR-068).
+        out.append("*CONTROLS, PARAMETERS=FIELD")
+        out.append("1e-5, 1e-5")
     out.append("*BOUNDARY")
     # Degree of freedom 11 is the temperature.
     out.extend(f"T{j + 1}, 11, 11, {_number(item.kelvin)}" for j, item in enumerate(held))
@@ -627,7 +663,7 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
         densities(spec, mesh)  # body loads need every body's density; DeckError names a gap
     thermal = temperature_change(spec)
     if thermal_stress:
-        alpha = expansions(spec, mesh, "A thermal stress analysis")
+        alpha = expansions(spec, mesh, "A thermal stress analysis", tables=True)
     else:
         alpha = {} if thermal is None else expansions(spec, mesh)
 
@@ -754,13 +790,34 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
             continue
         out = parts.materials.setdefault(material.id, [])
         what = f"Material {material.name}"
-        modulus = _si(material.youngs_modulus, "pressure", f"{what}: Young's modulus")
-        if modulus <= 0:
-            raise DeckError(f"{what}: Young's modulus must be greater than zero.")
-        if material.poissons_ratio is None:
-            raise DeckError(f"{what}: Poisson's ratio has no value. Enter one before running.")
+        modulus: Property
+        ratio: Property
+        if thermal_stress and material.youngs_modulus_table is not None:
+            modulus = table(
+                material.youngs_modulus_table,
+                "pressure",
+                f"{what}: Young's modulus table",
+                positive,
+            )
+            out.extend(_table_comment("Young's modulus", material.youngs_modulus_table))
+        else:
+            modulus = _si(material.youngs_modulus, "pressure", f"{what}: Young's modulus")
+            if modulus <= 0:
+                raise DeckError(f"{what}: Young's modulus must be greater than zero.")
+        if thermal_stress and material.poissons_ratio_table is not None:
+            ratio = table(
+                material.poissons_ratio_table, None, f"{what}: Poisson's ratio table", poisson
+            )
+            out.extend(_table_comment("Poisson's ratio", material.poissons_ratio_table))
+        else:
+            if material.poissons_ratio is None:
+                raise DeckError(f"{what}: Poisson's ratio has no value. Enter one before running.")
+            ratio = material.poissons_ratio
         out.append("*ELASTIC")
-        out.append(f"{_number(modulus)}, {_number(material.poissons_ratio)}")
+        # One line per temperature of either table, both interpolated there (deck/materials.py).
+        for kelvin, (e, nu) in rows([modulus, ratio]):
+            line = f"{_number(e)}, {_number(nu)}"
+            out.append(line if kelvin is None else f"{line}, {_number(kelvin)}")
         if material.density is not None:
             rho = _si(material.density, "density", f"{what}: density")
             if rho <= 0:
@@ -768,12 +825,29 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
             out.append(f"** Density {_number(material.density.value)} {material.density.unit}")
             out.append("*DENSITY")
             out.append(_number(rho))
-        if material.id in alpha:
+        coefficient = alpha.get(material.id)
+        if isinstance(coefficient, Table):
+            # Mean coefficients measured from the reference temperature, as CalculiX reads
+            # them with ZERO=: the strain at T is alpha(T) (T - ZERO) less the same at the
+            # initial (stress-free) temperature (checked with ccx 2.21; ADR-068).
+            entered_table = material.thermal_expansion_table
+            assert entered_table is not None  # expansions() took the table from it
+            zero = expansion_reference(entered_table, f"{what}: thermal expansion table")
+            reference = entered_table.reference_temperature
+            assert reference is not None  # expansion_reference refuses a missing one
+            out.extend(_table_comment("Thermal expansion", entered_table))
+            out.append(
+                f"** mean coefficients from {_number(reference.value)} {reference.unit} = "
+                f"{_number(zero)} K"
+            )
+            out.append(f"*EXPANSION, ZERO={_number(zero)}")
+            out.extend(f"{_number(v)}, {_number(t)}" for t, v in coefficient.points)
+        elif coefficient is not None:
             entered = material.thermal_expansion
             assert entered is not None  # expansions() refuses a missing one
             out.append(f"** Thermal expansion {_number(entered.value)} {entered.unit}")
             out.append("*EXPANSION")
-            out.append(_number(alpha[material.id]))
+            out.append(_number(coefficient))
     out = parts.sections
     for j, (key, stiffness) in enumerate(spring_sets):
         name, dof, _ = directions[key]

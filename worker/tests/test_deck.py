@@ -25,6 +25,7 @@ from clearfea_worker.deck.elements import (
 )
 from clearfea_worker.deck.generator import FIELD_WIDTH
 from clearfea_worker.deck.loads import fixed_support_nodes
+from clearfea_worker.deck.materials import Table, rows
 from clearfea_worker.meshing.volume import NODES_PER_ELEMENT, TET_FACES, VolumeMesh
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
@@ -465,6 +466,41 @@ def thermal_stress_spec() -> dict:
     return spec
 
 
+def tables_spec() -> dict:
+    """thermal_stress_spec with every property that can vary given as a table (M5.5,
+    ADR-068): Young's modulus in ksi against °F, Poisson's ratio at other temperatures in °C,
+    expansion in µin/(in·°F) from 68 °F, conductivity in W/(m·K) against K. The single values
+    stay, for a linear static analysis."""
+    spec = thermal_stress_spec()
+    spec["materials"][1] |= {
+        "youngsModulusTable": {
+            "temperatureUnit": "°F",
+            "unit": "ksi",
+            "rows": [
+                {"temperature": 70, "value": 29500},
+                {"temperature": 400, "value": 27700},
+                {"temperature": 700, "value": 25500},
+            ],
+        },
+        "poissonsRatioTable": {
+            "temperatureUnit": "°C",
+            "rows": [{"temperature": 100, "value": 0.29}, {"temperature": 300, "value": 0.31}],
+        },
+        "thermalExpansionTable": {
+            "temperatureUnit": "°F",
+            "unit": "µin/(in·°F)",
+            "referenceTemperature": {"value": 68, "unit": "°F"},
+            "rows": [{"temperature": 100, "value": 6.5}, {"temperature": 500, "value": 7.3}],
+        },
+        "thermalConductivityTable": {
+            "temperatureUnit": "K",
+            "unit": "W/(m·K)",
+            "rows": [{"temperature": 300, "value": 52}, {"temperature": 600, "value": 41}],
+        },
+    }
+    return spec
+
+
 def deck(spec: dict, mesh: VolumeMesh) -> str:
     return generate_deck(SimulationSpec.model_validate(spec), mesh)
 
@@ -529,6 +565,7 @@ SNAPSHOT_CASES = {
     "heat-two-bodies-c3d4": (heat_two_bodies_spec, lambda: bonded_tets(1)),
     "heat-loads-c3d10": (heat_loads_spec, lambda: two_tets(order=2)),
     "thermal-stress-c3d10": (thermal_stress_spec, lambda: two_tets(order=2)),
+    "thermal-stress-tables-c3d10": (tables_spec, lambda: two_tets(order=2)),
 }
 
 
@@ -1581,3 +1618,156 @@ def test_refuses_bonded_bodies_in_a_thermal_stress_analysis() -> None:
     spec["loads"] = [spec["loads"][0]]
     with pytest.raises(DeckError, match="Bonds do not carry heat in a thermal stress analysis"):
         deck(spec, bonded_tets(2))
+
+
+# --- Temperature-dependent properties (M5.5, ADR-068) ---
+
+
+def test_a_table_is_linear_between_rows_and_constant_beyond() -> None:
+    t = Table(((300.0, 10.0), (400.0, 20.0), (600.0, 0.0)))
+    assert [t.at(x) for x in (200.0, 300.0, 350.0, 400.0, 500.0, 600.0, 900.0)] == [
+        10.0,
+        10.0,
+        15.0,
+        20.0,
+        10.0,
+        0.0,
+        0.0,
+    ]
+    assert t.largest == 20.0
+
+
+def test_merged_rows_carry_each_property_to_every_temperature() -> None:
+    e = Table(((300.0, 200.0), (500.0, 100.0)))
+    nu = Table(((400.0, 0.3), (600.0, 0.4)))
+    assert rows([e, 0.3]) == [(300.0, [200.0, 0.3]), (500.0, [100.0, 0.3])]
+    assert rows([e, nu]) == [
+        (300.0, [200.0, 0.3]),
+        (400.0, [150.0, 0.3]),
+        (500.0, [100.0, 0.35]),
+        (600.0, [100.0, 0.4]),
+    ]
+    assert rows([210.0, 0.3]) == [(None, [210.0, 0.3])]
+
+
+def test_thermal_stress_writes_every_table_in_si_with_its_temperatures() -> None:
+    lines = deck(tables_spec(), two_tets(order=2)).splitlines()
+    k = lines.index("*CONDUCTIVITY")
+    assert lines[k + 1 : k + 3] == ["52.0, 300.0", "41.0, 600.0"]
+    elastic = lines.index("*ELASTIC")
+    # E at 70, 400, 700 °F and ν at 100, 300 °C (212, 572 °F), merged in kelvin.
+    rows_k = [line.split(", ") for line in lines[elastic + 1 : elastic + 6]]
+    assert [float(r[2]) for r in rows_k] == pytest.approx(
+        [294.26111, 373.15, 477.59444, 573.15, 644.26111], abs=1e-4
+    )
+    assert float(rows_k[0][0]) == pytest.approx(29500 * 6894757.29317, rel=1e-10)
+    assert float(rows_k[-1][0]) == pytest.approx(25500 * 6894757.29317, rel=1e-10)
+    # ν between its rows at 477.59 K, 0.29 + 0.02 (477.59 - 373.15) / 200.
+    assert [float(r[1]) for r in rows_k] == pytest.approx([0.29, 0.29, 0.300444444, 0.31, 0.31])
+    assert lines[elastic + 6][:1] == "*"
+    expansion = next(k for k, x in enumerate(lines) if x.startswith("*EXPANSION"))
+    assert lines[expansion] == "*EXPANSION, ZERO=293.15000000000003"
+    alpha = [line.split(", ") for line in lines[expansion + 1 : expansion + 3]]
+    assert [float(a[0]) for a in alpha] == pytest.approx([6.5e-6 * 1.8, 7.3e-6 * 1.8], rel=1e-12)
+    assert [float(a[1]) for a in alpha] == pytest.approx([310.92778, 533.15], abs=1e-4)
+    assert (
+        "** Thermal expansion against temperature: 100.0 °F: 6.5 µin/(in·°F); 500.0 °F: "
+        "7.3 µin/(in·°F)" in lines
+    )
+
+
+def test_a_linear_static_analysis_uses_the_single_values() -> None:
+    spec = tables_spec()
+    spec["analysis"] = "linear_static"
+    spec["loads"] = spec["loads"][3:]
+    plain = thermal_stress_spec()
+    plain["analysis"] = "linear_static"
+    plain["loads"] = plain["loads"][3:]
+    assert deck(spec, two_tets(order=2)) == deck(plain, two_tets(order=2))
+
+
+def test_a_varying_conductivity_starts_a_thermal_step_at_the_mean_known_temperature() -> None:
+    spec = heat_spec()
+    spec["materials"][1]["thermalConductivity"] = None
+    spec["materials"][1]["thermalConductivityTable"] = {
+        "temperatureUnit": "°C",
+        "unit": "W/(m·K)",
+        "rows": [{"temperature": 0, "value": 50}, {"temperature": 200, "value": 40}],
+    }
+    lines = deck(spec, two_tets(order=2)).splitlines()
+    start = lines.index("*INITIAL CONDITIONS, TYPE=TEMPERATURE")
+    assert lines[start + 1] == "NALL, 373.15"
+    assert "*PHYSICAL CONSTANTS" not in " ".join(lines)
+    # The step is nonlinear, so it iterates to tighter criteria than CalculiX's defaults.
+    controls = lines.index("*CONTROLS, PARAMETERS=FIELD")
+    assert lines[controls - 2 : controls + 2] == [
+        "*HEAT TRANSFER, STEADY STATE, SOLVER=PASTIX",
+        "1.0, 1.0",
+        "*CONTROLS, PARAMETERS=FIELD",
+        "1e-5, 1e-5",
+    ]
+    k = lines.index("*CONDUCTIVITY")
+    assert lines[k + 1 : k + 3] == ["50.0, 273.15", "40.0, 473.15"]
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            lambda m: m["thermalConductivityTable"].update(rows=[]),
+            "thermal conductivity table has 0 rows. A table needs at least two",
+        ),
+        (
+            lambda m: m["thermalConductivityTable"]["rows"][1].update(value=None),
+            "thermal conductivity table: row 2 is not complete",
+        ),
+        (
+            lambda m: m["thermalConductivityTable"]["rows"][1].update(temperature=300),
+            "row 2 is not hotter than row 1",
+        ),
+        (
+            lambda m: m["thermalConductivityTable"]["rows"][0].update(temperature=-1),
+            "row 1 is at or below absolute zero",
+        ),
+        (
+            lambda m: m["thermalConductivityTable"]["rows"][0].update(value=0),
+            "thermal conductivity table: row 1 must be greater than zero",
+        ),
+        (
+            lambda m: m["thermalConductivityTable"].update(unit="ksi"),
+            "is not a thermal conductivity unit",
+        ),
+        (
+            lambda m: m["youngsModulusTable"].update(temperatureUnit="mm"),
+            "Young's modulus table: row 1 temperature",
+        ),
+        (
+            lambda m: m["poissonsRatioTable"]["rows"][0].update(value=0.5),
+            "Poisson's ratio table: row 1 must be between -1 and 0.5",
+        ),
+        (
+            lambda m: m["poissonsRatioTable"].update(unit="ksi"),
+            "Poisson's ratio table has a unit",
+        ),
+        (
+            lambda m: m["thermalExpansionTable"].update(referenceTemperature=None),
+            "thermal expansion table: reference temperature has no value",
+        ),
+    ],
+)
+def test_refuses_tables_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
+    spec = tables_spec()
+    change(spec["materials"][1])
+    with pytest.raises(DeckError, match=re.escape(message)):
+        deck(spec, two_tets(order=2))
+
+
+def test_a_table_replaces_a_missing_single_value_in_thermal_stress() -> None:
+    spec = tables_spec()
+    spec["materials"][1] |= {
+        "youngsModulus": None,
+        "poissonsRatio": None,
+        "thermalExpansion": None,
+        "thermalConductivity": None,
+    }
+    assert deck(spec, two_tets(order=2)) == deck(tables_spec(), two_tets(order=2))
