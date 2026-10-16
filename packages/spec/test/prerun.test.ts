@@ -399,7 +399,8 @@ describe("pre-run validation of a steady-state thermal analysis (M5.1)", () => {
       },
       {
         item: "loads",
-        message: "There is no fixed temperature, so the temperatures are not set anywhere. Add a fixed temperature under Loads.",
+        message:
+          "There is no fixed temperature, convection or radiation, so the temperatures are not set anywhere. Add one under Loads.",
       },
     ]);
     expect(
@@ -449,10 +450,103 @@ describe("pre-run validation of a steady-state thermal analysis (M5.1)", () => {
     const s = { ...thermal(), bodies: [{ tag: 1, material: "steel" }, { tag: 2, material: "steel" }] };
     expect(preRunProblems(s, assembly).map((p) => p.message)).toEqual([
       "Bonds do not carry heat in a steady-state thermal analysis yet, so bonded bodies cannot be run. Remove the bonds under Bonds to run each body on its own.",
-      'Body "Lug" has no fixed temperature, so its temperature is not set. Add a fixed temperature on one of its faces.',
+      'Body "Lug" has no fixed temperature, convection or radiation, so its temperature is not set. Add one on one of its faces.',
     ]);
     const apart = { ...s, bonds: [{ faces: [2, 3] as [number, number], status: "removed" as const }] };
     const both = { ...apart, loads: [...apart.loads, { ...(apart.loads[0] as SimulationSpec["loads"][0]), id: "lug", faces: [3] }] };
     expect(preRunProblems(both, assembly)).toEqual([]);
+  });
+
+  it("asks each M5.2 load for its values, faces and bodies (M5.2)", () => {
+    const s = thermal();
+    expect(
+      messages({
+        ...s,
+        loads: [
+          ...s.loads,
+          { id: "q", type: "heat_flux", name: "Q", faces: [], flux: null },
+          { id: "h", type: "convection", name: "H", faces: [2], coefficient: null, ambientTemperature: null },
+          { id: "r", type: "radiation", name: "R", faces: [3], emissivity: null, ambientTemperature: null },
+          { id: "g", type: "heat_generation", name: "G", bodies: [], power: null },
+        ],
+      }),
+    ).toEqual([
+      'Load "Q" has no faces. Select the faces it acts on and add them to it.',
+      'Load "Q" has no heat flux. Enter it.',
+      'Load "H" has no convection coefficient. Enter it.',
+      'Load "H" has no ambient temperature. Enter it.',
+      'Load "R" has no emissivity. Enter it.',
+      'Load "R" has no ambient temperature. Enter it.',
+      'Load "G" has no bodies. Pick the bodies that produce the heat.',
+      'Load "G" has no heat generation. Enter it.',
+    ]);
+  });
+
+  it("lets convection or radiation set the temperature without a fixed temperature (M5.2)", () => {
+    const s = thermal();
+    const air = { value: 20, unit: "°C" };
+    const loads: SimulationSpec["loads"] = [
+      { id: "q", type: "heat_flux", name: "Q", faces: [1], flux: { value: 2, unit: "kW/m²" } },
+      { id: "h", type: "convection", name: "H", faces: [2], coefficient: { value: 10, unit: "W/(m²·K)" }, ambientTemperature: air },
+    ];
+    expect(preRunProblems({ ...s, loads }, topology)).toEqual([]);
+    expect(preRunProblems({ ...s, loads: loads.slice(0, 1) }, topology).map((p) => p.item)).toEqual(["loads"]);
+  });
+
+  it("refuses a heat load on a fixed face and a second convection or radiation on a face (M5.2)", () => {
+    const s = thermal();
+    const air = { value: 20, unit: "°C" };
+    const h = { type: "convection" as const, faces: [1, 2], coefficient: { value: 10, unit: "W/(m²·K)" }, ambientTemperature: air };
+    const r = { type: "radiation" as const, faces: [2], emissivity: 0.5, ambientTemperature: air };
+    expect(
+      preRunProblems(
+        {
+          ...s,
+          loads: [
+            ...s.loads,
+            { id: "h1", name: "Air", ...h },
+            { id: "h2", name: "Wind", ...h, faces: [2] },
+            { id: "r1", name: "Sky", ...r },
+            { id: "r2", name: "Sun", ...r },
+            { id: "q", type: "heat_flux", name: "Q", faces: [2], flux: { value: 1, unit: "W/m²" } },
+            { id: "q2", type: "heat_flux", name: "Q2", faces: [2], flux: { value: 1, unit: "W/m²" } },
+          ],
+        },
+        topology,
+      ),
+    ).toEqual([
+      {
+        item: "h1",
+        message: 'Convection "Air" acts on face 1, which fixed temperature "Hot" holds, so it would have no effect. Remove the face from one of them.',
+      },
+      {
+        item: "h2",
+        message: 'Convection "Air" and "Wind" both act on face 2. Give each face one convection; combine them into one if both are meant.',
+      },
+      {
+        item: "r2",
+        message: 'Radiation "Sky" and "Sun" both act on face 2. Give each face one radiation; combine them into one if both are meant.',
+      },
+    ]);
+  });
+
+  it("checks the units and the bodies of the M5.2 loads (M5.2)", () => {
+    const s = thermal();
+    const air = { value: 20, unit: "°C" };
+    expect(
+      messages({
+        ...s,
+        loads: [
+          ...s.loads,
+          { id: "q", type: "heat_flux", name: "Q", faces: [2], flux: { value: 1, unit: "W/(m²·K)" } },
+          { id: "h", type: "convection", name: "H", faces: [2], coefficient: { value: 0, unit: "W/(m²·K)" }, ambientTemperature: air },
+          { id: "g", type: "heat_generation", name: "G", bodies: [1, 9], power: { value: 1, unit: "W/m³" } },
+        ],
+      }),
+    ).toEqual([
+      'The heat flux of load "Q" is given in "W/(m²·K)", which is not a heat flux unit. Use one of: W/m², kW/m², W/mm², BTU/(h·ft²).',
+      'The coefficient of load "H" must be greater than zero; it is 0 W/(m²·K).',
+      'Load "G" uses body 9, which the geometry does not have.',
+    ]);
   });
 });

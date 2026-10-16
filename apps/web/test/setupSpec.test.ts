@@ -511,7 +511,7 @@ describe("steady-state thermal marks (M5.1)", () => {
       mark: "incomplete",
       notes: ["Enter the thermal conductivity; a steady-state thermal analysis needs it."],
     });
-    expect(marks.get("loads")).toEqual({ mark: "incomplete", notes: ["Add a fixed temperature."] });
+    expect(marks.get("loads")).toEqual({ mark: "incomplete", notes: ["Add a fixed temperature, convection or radiation."] });
     spec = addLoad(spec, "fixed_temperature", []).spec;
     marks = setupStatus(spec, topology);
     expect(marks.get("fixed_temperature-1")).toEqual({
@@ -521,6 +521,35 @@ describe("steady-state thermal marks (M5.1)", () => {
     // Every mark that is not complete has a pre-run problem for the same item.
     const items = new Set(preRunProblems(spec, topology).map((p) => p.item));
     for (const item of ["material-1", "fixed_temperature-1"]) expect(items.has(item)).toBe(true);
+  });
+
+  it("asks each M5.2 load for its values, and lets convection alone set the temperature (M5.2)", () => {
+    let spec = setAnalysis(addMaterial(empty()).spec, "steady_thermal");
+    for (const type of ["heat_flux", "convection", "radiation", "heat_generation"] as const) {
+      spec = addLoad(spec, type, type === "heat_generation" ? [] : [2]).spec;
+    }
+    const marks = setupStatus(spec, topology);
+    expect(marks.get("heat_flux-1")?.notes).toEqual(["Enter the heat flux (negative for heat leaving)."]);
+    expect(marks.get("convection-1")?.notes).toEqual(["Enter the convection coefficient.", "Enter the ambient temperature."]);
+    expect(marks.get("radiation-1")?.notes).toEqual(["Enter the emissivity.", "Enter the ambient temperature."]);
+    // Heat generation starts on every body.
+    expect(spec.loads.at(-1)).toMatchObject({ type: "heat_generation", bodies: spec.bodies.map((b) => b.tag) });
+    expect(marks.get("heat_generation-1")?.notes).toEqual(["Enter the heat generation."]);
+    // A convection is enough to set the temperature, so the group asks for nothing more.
+    expect(marks.get("loads")?.notes).not.toContain("Add a fixed temperature, convection or radiation.");
+    const items = new Set(preRunProblems(spec, topology).map((p) => p.item));
+    for (const item of ["heat_flux-1", "convection-1", "radiation-1", "heat_generation-1"]) expect(items.has(item)).toBe(true);
+  });
+
+  it("marks a heat load on a fixed face as an error, with the pre-run message (M5.2)", () => {
+    let spec = setAnalysis(addMaterial(empty()).spec, "steady_thermal");
+    spec = addLoad(spec, "fixed_temperature", [1]).spec;
+    spec = addLoad(spec, "heat_flux", [1]).spec;
+    const problems = new Map(preRunProblems(spec, topology).map((p) => [p.item, p.message]));
+    expect(setupStatus(spec, topology).get("heat_flux-1")).toEqual({ mark: "error", notes: [problems.get("heat_flux-1")] });
+    expect(problems.get("heat_flux-1")).toBe(
+      'Heat flux "Heat flux 1" acts on face 1, which fixed temperature "Fixed temperature 1" holds, so it would have no effect. Remove the face from one of them.',
+    );
   });
 
   it("marks supports and structural loads as errors in a thermal setup, with the pre-run message", () => {

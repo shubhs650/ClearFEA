@@ -5,7 +5,6 @@
 // the viewer draws the mesh; while a local size is open it shows the geometry to pick from.
 
 import {
-  type BodyAssignment,
   type ElementOrder,
   type LocalMeshScope,
   type LocalMeshSize,
@@ -16,7 +15,7 @@ import {
 } from "@clearfea/spec";
 import { QuantityInput } from "../units/QuantityInput";
 import { Notes } from "./ItemPanels";
-import { FacesField, TagsField, TextField } from "./fields";
+import { BodiesField, FacesField, TagsField, TextField } from "./fields";
 import { type ItemStatus, meshIsCurrent, removeItem, updateLocalSize } from "./spec";
 
 const count = (n: number | null) => (n ?? 0).toLocaleString("en-US");
@@ -191,38 +190,6 @@ export function MeshPanel({
 }
 
 /** The bodies a local size applies to, as checkboxes. */
-function BodiesField({
-  bodies,
-  tags,
-  onChange,
-}: {
-  bodies: readonly BodyAssignment[];
-  tags: readonly number[];
-  onChange: (tags: number[]) => void;
-}) {
-  return (
-    <fieldset className="field">
-      <legend>Bodies</legend>
-      {bodies.map((body) => (
-        <label key={body.tag} className="checkbox">
-          <input
-            type="checkbox"
-            checked={tags.includes(body.tag)}
-            onChange={(event) =>
-              onChange(
-                event.target.checked
-                  ? [...tags, body.tag].sort((a, b) => a - b)
-                  : tags.filter((tag) => tag !== body.tag),
-              )
-            }
-          />
-          Body {body.tag}
-        </label>
-      ))}
-    </fieldset>
-  );
-}
-
 export function LocalSizePanel({
   spec,
   item,

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "analysis": "steady_thermal",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "concrete" }],
+  "materials": [
+    {
+      "id": "concrete",
+      "name": "Concrete (case values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 30, "unit": "GPa" },
+      "poissonsRatio": 0.2,
+      "thermalConductivity": { "value": 0.0015, "unit": "W/(mm·K)" }
+    }
+  ],
+  "supports": [],
+  "loads": [
+    {
+      "id": "hot",
+      "type": "convection",
+      "name": "Hot gas",
+      "faces": ["hot"],
+      "coefficient": { "value": 250, "unit": "W/(m²·°C)" },
+      "ambientTemperature": { "value": 392, "unit": "°F" }
+    },
+    {
+      "id": "cold",
+      "type": "convection",
+      "name": "Room air",
+      "faces": ["cold"],
+      "coefficient": { "value": 20, "unit": "BTU/(h·ft²·°F)" },
+      "ambientTemperature": { "value": 20, "unit": "°C" }
+    }
+  ],
+  "mesh": { "size": { "value": 10, "unit": "mm" } }
+}

@@ -96,8 +96,8 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Uniform temperature change | V-08 |
 | Bonded interface (structural) | V-11, V-12; E-03 runs a bonded two-body model through the UI |
 | Bonded interface (thermal) | to be added in M5 |
-| Steady-state thermal analysis | V-13 |
-| Fixed temperature | V-13, V-14 |
+| Steady-state thermal analysis | V-13, V-15, V-16, V-17 |
+| Fixed temperature | V-13, V-17, V-14 |
 | Heat flux | V-16 |
 | Convection | V-15 |
 | Radiation to ambient | V-16 |

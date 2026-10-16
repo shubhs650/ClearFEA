@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "analysis": "steady_thermal",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "ceramic" }],
+  "materials": [
+    {
+      "id": "ceramic",
+      "name": "Ceramic (case values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 300, "unit": "GPa" },
+      "poissonsRatio": 0.22,
+      "thermalConductivity": { "value": 1.5, "unit": "W/(m·K)" }
+    }
+  ],
+  "supports": [],
+  "loads": [
+    {
+      "id": "heater",
+      "type": "heat_flux",
+      "name": "Heater",
+      "faces": ["back"],
+      "flux": { "value": 1500, "unit": "BTU/(h·ft²)" }
+    },
+    {
+      "id": "room",
+      "type": "radiation",
+      "name": "Room",
+      "faces": ["front"],
+      "emissivity": 0.85,
+      "ambientTemperature": { "value": 70, "unit": "°F" }
+    }
+  ],
+  "mesh": { "size": { "value": 5, "unit": "mm" } }
+}

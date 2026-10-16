@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "analysis": "steady_thermal",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Stainless steel (case values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 193, "unit": "GPa" },
+      "poissonsRatio": 0.29,
+      "thermalConductivity": { "value": 15, "unit": "W/(m·°C)" }
+    }
+  ],
+  "supports": [],
+  "loads": [
+    {
+      "id": "faces",
+      "type": "fixed_temperature",
+      "name": "Cooled faces",
+      "faces": ["left", "right"],
+      "temperature": { "value": 50, "unit": "°C" }
+    },
+    {
+      "id": "current",
+      "type": "heat_generation",
+      "name": "Electric current",
+      "bodies": [1],
+      "power": { "value": 0.01, "unit": "W/mm³" }
+    }
+  ],
+  "mesh": { "size": { "value": 10, "unit": "mm" } }
+}

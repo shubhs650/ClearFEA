@@ -140,6 +140,10 @@ export const loadKinds = {
   centrifugal: "Centrifugal load",
   temperature: "Temperature change",
   fixed_temperature: "Fixed temperature",
+  heat_flux: "Heat flux",
+  convection: "Convection",
+  radiation: "Radiation",
+  heat_generation: "Heat generation",
 } as const;
 
 /** The analysis types as the setup names them (M5.1, ADR-064). */
@@ -148,10 +152,10 @@ export const analysisKinds = {
   steady_thermal: "Steady-state thermal",
 } as const;
 
-/** The load types each analysis type takes (M5.1, ADR-064); supports belong to linear static only. */
+/** The load types each analysis type takes (M5.1, ADR-064; M5.2, ADR-065); supports belong to linear static only. */
 export const analysisLoads: Record<AnalysisType, readonly Load["type"][]> = {
   linear_static: ["pressure", "force", "remote", "hydrostatic", "gravity", "centrifugal", "temperature"],
-  steady_thermal: ["fixed_temperature"],
+  steady_thermal: ["fixed_temperature", "heat_flux", "convection", "radiation", "heat_generation"],
 };
 
 /** True for an analysis that solves temperatures only, with no displacement or stress (M5.1). */
@@ -245,15 +249,32 @@ export function meshSettingsText(settings: {
   });
 }
 
-/** True when the load acts on faces the user picks (gravity, centrifugal and temperature act on every body). */
+/**
+ * True when the load acts on faces the user picks (gravity, centrifugal and temperature act on every
+ * body; heat generation on the bodies it lists).
+ */
 export function loadHasFaces(load: Load): load is Extract<Load, { faces: number[] }> {
   return (
     load.type === "pressure" ||
     load.type === "force" ||
     load.type === "remote" ||
     load.type === "hydrostatic" ||
-    load.type === "fixed_temperature"
+    load.type === "fixed_temperature" ||
+    load.type === "heat_flux" ||
+    load.type === "convection" ||
+    load.type === "radiation"
   );
+}
+
+/**
+ * True for a thermal load that ties the temperature to a value (M5.2, ADR-065): a fixed temperature,
+ * convection or radiation, which bring their own or an ambient temperature. A body needs one;
+ * a heat flux and heat generation only add heat.
+ */
+export function setsTemperature(
+  load: Load,
+): load is Extract<Load, { type: "fixed_temperature" | "convection" | "radiation" }> {
+  return load.type === "fixed_temperature" || load.type === "convection" || load.type === "radiation";
 }
 
 /** True when the setup has a gravity or centrifugal load, which need every material's density. */
@@ -299,6 +320,9 @@ const kindNames = {
   thermalExpansion: "a thermal expansion",
   temperature: "a temperature",
   thermalConductivity: "a thermal conductivity",
+  heatFlux: "a heat flux",
+  heatTransferCoefficient: "a heat transfer coefficient",
+  heatGeneration: "a heat generation",
 } as const;
 
 function unitProblem(
@@ -436,6 +460,15 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
       }
     } else if (load.type === "fixed_temperature") {
       add(load.id, unitProblem(load.temperature, "temperature", `The temperature of load "${load.name}"`, false));
+    } else if (load.type === "heat_flux") {
+      add(load.id, unitProblem(load.flux, "heatFlux", `The heat flux of load "${load.name}"`, false));
+    } else if (load.type === "convection") {
+      add(load.id, unitProblem(load.coefficient, "heatTransferCoefficient", `The coefficient of load "${load.name}"`, true));
+      add(load.id, unitProblem(load.ambientTemperature, "temperature", `The ambient temperature of load "${load.name}"`, false));
+    } else if (load.type === "radiation") {
+      add(load.id, unitProblem(load.ambientTemperature, "temperature", `The ambient temperature of load "${load.name}"`, false));
+    } else if (load.type === "heat_generation") {
+      add(load.id, unitProblem(load.power, "heatGeneration", `The heat generation of load "${load.name}"`, false));
     } else {
       add(load.id, unitProblem(load.angularVelocity, "angularVelocity", `The angular velocity of load "${load.name}"`, false));
       for (const axis of displacementAxes) {
@@ -507,6 +540,11 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
         add(entry.id, `${entry.label} uses face ${listTags(unknown)}, which the geometry does not have.`);
       }
     }
+    for (const load of spec.loads) {
+      if (load.type !== "heat_generation") continue;
+      const unknown = load.bodies.filter((tag) => !known.has(tag));
+      if (unknown.length > 0) add(load.id, `Load "${load.name}" uses body ${listTags(unknown)}, which the geometry does not have.`);
+    }
     const tagsOf: Record<LocalMeshScope, ReadonlySet<number> | undefined> = {
       faces,
       bodies: known,
@@ -547,4 +585,46 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
     }
   }
   return problems;
+}
+
+/**
+ * Faces where two thermal loads cannot both act (M5.2, ADR-065): a heat flux, convection or
+ * radiation on a face a fixed temperature holds (the fixed temperature sets the temperature there,
+ * so the load would have no effect), and two convections or two radiations on one face (the solver
+ * would keep one without saying which). Heat fluxes on one face add up. Each message belongs to the
+ * later of the two loads.
+ */
+export function faceHeatConflicts(spec: SimulationSpec): SpecProblem[] {
+  const held = new Map<number, string>();
+  for (const load of spec.loads) {
+    if (load.type === "fixed_temperature") for (const face of load.faces) if (!held.has(face)) held.set(face, load.name);
+  }
+  const seen = new Map<string, string>();
+  const out: SpecProblem[] = [];
+  for (const load of spec.loads) {
+    if (load.type !== "heat_flux" && load.type !== "convection" && load.type !== "radiation") continue;
+    const kind = loadKinds[load.type];
+    for (const face of load.faces) {
+      const fixed = held.get(face);
+      if (fixed !== undefined) {
+        out.push({
+          item: load.id,
+          message: `${kind} "${load.name}" acts on face ${face}, which fixed temperature "${fixed}" holds, so it would have no effect. Remove the face from one of them.`,
+        });
+        continue;
+      }
+      if (load.type === "heat_flux") continue;
+      const key = `${load.type}:${face}`;
+      const other = seen.get(key);
+      if (other === undefined) {
+        seen.set(key, load.name);
+      } else {
+        out.push({
+          item: load.id,
+          message: `${kind} "${other}" and "${load.name}" both act on face ${face}. Give each face one ${kind.toLowerCase()}; combine them into one if both are meant.`,
+        });
+      }
+    }
+  }
+  return out;
 }

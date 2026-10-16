@@ -27,7 +27,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { QuantityInput } from "../units/QuantityInput";
 import type { QuantityKind } from "../units/system";
-import { FacesField, NumberField, TextField } from "./fields";
+import { BodiesField, FacesField, NumberField, TextField } from "./fields";
 import {
   assignMaterial,
   editMaterial,
@@ -64,13 +64,17 @@ const loadAdds: { type: LoadType; label: string }[] = [
   { type: "centrifugal", label: "Add a centrifugal load" },
   { type: "temperature", label: "Add a temperature change" },
   { type: "fixed_temperature", label: "Add a fixed temperature" },
+  { type: "heat_flux", label: "Add a heat flux" },
+  { type: "convection", label: "Add convection" },
+  { type: "radiation", label: "Add radiation" },
+  { type: "heat_generation", label: "Add heat generation" },
 ];
 
 /** What each analysis type does, in one line (M5.1). */
 const analysisHints: Record<AnalysisType, string> = {
   linear_static: "Small displacements of linear elastic bodies under supports and loads: displacements, stresses and reactions.",
   steady_thermal:
-    "Steady-state heat conduction: temperatures from fixed temperatures on faces; every other face is insulated.",
+    "Steady-state heat conduction: temperatures from fixed temperatures, heat fluxes, convection and radiation on faces and heat generated in bodies; faces with none of them are insulated.",
 };
 
 /**
@@ -164,7 +168,10 @@ export function GroupPanel({
         ))}
       {group === "loads" &&
         (thermal ? (
-          <p className="field-hint">Select faces in the viewer first to give the new fixed temperature those faces.</p>
+          <p className="field-hint">
+            Select faces in the viewer first to give a new fixed temperature, heat flux, convection or radiation those faces. Heat
+            generation acts on the bodies you tick. Every body needs a fixed temperature, convection or radiation.
+          </p>
         ) : (
           <p className="field-hint">
             Select faces in the viewer first to give a new pressure, force, remote load or hydrostatic pressure those faces. Gravity, a centrifugal load and
@@ -438,7 +445,15 @@ const loadHints: Record<LoadType, string> = {
   temperature:
     "Every body warms (positive) or cools (negative) by the same amount from the temperature at which it is free of stress. Each material expands by its thermal expansion × the change, and the supports resist it. A setup can have one.",
   fixed_temperature:
-    "Holds every node of the faces at this temperature. Faces with no fixed temperature are insulated: no heat crosses them.",
+    "Holds every node of the faces at this temperature. Faces with no thermal load are insulated: no heat crosses them.",
+  heat_flux:
+    "Heat crossing the faces, the same per unit area everywhere: positive into the body, negative out of it. Heat fluxes on the same face add up.",
+  convection:
+    "Heat leaving the faces to a surrounding fluid: coefficient × (surface temperature − ambient temperature) per unit area. One convection per face.",
+  radiation:
+    "Heat leaving the faces to surroundings at the ambient temperature: emissivity × Stefan–Boltzmann constant × (surface temperature⁴ − ambient temperature⁴) per unit area. Each face sees only the surroundings, not other faces. One radiation per face.",
+  heat_generation:
+    "Heat produced inside the bodies, the same per unit volume everywhere (for example from an electric current): negative for heat absorbed.",
 };
 
 function PressureFields({ load, set }: { load: PressureLoad; set: (changes: Partial<PressureLoad>) => void }) {
@@ -588,6 +603,42 @@ export function LoadPanel({
           value={load.temperature}
           onChange={(temperature) => set({ temperature })}
         />
+      )}
+      {load.type === "heat_flux" && (
+        <QuantityInput label="Heat flux" kind="heatFlux" value={load.flux} onChange={(flux) => set({ flux })} />
+      )}
+      {load.type === "convection" && (
+        <QuantityInput
+          label="Convection coefficient"
+          positive
+          kind="heatTransferCoefficient"
+          value={load.coefficient}
+          hint="For example 10 W/(m²·K) for still air, 1000 W/(m²·K) for flowing water."
+          onChange={(coefficient) => set({ coefficient })}
+        />
+      )}
+      {load.type === "radiation" && (
+        <NumberField
+          label="Emissivity"
+          value={load.emissivity}
+          hint="Above 0 and at most 1, for example 0.8 for oxidised steel."
+          range={{ above: 0, below: 1, orEqual: true }}
+          onChange={(emissivity) => set({ emissivity })}
+        />
+      )}
+      {(load.type === "convection" || load.type === "radiation") && (
+        <QuantityInput
+          label="Ambient temperature"
+          kind="temperature"
+          value={load.ambientTemperature}
+          onChange={(ambientTemperature) => set({ ambientTemperature })}
+        />
+      )}
+      {load.type === "heat_generation" && (
+        <>
+          <QuantityInput label="Heat per volume" kind="heatGeneration" value={load.power} onChange={(power) => set({ power })} />
+          <BodiesField bodies={spec.bodies} tags={load.bodies} onChange={(bodies) => set({ bodies })} />
+        </>
       )}
       {loadHasFaces(load) && (
         <FacesField faces={load.faces} selection={selection} onChange={(faces) => set({ faces })} />

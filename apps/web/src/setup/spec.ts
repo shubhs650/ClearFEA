@@ -12,6 +12,7 @@ import {
   bondKey,
   displacementAxes,
   hasBodyLoad,
+  faceHeatConflicts,
   hasTemperatureChange,
   type IsotropicMaterial,
   isThermal,
@@ -28,6 +29,7 @@ import {
   type SimulationSpec,
   type Support,
   sameMeshSettings,
+  setsTemperature,
   simulationSpecProblems,
   specBonds,
   supportKinds,
@@ -44,7 +46,8 @@ export type SupportType = Support["type"];
 
 /**
  * The types of load the setup offers (M1.5 pressure; M2.3 force, gravity, centrifugal; M2.4 remote;
- * M2.5 hydrostatic; M2.7 temperature change; M5.1 fixed temperature).
+ * M2.5 hydrostatic; M2.7 temperature change; M5.1 fixed temperature; M5.2 heat flux, convection,
+ * radiation, heat generation).
  */
 export type LoadType = Load["type"];
 
@@ -92,6 +95,10 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   const errors = new Map<string, string[]>();
   for (const problem of simulationSpecProblems(spec, topology)) {
     errors.set(problem.item, [...(errors.get(problem.item) ?? []), problem.message]);
+  }
+  // Thermal loads on a face that cannot take them (M5.2) are errors of the later load.
+  if (isThermal(spec)) {
+    for (const problem of faceHeatConflicts(spec)) errors.set(problem.item, [...(errors.get(problem.item) ?? []), problem.message]);
   }
   const errorsOf = (item: string) => errors.get(item) ?? [];
   const result = new Map<string, ItemStatus>();
@@ -198,10 +205,9 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
     return item;
   });
   // A prescribed displacement other than zero loads the part by itself (ADR-039).
-  const needsLoad = thermal
-    ? !spec.loads.some((l) => l.type === "fixed_temperature")
-    : spec.loads.length === 0 && !movesByDisplacement(spec);
-  const addLoadNote = thermal ? "Add a fixed temperature." : "Add a load.";
+  // A thermal setup needs a load that sets the temperature (M5.2, ADR-065).
+  const needsLoad = thermal ? !spec.loads.some(setsTemperature) : spec.loads.length === 0 && !movesByDisplacement(spec);
+  const addLoadNote = thermal ? "Add a fixed temperature, convection or radiation." : "Add a load.";
   result.set("loads", worst([status([], needsLoad ? [addLoadNote] : []), ...loads]));
 
   const settings = status(errorsOf("mesh"), spec.mesh.size === null ? ["Enter a global mesh size."] : []);
@@ -254,6 +260,10 @@ const loadNoun: Record<LoadType, string> = {
   centrifugal: "centrifugal load",
   temperature: "temperature change",
   fixed_temperature: "fixed temperature",
+  heat_flux: "heat flux",
+  convection: "convection",
+  radiation: "radiation",
+  heat_generation: "heat generation",
 };
 
 function loadMissing(load: Load): string[] {
@@ -282,6 +292,17 @@ function loadMissing(load: Load): string[] {
     if (displacementAxes.some((axis) => load.freeSurface[axis] === null)) missing.push("Enter a point on the free surface.");
   } else if (load.type === "temperature") {
     if (load.change === null) missing.push("Enter the temperature change (negative for cooling).");
+  } else if (load.type === "heat_flux") {
+    if (load.flux === null) missing.push("Enter the heat flux (negative for heat leaving).");
+  } else if (load.type === "convection") {
+    if (load.coefficient === null) missing.push("Enter the convection coefficient.");
+    if (load.ambientTemperature === null) missing.push("Enter the ambient temperature.");
+  } else if (load.type === "radiation") {
+    if (load.emissivity === null) missing.push("Enter the emissivity.");
+    if (load.ambientTemperature === null) missing.push("Enter the ambient temperature.");
+  } else if (load.type === "heat_generation") {
+    if (load.bodies.length === 0) missing.push("Pick the bodies that produce the heat.");
+    if (load.power === null) missing.push("Enter the heat generation.");
   } else if (load.type === "centrifugal") {
     if (load.angularVelocity === null) missing.push("Enter the angular velocity.");
     if (displacementAxes.some((axis) => load.axisPoint[axis] === null)) missing.push("Enter a point on the axis.");
@@ -375,8 +396,9 @@ export function addFixedSupport(spec: SimulationSpec, faces: readonly number[]):
 
 /**
  * Adds a load of the given type, with every value still to enter. A pressure, force, remote load,
- * hydrostatic pressure or fixed temperature takes the given faces; gravity, a centrifugal load and
- * a temperature change act on every body and have none.
+ * hydrostatic pressure, fixed temperature, heat flux, convection or radiation takes the given
+ * faces; gravity, a centrifugal load and a temperature change act on every body and have none;
+ * heat generation starts on every body (M5.2), to untick the ones that make none.
  */
 export function addLoad(
   spec: SimulationSpec,
@@ -408,7 +430,15 @@ export function addLoad(
                 ? { ...base, type, change: null }
                 : type === "fixed_temperature"
                   ? { ...base, type, faces: [...faces], temperature: null }
-                  : { ...base, type, angularVelocity: null, axisPoint: { ...empty }, axisDirection: { ...empty } };
+                  : type === "heat_flux"
+                    ? { ...base, type, faces: [...faces], flux: null }
+                    : type === "convection"
+                      ? { ...base, type, faces: [...faces], coefficient: null, ambientTemperature: null }
+                      : type === "radiation"
+                        ? { ...base, type, faces: [...faces], emissivity: null, ambientTemperature: null }
+                        : type === "heat_generation"
+                          ? { ...base, type, bodies: spec.bodies.map((b) => b.tag), power: null }
+                          : { ...base, type, angularVelocity: null, axisPoint: { ...empty }, axisDirection: { ...empty } };
   return { id: load.id, spec: { ...spec, loads: [...spec.loads, load] } };
 }
 

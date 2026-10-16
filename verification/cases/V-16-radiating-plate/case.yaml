@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-16: a plate heated on its back face and radiating from its front face to the room (M5.2).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-16
+title: Heated plate radiating to ambient
+analysis: steady_thermal
+features: [steady-state thermal analysis, heat flux, radiation, thermal conductivity, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  back: { min: [0, 0, 0], max: [0, 80, 80] }
+  front: { min: [10, 0, 0], max: [10, 80, 80] }
+mesh:
+  coarse: { value: 5, unit: mm }
+  full: { value: 2.5, unit: mm }
+# The profile is linear in x (reference.md). The radiation makes the solve nonlinear; CalculiX
+# iterates until the temperature changes by far less than the result files' five digits.
+checks:
+  - name: Radiating front face, from εσ(T⁴ − T∞⁴) = q
+    quantity: temperature
+    face: front
+    reference: { value: 297.002971, unit: °C }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Heated back face, front + qL/k
+    quantity: temperature
+    face: back
+    reference: { value: 623.387981, unit: °F }
+    tolerance: { coarse: 0.0001, full: 0.0001 }

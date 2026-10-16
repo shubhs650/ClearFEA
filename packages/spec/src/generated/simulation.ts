@@ -34,7 +34,7 @@ export type ItemName = string;
  */
 export type FaceTags = number[];
 /**
- * linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064); it solves temperatures only, so it uses thermal loads and no supports.
+ * linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "AnalysisType".
@@ -71,7 +71,11 @@ export type Load =
   | GravityLoad
   | CentrifugalLoad
   | TemperatureLoad
-  | FixedTemperatureLoad;
+  | FixedTemperatureLoad
+  | HeatFluxLoad
+  | ConvectionLoad
+  | RadiationLoad
+  | HeatGenerationLoad;
 /**
  * What a local mesh size applies to: faces, edges or bodies of the geometry, by their topology.json tags.
  *
@@ -404,6 +408,60 @@ export interface FixedTemperatureLoad {
   temperature: OptionalQuantity;
 }
 /**
+ * A uniform heat flux through faces in a steady-state thermal analysis (M5.2). flux is a heatFlux quantity, positive into the body and negative out of it, null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "HeatFluxLoad".
+ */
+export interface HeatFluxLoad {
+  id: ItemId;
+  type: "heat_flux";
+  name: ItemName;
+  faces: FaceTags;
+  flux: OptionalQuantity;
+}
+/**
+ * Convection from faces to a surrounding fluid in a steady-state thermal analysis (M5.2): the heat leaving a face is coefficient x (surface temperature - ambientTemperature). coefficient is a heatTransferCoefficient quantity greater than zero; ambientTemperature an absolute temperature quantity above 0 K; each null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "ConvectionLoad".
+ */
+export interface ConvectionLoad {
+  id: ItemId;
+  type: "convection";
+  name: ItemName;
+  faces: FaceTags;
+  coefficient: OptionalQuantity;
+  ambientTemperature: OptionalQuantity;
+}
+/**
+ * Radiation from faces to surroundings at one temperature in a steady-state thermal analysis (M5.2): the heat leaving a face is emissivity x Stefan-Boltzmann constant x (surface temperature^4 - ambientTemperature^4), every face seeing only the surroundings. emissivity is dimensionless, above 0 and at most 1; ambientTemperature an absolute temperature quantity above 0 K; each null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RadiationLoad".
+ */
+export interface RadiationLoad {
+  id: ItemId;
+  type: "radiation";
+  name: ItemName;
+  faces: FaceTags;
+  emissivity: number | null;
+  ambientTemperature: OptionalQuantity;
+}
+/**
+ * Heat produced uniformly inside bodies in a steady-state thermal analysis (M5.2). bodies are body tags of the geometry, empty until picked; power is a heatGeneration quantity (per unit of volume), negative for heat absorbed, null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "HeatGenerationLoad".
+ */
+export interface HeatGenerationLoad {
+  id: ItemId;
+  type: "heat_generation";
+  name: ItemName;
+  bodies: number[];
+  power: OptionalQuantity;
+}
+/**
  * A point in global coordinates; each coordinate a length quantity, null until entered.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -580,7 +638,7 @@ export interface MeshSettings {
   local?: LocalMeshSize[];
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -1094,7 +1152,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -1174,6 +1232,10 @@ export const validateForceLoad = validator<ForceLoad>(schema, "ForceLoad");
 export const validateGravityLoad = validator<GravityLoad>(schema, "GravityLoad");
 export const validateTemperatureLoad = validator<TemperatureLoad>(schema, "TemperatureLoad");
 export const validateFixedTemperatureLoad = validator<FixedTemperatureLoad>(schema, "FixedTemperatureLoad");
+export const validateHeatFluxLoad = validator<HeatFluxLoad>(schema, "HeatFluxLoad");
+export const validateConvectionLoad = validator<ConvectionLoad>(schema, "ConvectionLoad");
+export const validateRadiationLoad = validator<RadiationLoad>(schema, "RadiationLoad");
+export const validateHeatGenerationLoad = validator<HeatGenerationLoad>(schema, "HeatGenerationLoad");
 export const validateAxisPoint = validator<AxisPoint>(schema, "AxisPoint");
 export const validateAxisDirection = validator<AxisDirection>(schema, "AxisDirection");
 export const validateCentrifugalLoad = validator<CentrifugalLoad>(schema, "CentrifugalLoad");
