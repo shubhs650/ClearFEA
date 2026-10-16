@@ -672,7 +672,7 @@ M3.4 adds cut planes to the result view (DECISIONS product table, Results row; M
 7. **Verification.** Unit tests cover reading `mesh.bin`, the section's area and orientation for planes through nodes, between nodes and slanted, linear fields drawn exactly, the mid-edge nodes' part, the deformed placement, the viewer's panel, legend and markers with a cut, and the API's whole and per-field replies. The worker writes `nodes.bin` (physics-critical: `worker/clearfea_worker/results/surface.py`); `spikes/solve_check` checks it holds every field at every node of the cantilever to float32 precision. The harness gains checks inside the body (`inside: true`, the mean over the mesh nodes in a box, from `mesh.bin` and `nodes.bin`) and, for a case with one, an automatic check that every field served on its own equals the whole file; V-10 checks σz inside the column at a quarter of its height, off the middle so that values on the wrong nodes would show. E-01 cuts the block across x and y (`e01-cut.png`, `e01-cut-y.png`).
 
 ### ADR-054: Safety factor against yield as yield strength over von Mises at every node, capped at 15; library yield strengths are MIL-HDBK-5G's Fty for one named product
-2026-10-16 · Accepted (under Shubham's standing M3 instruction; pending his later review).
+2026-10-16 · Accepted (under Shubham's standing M3 instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M3.5 adds the safety factor against yield to the results (DECISIONS product table, Results row and Materials row: "yield strength for the safety-factor plot"; ARCHITECTURE results pipeline step 2). Choices it needed:
 
@@ -686,7 +686,7 @@ M3.5 adds the safety factor against yield to the results (DECISIONS product tabl
 8. **Verification.** V-24 checks Sy / σ = 36 / 14.5 along the bar's side to 0.1 percent (harness quantity `safetyFactor`); worker unit tests cover the field, the cap, the smallest factor at the largest von Mises stress, the shared-node rule and the no-yield case; viewer tests the reversed bands, the unitless legend and markers and the messages; E-01 enters a 250 MPa yield strength and checks the smallest factor's marker against 250 MPa over the largest von Mises marker (screenshot `e01-safety.png`).
 
 ### ADR-055: Hidden bodies are a viewer setting by face; saved views belong to the simulation and keep camera, hidden bodies and the result display
-2026-10-16 · Accepted (under Shubham's standing M3 instruction; pending his later review).
+2026-10-16 · Accepted (under Shubham's standing M3 instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M3.6 adds hide/show bodies and saved views (DECISIONS product table, Results row "hide/show bodies"; Report row "user selects sections and saved views", for M7). Choices it needed:
 
@@ -699,7 +699,7 @@ M3.6 adds hide/show bodies and saved views (DECISIONS product table, Results row
 7. **Verification.** Display only: no deck, solver or result-reading change, and no physics-critical module touched. API tests cover saving, replacing, listing, refusals and owner scoping; viewer tests cover hiding by face, the shared-face rule, the legend and markers over the bodies shown, the section without hidden bodies, and saving, applying and deleting views; E-01 saves a view on the cut σ1 result, changes the display, and brings it back.
 
 ### ADR-056: Result display units are picked per kind in the Run panel, over the unit system; a per-user browser setting, not stored with views or runs
-2026-10-16 · Accepted (under Shubham's standing M3 instruction; pending his later review).
+2026-10-16 · Accepted (under Shubham's standing M3 instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M3.7 adds display-unit switching for results without a rerun (DECISIONS product table, Units row "Display units switchable without rerunning"). ADR-038 item 5 already made results follow the project's unit system and left a separate choice in the result view to M3.7; ADR-050 item 5 left the strain unit (such as µε) to it. Choices it needed:
 
@@ -710,7 +710,7 @@ M3.7 adds display-unit switching for results without a rerun (DECISIONS product 
 5. **Verification.** Display only. Web tests cover the picks reaching the legend and the figures without a request to the API, their being kept after the page is opened again and cleared on request, µε strain, and a stored wrong unit ignored; E-01 switches stress to ksi and strain to µε and compares the marker with the MPa value.
 
 ### ADR-057: Results are exported in the browser from the run's stored files: node and reaction CSV in the units shown, the mesh and every field as a VTK XML file in SI
-2026-10-16 · Accepted (under Shubham's standing M3 instruction; pending his later review).
+2026-10-16 · Accepted (under Shubham's standing M3 instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M3.8 adds CSV and VTK export (DECISIONS product table, Results row "CSV and VTK export"; ADR-032 item 4 left a mesh export to it). Choices it needed:
 

@@ -106,7 +106,7 @@ Things only the maintainer can do.
 
 Written by the last session for the next one. Replace, do not append.
 
-> M3 close (2026-10-16): M3 closed on a green manual phase-end run on main (see the Milestones table). Next is M4 in PLAN.md order, which waits for the maintainer's go: his autodrive covered M1 to M3. Still waiting on the maintainer: review of ADR-054 to ADR-057 (M3, accepted under the autodrive), the temper picked per library metal (ADR-054 item 7), and how to reach the 2-million-element target (ADR-048 item 7).
+> M3 close (2026-10-16): M3 closed on a green manual phase-end run on main (see the Milestones table). Next is M4 in PLAN.md order, which waits for the maintainer's go: his autodrive covered M1 to M3. The maintainer reviewed and accepted ADR-054 to ADR-057 on 2026-10-16, so every ADR to date is accepted by him (ADR-054 item 7's temper choices included). Still waiting on the maintainer: how to reach the 2-million-element target (ADR-048 item 7).
 
 > M3.8 (2026-10-16): CSV and VTK export (ADR-057, accepted under Shubham's standing M3 instruction, pending his review). Web only; no API, worker, schema, `units.json` or `convert.ts` change, so no physics-critical module touched. The Run panel's new "Export" section (after the run figures) offers "Results at every node (CSV)" (node number as in the deck, undeformed x, y, z, every field, in the units shown, UTF-8 with a byte order mark), "Reactions and loads (CSV)" (the summary's reactions, moments and load totals) and "Mesh and results (VTK)" (`.vtu`, raw appended data, SI, mid-edge nodes reordered for VTK's quadratic tetrahedron, body tag as cell data). Built from `mesh.bin` and the whole `nodes.bin` (`GET /api/runs/:id/nodes`, already there since M3.4) in `apps/web/src/viewer/resultExport.ts`; runs before M3.4 export only reactions. Files are named `clearfea-run-<first 8 of run id>…`. Large models: the node CSV of 2.7 million nodes takes about 28 s and 705 MB (written in chunks so the page keeps drawing); the VTK file under half a second. E-01 downloads all three and checks them. VTK files were also read back with VTK 9.5.2's own reader by hand (not in CI). Screenshot in the project's `m3.8/` folder. Next: close M3 with a green manual phase-end run on main, and give Shubham the ADR list from ADR-054 on.
 
@@ -222,6 +222,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- ADR-054 to ADR-057 marked accepted by the maintainer (he reviewed them after the M3 close).
 - M3 closed: phase-end workflow run by hand on main df2a895 ([run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) green, `make verify` full tier 146 of 146 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26) and `make e2e` E-01. Next: M4, waiting on the maintainer's go.
 - M3.8: CSV and VTK export of a run's results, built in the browser from its stored files (ADR-057). Learned: writing text is the slow part (28 s for 2.7 million nodes), not the VTK file (under half a second).
 - M3.7: result display units picked per kind in the Run panel, over the unit system, kept per user in the browser (ADR-056).
