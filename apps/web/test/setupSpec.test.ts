@@ -588,3 +588,64 @@ describe("steady-state thermal marks (M5.1)", () => {
     expect(notes.some((n) => n.includes("support"))).toBe(false);
   });
 });
+
+describe("thermal stress marks (M5.4)", () => {
+  /** A complete thermal stress setup: steel with every value both steps need, a fixed support
+   * on face 2, a fixed temperature on face 1, stress-free at 20 °C. */
+  function thermalStress(): SimulationSpec {
+    let spec = setAnalysis(addMaterial(empty()).spec, "thermal_stress");
+    const [material] = spec.materials;
+    if (!material) throw new Error("no material");
+    spec = updateMaterial(spec, {
+      ...material,
+      youngsModulus: { value: 200, unit: "GPa" },
+      poissonsRatio: 0.3,
+      thermalConductivity: { value: 45, unit: "W/(m·K)" },
+      thermalExpansion: { value: 12, unit: "µm/(m·K)" },
+    });
+    spec = addFixedSupport(spec, [2]).spec;
+    spec = addLoad(spec, "fixed_temperature", [1]).spec;
+    const [load] = spec.loads;
+    if (load?.type !== "fixed_temperature") throw new Error("no fixed temperature");
+    spec = updateLoad(spec, { ...load, temperature: { value: 100, unit: "°C" } });
+    return { ...spec, stressFreeTemperature: { value: 20, unit: "°C" } };
+  }
+
+  it("marks a complete thermal stress setup complete", () => {
+    const spec = thermalStress();
+    const marks = setupStatus(spec, topology);
+    for (const item of ["analysis", "materials", "material-1", "supports", "loads", "fixed_temperature-1", "bodies"]) {
+      expect(marks.get(item)).toEqual({ mark: "complete", notes: [] });
+    }
+    expect(preRunProblems(spec, topology).filter((p) => p.item !== "mesh")).toEqual([]);
+  });
+
+  it("asks for the stress-free temperature, both steps' material values, a support and a temperature", () => {
+    const spec = setAnalysis(addMaterial(empty()).spec, "thermal_stress");
+    const marks = setupStatus(spec, topology);
+    expect(marks.get("analysis")).toEqual({ mark: "incomplete", notes: ["Enter the stress-free temperature."] });
+    expect(marks.get("material-1")).toEqual({
+      mark: "incomplete",
+      notes: [
+        "Enter the thermal conductivity; a thermal stress analysis needs it.",
+        "Enter Young's modulus.",
+        "Enter Poisson's ratio.",
+        "Enter the thermal expansion; a thermal stress analysis needs it.",
+      ],
+    });
+    expect(marks.get("supports")).toEqual({ mark: "incomplete", notes: ["Add a support."] });
+    expect(marks.get("loads")).toEqual({ mark: "incomplete", notes: ["Add a fixed temperature, convection or radiation."] });
+    // Every mark that is not complete has a pre-run problem for the same item.
+    const items = new Set(preRunProblems(spec, topology).map((p) => p.item));
+    for (const item of ["analysis", "material-1", "supports", "loads"]) expect(items.has(item)).toBe(true);
+  });
+
+  it("marks a temperature change, which the thermal step replaces", () => {
+    const spec = addLoad(thermalStress(), "temperature", []).spec;
+    const marks = setupStatus(spec, topology);
+    expect(marks.get("temperature-1")?.mark).toBe("error");
+    expect(marks.get("temperature-1")?.notes.at(-1)).toBe(
+      'Temperature change "Temperature change 1" has no effect in a thermal stress analysis, whose temperatures come from its thermal step. Delete it, or set the analysis type to linear static.',
+    );
+  });
+});

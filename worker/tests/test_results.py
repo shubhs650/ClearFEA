@@ -15,6 +15,7 @@ from clearfea_worker.deck.elements import FACE_NODES
 from clearfea_worker.results import (
     DatError,
     FrdError,
+    node_fields,
     principal_stresses,
     read_fields,
     read_node_displacements,
@@ -38,6 +39,7 @@ from .test_deck import (
     heat_loads_spec,
     heat_two_bodies_spec,
     supports_spec,
+    thermal_stress_spec,
 )
 
 SOLVE = Path(__file__).resolve().parent / "fixtures" / "solve"
@@ -358,7 +360,9 @@ def test_an_elastic_support_beside_a_fixed_one_shares_the_load() -> None:
     # Together they balance the pressures, (-100, 0, 50) N.
     total = [got["fixed-1"][i] + got["elastic-1"][i] for i in range(3)]
     assert total == pytest.approx([100.0, 0.0, -50.0], abs=1e-4)
-    assert result.balance is not None and result.balance.force_ratio < 1e-6
+    # Reactions to seven printed digits, much larger than the loads (the heat pushes on the
+    # support).
+    assert result.balance is not None and result.balance.force_ratio < 1e-4
 
 
 def test_balance_without_applied_load_measures_reactions_against_each_other() -> None:
@@ -550,3 +554,39 @@ def test_a_thermal_run_without_its_heat_flows_is_refused(tmp_path: Path) -> None
 def test_refuses_a_thermal_result_file_without_temperatures() -> None:
     with pytest.raises(FrdError, match="no FLUX, NDTEMP block"):
         read_thermal_fields(SOLVE / "job.frd", 14)
+
+
+def test_a_thermal_stress_run_has_both_steps_results() -> None:
+    # M5.4: the heat transfer step's temperatures, heat fluxes and heat flows, and the static
+    # step's displacements, stresses and reactions, read from the same two files.
+    spec = SimulationSpec.model_validate(thermal_stress_spec())
+    mesh = two_tets(order=2)
+    fields, result = read_results(
+        spec,
+        mesh,
+        HEAT / "thermal-stress-c3d10.frd",
+        HEAT / "thermal-stress-c3d10.dat",
+        "2.21",
+    )
+    assert fields.thermal is not None
+    assert result.temperature is not None and result.von_mises is not None
+    assert result.temperature.max.value == pytest.approx(373.15, abs=1e-3)
+    # The heat flows are the thermal loads', the load totals the structural loads' only.
+    assert [f.load_id for f in result.heat_flows or []] == ["hot-1", "h-1", "r-1"]
+    assert [x.load_id for x in result.loads or []] == ["p-1", "g-1"]
+    assert result.heat_balance is not None and result.heat_balance.ratio < 1e-5
+    # Reactions to seven printed digits, much larger than the loads (the heat pushes on the
+    # support).
+    assert result.balance is not None and result.balance.force_ratio < 1e-4
+    names = [f.name for f in node_fields(fields)]
+    assert names == [
+        "displacement",
+        "vonMises",
+        "stress",
+        "principalStress",
+        "strain",
+        "temperature",
+        "heatFlux",
+    ]
+    # The structural fields are the static step's: the heated part grows.
+    assert result.displacement is not None and result.displacement.max.value > 0

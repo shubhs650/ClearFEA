@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   extremeVertices,
   isThermalRun,
+  isThermalStressRun,
   isViewQuantity,
   runChoice,
   runQuantities,
@@ -162,6 +163,16 @@ describe("quantities of a run (M5.1)", () => {
     expect(QUANTITIES.heatFluxY).toMatchObject({ kind: "heatFlux", group: "Heat flux", field: "heatFlux", components: 3, component: 1 });
     expect(runQuantities(staticRun)[0]).toBe("displacement");
     expect(QUANTITIES.temperature).toMatchObject({ label: "Temperature", kind: "temperature", group: "Temperature", field: "temperature" });
+  });
+
+  it("offers a thermal stress run every quantity, deformed as chosen (M5.4)", () => {
+    const run = { spec: { ...spec, analysis: "thermal_stress" as const }, result: null };
+    expect(isThermalRun(run)).toBe(false);
+    expect(isThermalStressRun(run)).toBe(true);
+    expect(runQuantities(run)).toEqual(Object.keys(QUANTITIES));
+    const choice = { quantity: "temperature" as const, deformation: "auto" as const };
+    expect(runChoice(run, choice)).toBe(choice);
+    expect(runChoice(run, { quantity: "vonMises", deformation: "true" })).toEqual({ quantity: "vonMises", deformation: "true" });
   });
 
   it("shows a thermal run's temperature undeformed, and keeps a static run's choice", () => {

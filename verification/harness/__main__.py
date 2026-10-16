@@ -272,10 +272,11 @@ def run_case(
         )
 
     # Automatic checks on every case (docs/VERIFICATION.md): the force balance of a structural
-    # run, the heat balance of a steady-state thermal one (M5.3).
-    if spec["analysis"] == "steady_thermal":
+    # run, the heat balance of a steady-state thermal one (M5.3), both for a thermal stress run
+    # (M5.4), whose thermal loads apply no force.
+    if spec["analysis"] != "linear_static":
         heat_balance_rows(outcome, spec, surface, run)
-    else:
+    if spec["analysis"] != "steady_thermal":
         balance_rows(outcome, spec, surface, run)
     warnings = unexpected_warnings(log, case.allowed_warnings)
     outcome.rows.append(

@@ -96,8 +96,8 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Uniform temperature change | V-08 |
 | Bonded interface (structural) | V-11, V-12; E-03 runs a bonded two-body model through the UI |
 | Bonded interface (thermal) | to be added in M5 |
-| Steady-state thermal analysis | V-13, V-15, V-16, V-17 |
-| Fixed temperature | V-13, V-17, V-14 |
+| Steady-state thermal analysis | V-13, V-15, V-16, V-17 (and the heat step of V-18) |
+| Fixed temperature | V-13, V-17, V-18, V-14 |
 | Heat flux | V-16 |
 | Convection | V-15 |
 | Radiation to ambient | V-16 |
@@ -106,7 +106,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Temperature-dependent properties | V-19 |
 | Modal | V-20, V-21, V-22 |
 | Heat flux results | V-13, V-15, V-16, V-17 (heat flux along the wall, M5.3) |
-| Heat flows and heat balance check | V-13, V-15, V-16, V-17 (each load's heat flow); the run's own heat balance on every thermal case (M5.3) |
+| Heat flows and heat balance check | V-13, V-15, V-16, V-17 (each load's heat flow), V-18; the run's own heat balance on every thermal case (M5.3) |
 | Reaction balance check | V-04, V-05, V-06, V-07, V-08, V-10, V-25, V-03, V-26; the run's own balance check, force and moment, on every case (M3.2) |
 | Reaction moments | V-04 |
 | Local mesh refinement | V-03 |
@@ -125,7 +125,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 Besides its own reference values, every case asserts:
 
 - Reactions balance applied loads within 0.1 percent (structural), both as the harness integrates the loads over the run's surface and as the run's own balance check reports them, force and moment (M3.2, ADR-051).
-- Heat in equals heat out within 0.1 percent (thermal, since M5.3): the run's own heat balance, and, where the case has a heat flux or heat generation, the heat those bring in against the case's own integration over the run's surface (ADR-066). A thermal case has no force balance rows, since it has no forces.
+- Heat in equals heat out within 0.1 percent (thermal, since M5.3): the run's own heat balance, and, where the case has a heat flux or heat generation, the heat those bring in against the case's own integration over the run's surface (ADR-066). A steady-state thermal case has no force balance rows, since it has no forces; a thermal stress case (M5.4) gets both the heat and the force balance rows.
 - The solver log contains no unexpected warnings.
 - Billable seconds were recorded and one ledger entry was written.
 
@@ -142,7 +142,7 @@ Playwright drives the real UI against the local system on tiny models. `make e2e
 | E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component, read the reactions, load totals and balance, read the min/max markers and probe a node, cut it across x and y with a cut plane, show the safety factor against yield, save a view and bring it back, show the result in other units after a reload, export CSV and VTK files (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
 | E-02 | Unit entry in mixed units and display-unit switch | M2 |
 | E-03 | Multi-body upload: bodies listed by part name with a material each, the bond found reviewed and shown, a body held only by a removed bond refused before the run, run with the bond tied, reactions balancing the load carried through the bond, the note on stresses near bonded faces, one body hidden in the result view (`e03-multi-body.e2e.ts`, two blocks touching end to end; signs in as the second test user) | M4 (written after the M4 close) |
-| E-04 | Thermal stress setup and result | M5 |
+| E-04 | Thermal stress setup: the analysis type and its stress-free temperature, a material with elastic and thermal values, a fixed support and two fixed temperatures; run, see the von Mises stress on the deformed shape, the highest and lowest temperature, each fixed temperature's heat flow and the heat balance, draw the temperature of the same result and find both the reactions and the heat flows exports (`e04-thermal-stress.e2e.ts`, E-01's block, hot top and cold fixed end; signs in as the second test user) | M5 (M5.4) |
 | E-05 | Report generation and download | M7 |
 | E-06 | Cancel a running job; stop limit reached | M8 |
 | E-07 | Second user cannot open first user's project or share-revoked link | M8 |

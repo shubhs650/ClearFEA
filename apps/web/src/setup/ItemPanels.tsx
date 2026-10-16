@@ -75,6 +75,8 @@ const analysisHints: Record<AnalysisType, string> = {
   linear_static: "Small displacements of linear elastic bodies under supports and loads: displacements, stresses and reactions.",
   steady_thermal:
     "Steady-state heat conduction: temperatures from fixed temperatures, heat fluxes, convection and radiation on faces and heat generated in bodies; faces with none of them are insulated.",
+  thermal_stress:
+    "Steady-state heat conduction, then linear static on the temperatures it solves: temperatures, and the displacements, stresses and reactions they cause with the supports and structural loads.",
 };
 
 /**
@@ -112,6 +114,15 @@ export function AnalysisPanel({
           </div>
         ))}
       </fieldset>
+      {spec.analysis === "thermal_stress" && (
+        <QuantityInput
+          label="Stress-free temperature"
+          kind="temperature"
+          value={spec.stressFreeTemperature ?? null}
+          hint="The temperature at which the bodies have no thermal strain, for example the assembly temperature of 20 °C. Thermal strain is the thermal expansion × (temperature − this temperature)."
+          onChange={(stressFreeTemperature) => onChange({ ...spec, stressFreeTemperature })}
+        />
+      )}
     </section>
   );
 }
@@ -144,7 +155,8 @@ export function GroupPanel({
   children?: ReactNode;
 }) {
   const thermal = analysis === "steady_thermal";
-  // Supports belong to a linear static analysis only (ADR-064).
+  const thermalStress = analysis === "thermal_stress";
+  // Supports belong to the analyses with a static step (ADR-064, ADR-067).
   const adds =
     group === "supports"
       ? thermal
@@ -167,7 +179,13 @@ export function GroupPanel({
           <p className="field-hint">Select faces in the viewer first to give the new item those faces.</p>
         ))}
       {group === "loads" &&
-        (thermal ? (
+        (thermalStress ? (
+          <p className="field-hint">
+            Select faces in the viewer first to give a new load those faces. The thermal loads set the temperatures; the
+            structural loads act with them in the static step. Gravity and a centrifugal load act on every body; heat
+            generation on the bodies you tick.
+          </p>
+        ) : thermal ? (
           <p className="field-hint">
             Select faces in the viewer first to give a new fixed temperature, heat flux, convection or radiation those faces. Heat
             generation acts on the bodies you tick. Every body needs a fixed temperature, convection or radiation.
@@ -258,7 +276,7 @@ export function MaterialPanel({
         label="Thermal expansion"
         kind="thermalExpansion"
         value={material.thermalExpansion ?? null}
-        hint="Coefficient of linear thermal expansion, for example 12e-6 1/°C for steel. Needed for a temperature change."
+        hint="Coefficient of linear thermal expansion, for example 12e-6 1/°C for steel. Needed for a temperature change and a thermal stress analysis."
         onChange={(thermalExpansion) => set({ thermalExpansion })}
       />
       <QuantityInput
@@ -266,7 +284,7 @@ export function MaterialPanel({
         positive
         kind="thermalConductivity"
         value={material.thermalConductivity ?? null}
-        hint="For example 45 W/(m·K) for carbon steel. Needed for a steady-state thermal analysis."
+        hint="For example 45 W/(m·K) for carbon steel. Needed for a steady-state thermal and a thermal stress analysis."
         onChange={(thermalConductivity) => set({ thermalConductivity })}
       />
       <QuantityInput

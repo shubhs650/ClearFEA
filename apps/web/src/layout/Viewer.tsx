@@ -226,7 +226,7 @@ export function contourOf(
     return "This run has no safety factor against yield. It needs a yield strength for every material, and runs solved before ClearFEA worked it out have none. Enter the yield strength under Materials and run the simulation again.";
   }
   if (!field && name === "temperature") {
-    return "This run has no temperatures. Only a steady-state thermal analysis solves them; set the analysis type under Analysis and run the simulation again.";
+    return "This run has no temperatures. Only a steady-state thermal or a thermal stress analysis solves them; set the analysis type under Analysis and run the simulation again.";
   }
   if (!field && name === "heatFlux") {
     return "This run was solved before ClearFEA kept heat fluxes, so it has none. Run the simulation again to see the heat flux.";
