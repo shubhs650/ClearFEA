@@ -70,57 +70,52 @@ export function BondsPanel({
       <Notes status={status} />
       <p className="field-hint">{intro}</p>
       {bonds.length > 0 && (
-        <table className="setup-bodies-table setup-bonds-table">
-          <thead>
-            <tr>
-              <th scope="col">Bodies</th>
-              <th scope="col">Area ({areaUnit})</th>
-              <th scope="col">Status</th>
-              <th scope="col">Review</th>
-            </tr>
-          </thead>
-          <tbody>
-            {bonds.map((bond) => {
-              const key = bondKey(bond.faces);
-              const candidate = candidates.get(key);
-              const name = `${label(candidate?.bodies[0])} to ${label(candidate?.bodies[1])}`;
-              const isShown = selection.size === 2 && bond.faces.every((f) => selection.has(f));
-              return (
-                <tr key={key} className={bond.status === "removed" ? "bond-removed" : undefined} aria-current={isShown ? "true" : undefined}>
-                  <th scope="row">
-                    <button
-                      type="button"
-                      className="link-button"
-                      aria-label={`Show the bond ${name}, faces ${bond.faces.join(" and ")}`}
-                      onClick={() => onShow(bond.faces)}
-                    >
-                      {name}
+        <ul className="bond-list" aria-label="Bonds found">
+          {bonds.map((bond) => {
+            const key = bondKey(bond.faces);
+            const candidate = candidates.get(key);
+            const name = `${label(candidate?.bodies[0])} to ${label(candidate?.bodies[1])}`;
+            const isShown = selection.size === 2 && bond.faces.every((f) => selection.has(f));
+            const area = candidate === undefined ? null : `${shown(fromSi(candidate.area, areaUnit, "area"))} ${areaUnit}`;
+            return (
+              <li
+                key={key}
+                className={bond.status === "removed" ? "bond bond-removed" : "bond"}
+                aria-label={name}
+                aria-current={isShown ? "true" : undefined}
+              >
+                <button
+                  type="button"
+                  className="link-button"
+                  aria-label={`Show the bond ${name}, faces ${bond.faces.join(" and ")}`}
+                  onClick={() => onShow(bond.faces)}
+                >
+                  {name}
+                </button>
+                <span className="field-hint bond-facts">
+                  Faces {bond.faces.join(" and ")}
+                  {area !== null && `, ${area}`}. {statusLabels[bond.status]}.
+                </span>
+                <span className="bond-actions">
+                  {bond.status === "detected" && (
+                    <button type="button" aria-label={`Accept the bond ${name}`} onClick={() => review(bond.faces, "accepted")}>
+                      Accept
                     </button>
-                    <span className="field-hint bond-faces">Faces {bond.faces.join(" and ")}</span>
-                  </th>
-                  <td>{candidate === undefined ? "?" : shown(fromSi(candidate.area, areaUnit, "area"))}</td>
-                  <td>{statusLabels[bond.status]}</td>
-                  <td className="bond-actions">
-                    {bond.status === "detected" && (
-                      <button type="button" aria-label={`Accept the bond ${name}`} onClick={() => review(bond.faces, "accepted")}>
-                        Accept
-                      </button>
-                    )}
-                    {bond.status !== "removed" ? (
-                      <button type="button" aria-label={`Remove the bond ${name}`} onClick={() => review(bond.faces, "removed")}>
-                        Remove
-                      </button>
-                    ) : (
-                      <button type="button" aria-label={`Restore the bond ${name}`} onClick={() => review(bond.faces, "accepted")}>
-                        Restore
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  )}
+                  {bond.status !== "removed" ? (
+                    <button type="button" aria-label={`Remove the bond ${name}`} onClick={() => review(bond.faces, "removed")}>
+                      Remove
+                    </button>
+                  ) : (
+                    <button type="button" aria-label={`Restore the bond ${name}`} onClick={() => review(bond.faces, "accepted")}>
+                      Restore
+                    </button>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       )}
       {bonds.length > 0 && (
         <div className="field-actions">

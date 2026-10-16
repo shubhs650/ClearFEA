@@ -458,16 +458,15 @@ describe("setup tree", () => {
     // Opening Bonds selects the faces of every tied bond.
     expect(scene.selections.at(-1)).toEqual([3, 7]);
     expect(settings().getByText(/touch within 0.01 mm are bonded/)).toBeTruthy();
-    expect(settings().getByRole("columnheader", { name: "Area (mm²)" })).toBeTruthy();
-    expect(settings().getByRole("cell", { name: "400" })).toBeTruthy();
-    expect(settings().getByRole("cell", { name: "Detected, tied" })).toBeTruthy();
+    const bond = () => within(settings().getByRole("listitem", { name: "Base plate to Lug" }));
+    expect(bond().getByText("Faces 3 and 7, 400 mm². Detected, tied.")).toBeTruthy();
 
     fireEvent.click(settings().getByRole("button", { name: "Accept the bond Base plate to Lug" }));
     expect(tree().getByRole("button", { name: "Bonds, complete" })).toBeTruthy();
     await waitFor(() => expect(sent.at(-1)?.bonds).toEqual([{ faces: [3, 7], status: "accepted" }]));
 
     fireEvent.click(settings().getByRole("button", { name: "Remove the bond Base plate to Lug" }));
-    expect(settings().getByRole("cell", { name: "Removed, not tied" })).toBeTruthy();
+    expect(bond().getByText("Faces 3 and 7, 400 mm². Removed, not tied.")).toBeTruthy();
     await waitFor(() => expect(sent.at(-1)?.bonds).toEqual([{ faces: [3, 7], status: "removed" }]));
     expect(settings().getByRole("button", { name: "Show every tied bond" })).toHaveProperty("disabled", true);
 

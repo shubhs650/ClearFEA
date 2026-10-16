@@ -554,25 +554,34 @@ button:disabled {
   width: 100%;
 }
 
-.setup-bonds-table tbody tr[aria-current="true"] {
+.bond-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.bond {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bond[aria-current="true"] {
   background: #e7f0fb;
 }
 
-.setup-bonds-table .bond-faces {
-  display: block;
-}
-
-.setup-bonds-table .bond-removed th,
-.setup-bonds-table .bond-removed td {
+.bond-removed .link-button,
+.bond-removed .bond-facts {
   color: var(--muted);
 }
 
-.setup-bonds-table .bond-actions {
-  white-space: nowrap;
-}
-
-.setup-bonds-table .bond-actions button + button {
-  margin-left: 4px;
+.bond-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
 }
 
 .field-actions-column {
