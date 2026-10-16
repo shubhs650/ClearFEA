@@ -21,10 +21,13 @@ import {
   type SimulationResponse,
   type SimulationSpec,
   type SimulationView,
+  type ViewListResponse,
+  type ViewResponse,
   sameMeshSettings,
   type Topology,
   validateCreateRunRequest,
   validateCreateSimulationRequest,
+  validateSaveViewRequest,
   validateSimulationSpec,
   validateTopology,
 } from "@clearfea/spec";
@@ -50,6 +53,7 @@ import {
   type Simulation,
   saveSpec,
 } from "../db/simulations";
+import { deleteView, listViews, saveView } from "../db/views";
 import type { Env } from "../env";
 import { requireUser, type SessionEnv } from "../session";
 import { meshView } from "./meshes";
@@ -326,4 +330,39 @@ simulations.post("/:id/runs", async (c) => {
     return c.json({ error: "The mesh or the machine sizes changed meanwhile. Check the mesh, then run again." }, 409);
   }
   return c.json({ run: runView(created.run) } satisfies RunResponse, 201);
+});
+
+// Saved views (M3.6, ADR-055). Hidden bodies must be bodies of the simulation's geometry, which
+// its spec lists, and at least one body stays shown.
+simulations.get("/:id/views", async (c) => {
+  const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
+  if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  const views = await listViews(c.env.DB, c.var.userId, simulation.id);
+  return c.json({ views } satisfies ViewListResponse);
+});
+
+simulations.post("/:id/views", async (c) => {
+  const body = await readBody(c.req.raw, validateSaveViewRequest, "SaveViewRequest", "view.schema.json");
+  if ("error" in body) return c.json({ error: body.error }, 400);
+  const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
+  if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  const { name, settings } = body.value;
+  const bodies = new Set(simulation.spec.bodies.map((b) => b.tag));
+  const unknown = settings.hiddenBodies.filter((tag) => !bodies.has(tag));
+  if (unknown.length > 0) {
+    return c.json({ error: `The geometry of this simulation has no body ${unknown.join(", ")}, so it cannot be hidden.` }, 400);
+  }
+  if (settings.hiddenBodies.length >= bodies.size) {
+    return c.json({ error: "A view hides every body, so it would show nothing. Show at least one body and save it again." }, 400);
+  }
+  const saved = await saveView(c.env.DB, c.var.userId, simulation.id, name.trim(), settings);
+  if (saved === null) return c.json({ error: NOT_FOUND }, 404);
+  return c.json({ view: saved.view } satisfies ViewResponse, saved.created ? 201 : 200);
+});
+
+simulations.delete("/:id/views/:viewId", async (c) => {
+  if (!(await deleteView(c.env.DB, c.var.userId, c.req.param("id"), c.req.param("viewId")))) {
+    return c.json({ error: "There is no saved view with that id in this simulation." }, 404);
+  }
+  return c.body(null, 204);
 });
