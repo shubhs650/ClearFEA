@@ -7,7 +7,6 @@ import {
   preRunProblems,
   type SessionUser,
   type SimulationSpec,
-  systemUnit,
 } from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchSession, signOut } from "./api/session";
@@ -21,7 +20,8 @@ import { SignIn } from "./session/SignIn";
 import { GroupPanel, LoadPanel, MaterialPanel, SupportPanel } from "./setup/ItemPanels";
 import { MaterialChooser } from "./setup/MaterialLibrary";
 import { LocalSizePanel, MeshPanel } from "./setup/MeshPanel";
-import { type ResultChoice, type ResultUnits, type RunBlocker, RunPanel } from "./setup/RunPanel";
+import { useDisplayUnits } from "./setup/displayUnits";
+import { type ResultChoice, type RunBlocker, RunPanel } from "./setup/RunPanel";
 import { useEstimate } from "./setup/useEstimate";
 import {
   addLoad,
@@ -119,18 +119,10 @@ export function App() {
   const project = useProject(session.kind === "signedIn", signedOut);
   const materials = useMaterials(setup.kind === "open", signedOut);
   const { unitSystem } = project;
-  // One object per unit system, so the viewer does not redraw the results on every render.
-  const resultUnits = useMemo<ResultUnits>(
-    () => ({
-      length: systemUnit(unitSystem, "length"),
-      pressure: systemUnit(unitSystem, "pressure"),
-      force: systemUnit(unitSystem, "force"),
-      moment: systemUnit(unitSystem, "moment"),
-      strain: systemUnit(unitSystem, "strain"),
-      ratio: systemUnit(unitSystem, "ratio"),
-    }),
-    [unitSystem],
-  );
+  // The result view's display units (M3.7): one object per choice, so the viewer does not redraw
+  // the results on every render.
+  const displayUnits = useDisplayUnits(session.kind === "signedIn" ? session.user.id : null, unitSystem);
+  const resultUnits = displayUnits.units;
   const statuses = useMemo(() => {
     if (setup.kind !== "open") return new Map<string, ItemStatus>();
     const result = setupStatus(setup.spec, setup.topology);
@@ -294,6 +286,9 @@ export function App() {
           blockers={runBlockers()}
           onOpen={select}
           units={resultUnits}
+          unitChoice={displayUnits.choice}
+          onUnitChange={displayUnits.change}
+          onUnitReset={displayUnits.reset}
           estimate={estimate}
           requesting={runs.requesting}
           requestProblem={runs.requestProblem}

@@ -11,23 +11,83 @@
 // before a run, with a machine size to run on (the recommended one first), and the record shows
 // the estimate the run started with (ADR-049). From M3.2 the result figures give each support's
 // reaction force and moment, each load's total and the balance of loads against reactions
-// (ADR-051), named as in the run's own frozen setup.
+// (ADR-051), named as in the run's own frozen setup. From M3.7 the result can be shown in units
+// of its own, picked per kind, instead of the unit system's (ADR-056).
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
-import type { RunEstimate, RunFileName, RunView, SimulationSpec, SolveResult } from "@clearfea/spec";
+import {
+  type RunEstimate,
+  type RunFileName,
+  type RunView,
+  type SimulationSpec,
+  type SolveResult,
+  systemUnit,
+} from "@clearfea/spec";
 import { Fragment, useState } from "react";
 import { runFileUrl } from "../api/runs";
 import { credits } from "../billing/credits";
 import { duration, memory } from "../billing/estimate";
 import type { Deformation } from "../layout/Viewer";
 import { fromSi } from "../units/convert";
+import { useUnitSystem } from "../units/system";
+import { DISPLAY_KINDS, type DisplayKind, type DisplayUnitChoice, type ResultUnits, unitsOf } from "./displayUnits";
 import { QUANTITIES, type Quantity, type QuantityGroup, SAFETY_FACTOR_CAP } from "../viewer/resultFields";
 import { Notes } from "./ItemPanels";
 import { type ItemStatus, sameSpec } from "./spec";
 import type { EstimateState } from "./useEstimate";
 
-/** The units result figures are shown in: the project system's units for these kinds. */
-export type ResultUnits = Readonly<Record<"length" | "pressure" | "force" | "moment" | "strain", string>>;
+/** What each display kind is called in the Run panel's unit choice. */
+const KIND_LABELS: Record<DisplayKind, string> = {
+  length: "Length",
+  pressure: "Stress",
+  force: "Force",
+  moment: "Moment",
+  strain: "Strain",
+};
+
+/**
+ * The result view's display units (M3.7, ADR-056): one list per kind, first "as the unit system"
+ * (naming its unit), then every unit units.json has for the kind. A change redraws the figures,
+ * legend, markers and probes from the stored SI values, without running again.
+ */
+function DisplayUnits({
+  choice,
+  onChange,
+  onReset,
+}: {
+  choice: DisplayUnitChoice;
+  onChange: (kind: DisplayKind, unit: string | null) => void;
+  onReset: () => void;
+}) {
+  const system = useUnitSystem();
+  const picked = DISPLAY_KINDS.some((kind) => choice[kind] !== undefined);
+  return (
+    <fieldset className="result-choice result-units">
+      <legend>Units shown</legend>
+      {DISPLAY_KINDS.map((kind) => {
+        return (
+          <label key={kind}>
+            {KIND_LABELS[kind]}
+            <select value={choice[kind] ?? ""} onChange={(event) => onChange(kind, event.target.value || null)}>
+              <option value="">As the unit system ({systemUnit(system, kind)})</option>
+              {unitsOf(kind).map((unit) => (
+                <option key={unit} value={unit}>
+                  {unit}
+                </option>
+              ))}
+            </select>
+          </label>
+        );
+      })}
+      <p className="field-hint">Changes only how results are shown; nothing is run again.</p>
+      {picked && (
+        <button type="button" className="link-button" onClick={onReset}>
+          Show all in the unit system
+        </button>
+      )}
+    </fieldset>
+  );
+}
 
 /** The headings of the quantity list, in order. */
 const QUANTITY_GROUPS: readonly QuantityGroup[] = ["Displacement", "Stress", "Strain", "Safety factor"];
@@ -347,6 +407,9 @@ export function RunPanel({
   blockers,
   onOpen,
   units,
+  unitChoice,
+  onUnitChange,
+  onUnitReset,
   estimate,
   requesting,
   requestProblem,
@@ -365,6 +428,10 @@ export function RunPanel({
   onOpen: (item: string) => void;
   /** The units figures are shown in. */
   units: ResultUnits;
+  /** The units picked for the result view; a kind left out follows the unit system. */
+  unitChoice: DisplayUnitChoice;
+  onUnitChange: (kind: DisplayKind, unit: string | null) => void;
+  onUnitReset: () => void;
   /** The estimate for the current mesh, shown before a run. */
   estimate: EstimateState;
   requesting: boolean;
@@ -448,6 +515,9 @@ export function RunPanel({
             </select>
           </label>
         </fieldset>
+      )}
+      {result && (
+        <DisplayUnits choice={unitChoice} onChange={onUnitChange} onReset={onUnitReset} />
       )}
       {result && (
         <dl className="geometry-facts" aria-label="Run results">
