@@ -36,7 +36,6 @@ sys.path.insert(0, str(HERE))
 
 import bench  # noqa: E402  (the M2.11 script beside this one: the block, its spec, the machine)
 
-
 #: Steel's density for the modal runs, kg/m³.
 DENSITY = 7850.0
 

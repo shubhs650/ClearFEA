@@ -171,9 +171,15 @@ def fit_modal(steps: dict) -> dict:
         laws = {name: fit_power_law(points) for name, points in parts.items()}
         for name, key in (("memory", "peakMemoryBytes"), ("seconds", "jobSeconds")):
             # How far the whole sum fell short at worst, over every modal row.
-            laws[name]["largestRatio"] = float(
-                f"{max(row[key] / (law(laws[name], row['nodes']) + row['modes'] * law(laws[name + 'PerMode'], row['nodes'])) for row in rows):.6g}"
+            ratio = max(
+                row[key]
+                / (
+                    law(laws[name], row["nodes"])
+                    + row["modes"] * law(laws[name + "PerMode"], row["nodes"])
+                )
+                for row in rows
             )
+            laws[name]["largestRatio"] = float(f"{ratio:.6g}")
         limit = modal_node_limit(laws["memory"], laws["memoryPerMode"])
         orders = {}
         for order in (1, 2):
@@ -263,9 +269,8 @@ def main() -> int:
     ESTIMATOR.write_text(json.dumps(new, indent=2) + "\n")
     for analysis, models in new["analyses"].items():
         for solver, model in models.items():
-            print(
-                f"{analysis} {solver}: memory {model['peakMemoryBytes']}, time {model['jobSeconds']}"
-            )
+            memory, seconds = model["peakMemoryBytes"], model["jobSeconds"]
+            print(f"{analysis} {solver}: memory {memory}, time {seconds}")
             if "peakMemoryBytesPerMode" in model:
                 print(
                     f"  per mode: memory {model['peakMemoryBytesPerMode']}, "
