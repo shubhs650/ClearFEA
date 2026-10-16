@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "analysis": "thermal_stress",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (case values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200, "unit": "GPa" },
+      "poissonsRatio": 0.3,
+      "thermalExpansion": { "value": 12, "unit": "µm/(m·K)" },
+      "thermalConductivity": { "value": 26, "unit": "BTU/(h·ft·°F)" }
+    }
+  ],
+  "supports": [
+    { "id": "sym-y", "type": "frictionless", "name": "Plane y = 0", "faces": ["cut-y"] },
+    { "id": "sym-x", "type": "frictionless", "name": "Plane x = 0", "faces": ["cut-x"] },
+    { "id": "end-0", "type": "frictionless", "name": "End z = 0", "faces": ["end-0"] },
+    { "id": "end-L", "type": "frictionless", "name": "End z = L", "faces": ["end-L"] }
+  ],
+  "loads": [
+    {
+      "id": "bore",
+      "type": "fixed_temperature",
+      "name": "Hot bore",
+      "faces": ["bore"],
+      "temperature": { "value": 302, "unit": "°F" }
+    },
+    {
+      "id": "outside",
+      "type": "fixed_temperature",
+      "name": "Cool outside",
+      "faces": ["outside"],
+      "temperature": { "value": 30, "unit": "°C" }
+    }
+  ],
+  "stressFreeTemperature": { "value": 68, "unit": "°F" },
+  "mesh": { "size": { "value": 5, "unit": "mm" } }
+}

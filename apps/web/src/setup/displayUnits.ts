@@ -20,6 +20,8 @@ export const STATIC_KINDS: readonly DisplayKind[] = ["length", "pressure", "forc
 /** The kinds a steady-state thermal run shows (M5.1): positions, temperatures, and since M5.3
  * heat fluxes and heat flows. */
 export const THERMAL_KINDS: readonly DisplayKind[] = ["length", "temperature", "heatFlux", "heatFlow"];
+/** The kinds a thermal stress run shows (M5.4): a static run's and a thermal run's. */
+export const THERMAL_STRESS_KINDS: readonly DisplayKind[] = [...STATIC_KINDS, "temperature", "heatFlux", "heatFlow"];
 
 /** The unit picked for a kind; a kind left out follows the unit system. */
 export type DisplayUnitChoice = Partial<Record<DisplayKind, string>>;

@@ -1803,7 +1803,7 @@ describe("steady-state thermal analysis (M5.1)", () => {
     expect(settings().getByText("Enter the thermal conductivity; a steady-state thermal analysis needs it.")).toBeTruthy();
     expect(settings().queryByText("Enter Young's modulus.")).toBeNull();
     expect(
-      settings().getByText("For example 45 W/(m·K) for carbon steel. Needed for a steady-state thermal analysis."),
+      settings().getByText("For example 45 W/(m·K) for carbon steel. Needed for a steady-state thermal and a thermal stress analysis."),
     ).toBeTruthy();
     fireEvent.change(settings().getByLabelText("Thermal conductivity"), { target: { value: "45" } });
     expect(tree().getByRole("button", { name: "Steel, complete" })).toBeTruthy();
@@ -1871,6 +1871,101 @@ describe("steady-state thermal analysis (M5.1)", () => {
         { id: "heat_generation-1", type: "heat_generation", name: "Heat generation 1", bodies: [], power: { value: 5000, unit: "W/m³" } },
       ]),
     );
+  });
+
+  /** A thermal stress setup (M5.4): heated's temperatures on steel with every value, a fixed
+   * support on face 7, stress-free at 20 °C. */
+  const stressed: SimulationSpec = {
+    ...heated,
+    analysis: "thermal_stress",
+    stressFreeTemperature: { value: 20, unit: "°C" },
+    materials: [
+      {
+        ...thermalSpec.materials[0],
+        youngsModulus: { value: 200, unit: "GPa" },
+        poissonsRatio: 0.3,
+        thermalExpansion: { value: 12, unit: "µm/(m·K)" },
+      } as SimulationSpec["materials"][number],
+    ],
+    supports: [{ id: "fixed-1", type: "fixed", name: "Base", faces: [7] }],
+  };
+
+  it("sets up a thermal stress analysis with its stress-free temperature (M5.4)", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation({ ...stressed, stressFreeTemperature: null })], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Analysis, incomplete" }));
+    expect(settings().getByRole("radio", { name: "Thermal stress" })).toHaveProperty("checked", true);
+    expect(settings().getByText("Enter the stress-free temperature.")).toBeTruthy();
+    // Supports and both kinds of load are offered; a uniform temperature change is not.
+    expect(tree().getByRole("button", { name: "Base, complete" })).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Stress-free temperature"), { target: { value: "20" } });
+    await waitFor(() => expect(sent.at(-1)?.stressFreeTemperature).toEqual({ value: 20, unit: "°C" }));
+    expect(tree().getByRole("button", { name: "Analysis, complete" })).toBeTruthy();
+    fireEvent.click(tree().getByRole("button", { name: /^Loads,/ }));
+    const adds = within(settings().getByRole("region", { name: "Loads" }))
+      .getAllByRole("button")
+      .map((b) => b.textContent);
+    expect(adds).toContain("Add a pressure");
+    expect(adds).toContain("Add a fixed temperature");
+    expect(adds).not.toContain("Add a temperature change");
+  });
+
+  it("shows a thermal stress run's stresses and temperatures together (M5.4)", async () => {
+    window.localStorage.clear();
+    const result: SolveResult = {
+      nodes: 7108,
+      displacement: { max: { value: 2e-5, node: 4, position: [0.1, 0.05, 0.02] } },
+      vonMises: {
+        min: { value: 1e6, node: 3, position: [0.1, 0.05, 0] },
+        max: { value: 150e6, node: 40, position: [0, 0, 0] },
+      },
+      reactions: [{ supportId: "fixed-1", force: [0, 0, 0], moment: [0, 0, 0], point: [0.1, 0.025, 0.01] }],
+      loads: [],
+      temperature: {
+        min: { value: 293.15, node: 3, position: [0.1, 0.05, 0] },
+        max: { value: 373.15, node: 40, position: [0, 0, 0] },
+      },
+      heatFlux: { max: { value: 4000, node: 12, position: [0.05, 0, 0] } },
+      heatFlows: [
+        { loadId: "fixed_temperature-1", heat: 25 },
+        { loadId: "fixed_temperature-2", heat: -25 },
+      ],
+      heatBalance: { heatIn: 25, heatOut: 25, scale: 25, ratio: 0 },
+      software: { calculix: "2.21" },
+    };
+    const fields = encodeFields(7, [
+      { name: "displacement", kind: "length", components: 3, values: Array.from({ length: 21 }, (_, k) => (k % 3 === 0 ? 1e-5 : 0)) },
+      { name: "vonMises", kind: "pressure", components: 1, values: Array.from({ length: 7 }, (_, v) => 1e6 + v * 1e6) },
+      { name: "temperature", kind: "temperature", components: 1, values: Array.from({ length: 7 }, (_, v) => 293.15 + (80 * v) / 6) },
+    ]);
+    const routes_ = thermalRun();
+    const runs = routes_["GET /api/simulations/s1/runs"] as { status: number; json: { runs: RunView[] } };
+    const [first] = runs.json.runs;
+    if (!first) throw new Error("no run");
+    routes_["GET /api/simulations/s1/runs"] = { status: 200, json: { runs: [{ ...first, spec: stressed, result }] } };
+    routes_["GET /api/runs/r1/fields"] = { status: 200, bytes: fields };
+    serve(routes([simulation(stressed)], routes_));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const legend = await screen.findByLabelText("Legend");
+    expect(legend.textContent).toContain("Von Mises stress");
+    // The temperature is one of the quantities, drawn on the deformed shape.
+    const quantity = settings().getByLabelText("Quantity") as HTMLSelectElement;
+    expect([...quantity.querySelectorAll("optgroup")].map((g) => g.label)).toContain("Temperature");
+    fireEvent.change(quantity, { target: { value: "temperature" } });
+    expect(legend.textContent).toContain("Temperature (°C)");
+    expect(settings().getByLabelText("Shape")).toBeTruthy();
+    const structural = within(settings().getByLabelText("Run results"));
+    expect(structural.getByText("Largest von Mises stress").nextElementSibling?.textContent).toBe("150 MPa at (0, 0, 0) mm");
+    const thermal = within(settings().getByLabelText("Thermal results"));
+    expect(thermal.getByText("Highest temperature").nextElementSibling?.textContent).toBe("100 °C at (0, 0, 0) mm");
+    expect(thermal.getByText("Heat flow, Hot").nextElementSibling?.textContent).toBe("25 W in");
+    const exports = within(settings().getByRole("region", { name: "Export" }));
+    expect(exports.getByRole("button", { name: "Reactions and loads (CSV)" })).toBeTruthy();
+    expect(exports.getByRole("button", { name: "Heat flows (CSV)" })).toBeTruthy();
+    expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
+    window.localStorage.clear();
   });
 
   it("shows a thermal run's highest and lowest temperature and draws the temperature alone", async () => {

@@ -150,17 +150,36 @@ export const loadKinds = {
 export const analysisKinds = {
   linear_static: "Linear static",
   steady_thermal: "Steady-state thermal",
+  thermal_stress: "Thermal stress",
 } as const;
 
-/** The load types each analysis type takes (M5.1, ADR-064; M5.2, ADR-065); supports belong to linear static only. */
+const structuralLoads = ["pressure", "force", "remote", "hydrostatic", "gravity", "centrifugal"] as const;
+const thermalLoads = ["fixed_temperature", "heat_flux", "convection", "radiation", "heat_generation"] as const;
+
+/**
+ * The load types each analysis type takes (M5.1, ADR-064; M5.2, ADR-065). A thermal stress
+ * analysis (M5.4, ADR-067) takes both kinds but not a uniform temperature change, since its
+ * temperatures come from its thermal step. Supports belong to the analyses with a static step.
+ */
 export const analysisLoads: Record<AnalysisType, readonly Load["type"][]> = {
-  linear_static: ["pressure", "force", "remote", "hydrostatic", "gravity", "centrifugal", "temperature"],
-  steady_thermal: ["fixed_temperature", "heat_flux", "convection", "radiation", "heat_generation"],
+  linear_static: [...structuralLoads, "temperature"],
+  steady_thermal: thermalLoads,
+  thermal_stress: [...structuralLoads, ...thermalLoads],
 };
 
 /** True for an analysis that solves temperatures only, with no displacement or stress (M5.1). */
 export function isThermal(spec: Pick<SimulationSpec, "analysis">): boolean {
   return spec.analysis === "steady_thermal";
+}
+
+/** True for an analysis with a thermal step, which solves temperatures (M5.1, M5.4). */
+export function solvesTemperature(spec: Pick<SimulationSpec, "analysis">): boolean {
+  return spec.analysis === "steady_thermal" || spec.analysis === "thermal_stress";
+}
+
+/** True for an analysis with a static step, which takes supports and solves displacements and stresses (M5.4). */
+export function solvesStress(spec: Pick<SimulationSpec, "analysis">): boolean {
+  return spec.analysis !== "steady_thermal";
 }
 
 /** What a local mesh size applies to, as the setup and its messages name it (M2.8). */
@@ -485,6 +504,10 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
       }
     }
   }
+  add(
+    "analysis",
+    unitProblem(spec.stressFreeTemperature ?? null, "temperature", "The stress-free temperature", false),
+  );
   add("mesh", unitProblem(spec.mesh.size, "length", "The global mesh size", true));
   for (const item of spec.mesh.local ?? []) {
     add(item.id, unitProblem(item.size, "length", `The size of local mesh size "${item.name}"`, true));

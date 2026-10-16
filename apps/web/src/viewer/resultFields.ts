@@ -149,13 +149,24 @@ const THERMAL_QUANTITIES: readonly Quantity[] = ["temperature", "heatFlux", "hea
  * temperature, with no displacement, stress or reactions.
  */
 export function isThermalRun(run: Pick<RunView, "spec" | "result">): boolean {
-  return run.spec.analysis === "steady_thermal" || run.result?.temperature !== undefined;
+  if (run.spec.analysis === "thermal_stress") return false;
+  return run.spec.analysis === "steady_thermal" || (run.result?.temperature !== undefined && run.result.vonMises === undefined);
+}
+
+/**
+ * True for a run of a thermal stress analysis (M5.4, ADR-067): the structural results of its
+ * static step and the temperatures and heat fluxes of its thermal step.
+ */
+export function isThermalStressRun(run: Pick<RunView, "spec">): boolean {
+  return run.spec.analysis === "thermal_stress";
 }
 
 /** The quantities a run has fields for, in menu order: the temperature and heat flux for a
- * thermal run (a thermal run solved before M5.3 has no heat flux; the view says so). */
+ * thermal run (a thermal run solved before M5.3 has no heat flux; the view says so), and both
+ * the structural and those for a thermal stress run (M5.4). */
 export function runQuantities(run: Pick<RunView, "spec" | "result">): Quantity[] {
   const all = Object.keys(QUANTITIES) as Quantity[];
+  if (isThermalStressRun(run)) return all;
   return isThermalRun(run) ? [...THERMAL_QUANTITIES] : all.filter((q) => !THERMAL_QUANTITIES.includes(q));
 }
 

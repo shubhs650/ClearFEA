@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Nodal displacement, stress and strain from the solver output, and the derived von Mises
 and principal stresses; nodal temperatures and heat flux of a steady-state thermal run (M5.1,
-M5.3).
+M5.3), and both of a thermal stress run (M5.4).
 
 Physics-critical (ADR-030, ADR-050). CalculiX writes stresses and strains extrapolated from the
 integration points to the nodes and averaged over the elements that share a node; von Mises
@@ -29,20 +29,6 @@ HEAT_FLUX = ("F1", "F2", "F3")
 
 
 @dataclass(frozen=True)
-class NodalFields:
-    """``displacement[3 n + i]`` (m), ``stress[6 n + i]`` (Pa, in STRESS order) and
-    ``strain[6 n + i]`` (m/m, in STRAIN order, tensor shear components) of node n, and since
-    M3.5 ``safety_factor[n]``, its safety factor against yield (results.safety), when every
-    material of the setup has a yield strength."""
-
-    node_count: int
-    displacement: array
-    stress: array
-    strain: array
-    safety_factor: array | None = None
-
-
-@dataclass(frozen=True)
 class ThermalFields:
     """``temperature[n]``: the temperature of node n in kelvin (M5.1), and since M5.3
     ``heat_flux[3 n + i]``: component i of its heat flux in W/m², both as CalculiX wrote them."""
@@ -50,6 +36,22 @@ class ThermalFields:
     node_count: int
     temperature: array
     heat_flux: array
+
+
+@dataclass(frozen=True)
+class NodalFields:
+    """``displacement[3 n + i]`` (m), ``stress[6 n + i]`` (Pa, in STRESS order) and
+    ``strain[6 n + i]`` (m/m, in STRAIN order, tensor shear components) of node n, and since
+    M3.5 ``safety_factor[n]``, its safety factor against yield (results.safety), when every
+    material of the setup has a yield strength. A thermal stress run (M5.4) also has the
+    temperatures and heat fluxes its thermal step solved, ``thermal``."""
+
+    node_count: int
+    displacement: array
+    stress: array
+    strain: array
+    safety_factor: array | None = None
+    thermal: ThermalFields | None = None
 
 
 def read_thermal_fields(frd: Path, node_count: int) -> ThermalFields:

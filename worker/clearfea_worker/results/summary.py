@@ -5,8 +5,8 @@ Largest displacement magnitude, smallest and largest von Mises stress and (M3.5)
 safety factor against yield with the node and position where each occurs, the reaction force
 and moment of every support, each load's total force and moment, and the balance check of the
 two. For a steady-state thermal run, the smallest and largest temperature (M5.1), the largest
-heat flux, each thermal load's heat flow and the heat balance (M5.3, results.heat). SI
-throughout.
+heat flux, each thermal load's heat flow and the heat balance (M5.3, results.heat); a thermal
+stress run has both (M5.4). SI throughout.
 """
 
 import math
@@ -39,12 +39,15 @@ from .safety import safety_factor_field
 @dataclass(frozen=True)
 class Reaction:
     """One support's reaction: total force (N), its moment (N·m) about ``point`` (m), the area
-    centroid of the support's faces, and its moment about the origin for the balance check."""
+    centroid of the support's faces, its moment about the origin for the balance check, and
+    the sum of the sizes of its nodal forces (N), which the balance check is measured against
+    when no load is applied (M5.4)."""
 
     force: Vector
     moment: Vector
     point: Vector
     origin_moment: Vector
+    gross: float = 0.0
 
 
 def _at(mesh: VolumeMesh, field: array, node: int) -> dict[str, object]:
@@ -82,13 +85,17 @@ def balance(
     temperature change or a prescribed displacement applies no load, and its reactions must
     balance each other, as in the verification harness, ADR-039); its moment also against
     that force times the model's size, so a load through the origin does not leave the
-    moment measured against nothing.
+    moment measured against nothing. With no load at all, the reactions' sizes are those of
+    their nodal forces: a body heated on one fixed support pushes on it at every node while
+    the total is zero, which would otherwise measure the rounding against itself (ADR-067).
     """
     applied_f = [sum(load.force[i] for load in loads) for i in range(3)]
     applied_m = [sum(load.moment[i] for load in loads) for i in range(3)]
     reaction_f = [sum(r.force[i] for r in reactions) for i in range(3)]
     reaction_m = [sum(r.origin_moment[i] for r in reactions) for i in range(3)]
-    force_scale = max(sum(load.gross for load in loads), sum(norm(r.force) for r in reactions))
+    applied = sum(load.gross for load in loads)
+    held = sum(max(r.gross, norm(r.force)) if applied == 0.0 else norm(r.force) for r in reactions)
+    force_scale = max(applied, held)
     moment_scale = max(
         norm(applied_m),
         sum(norm(r.origin_moment) for r in reactions),
@@ -115,10 +122,16 @@ def summarize(
     reactions: list[Reaction],
     calculix: str,
 ) -> SolveResult:
-    """``reactions``: the reaction of each support, in spec order."""
+    """``reactions``: the reaction of each support, in spec order. The loads are the
+    structural ones; a thermal stress run's thermal loads apply no force (M5.4)."""
     magnitude = displacement_magnitude(fields)
     mises = von_mises_field(fields)
-    loads = load_resultants(spec, mesh)
+    pairs = [
+        (load, total)
+        for load, total in zip(spec.loads, load_resultants(spec, mesh), strict=True)
+        if not isinstance(load, THERMAL_LOADS)
+    ]
+    loads = [total for _, total in pairs]
     return SolveResult.model_validate(
         {
             "nodes": fields.node_count,
@@ -138,7 +151,7 @@ def summarize(
             ],
             "loads": [
                 {"loadId": load.id, "force": list(total.force), "moment": list(total.moment)}
-                for load, total in zip(spec.loads, loads, strict=True)
+                for load, total in pairs
             ],
             "balance": balance(mesh, loads, reactions),
             **(
@@ -161,22 +174,40 @@ def summarize_thermal(
     """A steady-state thermal run's summary: the smallest and largest temperature (M5.1), the
     largest heat flux, and the heat flow of each thermal load (``flows``, in spec order, from
     results.heat) with the heat balance (M5.3)."""
-    t = fields.temperature
-    q = heat_flux_magnitude(fields)
-    loads = [x for x in spec.loads if isinstance(x, THERMAL_LOADS)]
     return SolveResult.model_validate(
         {
             "nodes": fields.node_count,
-            "temperature": {"min": _at(mesh, t, _argmin(t)), "max": _at(mesh, t, _argmax(t))},
-            "heatFlux": {"max": _at(mesh, q, _argmax(q))},
-            "heatFlows": [
-                {"loadId": load.id, "heat": flow.heat}
-                for load, flow in zip(loads, flows, strict=True)
-            ],
-            "heatBalance": heat_balance(flows, balance_floor(spec, mesh, t)),
+            **_thermal_summary(spec, mesh, fields, flows),
             "software": {"calculix": calculix},
         }
     )
+
+
+def _thermal_summary(
+    spec: SimulationSpec, mesh: VolumeMesh, fields: ThermalFields, flows: list[HeatFlow]
+) -> dict[str, object]:
+    t = fields.temperature
+    q = heat_flux_magnitude(fields)
+    loads = [x for x in spec.loads if isinstance(x, THERMAL_LOADS)]
+    return {
+        "temperature": {"min": _at(mesh, t, _argmin(t)), "max": _at(mesh, t, _argmax(t))},
+        "heatFlux": {"max": _at(mesh, q, _argmax(q))},
+        "heatFlows": [
+            {"loadId": load.id, "heat": flow.heat} for load, flow in zip(loads, flows, strict=True)
+        ],
+        "heatBalance": heat_balance(flows, balance_floor(spec, mesh, t)),
+    }
+
+
+def _read_thermal(
+    spec: SimulationSpec, mesh: VolumeMesh, frd: Path, dat: Path
+) -> tuple[ThermalFields, list[HeatFlow]]:
+    thermal = read_thermal_fields(frd, mesh.node_count)
+    try:
+        flows = read_heat_flows(spec, mesh, thermal.temperature, dat)
+    except ValueError as error:
+        raise DatError(str(error)) from None
+    return thermal, flows
 
 
 def read_results(
@@ -184,17 +215,21 @@ def read_results(
 ) -> tuple[NodalFields | ThermalFields, SolveResult]:
     """Reads the solver output of a deck made from ``spec`` and ``mesh``, with the safety
     factor against yield when every material has a yield strength (ADR-054). A steady-state
-    thermal run has temperatures and heat fluxes (M5.1, M5.3)."""
+    thermal run has temperatures and heat fluxes (M5.1, M5.3); a thermal stress run has those
+    of its heat transfer step beside the structural results of its static step (M5.4): each
+    block of the result files is asked for in one step only, so each is read as before."""
     if spec.analysis == "steady_thermal":
-        thermal = read_thermal_fields(frd, mesh.node_count)
-        try:
-            flows = read_heat_flows(spec, mesh, thermal.temperature, dat)
-        except ValueError as error:
-            raise DatError(str(error)) from None
+        thermal, flows = _read_thermal(spec, mesh, frd, dat)
         return thermal, summarize_thermal(spec, mesh, thermal, flows, calculix)
     fields = read_fields(frd, mesh.node_count)
     fields = replace(fields, safety_factor=safety_factor_field(spec, mesh, fields))
-    return fields, summarize(spec, mesh, fields, read_reactions(spec, mesh, dat), calculix)
+    result = summarize(spec, mesh, fields, read_reactions(spec, mesh, dat), calculix)
+    if spec.analysis != "thermal_stress":
+        return fields, result
+    thermal, flows = _read_thermal(spec, mesh, frd, dat)
+    summary = result.model_dump(by_alias=True, exclude_none=True)
+    summary.update(_thermal_summary(spec, mesh, thermal, flows))
+    return replace(fields, thermal=thermal), SolveResult.model_validate(summary)
 
 
 def read_reactions(spec: SimulationSpec, mesh: VolumeMesh, dat: Path) -> list[Reaction]:
@@ -246,7 +281,9 @@ def _reaction(mesh: VolumeMesh, faces: list[int], nodal: dict[int, Vector]) -> R
     force = [0.0, 0.0, 0.0]
     moment = [0.0, 0.0, 0.0]
     origin = [0.0, 0.0, 0.0]
+    gross = 0.0
     for node, f in nodal.items():
+        gross += norm(f)
         x = (p[3 * node], p[3 * node + 1], p[3 * node + 2])
         about = cross([x[i] - point[i] for i in range(3)], f)
         m0 = cross(x, f)
@@ -259,6 +296,7 @@ def _reaction(mesh: VolumeMesh, faces: list[int], nodal: dict[int, Vector]) -> R
         (moment[0], moment[1], moment[2]),
         point,
         (origin[0], origin[1], origin[2]),
+        gross,
     )
 
 

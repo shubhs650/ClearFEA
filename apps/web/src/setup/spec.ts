@@ -31,6 +31,7 @@ import {
   sameMeshSettings,
   setsTemperature,
   simulationSpecProblems,
+  solvesTemperature,
   specBonds,
   supportKinds,
   type TopologyTags,
@@ -97,15 +98,24 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
     errors.set(problem.item, [...(errors.get(problem.item) ?? []), problem.message]);
   }
   // Thermal loads on a face that cannot take them (M5.2) are errors of the later load.
-  if (isThermal(spec)) {
+  if (solvesTemperature(spec)) {
     for (const problem of faceHeatConflicts(spec)) errors.set(problem.item, [...(errors.get(problem.item) ?? []), problem.message]);
   }
   const errorsOf = (item: string) => errors.get(item) ?? [];
   const result = new Map<string, ItemStatus>();
-  // The analysis type (M5.1) always has one of its values.
-  result.set("analysis", { mark: "complete", notes: [] });
+  // The analysis type (M5.1) always has one of its values; a thermal stress analysis (M5.4)
+  // needs its stress-free temperature.
+  const thermalStress = spec.analysis === "thermal_stress";
+  result.set(
+    "analysis",
+    status(
+      errorsOf("analysis"),
+      thermalStress && (spec.stressFreeTemperature ?? null) === null ? ["Enter the stress-free temperature."] : [],
+    ),
+  );
   // A steady-state thermal analysis (M5.1, ADR-064) needs conductivities and fixed temperatures;
-  // supports and structural loads have no effect in it, as preRunProblems says.
+  // supports and structural loads have no effect in it, as preRunProblems says. A thermal stress
+  // analysis needs what both steps need.
   const thermal = isThermal(spec);
 
   const bodyLoad = hasBodyLoad(spec);
@@ -117,10 +127,15 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
         missing.push("Enter the thermal conductivity; a steady-state thermal analysis needs it.");
       }
     } else {
+      if (thermalStress && (m.thermalConductivity ?? null) === null) {
+        missing.push("Enter the thermal conductivity; a thermal stress analysis needs it.");
+      }
       if (m.youngsModulus === null) missing.push("Enter Young's modulus.");
       if (m.poissonsRatio === null) missing.push("Enter Poisson's ratio.");
       if (bodyLoad && (m.density ?? null) === null) missing.push("Enter the density; gravity and centrifugal loads need it.");
-      if (temperatureChange && (m.thermalExpansion ?? null) === null) {
+      if (thermalStress && (m.thermalExpansion ?? null) === null) {
+        missing.push("Enter the thermal expansion; a thermal stress analysis needs it.");
+      } else if (temperatureChange && (m.thermalExpansion ?? null) === null) {
         missing.push("Enter the thermal expansion; the temperature change needs it.");
       }
     }
@@ -153,7 +168,9 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
       : spec.materials.length === 0
         ? ["Add a material under Materials, then pick each body's material here."]
         : [`Pick a material for ${unassigned.join(", ")}.`];
-  const bodyMessages = thermal ? thermalBodyMessages(spec, topology) : unheldBodyMessages(spec, topology);
+  const bodyMessages = thermal
+    ? thermalBodyMessages(spec, topology)
+    : [...(thermalStress ? thermalBodyMessages(spec, topology) : []), ...unheldBodyMessages(spec, topology)];
   result.set("bodies", status(errorsOf("bodies"), [...bodiesMissing, ...bodyMessages]));
   // Bonds (M4.2): incomplete while a detected bond awaits review. Detected bonds are tied all the
   // same, so this is a reminder, not something a run waits for.
@@ -206,8 +223,9 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   });
   // A prescribed displacement other than zero loads the part by itself (ADR-039).
   // A thermal setup needs a load that sets the temperature (M5.2, ADR-065).
-  const needsLoad = thermal ? !spec.loads.some(setsTemperature) : spec.loads.length === 0 && !movesByDisplacement(spec);
-  const addLoadNote = thermal ? "Add a fixed temperature, convection or radiation." : "Add a load.";
+  const temperatures = solvesTemperature(spec);
+  const needsLoad = temperatures ? !spec.loads.some(setsTemperature) : spec.loads.length === 0 && !movesByDisplacement(spec);
+  const addLoadNote = temperatures ? "Add a fixed temperature, convection or radiation." : "Add a load.";
   result.set("loads", worst([status([], needsLoad ? [addLoadNote] : []), ...loads]));
 
   const settings = status(errorsOf("mesh"), spec.mesh.size === null ? ["Enter a global mesh size."] : []);

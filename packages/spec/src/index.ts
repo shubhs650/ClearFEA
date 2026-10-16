@@ -26,6 +26,8 @@ export {
   setsTemperature,
   type SpecProblem,
   simulationSpecProblems,
+  solvesStress,
+  solvesTemperature,
   specBonds,
   unheldBodies,
   supportKinds,

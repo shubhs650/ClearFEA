@@ -427,6 +427,44 @@ def bonded_slide_spec() -> dict:
     return spec
 
 
+def thermal_stress_spec() -> dict:
+    """A thermal stress analysis of M5.4 (ADR-067) on the one-body mesh: heat_loads_spec's
+    fixed temperature on face 1, convection on face 3 and radiation on face 4, a fixed support
+    on face 2, a pressure on face 4 and gravity; steel in US units with a thermal expansion and
+    a density; stress-free at 68 °F."""
+    spec = heat_loads_spec()
+    spec["analysis"] = "thermal_stress"
+    spec["stressFreeTemperature"] = {"value": 68, "unit": "°F"}
+    spec["materials"][1] |= {
+        "youngsModulus": {"value": 29000, "unit": "ksi"},
+        "poissonsRatio": 0.29,
+        "density": {"value": 0.284, "unit": "lb/in³"},
+        "thermalExpansion": {"value": 6.5, "unit": "µin/(in·°F)"},
+    }
+    spec["supports"] = [{"id": "fixed-1", "type": "fixed", "name": "Base", "faces": [2]}]
+    spec["loads"] = [
+        spec["loads"][0],
+        spec["loads"][3],
+        spec["loads"][4],
+        {
+            "id": "p-1",
+            "type": "pressure",
+            "name": "Inside",
+            "faces": [4],
+            "magnitude": {"value": 150, "unit": "psi"},
+        },
+        {
+            "id": "g-1",
+            "type": "gravity",
+            "name": "Weight",
+            "x": {"value": 0, "unit": "m/s²"},
+            "y": {"value": 0, "unit": "m/s²"},
+            "z": {"value": -1, "unit": "g"},
+        },
+    ]
+    return spec
+
+
 def deck(spec: dict, mesh: VolumeMesh) -> str:
     return generate_deck(SimulationSpec.model_validate(spec), mesh)
 
@@ -490,6 +528,7 @@ SNAPSHOT_CASES = {
     "heat-c3d10": (heat_spec, lambda: two_tets(order=2)),
     "heat-two-bodies-c3d4": (heat_two_bodies_spec, lambda: bonded_tets(1)),
     "heat-loads-c3d10": (heat_loads_spec, lambda: two_tets(order=2)),
+    "thermal-stress-c3d10": (thermal_stress_spec, lambda: two_tets(order=2)),
 }
 
 
@@ -1438,3 +1477,107 @@ def test_refuses_thermal_loads_in_a_static_analysis(load: int) -> None:
     spec["loads"].append(item)
     with pytest.raises(DeckError, match=f'"{item["name"]}" has no effect in a linear static'):
         deck(spec, two_tets(order=2))
+
+
+# --- Thermal stress (M5.4, ADR-067) ---
+
+
+def test_thermal_stress_is_a_heat_step_then_a_static_step_from_the_stress_free_temperature() -> (
+    None
+):
+    lines = deck(thermal_stress_spec(), two_tets(order=2)).splitlines()
+    assert lines[4] == "ClearFEA thermal stress analysis"
+    assert "Units: SI (m, kg, s, N, Pa, K, W)." in lines[1]
+    # Every node starts at the stress-free temperature, 68 °F, also where radiation would
+    # otherwise start it at the mean known temperature.
+    start = lines.index("*INITIAL CONDITIONS, TYPE=TEMPERATURE")
+    assert lines[start + 1] == "NALL, 293.15000000000003"
+    assert lines.count("*INITIAL CONDITIONS, TYPE=TEMPERATURE") == 1
+    steps = [k for k, line in enumerate(lines) if line == "*STEP"]
+    assert len(steps) == 2 and start < steps[0]
+    assert lines[steps[0] + 1] == "*HEAT TRANSFER, STEADY STATE, SOLVER=PASTIX"
+    assert lines[steps[1] + 1 : steps[1] + 3] == ["*STATIC, SOLVER=PASTIX", "1.0, 1.0, 1.0, 1.0"]
+    heat, static = lines[steps[0] : steps[1]], lines[steps[1] :]
+    assert "*FILM" in heat and "*RADIATE" in heat and "*DLOAD" not in heat
+    assert "*DLOAD" in static and "*FILM" not in static and "*TEMPERATURE" not in static
+    # One material with every property the two steps need.
+    material = lines.index("*MATERIAL, NAME=M2")
+    assert [x for x in lines[material:] if x[:1] == "*" and x[:2] != "**"][:5] == [
+        "*MATERIAL, NAME=M2",
+        "*CONDUCTIVITY",
+        "*ELASTIC",
+        "*DENSITY",
+        "*EXPANSION",
+    ]
+    assert lines.count("*MATERIAL, NAME=M2") == 1 and "*MATERIAL, NAME=M1" not in lines
+
+
+def test_the_thermal_stress_static_step_is_the_linear_static_one() -> None:
+    """The static step and the supports' sets are written as for a linear static analysis of
+    the structural loads alone; only the increment line is added."""
+    spec = thermal_stress_spec()
+    static = copy.deepcopy(spec)
+    static["analysis"] = "linear_static"
+    static["loads"] = static["loads"][3:]
+    static["materials"][1]["thermalConductivity"] = None
+    linear = deck(static, two_tets(order=2)).splitlines()
+    both = deck(spec, two_tets(order=2)).splitlines()
+    second = both[[k for k, x in enumerate(both) if x == "*STEP"][1] :]
+    assert (
+        second
+        == linear[linear.index("*STEP") :][:2]
+        + ["1.0, 1.0, 1.0, 1.0"]
+        + linear[linear.index("*STEP") + 2 :]
+    )
+    assert "*NSET, NSET=S1" in both and "*NSET, NSET=RALL" in both
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (lambda s: s.update(stressFreeTemperature=None), "no stress-free temperature"),
+        (
+            lambda s: s.update(stressFreeTemperature={"value": -500, "unit": "°F"}),
+            "stress-free temperature is at or below absolute zero",
+        ),
+        (
+            lambda s: s.update(stressFreeTemperature={"value": 1, "unit": "m"}),
+            "not a temperature unit",
+        ),
+        (
+            lambda s: s["materials"][1].update(thermalExpansion=None),
+            "has no thermal expansion. A thermal stress analysis needs it",
+        ),
+        (
+            lambda s: s["materials"][1].update(thermalConductivity=None),
+            "has no thermal conductivity",
+        ),
+        (lambda s: s.update(supports=[]), "no supports"),
+        (lambda s: s.update(loads=s["loads"][3:]), "no fixed temperature, convection or radiation"),
+        (
+            lambda s: s["loads"].append(
+                {
+                    "id": "dt",
+                    "type": "temperature",
+                    "name": "Warm",
+                    "change": {"value": 9, "unit": "K"},
+                }
+            ),
+            'Temperature change "Warm" has no effect in a thermal stress analysis',
+        ),
+    ],
+)
+def test_refuses_thermal_stress_setups_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
+    spec = thermal_stress_spec()
+    change(spec)
+    with pytest.raises(DeckError, match=re.escape(message)):
+        deck(spec, two_tets(order=2))
+
+
+def test_refuses_bonded_bodies_in_a_thermal_stress_analysis() -> None:
+    spec = thermal_stress_spec()
+    spec["bodies"] = [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
+    spec["bonds"] = [{"faces": [1, 3], "status": "accepted"}]
+    spec["loads"] = [spec["loads"][0]]
+    with pytest.raises(DeckError, match="Bonds do not carry heat in a thermal stress analysis"):
+        deck(spec, bonded_tets(2))

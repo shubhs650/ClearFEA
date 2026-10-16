@@ -52,10 +52,12 @@ import {
   type ResultUnits,
   STATIC_KINDS,
   THERMAL_KINDS,
+  THERMAL_STRESS_KINDS,
   unitsOf,
 } from "./displayUnits";
 import {
   isThermalRun,
+  isThermalStressRun,
   QUANTITIES,
   type Quantity,
   type QuantityGroup,
@@ -394,11 +396,22 @@ function heatFlowText(heat: number, unit: string): string {
 /** The figures of a steady-state thermal run (M5.1): its highest and lowest temperature, where
  * they are, and since M5.3 its largest heat flux, the heat each thermal load brings in or takes
  * out, and the heat balance. Absolute temperatures, converted with their offset. Numbers only. */
-function ThermalFigures({ result, spec, units }: { result: SolveResult; spec: SimulationSpec; units: ResultUnits }) {
+function ThermalFigures({
+  result,
+  spec,
+  units,
+  label = "Run results",
+}: {
+  result: SolveResult;
+  spec: SimulationSpec;
+  units: ResultUnits;
+  /** "Thermal results" beside a thermal stress run's structural ones (M5.4). */
+  label?: string;
+}) {
   const { temperature, heatFlux, heatFlows, heatBalance } = result;
   const loadName = new Map(spec.loads.map((l) => [l.id, l.name]));
   return (
-    <dl className="geometry-facts" aria-label="Run results">
+    <dl className="geometry-facts" aria-label={label}>
       {temperature === undefined ? (
         <>
           <dt>Temperature</dt>
@@ -612,8 +625,10 @@ export function RunPanel({
 }) {
   const solving = run?.status === "solving";
   const result = run?.status === "succeeded" ? run.result : null;
-  // A steady-state thermal run (M5.1) has temperatures only.
+  // A steady-state thermal run (M5.1) has temperatures only; a thermal stress run (M5.4) has
+  // the structural results and the temperatures and heat flows of its thermal step.
   const thermal = run !== null && isThermalRun(run);
+  const thermalStress = run !== null && isThermalStressRun(run);
   const quantities = run === null ? [] : runQuantities(run);
   // The size to run on: the recommended one (the largest when none fits) until the user picks
   // another for this estimate.
@@ -694,7 +709,7 @@ export function RunPanel({
       )}
       {result && (
         <DisplayUnits
-          kinds={thermal ? THERMAL_KINDS : STATIC_KINDS}
+          kinds={thermal ? THERMAL_KINDS : thermalStress ? THERMAL_STRESS_KINDS : STATIC_KINDS}
           choice={unitChoice}
           onChange={onUnitChange}
           onReset={onUnitReset}
@@ -742,6 +757,9 @@ export function RunPanel({
           {run !== null && <Reactions result={result} spec={run.spec} units={units} />}
         </dl>
       )}
+      {result && thermalStress && run !== null && (
+        <ThermalFigures result={result} spec={run.spec} units={units} label="Thermal results" />
+      )}
       {run !== null &&
         result &&
         runReportNotes(run.spec).map((note) => (
@@ -749,7 +767,7 @@ export function RunPanel({
             <strong>{note.title}.</strong> {note.text}
           </p>
         ))}
-      {run !== null && result && <RunExport run={run} result={result} units={units} thermal={thermal} />}
+      {run !== null && result && <RunExport run={run} result={result} units={units} thermal={thermal} thermalStress={thermalStress} />}
       {run !== null && <RunRecord run={run} currentSpec={currentSpec} />}
       {run !== null && (
         <details className="run-log" open={solving}>

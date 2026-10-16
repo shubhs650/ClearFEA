@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-18: a quarter of a long thick tube, hot bore and cool outside, held at both ends against
+# axial growth (plane strain) (M5.4).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-18
+title: Thick cylinder thermal stress
+analysis: thermal_stress
+features: [thermal stress analysis, fixed temperature, frictionless support, stress-free temperature, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  bore: { min: [0, 0, 0], max: [40, 40, 20] }
+  outside: { min: [0, 0, 0], max: [60, 60, 20] }
+  cut-y: { min: [40, 0, 0], max: [60, 0, 20] }
+  cut-x: { min: [0, 40, 0], max: [0, 60, 20] }
+  end-0: { min: [0, 0, 0], max: [60, 60, 0] }
+  end-L: { min: [0, 0, 20], max: [60, 60, 20] }
+mesh:
+  coarse: { value: 5, unit: mm } # four quadratic elements through the wall
+  full: { value: 2.5, unit: mm }
+# The frictionless ends and cuts make the plane strain solution exact everywhere (reference.md),
+# so the checks read whole faces. On the cut y = 0 the yy stress is the hoop stress σθ.
+checks:
+  - name: Hoop stress at the bore, σθ(a)
+    quantity: stress.yy
+    face: cut-y
+    box: { min: [39.9, 0, 0], max: [40.1, 0, 20] }
+    reference: { value: -233.2176, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Hoop stress at the outside, σθ(b)
+    quantity: stress.yy
+    face: cut-y
+    box: { min: [59.9, 0, 0], max: [60.1, 0, 20] }
+    reference: { value: 178.2110, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Axial stress at the bore, σz(a)
+    quantity: stress.zz
+    face: bore
+    reference: { value: -381.9653, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Axial stress at the outside, σz(b)
+    quantity: stress.zz
+    face: outside
+    reference: { value: 29.4633, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: von Mises stress at the bore
+    quantity: vonMises
+    face: bore
+    reference: { value: 333.4770, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: von Mises stress at the outside
+    quantity: vonMises
+    face: outside
+    reference: { value: 165.4586, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.01 }
+  - name: Radial displacement of the bore
+    quantity: displacement.radial
+    face: bore
+    reference: { value: 0.038674, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Radial displacement of the outside
+    quantity: displacement.radial
+    face: outside
+    reference: { value: 0.058012, unit: mm }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Axial force on the end z = 0, Eα 2π Ib / 4
+    quantity: reaction.z
+    support: end-0
+    reference: { value: 233652.34, unit: N }
+    tolerance: { coarse: 0.01, full: 0.005 }
+  - name: Heat in through the bore, (π/2) k L ΔT / ln(b/a)
+    quantity: heatFlow
+    load: bore
+    reference: { value: 418.39017, unit: W }
+    tolerance: { coarse: 0.01, full: 0.005 }

@@ -110,12 +110,10 @@ def extract_surface(mesh: VolumeMesh) -> Surface:
 def node_fields(fields: NodalFields | ThermalFields) -> list[SurfaceField]:
     """Every result field at every node of the mesh, in the order of result-fields.md: what
     nodes.bin holds for cut planes (M3.4, ADR-053). A thermal run has the temperature only
-    (M5.1) and its heat flux (M5.3)."""
+    (M5.1) and its heat flux (M5.3); a thermal stress run has both the structural fields and
+    those two after them (M5.4)."""
     if isinstance(fields, ThermalFields):
-        return [
-            SurfaceField("temperature", "temperature", 1, array("f", fields.temperature)),
-            SurfaceField("heatFlux", "heatFlux", 3, array("f", fields.heat_flux)),
-        ]
+        return _thermal_fields(fields)
     return [
         SurfaceField("displacement", "length", 3, array("f", fields.displacement)),
         SurfaceField("vonMises", "pressure", 1, array("f", von_mises_field(fields))),
@@ -127,6 +125,14 @@ def node_fields(fields: NodalFields | ThermalFields) -> list[SurfaceField]:
             if fields.safety_factor is not None
             else []
         ),
+        *([] if fields.thermal is None else _thermal_fields(fields.thermal)),
+    ]
+
+
+def _thermal_fields(fields: ThermalFields) -> list[SurfaceField]:
+    return [
+        SurfaceField("temperature", "temperature", 1, array("f", fields.temperature)),
+        SurfaceField("heatFlux", "heatFlux", 3, array("f", fields.heat_flux)),
     ]
 
 

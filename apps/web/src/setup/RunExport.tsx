@@ -39,6 +39,7 @@ export function RunExport({
   result,
   units,
   thermal = false,
+  thermalStress = false,
 }: {
   run: RunView;
   result: SolveResult;
@@ -46,6 +47,9 @@ export function RunExport({
   /** A steady-state thermal run (M5.1): temperatures and heat fluxes at the nodes, and heat
    * flows instead of reactions and loads (M5.3). */
   thermal?: boolean;
+  /** A thermal stress run (M5.4): the structural results and the thermal ones, the reactions
+   * and loads and the heat flows. */
+  thermalStress?: boolean;
 }) {
   const [busy, setBusy] = useState<Kind | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -93,15 +97,16 @@ export function RunExport({
       <h3 className="pane-subtitle">Export</h3>
       <div className="export-buttons">
         {button("nodes", "Results at every node (CSV)", !hasNodes)}
-        {thermal
-          ? button("heatFlows", "Heat flows (CSV)", result.heatFlows === undefined)
-          : button("reactions", "Reactions and loads (CSV)")}
+        {!thermal && button("reactions", "Reactions and loads (CSV)")}
+        {(thermal || thermalStress) && button("heatFlows", "Heat flows (CSV)", result.heatFlows === undefined)}
         {button("vtk", "Mesh and results (VTK)", !hasNodes)}
       </div>
       <p className="field-hint">
         {thermal
           ? "CSV files are in the units shown above, the results one row per mesh node numbered as in the solver input. The VTK file (.vtu) holds the mesh and the temperature and heat flux at its nodes in SI units (m, K, W/m²)."
-          : hasNodes
+          : thermalStress && hasNodes
+            ? "CSV files are in the units shown above, one row per mesh node numbered as in the solver input. The VTK file (.vtu) holds the undeformed mesh and every result at its nodes, temperatures and heat fluxes too, in SI units (m, Pa, m/m, K, W/m²); warp by displacement to see the deformed shape."
+            : hasNodes
             ? "CSV files are in the units shown above, one row per mesh node numbered as in the solver input. The VTK file (.vtu) holds the undeformed mesh and every result at its nodes in SI units (m, Pa, m/m); warp by displacement to see the deformed shape."
             : "This run was solved before node values were kept, so only the reactions can be exported. Run again to export the results at every node."}
       </p>
