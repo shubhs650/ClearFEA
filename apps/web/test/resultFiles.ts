@@ -31,10 +31,19 @@ export function encodeFields(vertexCount: number, fields: TestField[]): ArrayBuf
 }
 
 /** Fields for the 7 vertices of display-two-faces.bin: x displacement 0 to 0.6 mm, von Mises
- * 0 to 90 MPa, both rising with the vertex index. */
-export function twoFacesFields(): ArrayBuffer {
+ * 0 to 90 MPa, both rising with the vertex index. Unless `before31`, also the M3.1 fields:
+ * σxx 0 to 60 MPa and τxy 0 to -6 MPa, principal stresses σ1 = σxx, σ3 = τxy, and εxx 0 to
+ * 6e-4 with εxy 0 to 1.2e-4. A run solved before M3.1 has only displacement and von Mises. */
+export function twoFacesFields({ before31 = false } = {}): ArrayBuffer {
   const vertices = 7;
+  const each = (row: (v: number) => number[]) => Array.from({ length: vertices }, (_, v) => row(v)).flat();
+  const m31: TestField[] = [
+    { name: "stress", kind: "pressure", components: 6, values: each((v) => [v * 10e6, 0, 0, -v * 1e6, 0, 0]) },
+    { name: "principalStress", kind: "pressure", components: 3, values: each((v) => [v * 10e6, 0, -v * 1e6]) },
+    { name: "strain", kind: "strain", components: 6, values: each((v) => [v * 1e-4, 0, 0, v * 2e-5, 0, 0]) },
+  ];
   return encodeFields(vertices, [
+    ...(before31 ? [] : m31),
     {
       name: "displacement",
       kind: "length",

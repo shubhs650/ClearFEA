@@ -48,14 +48,14 @@ Stress is checked away from supports and load application points unless the case
 
 | Id | Case | Reference | Added in |
 | --- | --- | --- | --- |
-| V-01 | Thick cylinder, internal pressure, one end fixed and one open | Lamé (open ends): von Mises stress and radial displacement at the bore and the outside | M1 |
+| V-01 | Thick cylinder, internal pressure, one end fixed and one open | Lamé (open ends): von Mises stress and radial displacement at the bore and the outside; hoop stress as σ1, shear stress and tensor shear strain at 45° (M3.1) | M1 |
 | V-02 | Cantilever, end load: a force on an end patch of the top face (a pressure until M2.3) | Timoshenko beam: tip deflection under the patch load, bending stress at mid-length; clamp reaction | M1 |
 | V-03 | Plate with central hole in tension: an eighth on three symmetry planes (ν = 0), d/W = 0.1, a local mesh size on the hole | Kirsch factor 3 for a wide plate, with Howland's finite-width correction (Ktg = 3.025): peak stress at the side of the hole; uniform stress at the pulled end | M2 |
 | V-04 | Remote force and moment on a round stub: an axial force through a point off the axis, a torque and a bending moment | Saint-Venant extension, bending and torsion: von Mises on top, underneath and on the side along the middle, which carry the remote point's lever; clamp reaction equals the force (reaction moments with M3.2) | M2 |
 | V-05 | Tank wall strip clamped at its base, water against one side up to 100 mm below its top (ν = 0) | Base reaction ρ g b H²/2 (ρg × depth-weighted area); bending stress from the cubic moment ρ g b (H − z)³/6 at two depths; top deflection of a cantilever under a triangular load | M2 |
 | V-06 | Thin rotating ring: a quarter on three symmetry planes | Plane stress rotating disc (hoop stress ρω²r² in the thin limit): hoop stress and radial growth on both faces; hoop force ρω²t(b³ − a³)/3 across each cut | M2 |
 | V-07 | Block on an elastic support, pressed by a force on its top, sliding stopped by two symmetry planes | Base settlement F/(k·A), top displacement adding F·H/(E·A), uniform stress F/A, foundation reaction F | M2 |
-| V-08 | Bar with ends restrained (frictionless ends, two symmetry planes), uniform temperature rise | Axial stress −EαΔT (von Mises and end reactions ±EαΔT·A); sideways growth (1 + ν)αΔT | M2 |
+| V-08 | Bar with ends restrained (frictionless ends, two symmetry planes), uniform temperature rise | Axial stress −EαΔT (von Mises, σxx, σ3 and end reactions ±EαΔT·A); sideways growth and total strain (1 + ν)αΔT | M2 |
 | V-09 | Symmetry model against full model: a quarter of V-01's tube on leaning symmetry planes and a frictionless base | Quarter model results equal the full tube's Lamé values; hoop force p·a·L on each cut plane | M2 |
 | V-10 | Column under self-weight, standing on a fixed base | Base reaction equals weight; stress ρg(h − z); top shortening ρgh²/2E | M2 |
 | V-11 | Two bonded blocks against one block | Displacement and stress away from the interface match the single body | M4 |
@@ -71,7 +71,7 @@ Stress is checked away from supports and load application points unless the case
 | V-21 | Fixed-fixed beam frequencies | Euler-Bernoulli, first two bending modes | M6 |
 | V-22 | Unrestrained body | Six rigid-body modes near zero, first elastic mode against reference | M6 |
 | V-23 | NAFEMS LE10, thick plate under pressure | Published target stress at point D; take the value from the NAFEMS document when implementing | M3 |
-| V-24 | Quarter bar stretched by prescribed end displacements on two symmetry planes | Uniform stress Eδ/L, lateral contraction νεy, end reaction σA | M2 |
+| V-24 | Quarter bar stretched by prescribed end displacements on two symmetry planes | Uniform stress Eδ/L (von Mises, σxx, σ1), strains δ/L and −νδ/L, lateral contraction νεy, end reaction σA | M2 |
 | V-25 | V-09's quarter tube with its outside on an elastic support (a stiff sleeve) | Lamé with σr(b) = −k u(b): von Mises and radial displacement at the bore and the outside; the sleeve's and the cut planes' reactions | M2 |
 | V-26 | V-24's kind of quarter bar pulled by a force on its end, meshed with first-order (four-node) tetrahedra | Uniform stress F/A, end displacement FL/(EA), lateral contraction νεy, start reaction F (exact for four-node tetrahedra) | M2 |
 
@@ -107,6 +107,9 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Reaction balance check | V-04, V-05, V-06, V-07, V-08, V-10, V-25, V-03, V-26 |
 | Local mesh refinement | V-03 |
 | First-order elements | V-26 |
+| Stress components | V-01, V-08, V-24 |
+| Principal stresses | V-01, V-08, V-24 |
+| Strain components (total strain, tensor shear) | V-01, V-08, V-24 |
 | Mixed input units | all |
 
 ### Automatic checks on every case
@@ -128,7 +131,7 @@ Playwright drives the real UI against the local system on tiny models. `make e2e
 
 | Test | Covers | Added in |
 | --- | --- | --- |
-| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
+| E-01 | Upload, select face, material, support, pressure, mesh, run, see contour, switch to a principal stress and a strain component (`e01-thin-slice.e2e.ts`, a 40 × 20 × 10 mm block) | M1 |
 | E-02 | Unit entry in mixed units and display-unit switch | M2 |
 | E-03 | Multi-body upload, review bonds, run | M4 |
 | E-04 | Thermal stress setup and result | M5 |

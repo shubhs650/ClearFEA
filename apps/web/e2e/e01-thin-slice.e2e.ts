@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // E-01 (docs/VERIFICATION.md): upload, select faces, material, support, pressure, mesh, run, see
-// the contour, all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at
-// its x = 40 mm end and pressed on its top face, z = 10 mm. Both faces look towards the viewer's
-// starting camera, so they can be clicked without turning the model.
+// the contour and switch to other result quantities (M3.1), all through the UI. The model is a
+// 40 × 20 × 10 mm block (e2e/block.py), fixed at its x = 40 mm end and pressed on its top face,
+// z = 10 mm. Both faces look towards the viewer's starting camera, so they can be clicked
+// without turning the model.
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
@@ -158,5 +159,16 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await expect(legend.getByRole("listitem")).toHaveCount(9);
     await expect(legend).toContainText("Deformed shape, scale ×");
     await page.screenshot({ path: `${OUT}/e01-contour.png` });
+  });
+
+  await test.step("switch to a principal stress and a strain component (M3.1)", async () => {
+    const quantity = settings.getByLabel("Quantity");
+    const legend = page.getByRole("region", { name: "Legend", exact: true });
+    await quantity.selectOption("principal3");
+    await expect(legend).toContainText("Minimum principal stress σ3 (MPa)");
+    await page.screenshot({ path: `${OUT}/e01-principal.png` });
+    await quantity.selectOption("strainZZ");
+    await expect(legend).toContainText("Normal strain εzz (mm/mm)");
+    await page.screenshot({ path: `${OUT}/e01-strain.png` });
   });
 });

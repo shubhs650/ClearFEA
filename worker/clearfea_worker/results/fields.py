@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Nodal displacement and stress from the solver output, and the derived von Mises stress.
+"""Nodal displacement, stress and strain from the solver output, and the derived von Mises
+and principal stresses.
 
-Physics-critical (ADR-030). CalculiX writes stresses extrapolated from the integration points
-to the nodes and averaged over the elements that share a node; von Mises is derived from
-those nodal stresses. Everything is SI: metres and pascals.
+Physics-critical (ADR-030, ADR-050). CalculiX writes stresses and strains extrapolated from the
+integration points to the nodes and averaged over the elements that share a node; von Mises
+and the principal stresses are derived from those nodal stresses. The strain is CalculiX's
+total strain (``E``: elastic plus thermal), with tensor shear components (half the engineering
+shear strain). Everything is SI: metres, pascals and m/m.
 """
 
 import math
@@ -16,21 +19,54 @@ from .frd import FrdError, NodalBlock, read_nodal_blocks
 DISPLACEMENT = ("D1", "D2", "D3")
 #: CalculiX's order: normal stresses, then the shear stresses xy, yz, zx.
 STRESS = ("SXX", "SYY", "SZZ", "SXY", "SYZ", "SZX")
+#: The same order for the total strain.
+STRAIN = ("EXX", "EYY", "EZZ", "EXY", "EYZ", "EZX")
 
 
 @dataclass(frozen=True)
 class NodalFields:
-    """``displacement[3 n + i]`` (m) and ``stress[6 n + i]`` (Pa, in STRESS order) of node n."""
+    """``displacement[3 n + i]`` (m), ``stress[6 n + i]`` (Pa, in STRESS order) and
+    ``strain[6 n + i]`` (m/m, in STRAIN order, tensor shear components) of node n."""
 
     node_count: int
     displacement: array
     stress: array
+    strain: array
 
 
 def von_mises(sxx: float, syy: float, szz: float, sxy: float, syz: float, szx: float) -> float:
     """Von Mises equivalent stress of a stress tensor given by its six components."""
     normal = (sxx - syy) ** 2 + (syy - szz) ** 2 + (szz - sxx) ** 2
     return math.sqrt(0.5 * normal + 3.0 * (sxy**2 + syz**2 + szx**2))
+
+
+def principal_stresses(
+    sxx: float, syy: float, szz: float, sxy: float, syz: float, szx: float
+) -> tuple[float, float, float]:
+    """The principal stresses σ1 ≥ σ2 ≥ σ3: the eigenvalues of the symmetric stress tensor.
+
+    Closed form for a symmetric 3 × 3 matrix (O. K. Smith, "Eigenvalues of a symmetric 3 × 3
+    matrix", Communications of the ACM 4(4), 1961): with q the mean normal stress and p the
+    size of the deviator, the eigenvalues are q + 2 p cos(φ + 2πk/3), φ = acos(det(B) / 2) / 3,
+    B = (σ − q I) / p. Exact for a diagonal tensor; the middle value comes from the trace so
+    the three add up to it.
+    """
+    q = (sxx + syy + szz) / 3.0
+    dx, dy, dz = sxx - q, syy - q, szz - q
+    shear = sxy * sxy + syz * syz + szx * szx
+    p2 = (dx * dx + dy * dy + dz * dz + 2.0 * shear) / 6.0
+    if shear == 0.0 or p2 == 0.0:
+        a, b, c = sorted((sxx, syy, szz), reverse=True)
+        return a, b, c
+    p = math.sqrt(p2)
+    bx, by, bz, bxy, byz, bzx = dx / p, dy / p, dz / p, sxy / p, syz / p, szx / p
+    det = bx * (by * bz - byz * byz) - bxy * (bxy * bz - byz * bzx) + bzx * (bxy * byz - by * bzx)
+    phi = math.acos(min(max(det / 2.0, -1.0), 1.0)) / 3.0
+    first = q + 2.0 * p * math.cos(phi)
+    third = q + 2.0 * p * math.cos(phi + 2.0 * math.pi / 3.0)
+    second = 3.0 * q - first - third
+    a, b, c = sorted((first, second, third), reverse=True)
+    return a, b, c
 
 
 def _ordered(block: NodalBlock, names: tuple[str, ...]) -> array:
@@ -51,14 +87,16 @@ def _ordered(block: NodalBlock, names: tuple[str, ...]) -> array:
 
 
 def read_fields(frd: Path, node_count: int) -> NodalFields:
-    """Displacement and stress of every node from the ``.frd`` file."""
-    blocks = read_nodal_blocks(frd, node_count, {"DISP", "STRESS"})
+    """Displacement, stress and total strain of every node from the ``.frd`` file."""
+    blocks = read_nodal_blocks(frd, node_count, {"DISP", "STRESS", "TOSTRAIN"})
     fields = NodalFields(
         node_count,
         _ordered(blocks["DISP"], DISPLACEMENT),
         _ordered(blocks["STRESS"], STRESS),
+        _ordered(blocks["TOSTRAIN"], STRAIN),
     )
-    if not all(math.isfinite(v) for v in (*fields.displacement, *fields.stress)):
+    values = (*fields.displacement, *fields.stress, *fields.strain)
+    if not all(math.isfinite(v) for v in values):
         raise FrdError("The result file holds values that are not finite numbers.")
     return fields
 
@@ -77,3 +115,12 @@ def displacement_magnitude(fields: NodalFields) -> array:
 def von_mises_field(fields: NodalFields) -> array:
     s = fields.stress
     return array("d", (von_mises(*s[6 * n : 6 * n + 6]) for n in range(fields.node_count)))
+
+
+def principal_field(fields: NodalFields) -> array:
+    """``out[3 n + i]``: principal stress i + 1 of node n (σ1 ≥ σ2 ≥ σ3), in pascals."""
+    s = fields.stress
+    return array(
+        "d",
+        (v for n in range(fields.node_count) for v in principal_stresses(*s[6 * n : 6 * n + 6])),
+    )

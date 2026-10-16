@@ -7,6 +7,8 @@ import {
   bandEdges,
   deformedPositions,
   parseResultFields,
+  QUANTITIES,
+  quantityValues,
   ResultFieldsError,
   range,
   scalarValues,
@@ -60,6 +62,25 @@ describe("result view helpers", () => {
     expect([...scalarValues(displacement)]).toEqual([5, 2]);
     expect([...scalarValues(mises)]).toEqual([7, 9]);
     expect(range(scalarValues(displacement))).toEqual({ min: 2, max: 5 });
+  });
+
+  it("takes one component of a tensor field for a component quantity", () => {
+    const { fields } = parseResultFields(
+      encodeFields(2, [{ name: "stress", kind: "pressure", components: 6, values: [1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6] }]),
+    );
+    const stress = fields.get("stress");
+    if (!stress) throw new Error("field missing");
+    expect(QUANTITIES.stressXY).toMatchObject({ field: "stress", components: 6, component: 3, kind: "pressure" });
+    expect([...quantityValues(stress, QUANTITIES.stressXX.component)]).toEqual([1, -1]);
+    expect([...quantityValues(stress, QUANTITIES.stressXY.component)]).toEqual([4, -4]);
+    expect([...quantityValues(stress, QUANTITIES.stressZX.component)]).toEqual([6, -6]);
+    // Every quantity names a field and component the worker writes (result-fields.md).
+    const written: Record<string, number> = { displacement: 3, vonMises: 1, stress: 6, principalStress: 3, strain: 6 };
+    for (const q of Object.values(QUANTITIES)) {
+      expect(written[q.field]).toBe(q.components);
+      expect(q.component === null || q.component < q.components).toBe(true);
+    }
+    expect(QUANTITIES.strainXX.kind).toBe("strain");
   });
 
   it("splits the range into equal bands and places values in them", () => {

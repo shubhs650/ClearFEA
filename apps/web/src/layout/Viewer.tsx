@@ -29,6 +29,7 @@ import {
   type ResultFields,
   ResultFieldsError,
   parseResultFields,
+  quantityValues,
   range,
   scalarValues,
 } from "../viewer/resultFields";
@@ -117,14 +118,21 @@ export function contourOf(
   results: ResultFields,
   display: Pick<ResultDisplay, "quantity" | "deformation" | "units">,
 ): Contour | string {
-  const { label, kind } = QUANTITIES[display.quantity];
-  const field = results.fields.get(display.quantity);
+  const { label, kind, field: name, components, component } = QUANTITIES[display.quantity];
+  const field = results.fields.get(name);
   const displacement = results.fields.get("displacement");
   const vertices = mesh.positions.length / 3;
-  if (!field || !displacement || displacement.components !== 3 || results.vertexCount !== vertices) {
+  if (displacement?.components !== 3 || results.vertexCount !== vertices) {
     return "The result files of this run do not belong together. Run the simulation again; if it happens again, report it as a bug.";
   }
-  const values = scalarValues(field);
+  if (!field) {
+    // Runs solved before M3.1 kept displacement and von Mises stress only.
+    return `This run was solved before ClearFEA kept stress components, principal stresses and strains, so it has no ${label.toLowerCase()}. Run the simulation again to see it.`;
+  }
+  if (field.components !== components) {
+    return "The result files of this run do not belong together. Run the simulation again; if it happens again, report it as a bug.";
+  }
+  const values = quantityValues(field, component);
   const { min, max } = range(values);
   const coordinates = values.map((v) => bandCoordinate(v, min, max));
   let positions = mesh.positions;

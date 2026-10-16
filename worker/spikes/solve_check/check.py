@@ -30,8 +30,12 @@ from clearfea_worker.geometry.importer import import_geometry  # noqa: E402
 from clearfea_worker.meshing.mesher import mesh_geometry  # noqa: E402
 from clearfea_worker.meshing.volume import read_volume_mesh  # noqa: E402
 from clearfea_worker.results import read_results  # noqa: E402
-from clearfea_worker.results.fields import von_mises_field  # noqa: E402
-from clearfea_worker.results.surface import read_fields, write_viewer_files  # noqa: E402
+from clearfea_worker.results.fields import principal_field, von_mises_field  # noqa: E402
+from clearfea_worker.results.surface import (  # noqa: E402
+    extract_surface,
+    read_fields,
+    write_viewer_files,
+)
 from clearfea_worker.solver import run_calculix  # noqa: E402
 from clearfea_worker.spec.geometry_schema import Topology  # noqa: E402
 from clearfea_worker.versions import calculix_version  # noqa: E402
@@ -59,7 +63,9 @@ def viewer_rows(mesh, fields, result, faces, work: Path) -> list[Row]:  # type: 
     """M1.9: the viewer's surface.bin and fields.bin, read back as the viewer would."""
     files = write_viewer_files(mesh, fields, work)
     patches = read_display(files.surface_path)
-    _, (displacement, mises) = read_fields(files.fields_path)
+    _, written = read_fields(files.fields_path)
+    by_name = {f.name: f for f in written}
+    displacement, mises = by_name["displacement"], by_name["vonMises"]
     rows: list[Row] = []
     total, wrong = 0.0, 0
     tag_normal = {tag: normal for tag, normal, _ in faces.values()}
@@ -106,6 +112,28 @@ def viewer_rows(mesh, fields, result, faces, work: Path) -> list[Row]:  # type: 
             lo >= vm.min.value * (1 - 1e-6) and rel(hi, vm.max.value) < 1e-6,
         )
     )
+    # M3.1: the stress, principal stress and strain fields carry the reader's nodal values.
+    surface = extract_surface(mesh)
+    principal = principal_field(fields)
+    worst = 0.0
+    for name, nodal, width in (
+        ("stress", fields.stress, 6),
+        ("principalStress", principal, 3),
+        ("strain", fields.strain, 6),
+    ):
+        values = by_name[name].values
+        scale = max(abs(x) for x in nodal)
+        for k, node in enumerate(surface.nodes):
+            for i in range(width):
+                worst = max(worst, abs(values[width * k + i] - nodal[width * node + i]) / scale)
+    rows.append(
+        (
+            "viewer: stress, principal stress and strain fields",
+            "the nodal values, to float32",
+            f"worst {worst:.2g} of the largest",
+            worst < 1e-6,
+        )
+    )
     return rows
 
 
@@ -145,6 +173,29 @@ def main() -> int:
             "0 Pa",
             f"largest {others:.3g} Pa",
             others < 1e-4 * P_SI,
+        )
+    )
+    exx = [fields.strain[6 * n] for n in range(mesh.node_count)]
+    strain_others = max(
+        abs(fields.strain[6 * n + i]) for n in range(mesh.node_count) for i in range(1, 6)
+    )
+    rows.append(
+        (
+            "nu = 0: total strain eps_xx at every node, others zero",
+            f"{-P_SI / E_SI:.6g}, others 0",
+            f"{min(exx):.6g} to {max(exx):.6g}, others at most {strain_others:.3g}",
+            max(rel(e, -P_SI / E_SI) for e in exx) < 1e-4 and strain_others < 1e-4 * P_SI / E_SI,
+        )
+    )
+    principal = principal_field(fields)
+    s1 = max(abs(principal[3 * n + i]) for n in range(mesh.node_count) for i in (0, 1))
+    s3 = [principal[3 * n + 2] for n in range(mesh.node_count)]
+    rows.append(
+        (
+            "nu = 0: principal stresses",
+            f"sigma_3 = {-P_SI:.6g} Pa, sigma_1 = sigma_2 = 0",
+            f"sigma_3 {min(s3):.6g} to {max(s3):.6g} Pa, sigma_1 and sigma_2 at most {s1:.3g} Pa",
+            max(rel(x, -P_SI) for x in s3) < 1e-4 and s1 < 1e-4 * P_SI,
         )
     )
     vm = result.von_mises

@@ -19,13 +19,16 @@ import { credits } from "../billing/credits";
 import { duration, memory } from "../billing/estimate";
 import type { Deformation } from "../layout/Viewer";
 import { fromSi } from "../units/convert";
-import { QUANTITIES, type Quantity } from "../viewer/resultFields";
+import { QUANTITIES, type Quantity, type QuantityGroup } from "../viewer/resultFields";
 import { Notes } from "./ItemPanels";
 import { type ItemStatus, sameSpec } from "./spec";
 import type { EstimateState } from "./useEstimate";
 
 /** The units result figures are shown in: the project system's units for these kinds. */
-export type ResultUnits = Readonly<Record<"length" | "pressure" | "force", string>>;
+export type ResultUnits = Readonly<Record<"length" | "pressure" | "force" | "strain", string>>;
+
+/** The headings of the quantity list, in order. */
+const QUANTITY_GROUPS: readonly QuantityGroup[] = ["Displacement", "Stress", "Strain"];
 
 /** One reason the setup cannot be run now, and the tree item that fixes it (null for none). */
 export interface RunBlocker {
@@ -345,10 +348,16 @@ export function RunPanel({
               value={choice.quantity}
               onChange={(event) => onChoiceChange({ ...choice, quantity: event.target.value as Quantity })}
             >
-              {(Object.keys(QUANTITIES) as Quantity[]).map((q) => (
-                <option key={q} value={q}>
-                  {QUANTITIES[q].label}
-                </option>
+              {QUANTITY_GROUPS.map((group) => (
+                <optgroup key={group} label={group}>
+                  {(Object.keys(QUANTITIES) as Quantity[])
+                    .filter((q) => QUANTITIES[q].group === group)
+                    .map((q) => (
+                      <option key={q} value={q}>
+                        {QUANTITIES[q].label}
+                      </option>
+                    ))}
+                </optgroup>
               ))}
             </select>
           </label>

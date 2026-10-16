@@ -191,6 +191,29 @@ def test_evaluates_the_mean_over_a_face_inside_a_box() -> None:
     assert evaluate(radial, s, fields, {"plate": 7}) == (pytest.approx(0.004), 1)
 
 
+def test_evaluates_tensor_components_and_principal_stresses_by_name() -> None:
+    s = surface()
+    n = len(s.positions)
+    fields = {
+        "displacement": [(0.0, 0.0, 0.0)] * n,
+        "vonMises": [(0.0,)] * n,
+        "stress": [(1.0, 2.0, 3.0, 4.0, 5.0, 6.0 * v) for v in range(n)],
+        "principalStress": [(30.0, 20.0, 10.0 * v) for v in range(n)],
+        "strain": [(0.1, 0.2, 0.3, 0.4, 0.5, 0.6) for v in range(n)],
+    }
+    box = Box((0.05, 0, 0), (0.1, 0.05, 0))  # vertices 4 and 5 of face 7
+
+    def mean(quantity: str) -> float:
+        check = Check("c", quantity, "plate", box, 1.0, "Pa", {})
+        return evaluate(check, s, fields, {"plate": 7})[0]
+
+    assert mean("stress.xy") == pytest.approx(4.0)
+    assert mean("stress.zx") == pytest.approx(27.0)
+    assert mean("principal.1") == pytest.approx(30.0)
+    assert mean("principal.3") == pytest.approx(45.0)
+    assert mean("strain.yz") == pytest.approx(0.5)
+
+
 def test_reads_a_reaction_component_of_the_named_support() -> None:
     check = Check("r", "reaction.y", None, None, 1.0, "N", {"coarse": 0.1, "full": 0.1}, "b")
     reactions = [{"supportId": "a", "force": [1, 2, 3]}, {"supportId": "b", "force": [4, 5, 6]}]
@@ -388,9 +411,21 @@ def test_v01_references_are_lame_with_open_ends() -> None:
         mises = math.sqrt(0.5 * ((sr - st) ** 2 + st**2 + sr**2))
         u = r * (st - nu * sr) / e
         [stress] = [c for c in checks.values() if c.face == face and c.quantity == "vonMises"]
-        [radial] = [c for c in checks.values() if c.face == face and c.quantity != "vonMises"]
+        [radial] = [
+            c for c in checks.values() if c.face == face and c.quantity == "displacement.radial"
+        ]
         assert stress.reference == pytest.approx(mises, rel=1e-5)
         assert radial.reference == pytest.approx(u, rel=1e-5)
+        [first] = [c for c in checks.values() if c.face == face and c.quantity == "principal.1"]
+        assert first.reference == pytest.approx(st, rel=1e-12)
+        if face == "bore":
+            # At 45 degrees: tau_xy = (sr - st) sin cos, and the tensor strain tau / 2G.
+            shear = (sr - st) / 2
+            assert checks["Shear stress τxy at 45 degrees on the bore"].reference == pytest.approx(
+                shear, rel=1e-12
+            )
+            strain = checks["Shear strain εxy at 45 degrees on the bore (tensor, γxy / 2)"]
+            assert strain.reference == pytest.approx(shear * (1 + nu) / e, rel=1e-12)
 
 
 def test_v02_references_are_timoshenko_beam_values() -> None:
@@ -477,7 +512,8 @@ def test_v09_references_are_the_full_tubes_lame_values() -> None:
         load_case(CASES / "V-09-symmetry-tube"),
         load_case(CASES / "V-01-thick-cylinder"),
     )
-    for check in full.checks:
+    # V-01's von Mises and radial displacement checks; its M3.1 checks have no V-09 twin.
+    for check in (c for c in full.checks if c.quantity in ("vonMises", "displacement.radial")):
         [same] = [
             c for c in quarter.checks if c.face == check.face and c.quantity == check.quantity
         ]
@@ -506,6 +542,29 @@ def test_v24_references_are_a_uniformly_stretched_bar() -> None:
     assert checks["Force needed at the end (σ A)"].reference == pytest.approx(
         e * strain * (0.5 * inch) ** 2
     )
+    for name in (
+        "Normal stress σxx along the side (E ε)",
+        "Largest principal stress along the side is σxx",
+    ):
+        assert checks[name].reference == pytest.approx(e * strain)
+    assert checks["Axial strain along the side (δ / L)"].reference == pytest.approx(strain)
+    assert checks["Lateral strain along the side (−ν ε)"].reference == pytest.approx(-nu * strain)
+
+
+def test_v08_strain_references_are_the_total_strain() -> None:
+    case = load_case(CASES / "V-08-heated-bar")
+    material = case.spec["materials"][0]
+    nu, alpha, dt = material["poissonsRatio"], 6.5e-6 * 1.8, 50.0
+    assert material["thermalExpansion"] == {"value": 6.5, "unit": "µin/(in·°F)"}
+    checks = by_name(case)
+    for name in (
+        "Total strain across the width (1 + nu) alpha dT",
+        "Total strain through the thickness (1 + nu) alpha dT",
+    ):
+        assert checks[name].reference == pytest.approx((1 + nu) * alpha * dt, rel=1e-12)
+    axial = checks["Axial stress σxx is compression −E alpha dT"].reference
+    assert checks["Smallest principal stress is the axial compression"].reference == axial
+    assert axial == pytest.approx(-29000e3 * 6894.757293168362 * alpha * dt, rel=1e-8)
 
 
 def test_spec_templates_use_mixed_units() -> None:

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Deformation, toggleFace, Viewer } from "../src/layout/Viewer";
 import type { DisplayMesh } from "../src/viewer/displayMesh";
 import type { ModelViewEvents } from "../src/viewer/ModelView";
+import type { Quantity } from "../src/viewer/resultFields";
 import { readFixture } from "./fixtures";
 import { twoFacesFields } from "./resultFiles";
 
@@ -276,9 +277,9 @@ const results = {
   "/api/geometries/g1/topology": { status: 200, json: topology },
 };
 
-const UNITS = { length: "mm", pressure: "MPa" };
+const UNITS = { length: "mm", pressure: "MPa", strain: "mm/mm" };
 
-function ResultHarness({ quantity, deformation }: { quantity: "displacement" | "vonMises"; deformation: Deformation }) {
+function ResultHarness({ quantity, deformation }: { quantity: Quantity; deformation: Deformation }) {
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
   return (
     <Viewer
@@ -328,6 +329,37 @@ describe("result view", () => {
     rerender(<ResultHarness quantity="displacement" deformation="auto" />);
     await screen.findByText("Deformed shape, scale ×5");
     await vi.waitFor(() => expect(view?.meshes.at(-1)?.positions[3]).toBeCloseTo((base[3] ?? 0) + 5e-4, 6));
+  });
+
+  it("draws a stress or strain component and a principal stress, signed, in display units", async () => {
+    serve(results);
+    const { rerender } = render(<ResultHarness quantity="stressXY" deformation="undeformed" />);
+    const legend = await screen.findByLabelText("Legend");
+    expect(legend.textContent).toContain("Shear stress τxy (MPa)");
+    // Vertex v carries -v MPa: nine bands from -6 to 0, largest first.
+    const rows = () => [...legend.querySelectorAll("li")].map((li) => li.textContent);
+    expect(rows()[0]).toBe("-0.6667 to 0");
+    expect(rows()[8]).toBe("-6 to -5.333");
+    const view = scene.instances[0];
+    await vi.waitFor(() => expect(view?.bands.at(-1)).toBeDefined());
+    // The most negative value is at vertex 6, so the band coordinates fall with the index.
+    expect([...(view?.bands.at(-1) ?? [])]).toEqual([6, 5, 4, 3, 2, 1, 0].map((v) => Math.fround(v / 6)));
+    rerender(<ResultHarness quantity="principal1" deformation="undeformed" />);
+    await vi.waitFor(() => expect(legend.textContent).toContain("Maximum principal stress σ1 (MPa)"));
+    expect(rows()[0]).toBe("53.33 to 60");
+    rerender(<ResultHarness quantity="strainXY" deformation="undeformed" />);
+    await vi.waitFor(() => expect(legend.textContent).toContain("Shear strain εxy (γxy / 2) (mm/mm)"));
+    expect(rows()[0]).toBe("0.0001067 to 0.00012");
+  });
+
+  it("says a run solved before M3.1 has no components, and still draws von Mises", async () => {
+    serve({ ...results, "/api/runs/r1/fields": { status: 200, bytes: twoFacesFields({ before31: true }) } });
+    const { rerender } = render(<ResultHarness quantity="strainXX" deformation="auto" />);
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "This run was solved before ClearFEA kept stress components, principal stresses and strains, so it has no normal strain εxx. Run the simulation again to see it.",
+    );
+    rerender(<ResultHarness quantity="vonMises" deformation="auto" />);
+    expect((await screen.findByLabelText("Legend")).textContent).toContain("Von Mises stress (MPa)");
   });
 
   it("says the run's files do not match when their vertex counts differ", async () => {

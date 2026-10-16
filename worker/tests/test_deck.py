@@ -801,7 +801,7 @@ def test_elastic_springs_are_spring1_elements_along_the_normals() -> None:
     assert ", ORIENTATION=O1\n1\n" in text
     assert "*NODE PRINT, NSET=S2, GLOBAL=YES\nU\n" in text
     # No extra nodes: the result file holds the mesh's nodes only.
-    assert "*NODE FILE\nU\n*EL FILE\nS\n" in text
+    assert "*NODE FILE\nU\n*EL FILE\nS, E\n" in text
     assert text.count("*NODE,") == 1
 
 

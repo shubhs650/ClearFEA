@@ -14,6 +14,7 @@ from clearfea_worker.deck.elements import FACE_NODES
 from clearfea_worker.results import (
     DatError,
     FrdError,
+    principal_stresses,
     read_fields,
     read_node_displacements,
     read_node_forces,
@@ -42,6 +43,57 @@ def test_reads_displacement_and_stress_of_every_node() -> None:
         -7.92396e-01,
         1.52217e06,
     ]
+    # The total strain, EXX to EZX as the file lists them (M3.1).
+    assert list(fields.strain[6:12]) == [
+        2.41532e-06,
+        1.89529e-06,
+        -6.31506e-06,
+        4.18122e-06,
+        2.61273e-06,
+        4.53690e-06,
+    ]
+
+
+def test_principal_stresses_of_known_stress_states() -> None:
+    assert principal_stresses(-1.0e6, 0, 0, 0, 0, 0) == (0.0, 0.0, -1.0e6)
+    assert principal_stresses(1.0, 3.0, 2.0, 0, 0, 0) == (3.0, 2.0, 1.0)
+    # Pure shear in xy: +tau and -tau at 45 degrees, nothing along z.
+    s1, s2, s3 = principal_stresses(0, 0, 0, 2.0e6, 0, 0)
+    assert (s1, s2, s3) == pytest.approx((2.0e6, 0.0, -2.0e6), abs=1e-6)
+    s1, s2, s3 = principal_stresses(0, 0, 0, 0, 0, -2.0e6)
+    assert (s1, s2, s3) == pytest.approx((2.0e6, 0.0, -2.0e6), abs=1e-6)
+    # Plane stress with shear: (sx + sy)/2 +- sqrt(((sx - sy)/2)^2 + txy^2).
+    s1, s2, s3 = principal_stresses(80.0, 20.0, 0, 40.0, 0, 0)
+    # Here 50 +- 50, and sz = 0 is the third.
+    assert (s1, s2, s3) == pytest.approx((100.0, 0.0, 0.0), abs=1e-9)
+    s1, s2, s3 = principal_stresses(80.0, 20.0, -30.0, 40.0, 0, 0)
+    assert (s1, s2, s3) == pytest.approx((100.0, 0.0, -30.0), abs=1e-9)
+    # A hydrostatic state, and one with a tiny shear, which splits it by plus and minus that.
+    assert principal_stresses(5.0, 5.0, 5.0, 0, 0, 0) == (5.0, 5.0, 5.0)
+    s = principal_stresses(5.0e6, 5.0e6, 5.0e6, 1e-3, 0, 0)
+    assert s == pytest.approx((5.0e6 + 1e-3, 5.0e6, 5.0e6 - 1e-3), abs=1e-8)
+
+
+@pytest.mark.parametrize("seed", range(20))
+def test_principal_stresses_keep_the_invariants_of_the_tensor(seed: int) -> None:
+    import random
+
+    rng = random.Random(seed)
+    sxx, syy, szz, sxy, syz, szx = (rng.uniform(-1e8, 1e8) for _ in range(6))
+    s1, s2, s3 = principal_stresses(sxx, syy, szz, sxy, syz, szx)
+    assert s1 >= s2 >= s3
+    scale = 1e8
+    # I1, I2 and I3 of the tensor equal those of its eigenvalues.
+    i1 = sxx + syy + szz
+    i2 = sxx * syy + syy * szz + szz * sxx - sxy**2 - syz**2 - szx**2
+    i3 = sxx * syy * szz + 2 * sxy * syz * szx - sxx * syz**2 - syy * szx**2 - szz * sxy**2
+    assert s1 + s2 + s3 == pytest.approx(i1, abs=1e-9 * scale)
+    assert s1 * s2 + s2 * s3 + s3 * s1 == pytest.approx(i2, abs=1e-9 * scale**2)
+    assert s1 * s2 * s3 == pytest.approx(i3, abs=1e-9 * scale**3)
+    # Von Mises from the principal stresses equals von Mises from the components.
+    assert von_mises(s1, s2, s3, 0, 0, 0) == pytest.approx(
+        von_mises(sxx, syy, szz, sxy, syz, szx), rel=1e-9
+    )
 
 
 def test_von_mises_of_known_stress_states() -> None:
@@ -93,16 +145,24 @@ def short_frd(rows: list[str], components: tuple[str, ...] = ("D1", "D2", "D3"))
     return "\n".join([*lines, *rows, " -3", "9999"]) + "\n"
 
 
-def stress_block() -> list[str]:
+def tensor_block(name: str, components: tuple[str, ...], step: int) -> list[str]:
     header = "  100CL  101 1.000000000           3                     0    1           0"
     rows = [f" -1{n:5d}" + "".join(f"{v:12.5E}" for v in [1.0] * 6) for n in (1, 2, 3)]
     return [
-        "    1PSTEP                         2           1           1",
+        f"    1PSTEP                         {step}           1           1",
         header,
-        " -4  STRESS      6    1",
-        *(f" -5  {c:<10}1    4    1    1" for c in ("SXX", "SYY", "SZZ", "SXY", "SYZ", "SZX")),
+        f" -4  {name:<10}6    1",
+        *(f" -5  {c:<10}1    4    1    1" for c in components),
         *rows,
         " -3",
+    ]
+
+
+def stress_block() -> list[str]:
+    """A STRESS and a TOSTRAIN block, every component 1 at nodes 1 to 3."""
+    return [
+        *tensor_block("STRESS", ("SXX", "SYY", "SZZ", "SXY", "SYZ", "SZX"), 2),
+        *tensor_block("TOSTRAIN", ("EXX", "EYY", "EZZ", "EXY", "EYZ", "EZX"), 3),
     ]
 
 
@@ -155,7 +215,17 @@ def test_refuses_a_file_without_stresses(tmp_path: Path) -> None:
     path = tmp_path / "disp-only.frd"
     rows = [f" -1{n:5d} 0.00000E+00 0.00000E+00 0.00000E+00" for n in (1, 2, 3)]
     path.write_text(short_frd(rows))
-    with pytest.raises(FrdError, match="no STRESS block"):
+    with pytest.raises(FrdError, match="no STRESS, TOSTRAIN block"):
+        read_fields(path, 3)
+
+
+def test_refuses_a_file_without_strains(tmp_path: Path) -> None:
+    # The output of a deck from before M3.1, which asked for stresses only.
+    path = tmp_path / "no-strain.frd"
+    rows = [f" -1{n:5d} 0.00000E+00 0.00000E+00 0.00000E+00" for n in (1, 2, 3)]
+    stress = tensor_block("STRESS", ("SXX", "SYY", "SZZ", "SXY", "SYZ", "SZX"), 2)
+    path.write_text(short_frd(rows).replace("9999\n", "\n".join(stress) + "\n9999\n"))
+    with pytest.raises(FrdError, match="no TOSTRAIN block"):
         read_fields(path, 3)
 
 

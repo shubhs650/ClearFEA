@@ -54,7 +54,7 @@ from .loads.body import gravity_vector, rotation
 from .loads.thermal import expansions, temperature_change
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
-DECK_FORMAT = 1
+DECK_FORMAT = 2
 
 #: CalculiX reads at most 16 entries on a data line.
 _PER_LINE = 16
@@ -519,8 +519,9 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
         out.append(f"NALL, {_number(thermal[1])}")
     out.append("*NODE FILE")
     out.append("U")
+    # Stress and total strain (elastic plus thermal), both extrapolated to the nodes (ADR-050).
     out.append("*EL FILE")
-    out.append("S")
+    out.append("S, E")
     # The displacement of an elastic support's nodes gives its reaction (loads/elastic.py).
     for k, _ in springs:
         out.append(f"*NODE PRINT, NSET={support_sets[k]}, GLOBAL=YES")
