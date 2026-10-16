@@ -29,6 +29,8 @@ type Recorded = {
   hiddenFaces: number[][];
   /** Each setCamera call (M3.6). */
   cameras: CameraView[];
+  /** Each setSwing call (M6.2). */
+  swings: (Float32Array | null)[];
   disposed: boolean;
 };
 
@@ -39,7 +41,7 @@ vi.mock("../src/viewer/ModelView", () => ({
     record: Recorded;
     constructor(_host: HTMLElement, events: ModelViewEvents) {
       if (scene.failToStart) throw new Error("no WebGL");
-      this.record = { events, meshes: [], bands: [], selections: [], edges: [], edgeSelections: [], markers: [], cuts: [], hiddenFaces: [], cameras: [], disposed: false };
+      this.record = { events, meshes: [], bands: [], selections: [], edges: [], edgeSelections: [], markers: [], cuts: [], hiddenFaces: [], cameras: [], swings: [], disposed: false };
       scene.instances.push(this.record);
     }
     setMesh(mesh: DisplayMesh, _edges?: string, _keep?: boolean, bands?: Float32Array) {
@@ -64,6 +66,9 @@ vi.mock("../src/viewer/ModelView", () => ({
     }
     setCut(cut: Cut | null) {
       this.record.cuts.push(cut);
+    }
+    setSwing(swing: Float32Array | null) {
+      this.record.swings.push(swing);
     }
     setHiddenFaces(tags: ReadonlySet<number>) {
       this.record.hiddenFaces.push([...tags].sort((a, b) => a - b));
@@ -312,7 +317,7 @@ function ResultHarness({ quantity, deformation }: { quantity: Quantity; deformat
   return (
     <Viewer
       geometry={geometry()}
-      result={{ run: succeeded, quantity, deformation, units: UNITS }}
+      result={{ run: succeeded, quantity, deformation, units: UNITS, mode: 1, animate: false }}
       selection={selection}
       onSelectionChange={setSelection}
       onSignedOut={() => {}}
@@ -572,16 +577,17 @@ const savedView = {
 /** The viewer of an open simulation, with the result choice held in state as the app holds it. */
 function ViewsHarness({ onResult }: { onResult?: boolean }) {
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
-  const [choice, setChoice] = useState<{ quantity: Quantity; deformation: Deformation }>({
+  const [choice, setChoice] = useState<{ quantity: Quantity; deformation: Deformation; mode: number }>({
     quantity: "vonMises",
     deformation: "undeformed",
+    mode: 1,
   });
   return (
     <>
       <span data-testid="choice">{`${choice.quantity} ${choice.deformation}`}</span>
       <Viewer
         geometry={geometry({ bodyCount: 2 })}
-        result={onResult ? { run: succeeded, ...choice, units: UNITS } : null}
+        result={onResult ? { run: succeeded, ...choice, units: UNITS, animate: false } : null}
         selection={selection}
         onSelectionChange={setSelection}
         simulationId="s1"
@@ -770,7 +776,14 @@ describe("thermal results (M5.1)", () => {
     return (
       <Viewer
         geometry={geometry()}
-        result={{ run: thermalRun, quantity: "temperature", deformation: "undeformed", units: { ...UNITS, temperature: unit } }}
+        result={{
+          run: thermalRun,
+          quantity: "temperature",
+          deformation: "undeformed",
+          units: { ...UNITS, temperature: unit },
+          mode: 1,
+          animate: false,
+        }}
         selection={selection}
         onSelectionChange={setSelection}
         onSignedOut={() => {}}
@@ -831,6 +844,114 @@ describe("thermal results (M5.1)", () => {
     // The section at x = 0.5 m is at 50 °C, inside the surface's 20 °C to 80 °C.
     await vi.waitFor(() => expect(view?.cuts.at(-1)?.plane).toEqual({ normal: [1, 0, 0], offset: 0.5 }));
     expect(fetchMock.mock.calls.map(([path]) => String(path))).not.toContain("/api/runs/r1/nodes?field=displacement");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("modal results (M6.2)", () => {
+  const modalRun: RunView = {
+    ...succeeded,
+    spec: { ...succeeded.spec, analysis: "modal", modes: 2 },
+    result: { nodes: 7, frequencies: [10, 20], software: { calculix: "2.21" } },
+  };
+  // Mode 1 moves along z, vertex v by v / 6 (1 at vertex 6); mode 2 along y, -1 at vertex 0.
+  const shapes = encodeFields(7, [
+    { name: "mode1", kind: "ratio", components: 3, values: Array.from({ length: 21 }, (_, i) => (i % 3 === 2 ? Math.floor(i / 3) / 6 : 0)) },
+    {
+      name: "mode2",
+      kind: "ratio",
+      components: 3,
+      values: Array.from({ length: 21 }, (_, i) => (i % 3 === 1 ? (Math.floor(i / 3) - 6) / 6 : 0)),
+    },
+  ]);
+  const modal = { ...results, "/api/runs/r1/fields": { status: 200, bytes: shapes } };
+
+  function ModalHarness({ mode, deformation = "auto", animate = false }: { mode: number; deformation?: Deformation; animate?: boolean }) {
+    const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
+    return (
+      <Viewer
+        geometry={geometry()}
+        result={{ run: modalRun, quantity: "modeShape", deformation, units: UNITS, mode, animate }}
+        selection={selection}
+        onSelectionChange={setSelection}
+        onSignedOut={() => {}}
+      />
+    );
+  }
+
+  /** The diagonal of the box around the run's surface, in metres. */
+  function size(): number {
+    const p = readPositions();
+    const span = [0, 1, 2].map((axis) => {
+      const values = p.filter((_, i) => i % 3 === axis);
+      return Math.max(...values) - Math.min(...values);
+    });
+    return Math.hypot(...span);
+  }
+
+  it("draws the chosen mode's shape, coloured by its relative displacement, at a tenth of the model's size", async () => {
+    serve(modal);
+    const { rerender } = render(<ModalHarness mode={1} />);
+    const legend = await screen.findByLabelText("Legend");
+    expect(legend.textContent).toContain("Mode shape, relative displacement");
+    expect(legend.textContent).not.toContain("(1)");
+    expect(legend.textContent).toContain("largest displacement drawn at 10 % of the model's size");
+    const view = scene.instances[0];
+    const scale = 0.1 * size();
+    const rest = readPositions();
+    await vi.waitFor(() => expect(view?.meshes.at(-1)?.positions[20]).toBeCloseTo((rest[20] ?? 0) + scale, 6));
+    expect(view?.meshes.at(-1)?.positions[1]).toBeCloseTo(rest[1] ?? 0, 6);
+    await vi.waitFor(() => expect(view?.markers.at(-1)?.[0]).toMatchObject({ kind: "max", text: "Max 1", vertex: 6 }));
+    // Mode 2 moves along y; its largest displacement is at vertex 0.
+    rerender(<ModalHarness mode={2} />);
+    await vi.waitFor(() => expect(view?.meshes.at(-1)?.positions[1]).toBeCloseTo((rest[1] ?? 0) - scale, 6));
+    expect(view?.meshes.at(-1)?.positions[20]).toBeCloseTo(rest[20] ?? 0, 6);
+    // Undeformed, the shape is only the colours.
+    rerender(<ModalHarness mode={2} deformation="undeformed" />);
+    await vi.waitFor(() => expect(view?.meshes.at(-1)?.positions).toEqual(new Float32Array(rest)));
+    expect(screen.getByLabelText("Legend").textContent).toContain("Undeformed shape");
+  });
+
+  it("swings the mode shape drawn when asked, and stops", async () => {
+    serve(modal);
+    const { rerender } = render(<ModalHarness mode={1} animate />);
+    await screen.findByLabelText("Legend");
+    const view = scene.instances[0];
+    const scale = 0.1 * size();
+    await vi.waitFor(() => expect(view?.swings.at(-1)).toBeInstanceOf(Float32Array));
+    const swing = view?.swings.at(-1);
+    expect(swing?.[20]).toBeCloseTo(scale, 6);
+    expect(swing?.[19]).toBe(0);
+    rerender(<ModalHarness mode={1} />);
+    await vi.waitFor(() => expect(view?.swings.at(-1)).toBeNull());
+  });
+
+  it("says a modal run solved before M6.2 has no mode shapes", async () => {
+    serve({ ...results, "/api/runs/r1/fields": { status: 200, bytes: encodeFields(7, []) } });
+    render(<ModalHarness mode={1} />);
+    expect((await screen.findByRole("alert")).textContent).toContain("solved before ClearFEA kept mode shapes");
+  });
+
+  it("cuts a modal run asking for the shown mode's values at every node and nothing else", async () => {
+    const cube = boxMesh(2);
+    const nodes = new DataView(cube).getUint32(12, true);
+    const fetchMock = serve({
+      ...modal,
+      "/api/runs/r1/mesh": { status: 200, bytes: cube },
+      "/api/runs/r1/nodes?field=mode2": {
+        status: 200,
+        bytes: encodeFields(nodes, [
+          { name: "mode2", kind: "ratio", components: 3, values: Array.from({ length: 3 * nodes }, (_, i) => (i % 3 === 1 ? 0.5 : 0)) },
+        ]),
+      },
+    });
+    render(<ModalHarness mode={2} />);
+    await screen.findByLabelText("Legend");
+    fireEvent.click(screen.getByLabelText("Cut plane"));
+    const panel = screen.getByLabelText("Cut plane", { selector: "section" });
+    await vi.waitFor(() => expect(panel.textContent).toContain("Cuts 24 elements."));
+    const asked = fetchMock.mock.calls.map(([path]) => String(path));
+    expect(asked.filter((path) => path.includes("nodes?"))).toEqual(["/api/runs/r1/nodes?field=mode2"]);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });

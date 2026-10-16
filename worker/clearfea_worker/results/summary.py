@@ -6,7 +6,8 @@ safety factor against yield with the node and position where each occurs, the re
 and moment of every support, each load's total force and moment, and the balance check of the
 two. For a steady-state thermal run, the smallest and largest temperature (M5.1), the largest
 heat flux, each thermal load's heat flow and the heat balance (M5.3, results.heat); a thermal
-stress run has both (M5.4). A modal run has its natural frequencies (M6.1, results.modal).
+stress run has both (M5.4). A modal run has its natural frequencies (M6.1, results.modal);
+its mode shapes are fields (M6.2).
 SI throughout.
 """
 
@@ -34,7 +35,7 @@ from .fields import (
     von_mises_field,
 )
 from .heat import THERMAL_LOADS, HeatFlow, balance_floor, heat_balance, read_heat_flows
-from .modal import ModalFields, frequency, read_eigenvalues
+from .modal import ModalFields, frequency, read_eigenvalues, read_mode_shapes
 from .safety import safety_factor_field
 
 
@@ -231,9 +232,12 @@ def read_results(
     thermal run has temperatures and heat fluxes (M5.1, M5.3); a thermal stress run has those
     of its heat transfer step beside the structural results of its static step (M5.4): each
     block of the result files is asked for in one step only, so each is read as before. A
-    modal run has its natural frequencies (M6.1, ADR-070) and no fields yet."""
+    modal run has its natural frequencies (M6.1, ADR-070) and since M6.2 its mode shapes
+    (ADR-071)."""
     if spec.analysis == "modal":
-        return ModalFields(mesh.node_count), summarize_modal(read_eigenvalues(dat), mesh, calculix)
+        eigenvalues = read_eigenvalues(dat)
+        shapes = read_mode_shapes(frd, mesh.node_count, len(eigenvalues))
+        return ModalFields(mesh.node_count, shapes), summarize_modal(eigenvalues, mesh, calculix)
     if spec.analysis == "steady_thermal":
         thermal, flows = _read_thermal(spec, mesh, frd, dat)
         return thermal, summarize_thermal(spec, mesh, thermal, flows, calculix)

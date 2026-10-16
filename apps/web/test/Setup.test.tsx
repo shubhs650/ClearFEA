@@ -54,6 +54,7 @@ vi.mock("../src/viewer/ModelView", () => ({
     setMarkers() {}
     setBands() {}
     setCut() {}
+    setSwing() {}
     setHiddenFaces() {}
     cameraView() {
       return { position: [1, 1, 1], target: [0, 0, 0] };
@@ -2168,17 +2169,36 @@ describe("modal analysis (M6.1)", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
     const frequencies = within(await screen.findByLabelText("Natural frequencies"));
-    expect(frequencies.getByText("Mode 3").nextElementSibling?.textContent).toBe("64.83 Hz");
-    expect(frequencies.getByText("Mode 4").nextElementSibling?.textContent).toBe("129.5 Hz");
+    // A table (M6.2): each row's mode, frequency and a choice of the mode shape drawn.
+    const frequencyOf = (mode: number) =>
+      frequencies.getByRole("radio", { name: `Show mode ${mode}` }).closest("tr")?.cells[1]?.textContent;
+    expect(frequencies.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Mode", "Frequency (Hz)", "Shown"]);
+    expect(frequencyOf(3)).toBe("64.83");
+    expect(frequencyOf(4)).toBe("129.5");
     expect(settings().getByRole("note").textContent).toContain("rigid-body modes");
-    // Frequencies only: no quantity to draw, no static figures and no export until mode shapes.
+    // The first mode is shown; a row picks another.
+    expect((frequencies.getByRole("radio", { name: "Show mode 1" }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(frequencies.getByRole("radio", { name: "Show mode 3" }));
+    expect((frequencies.getByRole("radio", { name: "Show mode 3" }) as HTMLInputElement).checked).toBe(true);
+    // Its shape is drawn exaggerated or undeformed, never at a true scale, and can swing.
+    const shapes = within(settings().getByRole("group", { name: "Mode shape on the model" }));
+    const shape = shapes.getByLabelText("Shape") as HTMLSelectElement;
+    expect([...shape.options].map((o) => o.value)).toEqual(["auto", "undeformed"]);
+    const animate = shapes.getByLabelText("Animate") as HTMLInputElement;
+    expect(animate.checked).toBe(false);
+    fireEvent.click(animate);
+    expect(animate.checked).toBe(true);
+    fireEvent.change(shape, { target: { value: "undeformed" } });
+    expect(animate.disabled).toBe(true);
+    // No other quantity to draw, no static figures and no export.
     expect(settings().queryByLabelText("Quantity")).toBeNull();
     expect(settings().queryByRole("region", { name: "Export" })).toBeNull();
     expect(settings().queryByText(/von Mises|Reaction/)).toBeNull();
     const units = within(settings().getByRole("group", { name: "Units shown" }));
     expect(units.getAllByRole("combobox").map((c) => c.closest("label")?.firstChild?.textContent)).toEqual(["Frequency"]);
     fireEvent.change(settings().getByLabelText("Frequency"), { target: { value: "cpm" } });
-    expect(frequencies.getByText("Mode 3").nextElementSibling?.textContent).toBe("3890 cpm");
+    expect(frequencyOf(3)).toBe("3890");
+    expect(frequencies.getByRole("columnheader", { name: "Frequency (cpm)" })).toBeTruthy();
     expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
     window.localStorage.clear();
   });

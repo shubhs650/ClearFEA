@@ -13,7 +13,9 @@
 // plane makes through the run's volume mesh, from the run's values at every node. Bodies can
 // be hidden in every mode (M3.6, ADR-055), and the camera, hidden bodies and the result display
 // can be saved as named views of the simulation and brought back. A steady-state thermal run
-// (M5.1) has no displacement: its temperatures are drawn on the undeformed shape.
+// (M5.1) has no displacement: its temperatures are drawn on the undeformed shape. A modal run
+// (M6.2, ADR-071) shows the shape of one mode, coloured by its relative displacement and drawn
+// deformed with its largest displacement at a tenth of the model's size, and can swing it.
 
 import type {
   Deformation as DeformationName,
@@ -46,7 +48,11 @@ import {
   bandEdges,
   deformedPositions,
   extremeVertices,
+  isModalRun,
   isViewQuantity,
+  MODE_SHAPE_SHARE,
+  modeField,
+  modeResults,
   QUANTITIES,
   type Quantity,
   type ResultFields,
@@ -80,6 +86,10 @@ export type ResultDisplay = {
   deformation: Deformation;
   /** Display unit of each quantity kind (length, pressure): the project system's. */
   units: Readonly<Record<string, string>>;
+  /** The mode a modal run's shape is shown for, from 1 (M6.2); unused for other runs. */
+  mode: number;
+  /** Whether a modal run's mode shape swings (M6.2). */
+  animate: boolean;
 };
 
 /** Statuses in which the API serves the display mesh (apps/api/src/routes/geometries.ts). */
@@ -163,22 +173,42 @@ function diagonal(positions: Float32Array): number {
 }
 
 /** The run's surface as drawn: deformed or not, and the scale used; no displacement for a
- * steady-state thermal run (M5.1). */
-type Shape = { mesh: DisplayMesh; scale: number | null; displacement: ResultField | null };
+ * steady-state thermal run (M5.1). `modeShape` when the displacement is a mode shape (M6.2). */
+type Shape = { mesh: DisplayMesh; scale: number | null; displacement: ResultField | null; modeShape: boolean };
 
-/** The shape the result view draws the run's surface in, or a reason it cannot be drawn. */
-export function shapeOf(mesh: DisplayMesh, results: ResultFields, deformation: Deformation): Shape | string {
+/** The shape the result view draws the run's surface in, or a reason it cannot be drawn. A
+ * mode shape (M6.2) has no true scale: deformed, its largest displacement is drawn at
+ * MODE_SHAPE_SHARE of the model's size. */
+export function shapeOf(
+  mesh: DisplayMesh,
+  results: ResultFields,
+  deformation: Deformation,
+  modeShape = false,
+): Shape | string {
   const displacement = results.fields.get("displacement");
   // A steady-state thermal run keeps the temperature alone; it is drawn undeformed.
   if (displacement === undefined && results.fields.has("temperature") && results.vertexCount === mesh.positions.length / 3) {
-    return { mesh, scale: null, displacement: null };
+    return { mesh, scale: null, displacement: null, modeShape };
   }
   if (displacement?.components !== 3 || results.vertexCount !== mesh.positions.length / 3) {
     return "The result files of this run do not belong together. Run the simulation again; if it happens again, report it as a bug.";
   }
-  if (deformation === "undeformed") return { mesh, scale: null, displacement };
-  const scale = deformation === "true" ? 1 : autoScale(range(scalarValues(displacement)).max, diagonal(mesh.positions));
-  return { mesh: { ...mesh, positions: deformedPositions(mesh.positions, displacement, scale) }, scale, displacement };
+  if (deformation === "undeformed") return { mesh, scale: null, displacement, modeShape };
+  const largest = range(scalarValues(displacement)).max;
+  const size = diagonal(mesh.positions);
+  const scale = modeShape
+    ? largest > 0
+      ? (MODE_SHAPE_SHARE * size) / largest
+      : 0
+    : deformation === "true"
+      ? 1
+      : autoScale(largest, size);
+  return {
+    mesh: { ...mesh, positions: deformedPositions(mesh.positions, displacement, scale) },
+    scale,
+    displacement,
+    modeShape,
+  };
 }
 
 /** What a cut plane adds to the contour (M3.4): the quantity at each section vertex, and
@@ -199,6 +229,8 @@ type Contour = {
   scale: number | null;
   /** False for a run with no displacement (a thermal run), whose shape is never deformed. */
   deformable: boolean;
+  /** True when the shape drawn is a mode shape (M6.2), which has no true scale. */
+  modeShape: boolean;
   /** Smallest values drawn red, largest blue (the safety factor, ADR-054). */
   smallestRed: boolean;
   /** The safety factor's cap when the largest value drawn reaches it, so the legend says so. */
@@ -262,6 +294,7 @@ export function contourOf(
     label,
     scale: shape.scale,
     deformable: shape.displacement !== null,
+    modeShape: shape.modeShape,
     smallestRed,
     cap: name === "safetyFactor" && max >= SAFETY_FACTOR_CAP ? SAFETY_FACTOR_CAP : null,
     cut: cut === null ? null : { coordinates: cut.values.map(band), values: cut.values, kept: cut.kept },
@@ -387,7 +420,9 @@ function Legend({ contour }: { contour: Contour }) {
         <div className="viewer-legend-note">
           {contour.scale === null
             ? "Undeformed shape"
-            : contour.scale === 1
+            : contour.modeShape
+              ? `Mode shape, largest displacement drawn at ${100 * MODE_SHAPE_SHARE} % of the model's size`
+              : contour.scale === 1
               ? "Deformed shape, true scale"
               : `Deformed shape, scale ×${contour.scale.toLocaleString("en-US")}`}
         </div>
@@ -695,8 +730,8 @@ export function Viewer({
   onEdgeSelectionChange?: (next: Set<number>) => void;
   /** The open simulation, whose saved views the viewer lists (M3.6); null for none. */
   simulationId?: string | null;
-  /** Shows another quantity or deformation, when a saved view brings them back. */
-  onResultChange?: (next: Pick<ResultDisplay, "quantity" | "deformation">) => void;
+  /** Shows another quantity, deformation or mode, when a saved view brings them back. */
+  onResultChange?: (next: Pick<ResultDisplay, "quantity" | "deformation" | "mode">) => void;
   onSignedOut: (problem: string) => void;
 }) {
   const canvasHost = useRef<HTMLDivElement>(null);
@@ -822,14 +857,24 @@ export function Viewer({
   const quantity = result?.quantity ?? "vonMises";
   const deformation = result?.deformation ?? "auto";
   const units = result?.units;
+  // A modal run (M6.2) draws the shape of one mode, which is also what deforms it.
+  const modal = result !== null && isModalRun(result.run);
+  const mode = result?.mode ?? 1;
+  const animate = modal && (result?.animate ?? false);
+  const drawn = useMemo(
+    () => (model?.results ? (modal ? modeResults(model.results, mode) : model.results) : null),
+    [model, modal, mode],
+  );
   const shape = useMemo(
-    () => (model?.results ? shapeOf(model.mesh, model.results, deformation) : null),
-    [model, deformation],
+    () =>
+      model === null || drawn === null ? null : typeof drawn === "string" ? drawn : shapeOf(model.mesh, drawn, deformation, modal),
+    [model, drawn, deformation, modal],
   );
 
   // A cut plane needs the run's mesh, the quantity's field at every node and, to draw the
   // section on the deformed shape, the displacement too; a thermal run (M5.1) has none to ask for.
-  const quantityField = QUANTITIES[quantity].field;
+  // A modal run's are both the shown mode's field (M6.2).
+  const quantityField = modal ? modeField(mode) : QUANTITIES[quantity].field;
   const wanted = useMemo(() => {
     if (cutSetting === null || !model?.results) return null;
     const displacement = model.results.fields.has("displacement") ? ["displacement"] : [];
@@ -864,16 +909,22 @@ export function Viewer({
     return { values, kept: drawn };
   }, [section, plane, nodeField, model, quantity, hiddenFaces, cutSetting]);
   const contour = useMemo(() => {
-    if (!model?.results || !units || shape === null) return null;
+    if (!model?.results || !units || shape === null || drawn === null) return null;
     if (typeof shape === "string") return shape;
-    return contourOf(shape, model.results, { quantity, units }, cutValues);
-  }, [model, shape, quantity, units, cutValues]);
-  const nodeDisplacement = volume?.fields.get("displacement");
+    if (typeof drawn === "string") return drawn;
+    return contourOf(shape, drawn, { quantity, units }, cutValues);
+  }, [model, shape, drawn, quantity, units, cutValues]);
+  const nodeDisplacement = volume?.fields.get(modal ? quantityField : "displacement");
   const sectionShape = useMemo(() => {
     if (section === null || !volume?.mesh || contour === null || typeof contour === "string") return null;
     if (contour.scale !== null && nodeDisplacement === undefined) return null;
     return sectionPositions(section, volume.mesh.positions, nodeDisplacement?.values ?? null, contour.scale ?? 0);
   }, [section, volume?.mesh, nodeDisplacement, contour]);
+  // The section on the undeformed shape, which a swinging mode shape moves it from (M6.2).
+  const sectionRest = useMemo(
+    () => (!animate || section === null || !volume?.mesh ? null : sectionPositions(section, volume.mesh.positions, null, 0)),
+    [animate, section, volume?.mesh],
+  );
   const legendShown = !!model?.results && contour !== null && typeof contour !== "string";
   // The model is rebuilt only when its shape changes; a new quantity or cut recolours it.
   const contourNow = useRef<Contour | null>(null);
@@ -903,12 +954,28 @@ export function Viewer({
   useEffect(() => {
     if (!model?.results || contour === null || typeof contour === "string") return;
     const cut = contour.cut;
+    // While a mode shape swings, the section swings with the model (M6.2).
+    const swing =
+      animate && sectionShape !== null && section !== null && volume?.mesh && contour.scale !== null
+        ? sectionShape.map((p, k) => p - (sectionRest?.[k] ?? p))
+        : undefined;
     view.current?.setCut(
       plane === null || section === null || sectionShape === null || cut === null
         ? null
-        : { plane, positions: sectionShape, indices: section.triangles, coordinates: cut.coordinates },
+        : { plane, positions: sectionShape, indices: section.triangles, coordinates: cut.coordinates, swing },
     );
-  }, [model, contour, plane, section, sectionShape]);
+  }, [model, contour, plane, section, sectionShape, animate, volume?.mesh, sectionRest]);
+  // A modal run's mode shape swings about the undeformed shape (M6.2): each vertex moves by its
+  // share of the deformation drawn. After setMesh, which stops it.
+  useEffect(() => {
+    if (!model?.results || contour === null || typeof contour === "string") return;
+    const shown = typeof shape === "object" && shape !== null ? shape : null;
+    view.current?.setSwing(
+      animate && shown !== null && shown.scale !== null && shown.displacement !== null
+        ? shown.displacement.values.map((u) => (shown.scale ?? 0) * u)
+        : null,
+    );
+  }, [model, contour, shape, animate]);
   useEffect(() => {
     if (!model?.results || contour === null || typeof contour === "string") return;
     view.current?.setMarkers(markersOf(contour, probes, extremes));
@@ -958,7 +1025,10 @@ export function Viewer({
       hiddenBodies: model.bodies.filter((tag) => hiddenBodies.has(tag)),
       // A view keeps only the quantities view.schema.json lists; the temperature (M5.1) is not one
       // yet, so its view keeps the camera and hidden bodies alone.
-      result: legendShown && isViewQuantity(quantity) ? { quantity, deformation, extremes, cut: cutSetting } : null,
+      result:
+        legendShown && isViewQuantity(quantity)
+          ? { quantity, deformation, extremes, cut: cutSetting, ...(modal ? { mode } : {}) }
+          : null,
     };
   };
   const saveView = async (name: string): Promise<string | null> => {
@@ -979,7 +1049,7 @@ export function Viewer({
     const next = new Set(hide.filter((tag) => bodies.has(tag)));
     setHiddenBodies(next.size < bodies.size ? next : new Set());
     if (legendShown && shows !== null) {
-      onResultChange?.({ quantity: shows.quantity, deformation: shows.deformation });
+      onResultChange?.({ quantity: shows.quantity, deformation: shows.deformation, mode: shows.mode ?? 1 });
       setExtremes(shows.extremes);
       setCutSetting(shows.cut);
     }

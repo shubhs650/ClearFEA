@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M6 Modal, in progress (maintainer's M6 autodrive, 2026-10-16)
-- **Next task:** M6.2, frequency table and mode shape display
+- **Next task:** M6.3, estimator terms for modal runs
 - **Blocked on:** nothing
 
 ## Milestones
@@ -95,7 +95,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M6 Modal
 
 - [x] M6.1 Modal analysis type: number of modes, supports only (with V-20, V-21, V-22)
-- [ ] M6.2 Frequency table; mode shape display and animation
+- [x] M6.2 Frequency table; mode shape display and animation (with V-20's mode shape checks)
 - [ ] M6.3 Estimator terms for modal runs
 
 ### M5 Thermal
@@ -131,6 +131,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M6.2 (2026-10-16): frequency table, mode shape display and animation (ADR-071, accepted under Shubham's M6 autodrive, pending his review). Physics-critical module touched: the result reader (`results/frd.py` gains `iter_nodal_blocks`, which `read_nodal_blocks` now uses unchanged; `results/modal.py` `read_mode_shapes`, `normalized_shape`; `ModalFields.shapes`; `surface.py` writes `mode1`…`modeN`, kind `ratio`). Each shape is scaled to a largest displacement of 1 and signed so the largest component where it moves most is positive. Deck generator untouched. New fixtures `worker/tests/fixtures/modal/*.frd` (ccx 2.21, SPOOLES, from the modal snapshots; `.gitignore` exempts them). view.schema.json: `modeShape` quantity and an optional `mode`. Web: `resultFields.ts` `isModalRun`, `modeField`, `modeResults`, `MODE_SHAPE_SHARE` (0.1 of the model's diagonal); the Run panel's `ModalFigures` is a table whose rows pick the mode, with Shape (exaggerated or undeformed) and Animate; `ModelView.setSwing` animates the surface, outlines and section in the vertex shader (`swing` attribute, `swingPhase` uniform); markers hide while it swings. A modal run solved under M6.1 has no shapes and the viewer asks for a rerun. Harness: `modeShape.x/.y/.z` with `mode`; V-20 gains three mid-span shape checks; `worker/spikes/modal_check` checks the same. Still no export for a modal run, and participation factors / effective masses are not read (parked). Next: M6.3, modal estimator terms (memory especially; see M6.1's note below), then M6 close. Screenshots in the project's `m6.2/` folder.
 
 > M6.1 (2026-10-16): modal analysis type (ADR-070, accepted under Shubham's M6 autodrive, pending his review). Physics-critical modules touched: the units table (version 8, `frequency`: Hz, kHz, cpm), the deck generator (`generator.py` `_frequency_step`: `*FREQUENCY, SOLVER=`, the modes, the supports' `*BOUNDARY` without values, `*NODE FILE` `U`; loads, nonzero prescribed displacements and iterative solvers refused; free bodies allowed but not with PaStiX) and the result reader (new `results/modal.py`, the `.dat` eigenvalue table; `SolveResult.frequencies` in Hz, signed). Earlier decks byte-identical, DECK_FORMAT 5; new snapshots `modal-c3d10`, `modal-held-c3d4`, `modal-free-bonded-c3d10`. Found: PaStiX gives wrong frequencies or aborts on a free body, because CalculiX factors K − 1·M (ADR-070 item 4), so a free body needs SPOOLES. Also: a modal run takes more memory than the static estimate, and V-20/V-21 at 2 mm ran out of the verification worker's 4 GB with PaStiX, so their full tier is 3 mm; M6.3 should fit modal memory and time. Mode shapes are written to the `.frd` but not read: `fields.bin`/`nodes.bin` of a modal run are empty and the viewer shows the geometry; M6.2 reads them (`results/modal.py` `ModalFields`) and adds the table and animation. New `worker/spikes/modal_check` (SPOOLES, 4 mm or `--size`). Web: Analysis gets Modal and "Number of modes"; the Run panel lists the frequencies (`ModalFigures`) with a rigid-body note. PLAN.md's V-21 corrected to the fixed-fixed beam. Screenshots in the project's `m6.1/` folder.
 
@@ -276,6 +278,7 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 - Shrink the worker image (about 2.1 GB since ADR-063): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use, and PaStiX needs the CUDA runtime libraries (no GPU is used).
 - A rigid (kinematic) option for remote loads, which keeps the loaded faces' shape (ADR-041 item 2), and drawing a remote load's reference point in the viewer. Needs the maintainer's decision on the option.
 - A 64-bit-integer PaStiX build and per-size limits for machines above 16 GB (ADR-063 item 10), when larger machines are benchmarked.
+- A modal run's export (CSV of frequencies, VTK with every mode shape) and its modal participation factors and effective masses, which the `.dat` file holds after the eigenvalues (ADR-071 item 2).
 - Keep a unit system picked before the project has loaded (`apps/web/src/units/useProject.ts` draws the loaded system over it right after sign-in; found by E-02, which waits for the load).
 
 ## Log
@@ -284,6 +287,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M6.2: frequency table, mode shape display and animation (ADR-071); V-20 checks three mode shapes at mid-span. Learned: CalculiX writes one `DISP` block per mode, mass-normalised, so the shapes need a scale and a sign of their own to read the same on every run.
 - M6.1: modal analysis type, frequencies only (ADR-070); V-20, V-21, V-22. Learned: PaStiX cannot solve a free body's frequency step (CalculiX's shift makes the matrix indefinite), and a modal solve needs more memory than a static one.
 - E-02: browser test of values entered in mixed units, part of `make e2e` (E-01 to E-04 pass locally). Learned: a unit system picked right after sign-in is drawn over when the project loads.
 - ADR-064 to ADR-069 (M5) reviewed and accepted by the maintainer; their status lines in DECISIONS.md updated.

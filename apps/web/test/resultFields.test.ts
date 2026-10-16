@@ -3,9 +3,12 @@ import { emptySimulationSpec, ResultQuantityValues } from "@clearfea/spec";
 import { describe, expect, it } from "vitest";
 import {
   extremeVertices,
+  isModalRun,
   isThermalRun,
   isThermalStressRun,
   isViewQuantity,
+  modeField,
+  modeResults,
   runChoice,
   runQuantities,
   nearestCorner,
@@ -93,6 +96,8 @@ describe("result view helpers", () => {
       safetyFactor: 1,
       temperature: 1,
       heatFlux: 3,
+      // A modal run's mode<N> fields, read as modeShape through modeResults (M6.2).
+      modeShape: 3,
     };
     for (const q of Object.values(QUANTITIES)) {
       expect(written[q.field]).toBe(q.components);
@@ -169,17 +174,57 @@ describe("quantities of a run (M5.1)", () => {
     const run = { spec: { ...spec, analysis: "thermal_stress" as const }, result: null };
     expect(isThermalRun(run)).toBe(false);
     expect(isThermalStressRun(run)).toBe(true);
-    expect(runQuantities(run)).toEqual(Object.keys(QUANTITIES));
-    const choice = { quantity: "temperature" as const, deformation: "auto" as const };
+    expect(runQuantities(run)).toEqual(Object.keys(QUANTITIES).filter((q) => q !== "modeShape"));
+    const choice = { quantity: "temperature" as const, deformation: "auto" as const, mode: 1 };
     expect(runChoice(run, choice)).toBe(choice);
-    expect(runChoice(run, { quantity: "vonMises", deformation: "true" })).toEqual({ quantity: "vonMises", deformation: "true" });
+    expect(runChoice(run, { quantity: "vonMises", deformation: "true", mode: 1 })).toEqual({
+      quantity: "vonMises",
+      deformation: "true",
+      mode: 1,
+    });
   });
 
   it("shows a thermal run's temperature undeformed, and keeps a static run's choice", () => {
-    const choice = { quantity: "vonMises" as const, deformation: "auto" as const };
-    expect(runChoice(thermalRun, choice)).toEqual({ quantity: "temperature", deformation: "undeformed" });
+    const choice = { quantity: "vonMises" as const, deformation: "auto" as const, mode: 1 };
+    expect(runChoice(thermalRun, choice)).toEqual({ quantity: "temperature", deformation: "undeformed", mode: 1 });
     expect(runChoice(staticRun, choice)).toBe(choice);
-    expect(runChoice(staticRun, { quantity: "temperature", deformation: "true" })).toEqual({ quantity: "vonMises", deformation: "true" });
+    expect(runChoice(staticRun, { quantity: "temperature", deformation: "true", mode: 1 })).toEqual({
+      quantity: "vonMises",
+      deformation: "true",
+      mode: 1,
+    });
+  });
+
+  it("shows a modal run's mode shape, of a mode it found, exaggerated or undeformed (M6.2)", () => {
+    const modalRun = {
+      spec: { ...spec, analysis: "modal" as const },
+      result: { nodes: 4, frequencies: [10, 20, 30], software: { calculix: "2.21" } },
+    };
+    expect(isModalRun(modalRun)).toBe(true);
+    expect(isModalRun(staticRun)).toBe(false);
+    expect(runQuantities(modalRun)).toEqual(["modeShape"]);
+    expect(runQuantities(staticRun)).not.toContain("modeShape");
+    expect(runChoice(modalRun, { quantity: "vonMises", deformation: "true", mode: 3 })).toEqual({
+      quantity: "modeShape",
+      deformation: "auto",
+      mode: 3,
+    });
+    expect(runChoice(modalRun, { quantity: "modeShape", deformation: "undeformed", mode: 4 }).mode).toBe(1);
+    const choice = { quantity: "modeShape" as const, deformation: "auto" as const, mode: 2 };
+    expect(runChoice(modalRun, choice)).toBe(choice);
+    // A static run keeps any mode number; it has none.
+    expect(runChoice(staticRun, { quantity: "vonMises", deformation: "auto", mode: 7 }).mode).toBe(7);
+  });
+
+  it("reads a modal run's mode shape as its quantity and displacement (M6.2)", () => {
+    const values = new Float32Array([0, 0, 1, 0, 0.5, 0]);
+    const fields = new Map([[modeField(2), { kind: "ratio", components: 3, values }]]);
+    const shown = modeResults({ vertexCount: 2, fields }, 2);
+    if (typeof shown === "string") throw new Error(shown);
+    expect(shown.fields.get("modeShape")?.values).toBe(values);
+    expect(shown.fields.get("displacement")?.values).toBe(values);
+    expect(modeResults({ vertexCount: 2, fields }, 1)).toContain("no shape for mode 1");
+    expect(modeResults({ vertexCount: 2, fields: new Map() }, 1)).toContain("solved before ClearFEA kept mode shapes");
   });
 
   it("saves only the quantities a saved view can keep", () => {

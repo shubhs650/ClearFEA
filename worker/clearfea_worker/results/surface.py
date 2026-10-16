@@ -12,7 +12,7 @@ results pipeline step 3. Two files per run for the surface:
   surface.bin, in SI, as float32: displacement (x, y, z), von Mises stress, and since M3.1 the
   stress components, the principal stresses and the total strain components (ADR-050), and
   since M3.5 the safety factor against yield when the setup gives every material a yield
-  strength (ADR-054).
+  strength (ADR-054). A modal run has its mode shapes instead (M6.2, ADR-071).
 
 Since M3.4 a third file, ``nodes.bin``, holds the same fields at every node of the mesh in the
 same format (vertex v is mesh node v of mesh.bin), so the viewer can draw them on a cut plane
@@ -112,9 +112,12 @@ def node_fields(fields: NodalFields | ThermalFields | ModalFields) -> list[Surfa
     """Every result field at every node of the mesh, in the order of result-fields.md: what
     nodes.bin holds for cut planes (M3.4, ADR-053). A thermal run has the temperature only
     (M5.1) and its heat flux (M5.3); a thermal stress run has both the structural fields and
-    those two after them (M5.4). A modal run has none yet (M6.1); its mode shapes are M6.2's."""
+    those two after them (M5.4). A modal run has one field per mode, ``mode1``, ``mode2`` …,
+    its shape scaled to a largest displacement of 1 (M6.2, ADR-071)."""
     if isinstance(fields, ModalFields):
-        return []
+        return [
+            SurfaceField(f"mode{k + 1}", "ratio", 3, shape) for k, shape in enumerate(fields.shapes)
+        ]
     if isinstance(fields, ThermalFields):
         return _thermal_fields(fields)
     return [

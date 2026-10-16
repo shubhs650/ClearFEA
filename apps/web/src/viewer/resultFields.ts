@@ -76,7 +76,14 @@ export function parseResultFields(buffer: ArrayBuffer): ResultFields {
  * view keeps one (M3.6). */
 export type Quantity = ResultQuantity;
 
-export type QuantityGroup = "Displacement" | "Stress" | "Strain" | "Safety factor" | "Temperature" | "Heat flux";
+export type QuantityGroup =
+  | "Displacement"
+  | "Stress"
+  | "Strain"
+  | "Safety factor"
+  | "Temperature"
+  | "Heat flux"
+  | "Mode shape";
 
 /** True for a quantity a saved view can keep (view.schema.json's ResultQuantity). */
 export function isViewQuantity(quantity: Quantity): quantity is ResultQuantity {
@@ -139,6 +146,16 @@ export const QUANTITIES: Record<Quantity, QuantityInfo> = {
   heatFluxX: { label: "Heat flux qx", kind: "heatFlux", group: "Heat flux", field: "heatFlux", components: 3, component: 0 },
   heatFluxY: { label: "Heat flux qy", kind: "heatFlux", group: "Heat flux", field: "heatFlux", components: 3, component: 1 },
   heatFluxZ: { label: "Heat flux qz", kind: "heatFlux", group: "Heat flux", field: "heatFlux", components: 3, component: 2 },
+  // A modal run's shape of one mode (M6.2, ADR-071), scaled to a largest displacement of 1; its
+  // field is mode<N> for the mode shown (modeField), read through modeResults.
+  modeShape: {
+    label: "Mode shape, relative displacement",
+    kind: "ratio",
+    group: "Mode shape",
+    field: "modeShape",
+    components: 3,
+    component: null,
+  },
 };
 
 /** The quantities of a steady-state thermal run, in menu order (M5.1, M5.3). */
@@ -161,11 +178,19 @@ export function isThermalStressRun(run: Pick<RunView, "spec">): boolean {
   return run.spec.analysis === "thermal_stress";
 }
 
+/** True for a run of a modal analysis (M6.1, ADR-070): its natural frequencies and, since M6.2,
+ * the shape of each mode (ADR-071). */
+export function isModalRun(run: Pick<RunView, "spec">): boolean {
+  return run.spec.analysis === "modal";
+}
+
 /** The quantities a run has fields for, in menu order: the temperature and heat flux for a
  * thermal run (a thermal run solved before M5.3 has no heat flux; the view says so), and both
- * the structural and those for a thermal stress run (M5.4). */
+ * the structural and those for a thermal stress run (M5.4); the mode shape for a modal run
+ * (M6.2). */
 export function runQuantities(run: Pick<RunView, "spec" | "result">): Quantity[] {
-  const all = Object.keys(QUANTITIES) as Quantity[];
+  if (isModalRun(run)) return ["modeShape"];
+  const all = (Object.keys(QUANTITIES) as Quantity[]).filter((q) => q !== "modeShape");
   if (isThermalStressRun(run)) return all;
   return isThermalRun(run) ? [...THERMAL_QUANTITIES] : all.filter((q) => !THERMAL_QUANTITIES.includes(q));
 }
@@ -173,18 +198,64 @@ export function runQuantities(run: Pick<RunView, "spec" | "result">): Quantity[]
 /**
  * What the result view shows of a run: the chosen quantity when the run has it, else the run's
  * first (von Mises stress, or the temperature of a thermal run); a thermal run has no
- * displacement, so it is always drawn undeformed.
+ * displacement, so it is always drawn undeformed. A modal run (M6.2) shows a mode shape, of a
+ * mode it found (the first when the choice names another), exaggerated or undeformed: its
+ * shape has no true scale.
  */
-export function runChoice<T extends { quantity: Quantity; deformation: Deformation }>(
+export function runChoice<T extends { quantity: Quantity; deformation: Deformation; mode: number }>(
   run: Pick<RunView, "spec" | "result">,
   choice: T,
 ): T {
   const thermal = isThermalRun(run);
+  const modal = isModalRun(run);
   const quantities = runQuantities(run);
-  const quantity = quantities.includes(choice.quantity) ? choice.quantity : thermal ? "temperature" : "vonMises";
-  const deformation = thermal ? "undeformed" : choice.deformation;
-  return quantity === choice.quantity && deformation === choice.deformation ? choice : { ...choice, quantity, deformation };
+  const quantity = quantities.includes(choice.quantity)
+    ? choice.quantity
+    : modal
+      ? "modeShape"
+      : thermal
+        ? "temperature"
+        : "vonMises";
+  const deformation = thermal ? "undeformed" : modal && choice.deformation === "true" ? "auto" : choice.deformation;
+  const modes = run.result?.frequencies?.length ?? 0;
+  const mode = modal && !(Number.isInteger(choice.mode) && choice.mode >= 1 && choice.mode <= modes) ? 1 : choice.mode;
+  return quantity === choice.quantity && deformation === choice.deformation && mode === choice.mode
+    ? choice
+    : { ...choice, quantity, deformation, mode };
 }
+
+/** The fields.bin field of a modal run holding the shape of a mode, counted from 1 (M6.2). */
+export function modeField(mode: number): string {
+  return `mode${mode}`;
+}
+
+/**
+ * A modal run's fields as the result view draws them (M6.2, ADR-071): the shape of `mode` both
+ * as the quantity drawn (modeShape) and as the displacement that deforms the model; or a reason
+ * there is none. A modal run solved before M6.2 kept no shapes.
+ */
+export function modeResults(results: ResultFields, mode: number): ResultFields | string {
+  const field = results.fields.get(modeField(mode));
+  if (field === undefined) {
+    return results.fields.size === 0
+      ? "This run was solved before ClearFEA kept mode shapes, so it has none. Run the simulation again to see them."
+      : `This run has no shape for mode ${mode}. Run the simulation again; if it happens again, report it as a bug.`;
+  }
+  if (field.components !== 3) {
+    return "The result files of this run do not belong together. Run the simulation again; if it happens again, report it as a bug.";
+  }
+  return {
+    vertexCount: results.vertexCount,
+    fields: new Map([
+      ["modeShape", field],
+      ["displacement", field],
+    ]),
+  };
+}
+
+/** A mode shape is drawn with its largest displacement at this share of the model's size
+ * (the diagonal of the box around it), since a free vibration has no size of its own (M6.2). */
+export const MODE_SHAPE_SHARE = 0.1;
 
 /** The largest safety factor the worker keeps; larger ones and unstressed nodes read as this
  * (ADR-054, worker/clearfea_worker/results/safety.py). */

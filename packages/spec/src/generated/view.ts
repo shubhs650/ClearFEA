@@ -16,7 +16,7 @@ import { validator } from "../validate";
  */
 export type ViewPoint = [number, number, number];
 /**
- * A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1), and its heat flux magnitude and components (M5.3).
+ * A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1), and its heat flux magnitude and components (M5.3); a modal run's mode shape (M6.2), whose mode a view keeps in mode.
  *
  * This interface was referenced by `View`'s JSON-Schema
  * via the `definition` "ResultQuantity".
@@ -44,7 +44,8 @@ export type ResultQuantity =
   | "heatFlux"
   | "heatFluxX"
   | "heatFluxY"
-  | "heatFluxZ";
+  | "heatFluxZ"
+  | "modeShape";
 /**
  * How the result view draws the shape: undeformed, at true scale, or exaggerated to be seen.
  *
@@ -98,6 +99,10 @@ export interface ViewResult {
    * Whether the min and max markers are drawn.
    */
   extremes: boolean;
+  /**
+   * The mode a view of a modal run's mode shape shows, from 1 (M6.2); left out for other quantities.
+   */
+  mode?: number;
   cut: ViewCut | null;
 }
 /**
@@ -156,7 +161,7 @@ export interface ViewListResponse {
 
 export const validateViewPoint = validator<ViewPoint>(schema, "ViewPoint");
 export const validateViewCamera = validator<ViewCamera>(schema, "ViewCamera");
-export const ResultQuantityValues = ["displacement", "vonMises", "principal1", "principal2", "principal3", "stressXX", "stressYY", "stressZZ", "stressXY", "stressYZ", "stressZX", "strainXX", "strainYY", "strainZZ", "strainXY", "strainYZ", "strainZX", "safetyFactor", "temperature", "heatFlux", "heatFluxX", "heatFluxY", "heatFluxZ"] as const satisfies readonly ResultQuantity[];
+export const ResultQuantityValues = ["displacement", "vonMises", "principal1", "principal2", "principal3", "stressXX", "stressYY", "stressZZ", "stressXY", "stressYZ", "stressZX", "strainXX", "strainYY", "strainZZ", "strainXY", "strainYZ", "strainZX", "safetyFactor", "temperature", "heatFlux", "heatFluxX", "heatFluxY", "heatFluxZ", "modeShape"] as const satisfies readonly ResultQuantity[];
 export const validateResultQuantity = validator<ResultQuantity>(schema, "ResultQuantity");
 export const DeformationValues = ["undeformed", "true", "auto"] as const satisfies readonly Deformation[];
 export const validateDeformation = validator<Deformation>(schema, "Deformation");

@@ -85,7 +85,12 @@ export function App() {
   // The tree item whose settings are shown: "geometry", a group, or a spec item's id.
   const [selected, setSelected] = useState("geometry");
   const [geometryRefresh, setGeometryRefresh] = useState(0);
-  const [resultChoice, setResultChoice] = useState<ResultChoice>({ quantity: "vonMises", deformation: "auto" });
+  const [resultChoice, setResultChoice] = useState<ResultChoice>({
+    quantity: "vonMises",
+    deformation: "auto",
+    mode: 1,
+    animate: false,
+  });
 
   // Face tags belong to one geometry, so a different geometry starts with no selection.
   const geometryId = geometry?.id;
@@ -464,8 +469,7 @@ export function App() {
         geometry={geometry}
         mesh={!showGeometry && selected === "mesh" ? mesh : null}
         result={
-          // A modal run has no fields to draw until its mode shapes (M6.2); the geometry stays.
-          !showGeometry && selected === "run" && run?.status === "succeeded" && run.spec.analysis !== "modal"
+          !showGeometry && selected === "run" && run?.status === "succeeded"
             ? { run, ...shownChoice, units: resultUnits }
             : null
         }
@@ -475,7 +479,7 @@ export function App() {
         edgeSelection={edgeSelection}
         onEdgeSelectionChange={setEdgeSelection}
         simulationId={setup.kind === "open" ? setup.id : null}
-        onResultChange={setResultChoice}
+        onResultChange={(next) => setResultChoice((was) => ({ ...was, ...next }))}
         onSignedOut={signedOut}
       />
       <SettingsPanel>

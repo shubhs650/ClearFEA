@@ -21,7 +21,7 @@
       }
     },
     "ResultQuantity": {
-      "description": "A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1), and its heat flux magnitude and components (M5.3).",
+      "description": "A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1), and its heat flux magnitude and components (M5.3); a modal run's mode shape (M6.2), whose mode a view keeps in mode.",
       "type": "string",
       "enum": [
         "displacement",
@@ -46,7 +46,8 @@
         "heatFlux",
         "heatFluxX",
         "heatFluxY",
-        "heatFluxZ"
+        "heatFluxZ",
+        "modeShape"
       ]
     },
     "Deformation": {
@@ -74,6 +75,11 @@
         "quantity": { "$ref": "#/$defs/ResultQuantity" },
         "deformation": { "$ref": "#/$defs/Deformation" },
         "extremes": { "description": "Whether the min and max markers are drawn.", "type": "boolean" },
+        "mode": {
+          "description": "The mode a view of a modal run's mode shape shows, from 1 (M6.2); left out for other quantities.",
+          "type": "integer",
+          "minimum": 1
+        },
         "cut": { "oneOf": [{ "$ref": "#/$defs/ViewCut" }, { "type": "null" }] }
       }
     },

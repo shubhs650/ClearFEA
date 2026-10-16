@@ -247,7 +247,7 @@ def run_case(
         )
 
     for check in case.checks:
-        if check.mode is not None:
+        if check.quantity == "frequency":
             value, error = frequency_error(check, run["result"].get("frequencies", []))
             limit = check.tolerance[tier]
             against = "" if check.relative_to is None else f" of mode {check.relative_to}"
