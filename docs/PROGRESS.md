@@ -5,8 +5,8 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M5 Thermal, in progress (M4 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M5 close (every M5 task done): ADR list for the maintainer and a green manual phase-end run
+- **Current milestone:** M6 Modal, not started (M5 closed 2026-10-16 on a green phase-end run on main)
+- **Next task:** M6.1, once the maintainer gives the go for M6 (his autodrive covered M5)
 - **Blocked on:** nothing
 
 ## Milestones
@@ -18,7 +18,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M2 | Structural setup | Done (phase-end run on main green, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) | 2026-10-16 |
 | M3 | Results tools | Done (phase-end run on main green, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) | 2026-10-16 |
 | M4 | Assemblies | Done (phase-end run on main green, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) | 2026-10-16 |
-| M5 | Thermal | In progress | |
+| M5 | Thermal | Done (phase-end run on main green, [run 38931101479](https://github.com/shubhs650/ClearFEA/actions/runs/38931101479)) | 2026-10-16 |
 | M6 | Modal | Not started | |
 | M7 | Report | Not started | |
 | M8 | Platform | Not started | |
@@ -119,11 +119,13 @@ Things only the maintainer can do.
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 23 cases, 271 of 271 checks (M5.6: new V-14 tube wall and V-27 two-layer tube); before that 249 of 249 (M5.5: new V-19); 230 of 230 (M5.4: new V-18 thermal stress cylinder); V-08, V-12, V-18 and V-24 61 of 61 again after the no-load balance scale change |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4); V-18 16 of 16 (M5.4); V-19 19 of 19 (2026-10-16, M5.5); V-14 and V-27 22 of 22 (M5.6) |
 | Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 (one body, every result step to M3.8), E-03 (two bonded bodies; also as thermal stress with heat across the bond since M5.6) and E-04 (thermal stress, M5.4; with conductivity and Young's modulus tables since M5.5); E-01 also checks the ADR-063 solver choice |
-| Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main 6e722e0, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547); closed M4) | Green: full tier 169 of 169 checks in all 15 cases (V-01 to V-12, V-24, V-25, V-26); E-01 |
+| Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main 94eb5e6, [run 38931101479](https://github.com/shubhs650/ClearFEA/actions/runs/38931101479); closed M5) | Green: full tier 271 of 271 checks in all 23 cases (V-01 to V-19, V-24 to V-27); E-01, E-03 and E-04 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M5 close (2026-10-16): M5 closed on a green manual phase-end run on main (see the Milestones table). Every M5 task, verification case (V-13 to V-19, V-27) and browser test listed for M5 (E-04; E-03's thermal step) is in; the exit (hot-inside, cool-outside thick tube) is covered by V-14 (temperature profile) and V-18 (thermal stress). Next is M6 in PLAN.md order, which waits for the maintainer's go. Still waiting on the maintainer: review of ADR-064 to ADR-069 (M5, accepted under the autodrive). E-02 (mixed-unit entry, listed for M2) is still not written.
 
 > M5.6 (2026-10-16): bonds carry heat (ADR-069, accepted under Shubham's M5 autodrive, pending his review). Physics-critical modules touched: the deck generator (`deck/loads/tie.py` `ties(..., temperature=held)` makes one `*EQUATION` on degree of freedom 11 per slave node with the displacement ties' weights, `TEMPERATURE`, `tie_heat`; `generator.py` `_heat_parts` writes them, `NSET=TTIED` and its `RFL`, and asks for a temperature-setting load per group of bonded bodies, `body_groups`) and the result reader (`results/heat.py` adds the tie heat to fixed-temperature nodes, since ccx's `RFL` leaves it out: 20 % out of balance without it on two blocks, all of it in snapshot `heat-bonded-c3d10`). A slave node at a fixed temperature is not tied. Earlier decks byte-identical, DECK_FORMAT 5; new snapshots `heat-bonded-c3d10`, `thermal-stress-bonded-c3d4` and their ccx fixtures. `packages/spec`: `unreachedBodies` (the core of `unheldBodies`), `thermalBodyMessages` now one message per group of bonded bodies no fixed temperature, convection or radiation reaches, offering a removed bond back; web Bodies rows mark such bodies. Report note `tiedInterfaces` mentions heat and V-27. New V-27 (two-layer tube, bonded layers k 50 and 15 W/(m·K), outer meshed finer; coarse and full within 0.1 % on temperatures) and V-14 (single tube, listed for M5 and not written before); both read the cut face's z = 0 edge, since its inside nodes lie anywhere and the outer layer's 11 K/mm gradient made a box around them read their spread. `make verify` coarse 271 of 271 in 23 cases. `worker/spikes/heat_check` (new `bonded.py`) checks a two-body bar at every node as heat transfer and thermal stress. E-03 now also runs its model as thermal stress, Lug's top hot and Base's end cooled, heat crossing the bond 10.38 W in and out. Next: the M5 close. Screenshots in the project's `m5.6/` folder.
 
@@ -270,6 +272,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M5 closed: phase-end workflow run by hand on main 94eb5e6 ([run 38931101479](https://github.com/shubhs650/ClearFEA/actions/runs/38931101479)) green, `make verify` full tier 271 of 271 checks in all 23 cases and `make e2e` E-01, E-03 and E-04. Next: M6, waiting on the maintainer's go.
 - M5.6: bonds carry heat in thermal and thermal stress analyses (ADR-069); V-14 and V-27 added, E-03 runs heat across its bond; `make verify` coarse 271 of 271 checks in 23 cases, V-14 and V-27 full 22 of 22, `make e2e` E-01, E-03 and E-04 green. Learned: ccx's `RFL` at a fixed-temperature node leaves out the heat tie equations pass to it, as RF leaves out tie forces.
 - M5.5: temperature-dependent property tables for conductivity, Young's modulus, Poisson's ratio and thermal expansion (ADR-068); V-19 added, E-04 uses two tables. Learned: ccx holds a table's end values beyond its range, reads `*EXPANSION, ZERO=` as mean coefficients from that temperature, and stops a nonlinear heat step early enough to leave 1e-4 of heat unbalanced unless `*CONTROLS` asks for more.
 - M5.4: thermal stress analysis, a heat transfer step then a static step in one deck (ADR-067); V-18 thick cylinder and the E-04 browser test added; `make verify` coarse 230 of 230 checks in 20 cases, V-18 full 16 of 16, `make e2e` E-01, E-03 and E-04 green. Learned: ccx measures thermal strain from the initial temperature, so the stress-free temperature must be written as `*INITIAL CONDITIONS`; a heated body on one support showed 100 % out of balance until the no-load scale used nodal forces.
