@@ -5,7 +5,9 @@
 // in packages/spec (M1.12).
 
 import {
+  type BondStatus,
   bodyLabels,
+  bondKey,
   displacementAxes,
   hasBodyLoad,
   hasTemperatureChange,
@@ -24,6 +26,7 @@ import {
   type Support,
   sameMeshSettings,
   simulationSpecProblems,
+  specBonds,
   supportKinds,
   type TopologyTags,
 } from "@clearfea/spec";
@@ -120,6 +123,18 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
         ? ["Add a material under Materials, then pick each body's material here."]
         : [`Pick a material for ${unassigned.join(", ")}.`];
   result.set("bodies", status(errorsOf("bodies"), bodiesMissing));
+  // Bonds (M4.2): incomplete while a detected bond awaits review. Detected bonds are tied all the
+  // same, so this is a reminder, not something a run waits for.
+  const unreviewed = specBonds(spec, topology).filter((b) => b.status === "detected").length;
+  result.set(
+    "bonds",
+    status(
+      errorsOf("bonds"),
+      unreviewed === 0
+        ? []
+        : [`Review ${unreviewed === 1 ? "the detected bond" : `${unreviewed} detected bonds`}: accept or remove each. Bonds not removed are tied.`],
+    ),
+  );
   result.set("materials", worst([status([], spec.materials.length === 0 ? ["Add a material."] : []), ...materials]));
 
   const supports = spec.supports.map((s) => {
@@ -392,6 +407,23 @@ export function updateLoad(spec: SimulationSpec, load: Load): SimulationSpec {
 /** Assigns a material to a body, or takes it off (null). */
 export function assignMaterial(spec: SimulationSpec, body: number, material: string | null): SimulationSpec {
   return { ...spec, bodies: spec.bodies.map((b) => (b.tag === body ? { ...b, material } : b)) };
+}
+
+/**
+ * Sets the review of bonds (M4.2): every bond whose faces are listed in `keys` (bondKey) gets
+ * `status`. A spec saved before M4.2 gets its own bond list first.
+ */
+export function setBondStatus(
+  spec: SimulationSpec,
+  topology: TopologyTags | undefined,
+  keys: readonly string[],
+  status: BondStatus,
+): SimulationSpec {
+  const which = new Set(keys);
+  return {
+    ...spec,
+    bonds: specBonds(spec, topology).map((b) => (which.has(bondKey(b.faces)) ? { ...b, status } : b)),
+  };
 }
 
 /**

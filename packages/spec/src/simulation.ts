@@ -5,6 +5,8 @@
 // pre-run validation's job (preRunProblems in prerun.ts, M1.12).
 
 import type {
+  Bond,
+  BondStatus,
   ElementOrder,
   IsotropicMaterial,
   LocalMeshScope,
@@ -24,6 +26,38 @@ export interface TopologyTags {
   bodies: readonly { tag: number; name?: string }[];
   faces: readonly { tag: number; type?: string }[];
   edges?: readonly { tag: number }[];
+  /**
+   * Candidate bonds between touching faces of different bodies (M4.2, ADR-059), with the contact
+   * area (m²) and largest gap (m) where known. Absent for geometries imported before M4.2.
+   */
+  bonds?: readonly TopologyBondTags[];
+}
+
+/** A candidate bond as topology.json lists it (M4.2): two faces, smaller tag first, and their bodies. */
+export interface TopologyBondTags {
+  faces: readonly [number, number];
+  bodies: readonly [number, number];
+  area?: number;
+  gap?: number;
+}
+
+/** The text a bond is told apart by: its two faces, smaller first ("6-11"). */
+export function bondKey(faces: readonly number[]): string {
+  return [...faces].sort((a, b) => a - b).join("-");
+}
+
+/**
+ * Every candidate bond of the geometry with the user's review of it (M4.2, ADR-059): the spec's
+ * own list, or, in a spec saved before M4.2, every candidate as detected.
+ */
+export function specBonds(spec: SimulationSpec, topology?: TopologyTags): Bond[] {
+  if (spec.bonds !== undefined) return spec.bonds;
+  return (topology?.bonds ?? []).map((b) => ({ faces: [b.faces[0], b.faces[1]], status: "detected" }));
+}
+
+/** True when a bond with this review is tied in the solver deck: every bond the user has not removed. */
+export function bondIsTied(status: BondStatus): boolean {
+  return status !== "removed";
 }
 
 /**
@@ -167,7 +201,7 @@ export function hasTemperatureChange(spec: SimulationSpec): boolean {
   return spec.loads.some((l) => l.type === "temperature");
 }
 
-/** A new, empty spec for a geometry: every body listed, nothing else set. */
+/** A new, empty spec for a geometry: every body and every candidate bond listed, nothing else set. */
 export function emptySimulationSpec(geometryId: string, topology: TopologyTags): SimulationSpec {
   return {
     version: 1,
@@ -178,6 +212,10 @@ export function emptySimulationSpec(geometryId: string, topology: TopologyTags):
     supports: [],
     loads: [],
     mesh: { size: null, order: 2, local: [] },
+    // Every candidate bond starts tied and unreviewed (M4.2); geometries imported before M4.2 have none.
+    ...(topology.bonds === undefined
+      ? {}
+      : { bonds: topology.bonds.map((b) => ({ faces: [b.faces[0], b.faces[1]], status: "detected" as const })) }),
   };
 }
 
@@ -231,7 +269,7 @@ export function materialProblems(material: IsotropicMaterial): string[] {
 
 /**
  * A problem with a spec and the item it belongs to: the id of a material, support or load,
- * "bodies" for the body list, "mesh" for the mesh settings.
+ * "bodies" for the body list, "bonds" for the bond list, "mesh" for the mesh settings.
  */
 export interface SpecProblem {
   item: string;
@@ -347,7 +385,35 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
     }
   }
 
+  const bondKeys = new Set<string>();
+  for (const bond of spec.bonds ?? []) {
+    const key = bondKey(bond.faces);
+    if (bondKeys.has(key)) add("bonds", `The bond between faces ${bond.faces.join(" and ")} is listed more than once.`);
+    bondKeys.add(key);
+  }
+
   if (topology !== undefined) {
+    // Bonds (M4.2): the spec reviews exactly the geometry's candidates; no bond can be made by hand.
+    if (spec.bonds !== undefined) {
+      if (topology.bonds === undefined) {
+        if (spec.bonds.length > 0) {
+          add("bonds", "The setup lists bonds, but this geometry was imported before bonds were detected. Upload the STEP file again.");
+        }
+      } else {
+        const candidates = new Set(topology.bonds.map((b) => bondKey(b.faces)));
+        for (const bond of spec.bonds) {
+          if (!candidates.has(bondKey(bond.faces))) {
+            add("bonds", `The geometry has no bond between faces ${bond.faces.join(" and ")}.`);
+          }
+        }
+        for (const bond of topology.bonds) {
+          if (!bondKeys.has(bondKey(bond.faces))) {
+            add("bonds", `The bond between faces ${bond.faces.join(" and ")} of the geometry is not listed in bonds.`);
+          }
+        }
+      }
+    }
+
     const known = new Set(topology.bodies.map((b) => b.tag));
     const unknownBodies = [...bodyTags].filter((tag) => !known.has(tag));
     const missingBodies = [...known].filter((tag) => !bodyTags.has(tag));
