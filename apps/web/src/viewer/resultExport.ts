@@ -12,7 +12,9 @@ import type { ResultFields } from "./resultFields";
 import type { VolumeMesh } from "./section";
 
 /** The units an export writes, one per kind (the Run panel's result units, ADR-056). */
-export type ExportUnits = Readonly<Record<"length" | "pressure" | "force" | "moment" | "strain" | "ratio", string>>;
+export type ExportUnits = Readonly<
+  Record<"length" | "pressure" | "force" | "moment" | "strain" | "temperature" | "ratio", string>
+>;
 
 /** A column group of the node CSV: one fields.bin field, its components' column names. */
 type CsvField = { name: string; kind: keyof ExportUnits; columns: readonly string[] };
@@ -28,6 +30,8 @@ const CSV_FIELDS: readonly CsvField[] = [
   // Tensor shear components (half the engineering shear strain), as stored (ADR-050).
   { name: "strain", kind: "strain", columns: TENSOR.map((c) => (c[0] === c[1] ? `strain ${c}` : `strain ${c} (tensor)`)) },
   { name: "safetyFactor", kind: "ratio", columns: ["safety factor"] },
+  // The only field of a steady-state thermal run (M5.1); absolute, converted with its offset.
+  { name: "temperature", kind: "temperature", columns: ["temperature"] },
 ];
 
 /** A column name with its unit in brackets; a ratio has none. */
@@ -123,7 +127,8 @@ export function reactionsCsv(result: SolveResult, spec: SimulationSpec, units: E
     ...["moment point x", "moment point y", "moment point z"].map((c) => header(c, units.length)),
   ];
   const rows = [columns];
-  for (const r of result.reactions) {
+  // A steady-state thermal run has no reactions (M5.1).
+  for (const r of result.reactions ?? []) {
     rows.push([
       "reaction",
       supportName.get(r.supportId) ?? r.supportId,
@@ -153,7 +158,7 @@ export const VTK_NODE_ORDER: Readonly<Record<1 | 2, readonly number[]>> = {
 };
 
 /** The VTK array name of a fields.bin field: its name and its SI unit. */
-const VTK_UNITS: Record<string, string> = { length: "m", pressure: "Pa", strain: "m/m" };
+const VTK_UNITS: Record<string, string> = { length: "m", pressure: "Pa", strain: "m/m", temperature: "K" };
 
 /** VTK names the six components of a symmetric tensor XX, YY, ZZ, XY, YZ, XZ, CalculiX's order. */
 const COMPONENT_NAMES: Record<string, readonly string[]> = {

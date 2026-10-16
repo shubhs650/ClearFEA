@@ -25,9 +25,11 @@ state=$(mktemp -d "${TMPDIR:-/tmp}/clearfea-e2e-state.XXXXXX")
 out=${E2E_OUT:-$(mktemp -d "${TMPDIR:-/tmp}/clearfea-e2e.XXXXXX")}
 mkdir -p "$out" && out=$(cd "$out" && pwd) # Playwright runs from apps/web
 
-say "Writing the test model."
+say "Writing the test models."
 uv run --project worker --locked python apps/web/e2e/block.py "$out/block.step" >"$out/model.log" 2>&1 ||
   die "Writing the test model with Gmsh failed; see $out/model.log."
+uv run --project worker --locked python apps/web/e2e/assembly.py "$out/assembly.step" >>"$out/model.log" 2>&1 ||
+  die "Writing the two-body test model with Gmsh failed; see $out/model.log."
 
 stack_start
 
@@ -43,5 +45,6 @@ curl -fsS -o /dev/null "http://127.0.0.1:$web_port/api/health" 2>/dev/null ||
   die "The web app has not answered on :$web_port after a minute; see $out/web.log."
 
 say "Running the browser tests (report and traces in $out)."
-CLEARFEA_E2E_URL="http://127.0.0.1:$web_port" CLEARFEA_E2E_MODEL="$out/block.step" CLEARFEA_E2E_OUT="$out" \
+CLEARFEA_E2E_URL="http://127.0.0.1:$web_port" CLEARFEA_E2E_MODEL="$out/block.step" \
+  CLEARFEA_E2E_ASSEMBLY="$out/assembly.step" CLEARFEA_E2E_OUT="$out" \
   "${playwright[@]}" test "$@"

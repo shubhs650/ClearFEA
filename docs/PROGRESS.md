@@ -5,8 +5,8 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M5 Thermal, not started (M4 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M5.1, once the maintainer gives the go for M5 (his autodrive covered M4)
+- **Current milestone:** M5 Thermal, in progress (M4 closed 2026-10-16 on a green phase-end run on main)
+- **Next task:** M5.2, under the maintainer's M5 autodrive
 - **Blocked on:** nothing
 
 ## Milestones
@@ -18,7 +18,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M2 | Structural setup | Done (phase-end run on main green, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) | 2026-10-16 |
 | M3 | Results tools | Done (phase-end run on main green, [run 38859875035](https://github.com/shubhs650/ClearFEA/actions/runs/38859875035)) | 2026-10-16 |
 | M4 | Assemblies | Done (phase-end run on main green, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) | 2026-10-16 |
-| M5 | Thermal | Not started | |
+| M5 | Thermal | In progress | |
 | M6 | Modal | Not started | |
 | M7 | Report | Not started | |
 | M8 | Platform | Not started | |
@@ -89,6 +89,16 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M4.3 Per-body meshing; tie constraints in the deck
 - [x] M4.4 Validation: unbonded or unrestrained bodies reported before run
 - [x] M4.5 Report text noting reduced stress accuracy at tied interfaces (stored for M7)
+- [x] E-03 Multi-body browser test (listed for M4 in VERIFICATION.md, written after the M4 close)
+
+### M5 Thermal
+
+- [x] M5.1 Steady-state thermal analysis type; thermal material properties
+- [ ] M5.2 Fixed temperature, heat flux, convection, radiation to ambient, internal heat generation (fixed temperature came with M5.1)
+- [ ] M5.3 Temperature and heat-flux results; heat balance check (heat in against heat out)
+- [ ] M5.4 Thermal stress: thermal step then static step; temperature field visible in the structural result
+- [ ] M5.5 Temperature-dependent property tables in materials, UI and deck
+- [ ] M5.6 Thermal bonds across tied interfaces
 
 ## Maintainer to-do
 
@@ -107,7 +117,7 @@ Things only the maintainer can do.
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 15 cases, 169 of 169 checks with PaStiX as the default solver (ADR-063) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4) |
-| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step, the M3.3 marker and probe step and the M3.4 cut plane step, the M3.5 safety factor step and the M3.6 saved view step and the ADR-063 solver choice step |
+| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 (one body, every result step to M3.8) and E-03 (two bonded bodies); E-01 also checks the ADR-063 solver choice |
 | Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main 6e722e0, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547); closed M4) | Green: full tier 169 of 169 checks in all 15 cases (V-01 to V-12, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
@@ -116,7 +126,11 @@ Written by the last session for the next one. Replace, do not append.
 
 > ADR-063 (2026-10-16): PaStiX is the default equation solver, with SPOOLES, iterative Cholesky and iterative scaling as user options, and runs are limited per solver and element order to what a 16 GB machine solves; the 2-million-element target is dropped (Shubham's decision before M4; ADR-063, pending his review of the details). Physics-critical module touched: the deck generator (every deck names its solver, deck format 4). `worker/ccx/build.sh` builds CalculiX 2.21 with a 32-bit PaStiX4CalculiX into the worker image (about 2.1 GB now). The worker sets `OMP_NUM_THREADS=1` as well as one solver thread: unset, OpenMP spun against PaStiX and cost 8 to 14 s a run. Limits on 16 GiB (10-node / 4-node elements): PaStiX 142,000 / 1,103,000; SPOOLES 161,000 / 461,000; both iterative 461,000 / 461,000 (capped at the largest mesh measured, as Shubham asked to stop the benchmark at 500,000 elements). `elementLimitProblem` in `packages/spec` refuses over-limit meshes in the setup and the API (409). The Run panel has an "Equation solver" list with each limit; picking an iterative solver shows an accuracy note, also in the run record and under results (Shubham chose "offer with warning"). `estimator.json` is version 2 with a law per solver. Runs made before keep `spooles` (their frozen spec has no solver). Surprising: the iterative solvers stop at a residual of 1e-4 fixed in ccx's source and miss 0.1% checks (iterative Cholesky 130 of 146, iterative scaling 139 of 146, worst 0.45%). Next: larger machines need a 64-bit PaStiX build (`Makefile_i8`) and their own benchmark, ADR-063 item 10.
 
-> M4 close (2026-10-16): M4 closed on a green manual phase-end run on main (see the Milestones table), after PR #59 fixed E-01's one-body check that M4.1's tree row had broken. The M4 exit (a three-body shell, nozzle and pad model runs with balanced reactions) was checked locally through `make verify` as a scratch case; its files and result table are in the project's `m4-close/` folder, not the repository. Next is M5 in PLAN.md order, which waits for the maintainer's go. Still waiting on the maintainer: review of ADR-058 to ADR-062 (M4, accepted under the autodrive). E-03 (multi-body upload, bonds, run; listed for M4 in VERIFICATION.md) is not written; E-01 is still one body.
+> M5.1 (2026-10-16): steady-state thermal analysis (ADR-064, accepted under Shubham's M5 autodrive, pending his review). Physics-critical modules touched: units table (`units.json` v5, kind `thermalConductivity`), the deck generator (`deck/generator.py` `_heat_transfer_deck`, new `deck/loads/heat.py`) and the result reader (`results/fields.py` `read_thermal_fields`, `results/summary.py` `summarize_thermal`, `results/surface.py`). Spec: `analysis` takes `steady_thermal`; materials gain `thermalConductivity`; new load `fixed_temperature` (faces, absolute temperature), pulled forward from M5.2 because a thermal run needs one to be solvable and verified; `SolveResult`'s displacement, vonMises and reactions are now optional and a thermal run has `temperature` min/max; `view.schema.json` `ResultQuantity` gains `temperature`. `analysisLoads`, `isThermal`, `wrongAnalysisMessage`, `thermalBodyMessages` in `packages/spec`; `preRunProblems` has a thermal branch. Deck: `*HEAT TRANSFER, STEADY STATE` with data line `1.0, 1.0` (without it ccx warns about a nonlinear analysis), `*CONDUCTIVITY`, `*BOUNDARY` DOF 11 in K, `*NODE FILE` NT; static decks unchanged (DECK_FORMAT 3; new snapshots `heat-c3d10`, `heat-two-bodies-c3d4`). Refused: supports or structural loads in a thermal setup (and a fixed temperature in a static one), tied bonds between bodies (until M5.6), a body without a fixed temperature, two fixed temperatures meeting at a node with different values, ≤ 0 K. Results: fields.bin/nodes.bin hold `temperature` (K) only. Web: Analysis row in the tree, thermal marks, "Add a fixed temperature", conductivity on the material panel, temperature figures, contour (undeformed), cut planes, probes, units shown, CSV/VTK with a temperature column, saved views. Harness: `temperature` quantity; thermal cases skip the force balance rows. New V-13 plane wall (temperatures at faces and three depths, 0.01 %); `worker/spikes/heat_check` (every node of a bar against the linear profile, C3D4 and C3D10). The estimator uses the linear static law for thermal runs (high, the safe side; the solver thread owns it). For M5.2: add the other thermal loads to `analysisLoads` and `_heat_transfer_deck`; with radiation the deck needs `*PHYSICAL CONSTANTS`. For M5.3: add `HFL`/`RFL` output, V-13's flux check and the heat balance automatic check (VERIFICATION.md). Parked: conductivities in the material library. Screenshots in the project's `m5.1/` folder.
+
+> E-03 (2026-10-16): the multi-body browser test, listed for M4 and written after the M4 close. `apps/web/e2e/e03-multi-body.e2e.ts` signs in as `bob` (so E-01's lists stay apart) and uploads `apps/web/e2e/assembly.py`'s model: "Base" (40 × 20 × 10 mm) and "Lug" (30 × 20 × 10 mm) touching at x = 0, part names written into the STEP text as `worker/tests/step_models.py` `two_blocks` does. Steps: Bodies lists Base and Lug; Steel for both, then Aluminium for Lug from the Bodies group; Bonds shows one 200 mm² bond, Show selects its two faces, Accept; fixed support on Base's x = 40 mm end and 1 MPa on Lug's top, each face's hover naming its body; removing the bond blocks the run with the Lug message, restoring it clears it; the run's reaction is the 600 N carried through the bond, out of balance under 0.1 %; the "Stresses near bonded faces" note shows; hiding Lug in the viewer leaves Base. `infra/e2e.sh` writes both models and passes `CLEARFEA_E2E_ASSEMBLY`. No app code changed. Screenshots in the project's `e03/` folder. Next: M5.
+
+> M4 close (2026-10-16): M4 closed on a green manual phase-end run on main (see the Milestones table), after PR #59 fixed E-01's one-body check that M4.1's tree row had broken. The M4 exit (a three-body shell, nozzle and pad model runs with balanced reactions) was checked locally through `make verify` as a scratch case; its files and result table are in the project's `m4-close/` folder, not the repository. Next is M5 in PLAN.md order, which waits for the maintainer's go. The maintainer reviewed and accepted ADR-058 to ADR-062 on 2026-10-16, so every ADR to date is accepted by him. E-03 was written afterwards (see the E-03 note above).
 
 > M4.5 (2026-10-16): report text on stress accuracy at tied interfaces, stored for M7 (ADR-062, accepted under Shubham's autodrive, pending his review). No physics-critical module touched. `packages/spec/report-notes.json` (schema `report-notes.schema.json`, Pydantic model generated) holds the note "Stresses near bonded faces" with ADR-060 item 9's measured figures; `runReportNotes(spec)` in `packages/spec/src/report.ts` returns the notes a run's frozen spec calls for (any bond not removed). The Run panel shows them under a succeeded run's results. For M7: the report job reads the same file (M7.5 can add the other standing statements to it, bumping `version` on any text change). Screenshot in the project's `m4.5/` folder. Next: M4 close (ADR list for review and a green manual phase-end run).
 
@@ -246,6 +260,9 @@ Newest first. One entry per session: date, what was done, what was learned.
 ### 2026-10-16
 
 - ADR-063: PaStiX built into the worker image and made the default solver, SPOOLES and both iterative solvers offered with an accuracy note on the iterative ones, all four benchmarked to 500,000 elements and runs limited per solver and element order on 16 GB; the 2-million-element target dropped. `make verify` with PaStiX 169 of 169 checks in all 15 cases (coarse), `make e2e` E-01 green with a solver step. Learned: OpenMP left unset spins a thread per core against PaStiX's own.
+- M5.1: steady-state thermal analysis type, thermal conductivity and fixed temperatures (ADR-064); V-13 plane wall added; `make verify` coarse 177 of 177 checks in 16 cases.
+- E-03: browser test of a two-body bonded model from upload to results, part of `make e2e` (both E-01 and E-03 pass locally).
+- ADR-058 to ADR-062 marked accepted by the maintainer (he reviewed them after the M4 close).
 - M4 closed: phase-end workflow run by hand on main 6e722e0 ([run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) green, `make verify` full tier 169 of 169 checks in all 15 cases and `make e2e` E-01. Next: M5, waiting on the maintainer's go.
 - M4 close, part 1: the first phase-end run on main b4280bf ([run 38889867749](https://github.com/shubhs650/ClearFEA/actions/runs/38889867749)) failed in `make e2e`: E-01's M3.6 step expected no button named "Bodies…" on a one-body model, and M4.1's Bodies row in the simulation tree is one. The step now looks only in the 3D viewer, the check it meant. M4's exit (a three-body shell, nozzle and pad model runs with balanced reactions) was run locally through `make verify` as a scratch case, not committed: 65,881 elements, reactions balance the applied load to 0.0014 %, the run's own balance check to 1.2e-7 %, membrane stress away from the nozzle 48.48 MPa against Lamé's 48.51 MPa. Next: re-run the phase-end workflow on main.
 - M4.5: the report's note on stress accuracy near bonded faces is stored in `packages/spec/report-notes.json` and shown under the results of runs that tied bonds (ADR-062). Learned: the no-verdict test caught "pass through" in the first draft, so notes avoid the word in any sense.

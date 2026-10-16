@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "kinds": {
     "length": {
       "description": "Lengths and coordinates.",
@@ -299,6 +299,32 @@
         }
       }
     },
+    "thermalConductivity": {
+      "description": "Thermal conductivity: heat flow per unit of area and of temperature gradient (M5.1).",
+      "si": "W/(m·K)",
+      "units": {
+        "W/(m·K)": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "W/(m·°C)": {
+          "factor": 1,
+          "definition": "1 W/(m·°C) = 1 W/(m·K) exactly"
+        },
+        "W/(mm·K)": {
+          "factor": 1000,
+          "definition": "1 W/(mm·K) = 1000 W/(m·K) exactly"
+        },
+        "BTU/(h·ft·°F)": {
+          "factor": 1.7307346663713912,
+          "definition": "BTU (International Table) = 1055.05585262 J, h = 3600 s, ft = 0.3048 m, °F = 5/9 K: 1055.05585262 x 9 / (3600 x 0.3048 x 5) = 1.7307346663... W/(m·K) (nearest double)"
+        },
+        "BTU·in/(h·ft²·°F)": {
+          "factor": 0.1442278888642826,
+          "definition": "BTU (International Table) = 1055.05585262 J, in = 0.0254 m: 1/12 of a BTU/(h·ft·°F) = 0.14422788886... W/(m·K) (nearest double)"
+        }
+      }
+    },
     "strain": {
       "description": "Strains: change of length per unit of length, dimensionless.",
       "si": "m/m",
@@ -352,6 +378,7 @@
         "temperature": "°C",
         "temperatureDifference": "°C",
         "thermalExpansion": "1/°C",
+        "thermalConductivity": "W/(m·°C)",
         "strain": "mm/mm",
         "ratio": "1"
       }
@@ -371,6 +398,7 @@
         "temperature": "K",
         "temperatureDifference": "K",
         "thermalExpansion": "1/K",
+        "thermalConductivity": "W/(m·K)",
         "strain": "m/m",
         "ratio": "1"
       }
@@ -390,6 +418,7 @@
         "temperature": "°F",
         "temperatureDifference": "°F",
         "thermalExpansion": "1/°F",
+        "thermalConductivity": "BTU/(h·ft·°F)",
         "strain": "in/in",
         "ratio": "1"
       }

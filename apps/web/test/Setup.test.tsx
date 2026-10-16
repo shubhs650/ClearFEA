@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import type { ModelViewEvents } from "../src/viewer/ModelView";
 import { readFixture } from "./fixtures";
-import { twoFacesFields } from "./resultFiles";
+import { encodeFields, twoFacesFields } from "./resultFiles";
 
 // jsdom has no WebGL: a stand-in scene lets the test pick faces and see the selection.
 const scene = vi.hoisted(() => ({
@@ -1103,7 +1103,7 @@ function finishedRun(beforeM32 = false, spec: SimulationSpec = supported): Recor
   };
   const { loads: _loads, balance: _balance, safetyFactor: _safetyFactor, ...older } = full;
   const result: SolveResult = beforeM32
-    ? { ...older, reactions: full.reactions.map(({ supportId, force }) => ({ supportId, force })) }
+    ? { ...older, reactions: (full.reactions ?? []).map(({ supportId, force }) => ({ supportId, force })) }
     : full;
   return {
     "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
@@ -1624,5 +1624,210 @@ describe("unit system", () => {
     fireEvent.change(unitSystem(), { target: { value: "us-in" } });
     expect(await tree().findByText("The unit system was not changed: 'us-in' is not a unit system.")).toBeTruthy();
     expect(unitSystem().value).toBe("metric-mm");
+  });
+});
+
+describe("steady-state thermal analysis (M5.1)", () => {
+  /** A thermal setup with nothing missing but its fixed temperature. */
+  const thermalSpec: SimulationSpec = {
+    ...meshed,
+    analysis: "steady_thermal",
+    bodies: [{ tag: 1, material: "steel" }],
+    materials: [
+      {
+        id: "steel",
+        name: "Steel",
+        model: "isotropic_elastic",
+        youngsModulus: null,
+        poissonsRatio: null,
+        thermalConductivity: { value: 45, unit: "W/(m·K)" },
+      },
+    ],
+  };
+
+  const heated: SimulationSpec = {
+    ...thermalSpec,
+    loads: [
+      { id: "fixed_temperature-1", type: "fixed_temperature", name: "Hot", faces: [3], temperature: { value: 100, unit: "°C" } },
+      { id: "fixed_temperature-2", type: "fixed_temperature", name: "Cold", faces: [7], temperature: { value: 20, unit: "°C" } },
+    ],
+  };
+
+  /** Routes of a succeeded thermal run whose only field is the temperature: 20 °C to 100 °C. */
+  function thermalRun(): Record<string, Route> {
+    const result: SolveResult = {
+      nodes: 7108,
+      temperature: {
+        min: { value: 293.15, node: 3, position: [0.1, 0.05, 0] },
+        max: { value: 373.15, node: 40, position: [0, 0, 0] },
+      },
+      software: { calculix: "2.21" },
+    };
+    const fields = encodeFields(7, [
+      { name: "temperature", kind: "temperature", components: 1, values: Array.from({ length: 7 }, (_, v) => 293.15 + (80 * v) / 6) },
+    ]);
+    return {
+      "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+      "GET /api/simulations/s1/runs": {
+        status: 200,
+        json: {
+          runs: [
+            run({
+              spec: heated,
+              status: "succeeded",
+              stage: null,
+              result,
+              files: ["deck.inp", "solver.log", "nodes.bin"],
+              cost: { billedSeconds: 3, amount: 833, charged: true },
+              finishedAt: "2026-10-15T12:01:00.000Z",
+            }),
+          ],
+        },
+      },
+      "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
+      "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
+      "GET /api/runs/r1/surface": { status: 200, bytes: display },
+      "GET /api/runs/r1/fields": { status: 200, bytes: fields },
+    };
+  }
+
+  it("switches the analysis type and marks what no longer belongs until it is deleted", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation(supported)], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    // The Analysis row sits between Geometry and Bodies.
+    const analysis = await screen.findByRole("button", { name: "Analysis, complete" });
+    const rows = tree().getAllByRole("button").map((b) => b.getAttribute("aria-label"));
+    expect(rows.slice(0, 3)).toEqual(["Geometry, complete", "Analysis, complete", "Bodies, complete"]);
+    fireEvent.click(analysis);
+    const linear = settings().getByRole("radio", { name: "Linear static" });
+    const thermal = settings().getByRole("radio", { name: "Steady-state thermal" });
+    expect(linear).toHaveProperty("checked", true);
+    expect(
+      settings().getByText("Steady-state heat conduction: temperatures from fixed temperatures on faces; every other face is insulated."),
+    ).toBeTruthy();
+
+    fireEvent.click(thermal);
+    await waitFor(() => expect(sent.at(-1)?.analysis).toBe("steady_thermal"));
+    // Only the analysis changed; the support and the pressure stay, marked as having no effect.
+    expect({ ...sent.at(-1), analysis: "linear_static" }).toEqual(supported);
+    expect(tree().getByRole("button", { name: "Base, has a problem" }).getAttribute("title")).toBe(
+      'Fixed support "Base" has no effect in a steady-state thermal analysis. Delete it, or set the analysis type to linear static.',
+    );
+    expect(tree().getByRole("button", { name: "Top, has a problem" })).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Steel, incomplete" }).getAttribute("title")).toBe(
+      "Enter the thermal conductivity; a steady-state thermal analysis needs it.",
+    );
+
+    // Once its supports are deleted, a thermal setup has no Supports group.
+    fireEvent.click(tree().getByRole("button", { name: "Base, has a problem" }));
+    fireEvent.click(settings().getByRole("button", { name: "Delete support" }));
+    expect(tree().queryByRole("button", { name: /^Supports,/ })).toBeNull();
+    fireEvent.click(tree().getByRole("button", { name: "Analysis, complete" }));
+    fireEvent.click(settings().getByRole("radio", { name: "Linear static" }));
+    expect(tree().getByRole("button", { name: "Supports, incomplete" })).toBeTruthy();
+    expect(tree().getByRole("button", { name: "Top, complete" })).toBeTruthy();
+  });
+
+  it("offers only a fixed temperature, on the selected faces, and asks the material for its conductivity", async () => {
+    const { sent, route } = saves();
+    const unset: SimulationSpec = {
+      ...thermalSpec,
+      materials: [{ ...thermalSpec.materials[0], thermalConductivity: null } as SimulationSpec["materials"][number]],
+    };
+    serve(routes([simulation(unset)], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+    expect(tree().queryByRole("button", { name: /^Supports,/ })).toBeNull();
+    expect(tree().getByRole("button", { name: "Loads, incomplete" }).getAttribute("title")).toBe("Add a fixed temperature.");
+
+    act(() => scene.events[0]?.onPick(3));
+    fireEvent.click(tree().getByRole("button", { name: "Loads, incomplete" }));
+    expect(settings().getByText("Select faces in the viewer first to give the new fixed temperature those faces.")).toBeTruthy();
+    expect(within(settings().getByRole("region", { name: "Loads" })).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Add a fixed temperature",
+    ]);
+    fireEvent.click(settings().getByRole("button", { name: "Add a fixed temperature" }));
+    expect(tree().getByRole("button", { name: "Fixed temperature 1, incomplete" })).toBeTruthy();
+    expect(settings().getByRole("heading", { name: "Fixed temperature" })).toBeTruthy();
+    expect(
+      settings().getByText(
+        "Holds every node of the faces at this temperature. Faces with no fixed temperature are insulated: no heat crosses them.",
+      ),
+    ).toBeTruthy();
+    expect(settings().getByText("Enter the temperature.")).toBeTruthy();
+    expect(settings().getByLabelText("Temperature unit")).toHaveProperty("value", "°C");
+    fireEvent.change(settings().getByLabelText("Temperature"), { target: { value: "-40" } });
+    expect(tree().getByRole("button", { name: "Fixed temperature 1, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.loads).toEqual([
+        {
+          id: "fixed_temperature-1",
+          type: "fixed_temperature",
+          name: "Fixed temperature 1",
+          faces: [3],
+          temperature: { value: -40, unit: "°C" },
+        },
+      ]),
+    );
+
+    // The material needs its thermal conductivity, not Young's modulus or Poisson's ratio.
+    fireEvent.click(tree().getByRole("button", { name: "Steel, incomplete" }));
+    expect(settings().getByText("Enter the thermal conductivity; a steady-state thermal analysis needs it.")).toBeTruthy();
+    expect(settings().queryByText("Enter Young's modulus.")).toBeNull();
+    expect(
+      settings().getByText("For example 45 W/(m·K) for carbon steel. Needed for a steady-state thermal analysis."),
+    ).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Thermal conductivity"), { target: { value: "45" } });
+    expect(tree().getByRole("button", { name: "Steel, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.materials[0]?.thermalConductivity).toEqual({ value: 45, unit: "W/(m·°C)" }),
+    );
+  });
+
+  it("shows a thermal run's highest and lowest temperature and draws the temperature alone", async () => {
+    window.localStorage.clear();
+    serve(routes([simulation(heated)], thermalRun()));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const legend = await screen.findByLabelText("Legend");
+    expect(legend.textContent).toContain("Temperature (°C)");
+    expect(legend.textContent).not.toContain("Deformed");
+    expect(legend.textContent).not.toContain("Undeformed");
+    // The bands run from 20 °C to 100 °C: the offset is applied, not just the factor.
+    expect(legend.textContent).toContain("91.11 to 100");
+    expect(legend.textContent).toContain("20 to 28.89");
+
+    const quantity = settings().getByLabelText("Quantity") as HTMLSelectElement;
+    expect(quantity.value).toBe("temperature");
+    expect([...quantity.options].map((o) => o.textContent)).toEqual(["Temperature"]);
+    expect([...quantity.querySelectorAll("optgroup")].map((g) => g.label)).toEqual(["Temperature"]);
+    expect(settings().queryByLabelText("Shape")).toBeNull();
+
+    const figures = within(settings().getByLabelText("Run results"));
+    expect(figures.getByText("Highest temperature").nextElementSibling?.textContent).toBe("100 °C at (0, 0, 0) mm");
+    expect(figures.getByText("Lowest temperature").nextElementSibling?.textContent).toBe("20 °C at (100, 50, 0) mm");
+    expect(figures.queryByText(/displacement|von Mises|Reaction|Applied|balance|safety factor/i)).toBeNull();
+
+    // The units shown are the length and the temperature only; kelvin and fahrenheit convert
+    // with their offsets.
+    const units = within(settings().getByRole("group", { name: "Units shown" }));
+    expect(units.getAllByRole("combobox").map((c) => c.closest("label")?.firstChild?.textContent)).toEqual([
+      "Length",
+      "Temperature",
+    ]);
+    fireEvent.change(settings().getByLabelText("Temperature"), { target: { value: "K" } });
+    expect(legend.textContent).toContain("Temperature (K)");
+    expect(figures.getByText("Highest temperature").nextElementSibling?.textContent).toBe("373.1 K at (0, 0, 0) mm");
+    fireEvent.change(settings().getByLabelText("Temperature"), { target: { value: "°F" } });
+    expect(figures.getByText("Lowest temperature").nextElementSibling?.textContent).toBe("68 °F at (100, 50, 0) mm");
+
+    // The node values and the VTK file can be exported; there are no reactions to export.
+    const exports = within(settings().getByRole("region", { name: "Export" }));
+    expect(exports.getByRole("button", { name: "Results at every node (CSV)" })).toHaveProperty("disabled", false);
+    expect(exports.getByRole("button", { name: "Mesh and results (VTK)" })).toHaveProperty("disabled", false);
+    expect(exports.queryByRole("button", { name: "Reactions and loads (CSV)" })).toBeNull();
+    expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
+    window.localStorage.clear();
   });
 });

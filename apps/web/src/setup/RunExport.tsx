@@ -34,7 +34,18 @@ async function meshAndNodes(runId: string) {
   return { mesh: parseVolumeMesh(mesh.value), nodes: parseResultFields(nodes.value) };
 }
 
-export function RunExport({ run, result, units }: { run: RunView; result: SolveResult; units: ExportUnits }) {
+export function RunExport({
+  run,
+  result,
+  units,
+  thermal = false,
+}: {
+  run: RunView;
+  result: SolveResult;
+  units: ExportUnits;
+  /** A steady-state thermal run (M5.1): temperatures at the nodes, and no reactions or loads. */
+  thermal?: boolean;
+}) {
   const [busy, setBusy] = useState<Kind | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const hasNodes = run.files.includes("nodes.bin");
@@ -77,13 +88,15 @@ export function RunExport({ run, result, units }: { run: RunView; result: SolveR
       <h3 className="pane-subtitle">Export</h3>
       <div className="export-buttons">
         {button("nodes", "Results at every node (CSV)", !hasNodes)}
-        {button("reactions", "Reactions and loads (CSV)")}
+        {!thermal && button("reactions", "Reactions and loads (CSV)")}
         {button("vtk", "Mesh and results (VTK)", !hasNodes)}
       </div>
       <p className="field-hint">
-        {hasNodes
-          ? "CSV files are in the units shown above, one row per mesh node numbered as in the solver input. The VTK file (.vtu) holds the undeformed mesh and every result at its nodes in SI units (m, Pa, m/m); warp by displacement to see the deformed shape."
-          : "This run was solved before node values were kept, so only the reactions can be exported. Run again to export the results at every node."}
+        {thermal
+          ? "The CSV file is in the units shown above, one row per mesh node numbered as in the solver input. The VTK file (.vtu) holds the mesh and the temperature at its nodes in SI units (m, K)."
+          : hasNodes
+            ? "CSV files are in the units shown above, one row per mesh node numbered as in the solver input. The VTK file (.vtu) holds the undeformed mesh and every result at its nodes in SI units (m, Pa, m/m); warp by displacement to see the deformed shape."
+            : "This run was solved before node values were kept, so only the reactions can be exported. Run again to export the results at every node."}
       </p>
       {problem !== null && (
         <p className="form-problem" role="alert">

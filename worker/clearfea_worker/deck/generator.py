@@ -16,6 +16,7 @@ from ..spec.simulation_schema import (
     CentrifugalLoad,
     ElasticSupport,
     FixedSupport,
+    FixedTemperatureLoad,
     ForceLoad,
     GravityLoad,
     HydrostaticLoad,
@@ -30,6 +31,7 @@ from .applied import force_loads
 from .common import DeckError, si
 from .constraints import (
     Hold,
+    body_nodes,
     check_held,
     frictionless_normals,
     hold_frame,
@@ -53,8 +55,9 @@ from .loads import (
     remote_vectors,
 )
 from .loads.body import gravity_vector, rotation
+from .loads.heat import conductivities, fixed_temperatures
 from .loads.thermal import expansions, temperature_change
-from .loads.tie import Equation, body_groups, ties
+from .loads.tie import Equation, body_groups, tied_bonds, ties
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
 DECK_FORMAT = 4
@@ -223,8 +226,7 @@ def _constraint_groups(held: dict[int, Hold], skip: set[int]) -> list[_Group]:
 
 
 #: CalculiX's name for each equation solver a spec may choose (ADR-063). Every deck names its
-#: solver on the ``*STATIC`` line, so the deck alone says what solved it, whatever the build's
-#: default.
+#: solver on the step line, so the deck alone says what solved it, whatever the build's default.
 SOLVER_NAMES = {
     "pastix": "PASTIX",
     "spooles": "SPOOLES",
@@ -237,51 +239,27 @@ DEFAULT_SOLVER = "pastix"
 SOLVERS = tuple(SOLVER_NAMES.values())
 
 
-def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None = None) -> str:
-    """CalculiX input for a linear static analysis of ``spec`` on ``mesh``.
-
-    The ``*STATIC`` line names the spec's equation solver (ADR-063); ``solver``, a CalculiX
-    name from SOLVERS, replaces it for the solver benchmark (M2.11). Raises DeckError when the
-    spec is incomplete or does not fit the mesh.
-    """
-    if solver is None:
-        solver = SOLVER_NAMES[spec.solver or DEFAULT_SOLVER]
-    elif solver not in SOLVERS:
-        raise DeckError(f"Unknown equation solver '{solver}'.")
-    if spec.analysis != "linear_static":
-        raise DeckError(f"Analysis type '{spec.analysis}' is not supported.")
-    if not spec.supports:
-        raise DeckError("The setup has no supports, so the part is free to move. Add a support.")
-    for item in (*spec.supports, *spec.loads):
-        if not isinstance(item, (GravityLoad, CentrifugalLoad, TemperatureLoad)):
-            _check_faces(mesh, item.faces, f"{item.name}")
-    bodies = _materials(spec, mesh)
-    gravity, spin = body_loads(spec)
-    if gravity is not None or spin is not None:
-        densities(spec, mesh)  # body loads need every body's density; DeckError names a gap
-    thermal = temperature_change(spec)
-    alpha = {} if thermal is None else expansions(spec, mesh)
-
-    npe = NODES_PER_ELEMENT[mesh.order]
-    used = set(mesh.elements)
-    if len(used) != mesh.node_count:
+def _check_nodes(mesh: VolumeMesh) -> None:
+    if len(set(mesh.elements)) != mesh.node_count:
         raise DeckError(
-            f"The mesh has {mesh.node_count - len(used)} nodes that belong to no element. "
-            "Mesh the simulation again."
+            f"The mesh has {mesh.node_count - len(set(mesh.elements))} nodes that belong to no "
+            "element. Mesh the simulation again."
         )
-    held = holds(spec, mesh)
-    springs = _elastic_springs(spec, mesh)
-    tie_list = ties(spec, mesh, node_frames(held))
-    check_held(mesh, held, [s for _, group in springs for s in group], body_groups(mesh, tie_list))
-    fixed_only = only_fixed_supports(spec)
-    normals = {} if fixed_only else frictionless_normals(spec, mesh)
 
+
+def _nodes_and_elements(
+    spec: SimulationSpec, mesh: VolumeMesh, bodies: list[tuple[int, int, str]], heading: str
+) -> list[str]:
+    """The deck's header, nodes and elements (one element set per body), shared by every
+    analysis type."""
+    npe = NODES_PER_ELEMENT[mesh.order]
     out = [
         f"** ClearFEA solver input, deck format {DECK_FORMAT}. Generated from the simulation's",
-        "** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).",
+        "** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa"
+        + (", K, W)." if spec.analysis == "steady_thermal" else ")."),
         f"** Geometry {spec.geometry_id}",
         "*HEADING",
-        "ClearFEA linear static analysis",
+        heading,
         f"** {mesh.node_count} nodes, {mesh.element_count} {ELEMENT_TYPE[mesh.order]} elements",
         "*NODE, NSET=NALL",
     ]
@@ -299,6 +277,127 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
             nodes = mesh.elements[e * npe : (e + 1) * npe]
             # The element id and ten nodes fit on one line of at most 16 entries.
             out.append(f"{e + 1}, " + ", ".join(str(nodes[k] + 1) for k in order))
+    return out
+
+
+def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> str:
+    """CalculiX input for a steady-state thermal analysis (M5.1, ADR-064): conduction only,
+    fixed temperatures on faces, every other face insulated. Temperatures in kelvin."""
+    wrong = [*spec.supports, *(x for x in spec.loads if not isinstance(x, FixedTemperatureLoad))]
+    if wrong:
+        raise DeckError(
+            f'"{wrong[0].name}" has no effect in a steady-state thermal analysis. Delete it, or '
+            "set the analysis type to linear static."
+        )
+    fixed = [x for x in spec.loads if isinstance(x, FixedTemperatureLoad)]
+    if not fixed:
+        raise DeckError(
+            "The setup has no fixed temperature, so the temperatures are not set anywhere. Add "
+            "a fixed temperature."
+        )
+    for load in fixed:
+        _check_faces(mesh, load.faces, f"{load.name}")
+    if len(mesh.bodies) > 1 and tied_bonds(spec):
+        raise DeckError(
+            "Bonds do not carry heat in a steady-state thermal analysis yet, so bonded bodies "
+            "cannot be run. Remove the bonds to run each body on its own."
+        )
+    bodies = _materials(spec, mesh)
+    k = conductivities(spec, mesh)
+    _check_nodes(mesh)
+    held = fixed_temperatures(spec, mesh)
+    # Bodies share no nodes (ADR-058), so each needs a fixed temperature of its own, or its
+    # temperature is undetermined and the equations singular.
+    nodes = {n for item in held for n in item.nodes}
+    unset = [tag for tag, _, _ in bodies if not nodes & body_nodes(mesh, [tag])]
+    if unset:
+        raise DeckError(
+            f"Body {', '.join(str(t) for t in unset)} has no fixed temperature, so its "
+            "temperature is not set. Add a fixed temperature on one of its faces."
+        )
+
+    out = _nodes_and_elements(spec, mesh, bodies, "ClearFEA steady-state thermal analysis")
+    for j, item in enumerate(held):
+        load, entered = item.load, item.load.temperature
+        assert entered is not None  # fixed_temperatures refuses a missing temperature
+        out.append(
+            f'** Fixed temperature {load.id} "{_label(load.name)}", faces '
+            + ", ".join(str(f) for f in load.faces)
+            + f": {_number(entered.value)} {entered.unit} = {_number(item.kelvin)} K"
+        )
+        out.append(f"*NSET, NSET=T{j + 1}")
+        out.extend(_lines(n + 1 for n in item.nodes))
+    for j, material in enumerate(spec.materials):
+        if material.id not in k:
+            continue
+        entered = material.thermal_conductivity
+        assert entered is not None  # conductivities() refuses a missing one
+        out.append(f'** Material {material.id} "{_label(material.name)}"')
+        out.append(f"*MATERIAL, NAME=M{j + 1}")
+        out.append(f"** Thermal conductivity {_number(entered.value)} {entered.unit}")
+        out.append("*CONDUCTIVITY")
+        out.append(_number(k[material.id]))
+    for tag, _, name in bodies:
+        out.append(f"*SOLID SECTION, ELSET=B{tag}, MATERIAL={name}")
+
+    out.append("*STEP")
+    step = "*HEAT TRANSFER, STEADY STATE"
+    out.append(f"{step}, SOLVER={solver}")
+    # CalculiX treats every heat transfer step as nonlinear and warns unless the first time
+    # increment and the step time are given; a linear steady state needs one increment.
+    out.append("1.0, 1.0")
+    out.append("*BOUNDARY")
+    # Degree of freedom 11 is the temperature.
+    out.extend(f"T{j + 1}, 11, 11, {_number(item.kelvin)}" for j, item in enumerate(held))
+    out.append("*NODE FILE")
+    out.append("NT")
+    out.append("*END STEP")
+    return "\n".join(out) + "\n"
+
+
+def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None = None) -> str:
+    """CalculiX input for the analysis of ``spec`` on ``mesh``: linear static, or steady-state
+    thermal (M5.1).
+
+    The step line (``*STATIC`` or ``*HEAT TRANSFER``) names the spec's equation solver
+    (ADR-063); ``solver``, a CalculiX name from SOLVERS, replaces it for the solver benchmark
+    (M2.11). Raises DeckError when the spec is incomplete or does not fit the mesh.
+    """
+    if solver is None:
+        solver = SOLVER_NAMES[spec.solver or DEFAULT_SOLVER]
+    elif solver not in SOLVERS:
+        raise DeckError(f"Unknown equation solver '{solver}'.")
+    if spec.analysis == "steady_thermal":
+        return _heat_transfer_deck(spec, mesh, solver)
+    if spec.analysis != "linear_static":
+        raise DeckError(f"Analysis type '{spec.analysis}' is not supported.")
+    thermal_loads = [x for x in spec.loads if isinstance(x, FixedTemperatureLoad)]
+    if thermal_loads:
+        raise DeckError(
+            f'Fixed temperature "{thermal_loads[0].name}" has no effect in a linear static '
+            "analysis. Delete it, or set the analysis type to steady-state thermal."
+        )
+    if not spec.supports:
+        raise DeckError("The setup has no supports, so the part is free to move. Add a support.")
+    for item in (*spec.supports, *spec.loads):
+        if not isinstance(item, (GravityLoad, CentrifugalLoad, TemperatureLoad)):
+            _check_faces(mesh, item.faces, f"{item.name}")
+    bodies = _materials(spec, mesh)
+    gravity, spin = body_loads(spec)
+    if gravity is not None or spin is not None:
+        densities(spec, mesh)  # body loads need every body's density; DeckError names a gap
+    thermal = temperature_change(spec)
+    alpha = {} if thermal is None else expansions(spec, mesh)
+
+    _check_nodes(mesh)
+    held = holds(spec, mesh)
+    springs = _elastic_springs(spec, mesh)
+    tie_list = ties(spec, mesh, node_frames(held))
+    check_held(mesh, held, [s for _, group in springs for s in group], body_groups(mesh, tie_list))
+    fixed_only = only_fixed_supports(spec)
+    normals = {} if fixed_only else frictionless_normals(spec, mesh)
+
+    out = _nodes_and_elements(spec, mesh, bodies, "ClearFEA linear static analysis")
 
     support_sets = support_set_names(spec)
     fixed_nodes: set[int] = set()

@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { emptySimulationSpec, type Load, type MeshView, preRunProblems, type RunView, type SimulationSpec } from "@clearfea/spec";
+import {
+  emptySimulationSpec,
+  type Load,
+  type MeshView,
+  preRunProblems,
+  type RunView,
+  type SimulationSpec,
+  thermalBodyMessages,
+} from "@clearfea/spec";
 import { describe, expect, it } from "vitest";
 import {
   addFixedSupport,
@@ -16,6 +24,7 @@ import {
   runStatus,
   removeItem,
   sameSpec,
+  setAnalysis,
   setBondStatus,
   setupStatus,
   updateLoad,
@@ -463,5 +472,90 @@ describe("bodies no support holds (M4.4)", () => {
     const accepted = setupStatus(assemblySpec("accepted"), assembly);
     expect([...accepted.values()].every((s) => s.mark === "complete")).toBe(true);
     expect(preRunProblems(assemblySpec("accepted"), assembly)).toEqual([]);
+  });
+});
+
+describe("steady-state thermal marks (M5.1)", () => {
+  /** A thermal setup: one material with a conductivity, a fixed temperature on face 1. */
+  function thermal(): SimulationSpec {
+    let spec = setAnalysis(addMaterial(empty()).spec, "steady_thermal");
+    const [material] = spec.materials;
+    if (!material) throw new Error("no material");
+    spec = updateMaterial(spec, { ...material, thermalConductivity: { value: 45, unit: "W/(m·K)" } });
+    spec = addLoad(spec, "fixed_temperature", [1]).spec;
+    const [load] = spec.loads;
+    if (load?.type !== "fixed_temperature") throw new Error("no fixed temperature");
+    return updateLoad(spec, { ...load, temperature: { value: 100, unit: "°C" } });
+  }
+
+  it("marks a complete thermal setup complete, with no support asked for", () => {
+    const spec = thermal();
+    expect(spec.loads[0]).toEqual({
+      id: "fixed_temperature-1",
+      type: "fixed_temperature",
+      name: "Fixed temperature 1",
+      faces: [1],
+      temperature: { value: 100, unit: "°C" },
+    });
+    const marks = setupStatus(spec, topology);
+    for (const item of ["analysis", "materials", "material-1", "supports", "loads", "fixed_temperature-1", "bodies"]) {
+      expect(marks.get(item)).toEqual({ mark: "complete", notes: [] });
+    }
+    expect(preRunProblems(spec, topology).filter((p) => p.item !== "mesh")).toEqual([]);
+  });
+
+  it("asks for the conductivity, a fixed temperature and its faces and temperature", () => {
+    let spec = setAnalysis(addMaterial(empty()).spec, "steady_thermal");
+    let marks = setupStatus(spec, topology);
+    expect(marks.get("material-1")).toEqual({
+      mark: "incomplete",
+      notes: ["Enter the thermal conductivity; a steady-state thermal analysis needs it."],
+    });
+    expect(marks.get("loads")).toEqual({ mark: "incomplete", notes: ["Add a fixed temperature."] });
+    spec = addLoad(spec, "fixed_temperature", []).spec;
+    marks = setupStatus(spec, topology);
+    expect(marks.get("fixed_temperature-1")).toEqual({
+      mark: "incomplete",
+      notes: ["Pick the faces to hold at the temperature.", "Enter the temperature."],
+    });
+    // Every mark that is not complete has a pre-run problem for the same item.
+    const items = new Set(preRunProblems(spec, topology).map((p) => p.item));
+    for (const item of ["material-1", "fixed_temperature-1"]) expect(items.has(item)).toBe(true);
+  });
+
+  it("marks supports and structural loads as errors in a thermal setup, with the pre-run message", () => {
+    const spec = { ...complete(), analysis: "steady_thermal" as const };
+    const marks = setupStatus(spec, topology);
+    const problems = new Map(preRunProblems(spec, topology).map((p) => [p.item, p.message]));
+    expect(marks.get("fixed-1")).toEqual({ mark: "error", notes: [problems.get("fixed-1")] });
+    expect(marks.get("pressure-1")).toEqual({ mark: "error", notes: [problems.get("pressure-1")] });
+    expect(marks.get("supports")?.mark).toBe("error");
+    expect(marks.get("loads")?.mark).toBe("error");
+    // Back to linear static, they belong again; a fixed temperature does not.
+    const back = addLoad(setAnalysis(spec, "linear_static"), "fixed_temperature", [1]).spec;
+    const again = setupStatus(back, topology);
+    expect(again.get("fixed-1")).toEqual({ mark: "complete", notes: [] });
+    expect(again.get("pressure-1")).toEqual({ mark: "complete", notes: [] });
+    expect(again.get("fixed_temperature-1")).toEqual({
+      mark: "error",
+      notes: [preRunProblems(back, topology).find((p) => p.item === "fixed_temperature-1")?.message],
+    });
+  });
+
+  it("takes the bodies' messages from thermalBodyMessages, not from the supports", () => {
+    const two = {
+      bodies: [{ tag: 1 }, { tag: 2 }],
+      faces: [
+        { tag: 1, bodies: [1] },
+        { tag: 2, bodies: [2] },
+      ],
+    };
+    let spec = setAnalysis(emptySimulationSpec("g1", two), "steady_thermal");
+    spec = addMaterial(spec).spec;
+    spec = addLoad(spec, "fixed_temperature", [1]).spec;
+    const notes = setupStatus(spec, two).get("bodies")?.notes ?? [];
+    expect(notes).toEqual(thermalBodyMessages(spec, two));
+    expect(notes.some((n) => n.includes("no fixed temperature"))).toBe(true);
+    expect(notes.some((n) => n.includes("support"))).toBe(false);
   });
 });

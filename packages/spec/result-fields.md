@@ -32,7 +32,8 @@ Version 1 holds, in this order:
 | `principalStress` | `pressure` | 3 | principal stresses σ1 ≥ σ2 ≥ σ3, the eigenvalues of the nodal stress tensor, in pascals | M3.1 |
 | `strain` | `strain` | 6 | total strain (elastic plus thermal) xx, yy, zz, xy, yz, zx, in m/m; the shear components are tensor components, half the engineering shear strain γ | M3.1 |
 | `safetyFactor` | `ratio` | 1 | safety factor against yield: the yield strength of the node's material over its von Mises stress, at most 15 (15 where there is no stress); only when every material of the setup has a yield strength (ADR-054) | M3.5 |
+| `temperature` | `temperature` | 1 | nodal temperature, absolute, in kelvin; a steady-state thermal run's only field (ADR-064) | M5.1 |
 
-Runs solved before M3.1 have only `displacement` and `vonMises`; the viewer says so when asked for another quantity (ADR-050).
+A steady-state thermal run (M5.1) has `temperature` only, and none of the structural fields. Runs solved before M3.1 have only `displacement` and `vonMises`; the viewer says so when asked for another quantity (ADR-050).
 
 Readers find fields by name, so a later version may add fields (principal stresses, temperature) to the table without changing the layout. A change to the layout bumps the version, and readers refuse versions they do not know.

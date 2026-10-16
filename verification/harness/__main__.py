@@ -21,7 +21,7 @@ from typing import Any
 
 from clearfea_worker.units import from_si
 
-from .binfiles import read_fields, read_mesh_positions, read_surface
+from .binfiles import Surface, read_fields, read_mesh_positions, read_surface
 from .cases import (
     BALANCE_TOLERANCE,
     QUANTITIES,
@@ -84,6 +84,44 @@ def d1_count(persist_to: Path, sql: str) -> int:
     out = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=True)
     rows = json.loads(out.stdout)[0]["results"]
     return int(next(iter(rows[0].values())))
+
+
+def balance_rows(
+    outcome: Outcome, spec: dict[str, Any], surface: Surface, run: dict[str, Any]
+) -> None:
+    """The force balance rows of a structural run: reactions against the applied load from
+    the case's own integration, and the run's own balance check."""
+    load, gross = applied_load(spec, surface)
+    forces = [r["force"] for r in run["result"]["reactions"]]
+    total = [sum(f[i] for f in forces) for i in range(3)]
+    miss, size = balance(load, gross, forces)
+    imbalance = miss / size
+    outcome.rows.append(
+        Row(
+            "Reactions balance the applied load",
+            "applied " + ", ".join(f"{c:.5g}" for c in load) + " N",
+            "reactions " + ", ".join(f"{c:.5g}" for c in total) + " N",
+            f"{100 * imbalance:.4f} % of {size:.5g} N",
+            f"{100 * BALANCE_TOLERANCE:g} %",
+            imbalance <= BALANCE_TOLERANCE,
+        )
+    )
+    # The run's own balance check (M3.2, ADR-051): its applied-load totals against its
+    # reactions, forces and moments, both from the worker.
+    check = run["result"].get("balance")
+    if check is None:
+        raise CaseError("The run's result has no balance check.")
+    worst = max(check["forceRatio"], check["momentRatio"])
+    outcome.rows.append(
+        Row(
+            "The run's balance check closes",
+            "force and moment",
+            f"force {100 * check['forceRatio']:.2g} %, moment {100 * check['momentRatio']:.2g} %",
+            f"{100 * worst:.4f} %",
+            f"{100 * BALANCE_TOLERANCE:g} %",
+            worst <= BALANCE_TOLERANCE,
+        )
+    )
 
 
 def run_case(
@@ -190,38 +228,10 @@ def run_case(
             )
         )
 
-    # Automatic checks on every case (docs/VERIFICATION.md).
-    load, gross = applied_load(spec, surface)
-    forces = [r["force"] for r in run["result"]["reactions"]]
-    total = [sum(f[i] for f in forces) for i in range(3)]
-    miss, size = balance(load, gross, forces)
-    imbalance = miss / size
-    outcome.rows.append(
-        Row(
-            "Reactions balance the applied load",
-            "applied " + ", ".join(f"{c:.5g}" for c in load) + " N",
-            "reactions " + ", ".join(f"{c:.5g}" for c in total) + " N",
-            f"{100 * imbalance:.4f} % of {size:.5g} N",
-            f"{100 * BALANCE_TOLERANCE:g} %",
-            imbalance <= BALANCE_TOLERANCE,
-        )
-    )
-    # The run's own balance check (M3.2, ADR-051): its applied-load totals against its
-    # reactions, forces and moments, both from the worker.
-    check = run["result"].get("balance")
-    if check is None:
-        raise CaseError("The run's result has no balance check.")
-    worst = max(check["forceRatio"], check["momentRatio"])
-    outcome.rows.append(
-        Row(
-            "The run's balance check closes",
-            "force and moment",
-            f"force {100 * check['forceRatio']:.2g} %, moment {100 * check['momentRatio']:.2g} %",
-            f"{100 * worst:.4f} %",
-            f"{100 * BALANCE_TOLERANCE:g} %",
-            worst <= BALANCE_TOLERANCE,
-        )
-    )
+    # Automatic checks on every case (docs/VERIFICATION.md). A steady-state thermal run has no
+    # forces; its heat balance comes with M5.3.
+    if spec["analysis"] != "steady_thermal":
+        balance_rows(outcome, spec, surface, run)
     warnings = unexpected_warnings(log, case.allowed_warnings)
     outcome.rows.append(
         Row(

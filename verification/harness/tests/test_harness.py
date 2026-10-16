@@ -648,3 +648,30 @@ def test_spec_templates_use_mixed_units() -> None:
         "lb/in³",
         "t/mm³",
     } <= units
+
+
+def test_evaluates_a_temperature_only_run() -> None:
+    s = surface()
+    n = len(s.positions)
+    # A thermal run's fields hold the temperature only (M5.1): no displacement to read.
+    fields = {"temperature": [(300.0 + v,) for v in range(n)]}
+    check = Check("t", "temperature", "plate", Box((0.05, 0, 0), (0.1, 0.05, 0)), 1.0, "K", {})
+    assert evaluate(check, s, fields, {"plate": 7}) == (pytest.approx(304.5), 2)
+
+
+def test_v13_references_are_a_linear_profile_between_the_fixed_temperatures() -> None:
+    case = load_case(CASES / "V-13-plane-wall")
+    hot, cold = (300 + 459.67) * 5 / 9, 293.15
+    assert [load["temperature"] for load in case.spec["loads"]] == [
+        {"value": 300, "unit": "°F"},
+        {"value": 20, "unit": "°C"},
+    ]
+    checks = by_name(case)
+    assert checks["Hot face at 300 °F"].reference == pytest.approx(hot, rel=1e-9)
+    assert checks["Cold face at 20 °C"].reference == pytest.approx(cold, rel=1e-12)
+    for name, x in (
+        ("A quarter of the way through, Th − (Th − Tc) / 4", 0.25),
+        ("Halfway through, the mean of Th and Tc", 0.5),
+        ("Three quarters of the way through, Tc + (Th − Tc) / 4", 0.75),
+    ):
+        assert checks[name].reference == pytest.approx(hot - (hot - cold) * x, rel=1e-8)

@@ -6,6 +6,7 @@
 
 import {
   specSolver,
+  type AnalysisType,
   type BondStatus,
   bodyLabels,
   bondKey,
@@ -13,6 +14,7 @@ import {
   hasBodyLoad,
   hasTemperatureChange,
   type IsotropicMaterial,
+  isThermal,
   type Load,
   type LocalMeshScope,
   type LocalMeshSize,
@@ -30,8 +32,10 @@ import {
   specBonds,
   supportKinds,
   type TopologyTags,
+  thermalBodyMessages,
   unheldBodies,
   unheldBodyMessages,
+  wrongAnalysisMessage,
 } from "@clearfea/spec";
 import { toSi } from "../units/convert";
 
@@ -40,7 +44,7 @@ export type SupportType = Support["type"];
 
 /**
  * The types of load the setup offers (M1.5 pressure; M2.3 force, gravity, centrifugal; M2.4 remote;
- * M2.5 hydrostatic; M2.7 temperature change).
+ * M2.5 hydrostatic; M2.7 temperature change; M5.1 fixed temperature).
  */
 export type LoadType = Load["type"];
 
@@ -91,16 +95,27 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   }
   const errorsOf = (item: string) => errors.get(item) ?? [];
   const result = new Map<string, ItemStatus>();
+  // The analysis type (M5.1) always has one of its values.
+  result.set("analysis", { mark: "complete", notes: [] });
+  // A steady-state thermal analysis (M5.1, ADR-064) needs conductivities and fixed temperatures;
+  // supports and structural loads have no effect in it, as preRunProblems says.
+  const thermal = isThermal(spec);
 
   const bodyLoad = hasBodyLoad(spec);
   const temperatureChange = hasTemperatureChange(spec);
   const materials = spec.materials.map((m) => {
     const missing: string[] = [];
-    if (m.youngsModulus === null) missing.push("Enter Young's modulus.");
-    if (m.poissonsRatio === null) missing.push("Enter Poisson's ratio.");
-    if (bodyLoad && (m.density ?? null) === null) missing.push("Enter the density; gravity and centrifugal loads need it.");
-    if (temperatureChange && (m.thermalExpansion ?? null) === null) {
-      missing.push("Enter the thermal expansion; the temperature change needs it.");
+    if (thermal) {
+      if ((m.thermalConductivity ?? null) === null) {
+        missing.push("Enter the thermal conductivity; a steady-state thermal analysis needs it.");
+      }
+    } else {
+      if (m.youngsModulus === null) missing.push("Enter Young's modulus.");
+      if (m.poissonsRatio === null) missing.push("Enter Poisson's ratio.");
+      if (bodyLoad && (m.density ?? null) === null) missing.push("Enter the density; gravity and centrifugal loads need it.");
+      if (temperatureChange && (m.thermalExpansion ?? null) === null) {
+        missing.push("Enter the thermal expansion; the temperature change needs it.");
+      }
     }
     const s = status(errorsOf(m.id), missing);
     result.set(m.id, s);
@@ -110,7 +125,8 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   // list (an unknown material, a body listed twice) mark the group.
   // A body no support or bond reaches (M4.4) is incomplete too, and so is the group.
   const labels = topology ? bodyLabels(topology) : new Map<number, string>();
-  const unheld = new Set(unheldBodies(spec, topology).flat());
+  // A thermal analysis has no supports, so no body is "unheld"; its body messages are its own.
+  const unheld = new Set(thermal ? [] : unheldBodies(spec, topology).flat());
   for (const b of spec.bodies) {
     const missing =
       b.material !== null
@@ -130,7 +146,8 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
       : spec.materials.length === 0
         ? ["Add a material under Materials, then pick each body's material here."]
         : [`Pick a material for ${unassigned.join(", ")}.`];
-  result.set("bodies", status(errorsOf("bodies"), [...bodiesMissing, ...unheldBodyMessages(spec, topology)]));
+  const bodyMessages = thermal ? thermalBodyMessages(spec, topology) : unheldBodyMessages(spec, topology);
+  result.set("bodies", status(errorsOf("bodies"), [...bodiesMissing, ...bodyMessages]));
   // Bonds (M4.2): incomplete while a detected bond awaits review. Detected bonds are tied all the
   // same, so this is a reminder, not something a run waits for.
   const unreviewed = specBonds(spec, topology).filter((b) => b.status === "detected").length;
@@ -166,20 +183,26 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
         missing.push("Give at least one component a value; every one is free.");
       }
     }
-    const item = status(errorsOf(s.id), missing);
+    // Supports belong to a linear static analysis; as preRunProblems does, wrongAnalysisMessage
+    // is asked about them only in a thermal one.
+    const item = status(thermal ? withWrongAnalysis(spec, s, errorsOf(s.id)) : errorsOf(s.id), missing);
     result.set(s.id, item);
     return item;
   });
-  result.set("supports", worst([status([], spec.supports.length === 0 ? ["Add a support."] : []), ...supports]));
+  const needsSupport = !thermal && spec.supports.length === 0;
+  result.set("supports", worst([status([], needsSupport ? ["Add a support."] : []), ...supports]));
 
   const loads = spec.loads.map((l) => {
-    const item = status(errorsOf(l.id), loadMissing(l));
+    const item = status(withWrongAnalysis(spec, l, errorsOf(l.id)), loadMissing(l));
     result.set(l.id, item);
     return item;
   });
   // A prescribed displacement other than zero loads the part by itself (ADR-039).
-  const needsLoad = spec.loads.length === 0 && !movesByDisplacement(spec);
-  result.set("loads", worst([status([], needsLoad ? ["Add a load."] : []), ...loads]));
+  const needsLoad = thermal
+    ? !spec.loads.some((l) => l.type === "fixed_temperature")
+    : spec.loads.length === 0 && !movesByDisplacement(spec);
+  const addLoadNote = thermal ? "Add a fixed temperature." : "Add a load.";
+  result.set("loads", worst([status([], needsLoad ? [addLoadNote] : []), ...loads]));
 
   const settings = status(errorsOf("mesh"), spec.mesh.size === null ? ["Enter a global mesh size."] : []);
   const global = spec.mesh.size;
@@ -198,6 +221,17 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
   });
   result.set("mesh", worst([settings, ...locals]));
   return result;
+}
+
+/** An item's errors, with why it does not belong to the analysis type when it does not (M5.1). */
+function withWrongAnalysis(spec: SimulationSpec, item: Support | Load, errors: readonly string[]): string[] {
+  const wrong = wrongAnalysisMessage(spec, item);
+  return wrong === null ? [...errors] : [...errors, wrong];
+}
+
+/** Sets the analysis type (M5.1). Items that do not belong to it stay, marked, until deleted. */
+export function setAnalysis(spec: SimulationSpec, analysis: AnalysisType): SimulationSpec {
+  return { ...spec, analysis };
 }
 
 /** True when length a is larger than length b; false when either unit is unknown. */
@@ -219,10 +253,16 @@ const loadNoun: Record<LoadType, string> = {
   gravity: "gravity",
   centrifugal: "centrifugal load",
   temperature: "temperature change",
+  fixed_temperature: "fixed temperature",
 };
 
 function loadMissing(load: Load): string[] {
   const missing: string[] = [];
+  if (load.type === "fixed_temperature") {
+    if (load.faces.length === 0) missing.push("Pick the faces to hold at the temperature.");
+    if (load.temperature === null) missing.push("Enter the temperature.");
+    return missing;
+  }
   if (loadHasFaces(load) && load.faces.length === 0) {
     missing.push(`Pick the faces the ${loadNoun[load.type]} acts on.`);
   }
@@ -242,7 +282,7 @@ function loadMissing(load: Load): string[] {
     if (displacementAxes.some((axis) => load.freeSurface[axis] === null)) missing.push("Enter a point on the free surface.");
   } else if (load.type === "temperature") {
     if (load.change === null) missing.push("Enter the temperature change (negative for cooling).");
-  } else {
+  } else if (load.type === "centrifugal") {
     if (load.angularVelocity === null) missing.push("Enter the angular velocity.");
     if (displacementAxes.some((axis) => load.axisPoint[axis] === null)) missing.push("Enter a point on the axis.");
     if (displacementAxes.some((axis) => load.axisDirection[axis] === null)) missing.push("Enter the axis direction.");
@@ -334,9 +374,9 @@ export function addFixedSupport(spec: SimulationSpec, faces: readonly number[]):
 }
 
 /**
- * Adds a load of the given type, with every value still to enter. A pressure, force, remote load
- * or hydrostatic pressure takes the given faces; gravity, a centrifugal load and a temperature
- * change act on every body and have none.
+ * Adds a load of the given type, with every value still to enter. A pressure, force, remote load,
+ * hydrostatic pressure or fixed temperature takes the given faces; gravity, a centrifugal load and
+ * a temperature change act on every body and have none.
  */
 export function addLoad(
   spec: SimulationSpec,
@@ -366,7 +406,9 @@ export function addLoad(
               ? { ...base, type, ...empty }
               : type === "temperature"
                 ? { ...base, type, change: null }
-                : { ...base, type, angularVelocity: null, axisPoint: { ...empty }, axisDirection: { ...empty } };
+                : type === "fixed_temperature"
+                  ? { ...base, type, faces: [...faces], temperature: null }
+                  : { ...base, type, angularVelocity: null, axisPoint: { ...empty }, axisDirection: { ...empty } };
   return { id: load.id, spec: { ...spec, loads: [...spec.loads, load] } };
 }
 
@@ -395,7 +437,14 @@ export function updateLocalSize(spec: SimulationSpec, item: LocalMeshSize): Simu
  */
 export function editMaterial(spec: SimulationSpec, material: IsotropicMaterial, changes: Partial<IsotropicMaterial>): SimulationSpec {
   const next: IsotropicMaterial = { ...material, ...changes };
-  const values = ["youngsModulus", "poissonsRatio", "density", "thermalExpansion", "yieldStrength"] as const;
+  const values = [
+    "youngsModulus",
+    "poissonsRatio",
+    "density",
+    "thermalExpansion",
+    "thermalConductivity",
+    "yieldStrength",
+  ] as const;
   if (values.some((key) => key in changes && changes[key] !== material[key])) delete next.source;
   return updateMaterial(spec, next);
 }

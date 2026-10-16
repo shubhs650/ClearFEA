@@ -35,8 +35,8 @@
       "uniqueItems": true
     },
     "AnalysisType": {
-      "description": "linear_static: small-displacement linear elastic static analysis, one load step.",
-      "enum": ["linear_static"]
+      "description": "linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064); it solves temperatures only, so it uses thermal loads and no supports.",
+      "enum": ["linear_static", "steady_thermal"]
     },
     "BodyAssignment": {
       "description": "A body of the geometry and the material it is made of. Every body of the geometry appears exactly once.",
@@ -91,6 +91,10 @@
         },
         "thermalExpansion": {
           "description": "Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.",
+          "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
+        },
+        "thermalConductivity": {
+          "description": "Thermal conductivity, a thermalConductivity quantity greater than zero (M5.1, ADR-064). Needed only by a steady-state thermal analysis; absent or null until entered.",
           "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "type": "null" }]
         },
         "yieldStrength": {
@@ -276,6 +280,19 @@
         "change": { "$ref": "#/$defs/OptionalQuantity" }
       }
     },
+    "FixedTemperatureLoad": {
+      "description": "The faces held at one temperature in a steady-state thermal analysis (M5.1, ADR-064). temperature is an absolute temperature quantity (with its offset: 20 °C is 293.15 K), null until entered.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "faces", "temperature"],
+      "properties": {
+        "id": { "$ref": "#/$defs/ItemId" },
+        "type": { "const": "fixed_temperature" },
+        "name": { "$ref": "#/$defs/ItemName" },
+        "faces": { "$ref": "#/$defs/FaceTags" },
+        "temperature": { "$ref": "#/$defs/OptionalQuantity" }
+      }
+    },
     "AxisPoint": {
       "description": "A point in global coordinates; each coordinate a length quantity, null until entered.",
       "type": "object",
@@ -370,7 +387,8 @@
         { "$ref": "#/$defs/HydrostaticLoad" },
         { "$ref": "#/$defs/GravityLoad" },
         { "$ref": "#/$defs/CentrifugalLoad" },
-        { "$ref": "#/$defs/TemperatureLoad" }
+        { "$ref": "#/$defs/TemperatureLoad" },
+        { "$ref": "#/$defs/FixedTemperatureLoad" }
       ]
     },
     "LocalMeshScope": {
@@ -418,7 +436,7 @@
       "enum": ["pastix", "spooles", "iterative_cholesky", "iterative_scaling"]
     },
     "SimulationSpec": {
-      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
+      "description": "Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.",
       "type": "object",
       "additionalProperties": false,
       "required": ["version", "analysis", "geometryId", "bodies", "materials", "supports", "loads", "mesh"],
@@ -656,10 +674,10 @@
       }
     },
     "SolveResult": {
-      "description": "Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons.",
+      "description": "Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons, temperature in kelvin. A linear static run has displacement, vonMises and reactions; a steady-state thermal run has temperature instead (M5.1, ADR-064).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["nodes", "displacement", "vonMises", "reactions", "software"],
+      "required": ["nodes", "software"],
       "properties": {
         "nodes": { "description": "Nodes with results; every node of the mesh.", "type": "integer", "minimum": 4 },
         "displacement": {
@@ -671,6 +689,13 @@
         },
         "vonMises": {
           "description": "Smallest and largest von Mises stress of CalculiX's nodal stresses.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": { "min": { "$ref": "#/$defs/NodeValue" }, "max": { "$ref": "#/$defs/NodeValue" } }
+        },
+        "temperature": {
+          "description": "Smallest and largest nodal temperature of a steady-state thermal run, in kelvin (M5.1).",
           "type": "object",
           "additionalProperties": false,
           "required": ["min", "max"],

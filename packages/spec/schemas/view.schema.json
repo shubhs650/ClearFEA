@@ -21,7 +21,7 @@
       }
     },
     "ResultQuantity": {
-      "description": "A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts).",
+      "description": "A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1).",
       "type": "string",
       "enum": [
         "displacement",
@@ -41,7 +41,8 @@
         "strainXY",
         "strainYZ",
         "strainZX",
-        "safetyFactor"
+        "safetyFactor",
+        "temperature"
       ]
     },
     "Deformation": {

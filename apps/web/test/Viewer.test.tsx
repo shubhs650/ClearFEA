@@ -750,3 +750,87 @@ describe("saved views (M3.6)", () => {
     expect(screen.queryByRole("button", { name: "Body 1 from below" })).toBeNull();
   });
 });
+
+describe("thermal results (M5.1)", () => {
+  const thermalRun: RunView = {
+    ...succeeded,
+    spec: { ...succeeded.spec, analysis: "steady_thermal" },
+  };
+  // Vertex v is at 20 + 10 v °C: 20 °C to 80 °C over the seven vertices.
+  const temperatures = encodeFields(7, [
+    { name: "temperature", kind: "temperature", components: 1, values: Array.from({ length: 7 }, (_, v) => 293.15 + 10 * v) },
+  ]);
+  const thermal = {
+    ...results,
+    "/api/runs/r1/fields": { status: 200, bytes: temperatures },
+  };
+
+  function ThermalHarness({ unit }: { unit: string }) {
+    const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
+    return (
+      <Viewer
+        geometry={geometry()}
+        result={{ run: thermalRun, quantity: "temperature", deformation: "undeformed", units: { ...UNITS, temperature: unit } }}
+        selection={selection}
+        onSelectionChange={setSelection}
+        onSignedOut={() => {}}
+      />
+    );
+  }
+
+  it("draws the temperature undeformed, with the legend, markers and probes converted with the offset", async () => {
+    serve(thermal);
+    const { rerender } = render(<ThermalHarness unit="°C" />);
+    const legend = await screen.findByLabelText("Legend");
+    expect(legend.textContent).toContain("Temperature (°C)");
+    expect(legend.textContent).not.toMatch(/shape/i);
+    const rows = [...legend.querySelectorAll("li")].map((li) => li.textContent);
+    expect(rows[0]).toBe("73.33 to 80");
+    expect(rows[8]).toBe("20 to 26.67");
+    const view = scene.instances[0];
+    // No displacement: the surface is drawn where the file has it.
+    await vi.waitFor(() => expect(view?.meshes.at(-1)?.positions).toEqual(new Float32Array(readPositions())));
+    await vi.waitFor(() =>
+      expect(view?.markers.at(-1)?.slice(0, 2)).toMatchObject([
+        { kind: "max", text: "Max 80 °C" },
+        { kind: "min", text: "Min 20 °C" },
+      ]),
+    );
+    act(() => view?.events.onProbe?.(4));
+    const probes = screen.getByLabelText("Probes");
+    expect(probes.querySelector("li")?.textContent).toMatch(/^1: 60 °C at/);
+    rerender(<ThermalHarness unit="°F" />);
+    await vi.waitFor(() => expect(probes.querySelector("li")?.textContent).toMatch(/^1: 140 °F at/));
+    expect(screen.getByLabelText("Legend").textContent).toContain("68 to 80");
+    rerender(<ThermalHarness unit="K" />);
+    await vi.waitFor(() => expect(probes.querySelector("li")?.textContent).toMatch(/^1: 333.1 K at/));
+  });
+
+  it("cuts a thermal run asking for the temperature at every node and nothing else", async () => {
+    const cube = boxMesh(2);
+    const view0 = new DataView(cube);
+    const nodes = view0.getUint32(12, true);
+    const x = (n: number) => view0.getFloat64(32 + n * 24, true);
+    // 0 °C at x = 0 to 100 °C at x = 1 m; a request for displacement is a test error.
+    const fetchMock = serve({
+      ...thermal,
+      "/api/runs/r1/mesh": { status: 200, bytes: cube },
+      "/api/runs/r1/nodes?field=temperature": {
+        status: 200,
+        bytes: encodeFields(nodes, [
+          { name: "temperature", kind: "temperature", components: 1, values: Array.from({ length: nodes }, (_, n) => 273.15 + 100 * x(n)) },
+        ]),
+      },
+    });
+    render(<ThermalHarness unit="°C" />);
+    await screen.findByLabelText("Legend");
+    fireEvent.click(screen.getByLabelText("Cut plane"));
+    const panel = screen.getByLabelText("Cut plane", { selector: "section" });
+    await vi.waitFor(() => expect(panel.textContent).toContain("Cuts 24 elements."));
+    const view = scene.instances[0];
+    // The section at x = 0.5 m is at 50 °C, inside the surface's 20 °C to 80 °C.
+    await vi.waitFor(() => expect(view?.cuts.at(-1)?.plane).toEqual({ normal: [1, 0, 0], offset: 0.5 }));
+    expect(fetchMock.mock.calls.map(([path]) => String(path))).not.toContain("/api/runs/r1/nodes?field=displacement");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
