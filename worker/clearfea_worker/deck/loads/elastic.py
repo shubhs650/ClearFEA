@@ -124,13 +124,25 @@ def elastic_springs(mesh: VolumeMesh, support: ElasticSupport) -> list[Spring]:
     return springs
 
 
-def spring_reaction(springs: list[Spring], displacements: dict[int, Vector]) -> Vector:
-    """The force (N) the springs put on the part when their nodes (0-based) have moved by
-    ``displacements`` (m): the sum of -k_i d_i (d_i · u_i). KeyError for a node without one."""
-    total = [0.0, 0.0, 0.0]
+def spring_forces(springs: list[Spring], displacements: dict[int, Vector]) -> dict[int, Vector]:
+    """The force (N) the springs put on the part at each of their nodes (0-based) when the
+    nodes have moved by ``displacements`` (m): -k_i d_i (d_i · u_i), added up per node.
+    KeyError for a node without a displacement."""
+    out: dict[int, list[float]] = {}
     for s in springs:
         u = displacements[s.node]
         f = s.stiffness * dot(s.direction, u)
+        total = out.setdefault(s.node, [0.0, 0.0, 0.0])
         for i in range(3):
             total[i] -= f * s.direction[i]
-    return (total[0], total[1], total[2])
+    return {node: (f[0], f[1], f[2]) for node, f in sorted(out.items())}
+
+
+def spring_reaction(springs: list[Spring], displacements: dict[int, Vector]) -> Vector:
+    """The total force (N) the springs put on the part (spring_forces added up)."""
+    forces = spring_forces(springs, displacements).values()
+    return (
+        sum(f[0] for f in forces),
+        sum(f[1] for f in forces),
+        sum(f[2] for f in forces),
+    )

@@ -717,10 +717,12 @@ def test_nodes_per_element_matches_element_types() -> None:
 # --- Prescribed displacement and frictionless support (M2.2, ADR-039) ---
 
 
-def test_fixed_only_setups_keep_the_m1_layout() -> None:
+def test_fixed_only_setups_keep_the_m1_holds_and_print_reactions_per_node() -> None:
     text = deck(fixture_spec(), two_tets(order=2))
-    assert "TOTALS=ONLY" in text
-    assert "*TRANSFORM," not in text and "RALL" not in text
+    assert "*BOUNDARY\nS1, 1, 3\n" in text
+    assert "*TRANSFORM," not in text and "TOTALS=ONLY" not in text
+    # Per node, for reaction moments and nodes shared between supports (M3.2).
+    assert "*NODE PRINT, NSET=RALL, GLOBAL=YES\nRF\n" in text
 
 
 def test_axis_aligned_planes_and_components_need_no_transform() -> None:
@@ -805,11 +807,11 @@ def test_elastic_springs_are_spring1_elements_along_the_normals() -> None:
     assert text.count("*NODE,") == 1
 
 
-def test_elastic_support_with_fixed_supports_keeps_their_totals() -> None:
+def test_elastic_support_beside_a_fixed_one_prints_the_fixed_nodes_reactions() -> None:
     text = deck(elastic_spec(), two_tets(order=2))
-    assert "*NODE PRINT, NSET=S1, TOTALS=ONLY\nRF\n" in text
-    assert "NSET=S2, TOTALS=ONLY" not in text
-    assert "RALL" not in text
+    assert "*NODE PRINT, NSET=RALL, GLOBAL=YES\nRF\n" in text
+    assert "*NODE PRINT, NSET=S2, GLOBAL=YES\nU\n" in text
+    assert "TOTALS=ONLY" not in text
 
 
 def elastic_support_spec(change) -> dict:  # type: ignore[no-untyped-def]

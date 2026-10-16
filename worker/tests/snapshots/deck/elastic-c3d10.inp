@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 2. Generated from the simulation's
+** ClearFEA solver input, deck format 3. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
 ** Geometry 00000000-0000-4000-8000-000000000001
 *HEADING
@@ -29,6 +29,8 @@ ClearFEA linear static analysis
 ** Elastic support elastic-1 "Foundation", faces 4: foundation stiffness 500.0 lbf/in³ = 135723568.7631567 N/m^3
 *NSET, NSET=S2
 1, 2, 3, 4, 5, 6, 9, 10, 11, 13, 14
+*NSET, NSET=RALL
+1, 3, 4, 8, 9, 10
 ** Elastic supports: a grounded spring per node and face along the face's
 ** normal at the node, stiffness = foundation stiffness x the node's share of
 ** the face area (N/m)
@@ -84,6 +86,6 @@ U
 S, E
 *NODE PRINT, NSET=S2, GLOBAL=YES
 U
-*NODE PRINT, NSET=S1, TOTALS=ONLY
+*NODE PRINT, NSET=RALL, GLOBAL=YES
 RF
 *END STEP

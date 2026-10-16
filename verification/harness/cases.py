@@ -72,7 +72,8 @@ class Case:
 TENSOR = ("xx", "yy", "zz", "xy", "yz", "zx")
 
 #: Quantity a check can compare -> its units.json kind. Radial is about the z axis. A reaction
-#: is a component of one support's total reaction in the run's result (M2.2). Stress and strain
+#: is a component of one support's total reaction in the run's result (M2.2), a moment one of
+#: its reaction moment about the centroid of the support's faces (M3.2). Stress and strain
 #: components and principal stresses (σ1 ≥ σ2 ≥ σ3) are the run's fields as written (M3.1);
 #: shear strains are tensor components, half of γ.
 QUANTITIES = {
@@ -88,7 +89,13 @@ QUANTITIES = {
     "reaction.x": "force",
     "reaction.y": "force",
     "reaction.z": "force",
+    "moment.x": "moment",
+    "moment.y": "moment",
+    "moment.z": "moment",
 }
+
+#: Quantities read from one support's reaction in the run's result, not from the fields.
+REACTION_QUANTITIES = ("reaction.", "moment.")
 
 
 def _box(raw: Any, unit: str, where: str) -> Box:
@@ -128,7 +135,7 @@ def load_case(folder: Path) -> Case:
                 f"{folder.name}: unknown quantity {quantity}; use one of {list(QUANTITIES)}."
             )
         support = None
-        if quantity.startswith("reaction."):
+        if quantity.startswith(REACTION_QUANTITIES):
             support = item.get("support")
             if support not in {s["id"] for s in spec["supports"]}:
                 raise CaseError(
@@ -250,9 +257,13 @@ def evaluate(
 
 
 def reaction(check: Check, reactions: list[dict[str, Any]]) -> float:
-    """The component a reaction check names of its support's total reaction, in newtons."""
-    [force] = [r["force"] for r in reactions if r["supportId"] == check.support]
-    return float(force["xyz".index(check.quantity[-1])])
+    """The component a reaction check names of its support's total reaction force (N) or of
+    its reaction moment about the centroid of the support's faces (N·m)."""
+    [found] = [r for r in reactions if r["supportId"] == check.support]
+    key = "moment" if check.quantity.startswith("moment.") else "force"
+    if key not in found:
+        raise CaseError(f"The run's result has no reaction {key} for support {check.support}.")
+    return float(found[key]["xyz".index(check.quantity[-1])])
 
 
 def balance(load: list[float], gross: float, reactions: list[list[float]]) -> tuple[float, float]:

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from clearfea_worker.deck.applied import NO_LOAD, Resultant, applied_nodal_loads, load_resultants
 from clearfea_worker.deck.elements import FACE_NODES
 from clearfea_worker.results import (
     DatError,
@@ -18,10 +19,10 @@ from clearfea_worker.results import (
     read_fields,
     read_node_displacements,
     read_node_forces,
-    read_reaction_totals,
     read_results,
     von_mises,
 )
+from clearfea_worker.results.summary import Reaction, balance
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
 from .deck_meshes import two_tets
@@ -105,9 +106,11 @@ def test_von_mises_of_known_stress_states() -> None:
     assert von_mises(100.0, 50.0, 0, 0, 0, 0) == pytest.approx(math.sqrt(7500.0))
 
 
-def test_reads_the_total_reaction_of_each_support_set() -> None:
-    totals = read_reaction_totals(SOLVE / "job.dat", ["S1"])
-    assert totals == {"S1": (100.0, 1.354472e-14, -33.33333)}
+def test_reads_the_reaction_force_of_every_held_node() -> None:
+    forces = read_node_forces(SOLVE / "job.dat", "RALL")
+    # Face 1's corners and mid-edge nodes (1-based 1, 3, 4, 8, 9, 10).
+    assert sorted(forces) == [0, 2, 3, 7, 8, 9]
+    assert forces[9] == (1.053433e02, 1.509460e00, -5.888535e00)
 
 
 def test_summary_names_the_extremes_and_the_reaction_of_each_support() -> None:
@@ -130,7 +133,23 @@ def test_summary_names_the_extremes_and_the_reaction_of_each_support() -> None:
     assert result.von_mises.min.node == 11
     assert result.von_mises.min.value == pytest.approx(1313414.807, rel=1e-9)
     assert [r.support_id for r in result.reactions] == ["fixed-1"]
-    assert result.reactions[0].force == [100.0, 1.354472e-14, -33.33333]
+    # The pressures add up to (-100, 0, 50) N; until M3.2 the part landing on the fixed
+    # face's nodes was left in the reaction, which then read (100, 0, -33.3) N (ADR-051).
+    assert [load.load_id for load in result.loads] == ["pressure-1"]
+    assert result.loads[0].force == pytest.approx([-100.0, 0.0, 50.0], abs=1e-12)
+    reaction = result.reactions[0]
+    assert reaction.force == pytest.approx([100.0, 0.0, -50.0], abs=1e-4)
+    # About the centroid of face 1, the triangle (0, 0, 0), (0, 10, 0), (0, 0, 10) mm.
+    assert reaction.point == pytest.approx([0.0, 0.01 / 3, 0.01 / 3], abs=1e-15)
+    assert reaction.moment == pytest.approx([0.0, 1 / 3, -1 / 6], abs=1e-6)
+    # Balanced to the solver's printed digits.
+    balance = result.balance
+    assert balance is not None
+    assert balance.force_ratio < 1e-6 and balance.moment_ratio < 1e-6
+    # Measured against the pressures' gross size, the sum of their nodal forces' sizes, which
+    # is more than the 111.8 N they add up to since the pressed faces lean different ways.
+    (gross,) = [total.gross for total in load_resultants(spec, mesh)]
+    assert balance.force_scale == gross > math.hypot(100.0, 50.0)
     assert result.nodes == 14
     assert result.software.calculix == "2.21"
 
@@ -236,11 +255,6 @@ def test_refuses_a_binary_result_file(tmp_path: Path) -> None:
         read_fields(path, 3)
 
 
-def test_refuses_a_dat_file_without_the_support_set() -> None:
-    with pytest.raises(DatError, match="no total reaction for S2"):
-        read_reaction_totals(SOLVE / "job.dat", ["S1", "S2"])
-
-
 # --- Supports other than fixed ones (M2.2, ADR-039) ---
 
 #: What CalculiX 2.21 wrote for the supports-c3d10 deck snapshot: two symmetry planes (faces 1
@@ -264,7 +278,13 @@ def test_each_support_gets_the_force_along_the_directions_it_holds() -> None:
     spec = SimulationSpec.model_validate(supports_spec())
     mesh = two_tets(order=2)
     _, result = read_results(spec, mesh, SUPPORTS / "job.frd", SUPPORTS / "job.dat", "2.21")
-    forces = read_node_forces(SUPPORTS / "job.dat", "RALL")
+    rf = read_node_forces(SUPPORTS / "job.dat", "RALL")
+    # The pressure on face 3 lands partly on held nodes, where RF includes it (M3.2).
+    applied = applied_nodal_loads(spec, mesh, rf)
+    assert applied
+    forces = {
+        n: tuple(f[i] - applied.get(n, (0.0, 0.0, 0.0))[i] for i in range(3)) for n, f in rf.items()
+    }
 
     def nodes(face: int) -> set[int]:
         return {
@@ -315,12 +335,42 @@ def test_an_elastic_support_reacts_with_the_force_of_its_springs() -> None:
     assert got["sym"][1:] == [0.0, 0.0]
 
 
-def test_an_elastic_support_beside_fixed_ones_keeps_the_fixed_totals() -> None:
+def test_an_elastic_support_beside_a_fixed_one_shares_the_load() -> None:
     spec = SimulationSpec.model_validate(elastic_spec())
     mesh = two_tets(order=2)
     dat = ELASTIC_FIXED / "job.dat"
     _, result = read_results(spec, mesh, ELASTIC_FIXED / "job.frd", dat, "")
     got = {r.support_id: r.force for r in result.reactions}
-    assert got["fixed-1"] == list(read_reaction_totals(dat, ["S1"])["S1"])
     # Face 4 meets the fixed face, so its springs hardly move.
     assert max(abs(f) for f in got["elastic-1"]) < 1e-2
+    # Together they balance the pressures, (-100, 0, 50) N.
+    total = [got["fixed-1"][i] + got["elastic-1"][i] for i in range(3)]
+    assert total == pytest.approx([100.0, 0.0, -50.0], abs=1e-4)
+    assert result.balance is not None and result.balance.force_ratio < 1e-6
+
+
+def test_balance_without_applied_load_measures_reactions_against_each_other() -> None:
+    # A temperature change or a prescribed displacement: two ends pushing back equally.
+    mesh = two_tets(order=1)
+    ends = [
+        Reaction((-5.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+        Reaction((5.0, 0.0, 0.001), (0.0, 0.0, 0.0), (0.01, 0.0, 0.0), (0.0, -1e-5, 0.0)),
+    ]
+    got = balance(mesh, [NO_LOAD], ends)
+    assert got["forceScale"] == pytest.approx(10.0, rel=1e-6)
+    assert got["forceRatio"] == pytest.approx(0.001 / got["forceScale"], rel=1e-9)
+    # The moment is measured against the force times the mesh's diagonal (10 mm cube).
+    assert got["momentScale"] == pytest.approx(got["forceScale"] * math.sqrt(3) * 0.01, rel=1e-9)
+    assert got["momentRatio"] == pytest.approx(1e-5 / got["momentScale"], rel=1e-9)
+    assert balance(mesh, [], [])["forceRatio"] == 0.0
+
+
+def test_balance_of_a_load_that_cancels_itself_is_measured_against_its_gross_size() -> None:
+    # A pressure all round a bore adds up to nothing, and so do the reactions; their tiny
+    # rounding must be measured against the pressure's size, not against itself (V-01).
+    mesh = two_tets(order=1)
+    bore = Resultant((1e-10, 0.0, 0.0), (0.0, 0.0, 0.0), 7.5e5)
+    end = [Reaction((-4e-4, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))]
+    got = balance(mesh, [bore], end)
+    assert got["forceScale"] == 7.5e5
+    assert got["forceRatio"] == pytest.approx(4e-4 / 7.5e5, rel=1e-6)

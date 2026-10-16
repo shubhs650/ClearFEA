@@ -171,4 +171,14 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await expect(legend).toContainText("Normal strain εzz (mm/mm)");
     await page.screenshot({ path: `${OUT}/e01-strain.png` });
   });
+
+  await test.step("read the reactions, the load totals and the balance (M3.2)", async () => {
+    const results = settings.getByLabel("Run results");
+    await expect(results).toContainText(/Reaction, .*\(.*\) N/);
+    await expect(results).toContainText(/moment \(.*\) N·mm about the faces' centre at \(.*\) mm/);
+    await expect(results).toContainText(/Applied, /);
+    await expect(results).toContainText(/Out of balance.*force [\d.e-]+ % of [\d.]+ N, moment [\d.e-]+ % of [\d.]+ N·mm/);
+    await results.getByText("Out of balance").scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${OUT}/e01-reactions.png` });
+  });
 });

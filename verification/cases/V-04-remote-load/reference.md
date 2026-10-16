@@ -32,7 +32,7 @@ Von Mises on the surface is √(σx² + 3τ²):
 
 The three values separate the three internal forces: the side has no bending, and top and underneath differ only by the bending moment's sign, so a wrong lever or a wrong moment sign shows.
 
-Reactions: the clamp carries −F = (−6 kN, 0, 0) and the moment −(M + (P − c₀) × F) about the clamp's centre, by equilibrium of the whole stub. The run's result reports reaction forces only; the force is checked here and by the automatic balance check. The moment is the section moment above, which every cut carries to the clamp; reaction moments per support come with M3.2, and `worker/spikes/load_check` checks a solved model's reaction moment about the point node by node.
+Reactions: the clamp carries −F = (−6 kN, 0, 0) and the moment −(M + (P − c₀) × F) about the clamp's centre c₀ = (0, 0, 0), by equilibrium of the whole stub: the section moment above, which every cut carries to the clamp, so (−120, 0, −127.7909) N·m. The force and the x and z moments are checked (the y moment's reference is zero, which a relative check cannot take; the automatic balance checks cover it), and `worker/spikes/load_check` checks a solved model's reaction moment about the point node by node. The run reports each support's moment about the area centroid of its faces (M3.2, ADR-051), here the circle's centre.
 
 ## Where the results are read
 
@@ -42,5 +42,5 @@ Each check is the mean von Mises over the surface vertices in a strip along the 
 
 ## Tolerances
 
-- Clamp reaction: 0.1 percent at both tiers, as the automatic balance check: it follows from equilibrium, and the nodal loads add up to the force exactly.
+- Clamp reaction force and moments: 0.1 percent at both tiers, as the automatic balance check: they follow from equilibrium, and the nodal loads add up to the force and its moment exactly.
 - Stresses: 1 percent coarse, 0.5 percent full, as V-02's bending stresses. The strips add up to 0.1 percent of their own; the coarse tier's first run was within 0.11 percent.

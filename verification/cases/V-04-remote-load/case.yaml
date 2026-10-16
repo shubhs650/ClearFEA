@@ -23,6 +23,16 @@ checks:
     support: clamp
     reference: { value: -6, unit: kN }
     tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Clamp's moment about its centre, torque
+    quantity: moment.x
+    support: clamp
+    reference: { value: -120, unit: N·m }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Clamp's moment about its centre, bending with the point's lever
+    quantity: moment.z
+    support: clamp
+    reference: { value: -127.7909, unit: N·m }
+    tolerance: { coarse: 0.001, full: 0.001 }
   - name: Bending, torsion and tension on top (y = +R)
     quantity: vonMises
     face: surface

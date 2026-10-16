@@ -9,10 +9,12 @@
 // run (ADR-034); each line opens the tree item it is about. From M2.1 figures are shown in the
 // project's unit system (ADR-038). From M2.12 the panel shows the estimate for the current mesh
 // before a run, with a machine size to run on (the recommended one first), and the record shows
-// the estimate the run started with (ADR-049).
+// the estimate the run started with (ADR-049). From M3.2 the result figures give each support's
+// reaction force and moment, each load's total and the balance of loads against reactions
+// (ADR-051), named as in the run's own frozen setup.
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
-import type { RunEstimate, RunFileName, RunView, SimulationSpec } from "@clearfea/spec";
+import type { RunEstimate, RunFileName, RunView, SimulationSpec, SolveResult } from "@clearfea/spec";
 import { Fragment, useState } from "react";
 import { runFileUrl } from "../api/runs";
 import { credits } from "../billing/credits";
@@ -25,7 +27,7 @@ import { type ItemStatus, sameSpec } from "./spec";
 import type { EstimateState } from "./useEstimate";
 
 /** The units result figures are shown in: the project system's units for these kinds. */
-export type ResultUnits = Readonly<Record<"length" | "pressure" | "force" | "strain", string>>;
+export type ResultUnits = Readonly<Record<"length" | "pressure" | "force" | "moment" | "strain", string>>;
 
 /** The headings of the quantity list, in order. */
 const QUANTITY_GROUPS: readonly QuantityGroup[] = ["Displacement", "Stress", "Strain"];
@@ -159,6 +161,75 @@ function at(position: number[], unit: string): string {
   return `at (${position.map((p) => Number(fromSi(p, unit, "length").toPrecision(4))).join(", ")}) ${unit}`;
 }
 
+/** A vector's components to four figures, in brackets, with the unit. */
+function components(values: readonly number[], unit: string, kind: string): string {
+  return `(${values.map((v) => Number(fromSi(v, unit, kind).toPrecision(4))).join(", ")}) ${unit}`;
+}
+
+/** A fraction as a percentage to two figures. */
+function percent(ratio: number): string {
+  return `${Number((100 * ratio).toPrecision(2))} %`;
+}
+
+/** Reactions per support, totals per load and their balance (ADR-051). Numbers only. */
+function Reactions({ result, spec, units }: { result: SolveResult; spec: SimulationSpec; units: ResultUnits }) {
+  const supportName = new Map(spec.supports.map((s) => [s.id, s.name]));
+  const loadName = new Map(spec.loads.map((l) => [l.id, l.name]));
+  const balance = result.balance;
+  return (
+    <>
+      {result.reactions.map((reaction) => (
+        <Fragment key={reaction.supportId}>
+          <dt>Reaction, {supportName.get(reaction.supportId) ?? reaction.supportId}</dt>
+          <dd>
+            {components(reaction.force, units.force, "force")}
+            {reaction.moment && reaction.point && (
+              <>
+                <br />
+                <span className="field-hint">
+                  moment {components(reaction.moment, units.moment, "moment")} about the faces' centre{" "}
+                  {at(reaction.point, units.length)}
+                </span>
+              </>
+            )}
+          </dd>
+        </Fragment>
+      ))}
+      {result.loads?.map((load) => (
+        <Fragment key={load.loadId}>
+          <dt>Applied, {loadName.get(load.loadId) ?? load.loadId}</dt>
+          <dd>{components(load.force, units.force, "force")}</dd>
+        </Fragment>
+      ))}
+      {balance === undefined ? (
+        <>
+          <dt>Balance</dt>
+          <dd className="field-hint">Run again to see reaction moments and the balance of loads and reactions.</dd>
+        </>
+      ) : (
+        <>
+          <dt>Balance, about the origin</dt>
+          <dd>
+            applied {components(balance.appliedForce, units.force, "force")}, reactions{" "}
+            {components(balance.reactionForce, units.force, "force")}
+            <br />
+            <span className="field-hint">
+              applied moment {components(balance.appliedMoment, units.moment, "moment")}, reactions{" "}
+              {components(balance.reactionMoment, units.moment, "moment")}
+            </span>
+          </dd>
+          <dt>Out of balance</dt>
+          <dd>
+            force {percent(balance.forceRatio)} of {Number(fromSi(balance.forceScale, units.force, "force").toPrecision(4))}{" "}
+            {units.force}, moment {percent(balance.momentRatio)} of{" "}
+            {Number(fromSi(balance.momentScale, units.moment, "moment").toPrecision(4))} {units.moment}
+          </dd>
+        </>
+      )}
+    </>
+  );
+}
+
 /** An API timestamp as a fixed, unambiguous UTC time. */
 function utc(timestamp: string): string {
   return `${timestamp.slice(0, 19).replace("T", " ")} UTC`;
@@ -271,7 +342,6 @@ export function RunPanel({
   blockers,
   onOpen,
   units,
-  supportNames,
   estimate,
   requesting,
   requestProblem,
@@ -290,8 +360,6 @@ export function RunPanel({
   onOpen: (item: string) => void;
   /** The units figures are shown in. */
   units: ResultUnits;
-  /** Names of the setup's supports by id, for the reaction lines. */
-  supportNames: ReadonlyMap<string, string>;
   /** The estimate for the current mesh, shown before a run. */
   estimate: EstimateState;
   requesting: boolean;
@@ -390,15 +458,7 @@ export function RunPanel({
           </dd>
           <dt>Smallest von Mises stress</dt>
           <dd>{figure(result.vonMises.min.value, units.pressure, "pressure")}</dd>
-          {result.reactions.map((reaction) => (
-            <Fragment key={reaction.supportId}>
-              <dt>Reaction, {supportNames.get(reaction.supportId) ?? reaction.supportId}</dt>
-              <dd>
-                ({reaction.force.map((f) => Number(fromSi(f, units.force, "force").toPrecision(4))).join(", ")}){" "}
-                {units.force}
-              </dd>
-            </Fragment>
-          ))}
+          {run !== null && <Reactions result={result} spec={run.spec} units={units} />}
         </dl>
       )}
       {run !== null && <RunRecord run={run} currentSpec={currentSpec} />}
