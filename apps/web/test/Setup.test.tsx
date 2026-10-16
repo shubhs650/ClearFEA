@@ -261,6 +261,7 @@ describe("setup tree", () => {
         poissonsRatio: 0.3,
         density: null,
         thermalExpansion: null,
+        yieldStrength: null,
       },
     ]);
     expect(sent.at(-1)?.bodies).toEqual([{ tag: 1, material: "material-1" }]);
@@ -951,9 +952,10 @@ function finishedRun(beforeM32 = false): Record<string, Route> {
       forceRatio: 2.5e-7,
       momentRatio: 2.1e-7,
     },
+    safetyFactor: { min: { value: 250e6 / 2.4e8, node: 40, position: [0, 0, 0] } },
     software: { calculix: "2.21" },
   };
-  const { loads: _loads, balance: _balance, ...older } = full;
+  const { loads: _loads, balance: _balance, safetyFactor: _safetyFactor, ...older } = full;
   const result: SolveResult = beforeM32
     ? { ...older, reactions: full.reactions.map(({ supportId, force }) => ({ supportId, force })) }
     : full;
@@ -1089,9 +1091,15 @@ describe("run", () => {
     const legend = await screen.findByLabelText("Legend");
     expect(legend.textContent).toContain("Von Mises stress (MPa)");
     expect(legend.textContent).toContain("Deformed shape, scale ×5");
-    // The quantity list is grouped: displacement, then stresses, then strains (M3.1).
+    // The quantity list is grouped: displacement, then stresses, then strains (M3.1), then the
+    // safety factor (M3.5).
     const quantity = settings().getByLabelText("Quantity");
-    expect([...quantity.querySelectorAll("optgroup")].map((g) => g.label)).toEqual(["Displacement", "Stress", "Strain"]);
+    expect([...quantity.querySelectorAll("optgroup")].map((g) => g.label)).toEqual([
+      "Displacement",
+      "Stress",
+      "Strain",
+      "Safety factor",
+    ]);
     expect([...quantity.querySelectorAll("optgroup[label=Stress] option")].map((o) => o.textContent)).toEqual([
       "Von Mises stress",
       "Maximum principal stress σ1",
@@ -1114,6 +1122,8 @@ describe("run", () => {
     expect(figures.getByText("at (100, 50, 20) mm")).toBeTruthy();
     expect(figures.getByText("240 MPa")).toBeTruthy();
     expect(figures.getByText("0.0015 MPa")).toBeTruthy();
+    // The smallest safety factor against yield, a number without a unit (M3.5).
+    expect(figures.getByText("1.04")).toBeTruthy();
     expect(figures.getByText("Reaction, Base")).toBeTruthy();
     expect(figures.getByText("(0, 0, -400) N")).toBeTruthy();
     // Moments in N·mm about the support's faces' centre; the load's total; the balance (M3.2).
@@ -1136,6 +1146,8 @@ describe("run", () => {
     expect(figures.getByText("(0, 0, -400) N")).toBeTruthy();
     expect(figures.queryByText(/about the faces/)).toBeNull();
     expect(figures.getByText("Run again to see reaction moments and the balance of loads and reactions.")).toBeTruthy();
+    // Nor has it a safety factor (M3.5).
+    expect(figures.getByText("None: it needs a yield strength for every material. Enter them under Materials and run again.")).toBeTruthy();
   });
 
   it("shows the run record with its versions and links to view and download the deck and log", async () => {

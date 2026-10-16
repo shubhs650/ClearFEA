@@ -87,9 +87,10 @@ export type Quantity =
   | "strainZZ"
   | "strainXY"
   | "strainYZ"
-  | "strainZX";
+  | "strainZX"
+  | "safetyFactor";
 
-export type QuantityGroup = "Displacement" | "Stress" | "Strain";
+export type QuantityGroup = "Displacement" | "Stress" | "Strain" | "Safety factor";
 
 export type QuantityInfo = {
   label: string;
@@ -101,6 +102,8 @@ export type QuantityInfo = {
   field: string;
   components: number;
   component: number | null;
+  /** True when the smallest values matter most, so they are drawn red (the safety factor). */
+  smallestRed?: boolean;
 };
 
 const tensor = (field: string, kind: string, c: number): Pick<QuantityInfo, "field" | "kind" | "components" | "component"> => ({
@@ -130,7 +133,25 @@ export const QUANTITIES: Record<Quantity, QuantityInfo> = {
   strainXY: { label: "Shear strain εxy (γxy / 2)", group: "Strain", ...tensor("strain", "strain", 3) },
   strainYZ: { label: "Shear strain εyz (γyz / 2)", group: "Strain", ...tensor("strain", "strain", 4) },
   strainZX: { label: "Shear strain εzx (γzx / 2)", group: "Strain", ...tensor("strain", "strain", 5) },
+  safetyFactor: {
+    label: "Safety factor against yield",
+    kind: "ratio",
+    group: "Safety factor",
+    field: "safetyFactor",
+    components: 1,
+    component: null,
+    smallestRed: true,
+  },
 };
+
+/** The largest safety factor the worker keeps; larger ones and unstressed nodes read as this
+ * (ADR-054, worker/clearfea_worker/results/safety.py). */
+export const SAFETY_FACTOR_CAP = 15;
+
+/** A value with its display unit, or alone for a dimensionless ratio (unit "1"). */
+export function withUnit(text: string, unit: string): string {
+  return unit === "1" || unit === "" ? text : `${text} ${unit}`;
+}
 
 /** The values a quantity shows, one per vertex: a component of its field, or the field's
  * scalarValues. */

@@ -246,6 +246,7 @@ export function addMaterial(spec: SimulationSpec, from?: IsotropicMaterial): { s
         poissonsRatio: null,
         density: null,
         thermalExpansion: null,
+        yieldStrength: null,
       };
   const first = spec.materials.length === 0;
   return {
@@ -346,7 +347,7 @@ export function updateLocalSize(spec: SimulationSpec, item: LocalMeshSize): Simu
  */
 export function editMaterial(spec: SimulationSpec, material: IsotropicMaterial, changes: Partial<IsotropicMaterial>): SimulationSpec {
   const next: IsotropicMaterial = { ...material, ...changes };
-  const values = ["youngsModulus", "poissonsRatio", "density", "thermalExpansion"] as const;
+  const values = ["youngsModulus", "poissonsRatio", "density", "thermalExpansion", "yieldStrength"] as const;
   if (values.some((key) => key in changes && changes[key] !== material[key])) delete next.source;
   return updateMaterial(spec, next);
 }

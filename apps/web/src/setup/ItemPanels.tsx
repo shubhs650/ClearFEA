@@ -178,6 +178,14 @@ export function MaterialPanel({
         hint="Coefficient of linear thermal expansion, for example 12e-6 1/°C for steel. Needed for a temperature change."
         onChange={(thermalExpansion) => set({ thermalExpansion })}
       />
+      <QuantityInput
+        label="Yield strength"
+        positive
+        kind="pressure"
+        value={material.yieldStrength ?? null}
+        hint="Tensile yield strength. The result shows the safety factor against yield when every material has one."
+        onChange={(yieldStrength) => set({ yieldStrength })}
+      />
       <fieldset className="setup-bodies">
         <legend>Bodies made of this material</legend>
         {spec.bodies.map((body) => {

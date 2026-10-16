@@ -77,7 +77,7 @@ describe("result view helpers", () => {
     expect([...quantityValues(stress, QUANTITIES.stressXY.component)]).toEqual([4, -4]);
     expect([...quantityValues(stress, QUANTITIES.stressZX.component)]).toEqual([6, -6]);
     // Every quantity names a field and component the worker writes (result-fields.md).
-    const written: Record<string, number> = { displacement: 3, vonMises: 1, stress: 6, principalStress: 3, strain: 6 };
+    const written: Record<string, number> = { displacement: 3, vonMises: 1, stress: 6, principalStress: 3, strain: 6, safetyFactor: 1 };
     for (const q of Object.values(QUANTITIES)) {
       expect(written[q.field]).toBe(q.components);
       expect(q.component === null || q.component < q.components).toBe(true);

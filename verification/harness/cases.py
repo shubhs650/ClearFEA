@@ -76,12 +76,14 @@ TENSOR = ("xx", "yy", "zz", "xy", "yz", "zx")
 #: is a component of one support's total reaction in the run's result (M2.2), a moment one of
 #: its reaction moment about the centroid of the support's faces (M3.2). Stress and strain
 #: components and principal stresses (σ1 ≥ σ2 ≥ σ3) are the run's fields as written (M3.1);
-#: shear strains are tensor components, half of γ.
+#: shear strains are tensor components, half of γ. The safety factor against yield is the
+#: run's field (M3.5, ADR-054).
 QUANTITIES = {
     "vonMises": "pressure",
     **{f"stress.{c}": "pressure" for c in TENSOR},
     **{f"principal.{k}": "pressure" for k in (1, 2, 3)},
     **{f"strain.{c}": "strain" for c in TENSOR},
+    "safetyFactor": "ratio",
     "displacement": "length",
     "displacement.x": "length",
     "displacement.y": "length",
@@ -228,8 +230,8 @@ def _value(
     quantity: str, p: tuple[float, ...], fields: dict[str, list[tuple[float, ...]]], v: int
 ) -> float:
     u = fields["displacement"][v]
-    if quantity == "vonMises":
-        return fields["vonMises"][v][0]
+    if quantity in ("vonMises", "safetyFactor"):
+        return fields[quantity][v][0]
     field, _, part = quantity.partition(".")
     if field in ("stress", "strain"):
         return fields[field][v][TENSOR.index(part)]
