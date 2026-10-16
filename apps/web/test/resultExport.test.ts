@@ -8,8 +8,8 @@ import type { ResultField, ResultFields } from "../src/viewer/resultFields";
 import { parseVolumeMesh, type VolumeMesh } from "../src/viewer/section";
 import { boxMesh } from "./volumeBox";
 
-const SI: ExportUnits = { length: "m", pressure: "Pa", force: "N", moment: "N·m", strain: "m/m", ratio: "1" };
-const MM: ExportUnits = { length: "mm", pressure: "MPa", force: "kN", moment: "N·mm", strain: "µε", ratio: "1" };
+const SI: ExportUnits = { length: "m", pressure: "Pa", force: "N", moment: "N·m", strain: "m/m", temperature: "K", ratio: "1" };
+const MM: ExportUnits = { length: "mm", pressure: "MPa", force: "kN", moment: "N·mm", strain: "µε", temperature: "°C", ratio: "1" };
 
 /** Fields with values made from the node number, so each cell can be checked. */
 function fieldsFor(mesh: VolumeMesh, withSafety = true): ResultFields {
@@ -199,5 +199,39 @@ describe("VTK file", () => {
     const { arrays } = await readVtu(vtuParts(mesh, fieldsFor(mesh)));
     expect(arrays.get("types")?.data.getUint8(0)).toBe(10);
     expect(arrays.get("connectivity")?.data.byteLength).toBe(mesh.elementCount * 4 * 4);
+  });
+});
+
+describe("export of a steady-state thermal run (M5.1)", () => {
+  const mesh = parseVolumeMesh(boxMesh(2, 2));
+  const n = mesh.nodeCount;
+  // The temperature alone, in kelvin: node index i at 293.15 + i K.
+  const nodes: ResultFields = {
+    vertexCount: n,
+    fields: new Map<string, ResultField>([
+      ["temperature", { kind: "temperature", components: 1, values: Float32Array.from({ length: n }, (_, i) => 293.15 + i) }],
+    ]),
+  };
+
+  it("writes a temperature column, converted with the offset of the unit asked for", () => {
+    const lines = rows(nodeCsv(mesh, nodes, MM));
+    expect(lines).toHaveLength(n + 1);
+    expect((lines[0] ?? "").slice(1).split(",")).toEqual(["node", "x (mm)", "y (mm)", "z (mm)", "temperature (°C)"]);
+    // Index 1 is at 294.15 K, 21 °C.
+    expect((lines[2] ?? "").split(",").map(Number).at(-1)).toBeCloseTo(21, 4);
+    expect((rows(nodeCsv(mesh, nodes, SI))[2] ?? "").split(",").map(Number).at(-1)).toBeCloseTo(294.15, 3);
+  });
+
+  it("writes the temperature to the VTK file in kelvin, with no displacement vectors", async () => {
+    const { head, arrays } = await readVtu(vtuParts(mesh, nodes));
+    expect([...arrays.keys()]).toEqual(["temperature (K)", "body", "Points", "connectivity", "offsets", "types"]);
+    expect(head).toContain("<PointData>");
+    const temperature = arrays.get("temperature (K)");
+    expect(temperature?.data.getFloat32(4, true)).toBeCloseTo(294.15, 3);
+  });
+
+  it("writes an empty reactions file for a result with no reactions", () => {
+    const result = { nodes: n, temperature: { min: {}, max: {} } } as unknown as SolveResult;
+    expect(reactionsCsv(result, { supports: [], loads: [] } as unknown as SimulationSpec, SI).split("\r\n")).toHaveLength(2);
   });
 });

@@ -34,12 +34,12 @@ export type ItemName = string;
  */
 export type FaceTags = number[];
 /**
- * linear_static: small-displacement linear elastic static analysis, one load step.
+ * linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064); it solves temperatures only, so it uses thermal loads and no supports.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "AnalysisType".
  */
-export type AnalysisType = "linear_static";
+export type AnalysisType = "linear_static" | "steady_thermal";
 /**
  * detected: found by bond detection and not yet reviewed; it is tied. accepted: the user reviewed it and keeps it; it is tied. removed: the user removed it; it is not tied, and stays listed so it can be restored.
  *
@@ -64,7 +64,14 @@ export type Support = FixedSupport | PrescribedDisplacement | FrictionlessSuppor
  * via the `definition` "Load".
  */
 export type Load =
-  PressureLoad | ForceLoad | RemoteLoad | HydrostaticLoad | GravityLoad | CentrifugalLoad | TemperatureLoad;
+  | PressureLoad
+  | ForceLoad
+  | RemoteLoad
+  | HydrostaticLoad
+  | GravityLoad
+  | CentrifugalLoad
+  | TemperatureLoad
+  | FixedTemperatureLoad;
 /**
  * What a local mesh size applies to: faces, edges or bodies of the geometry, by their topology.json tags.
  *
@@ -200,6 +207,10 @@ export interface IsotropicMaterial {
    * Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.
    */
   thermalExpansion?: Quantity | null;
+  /**
+   * Thermal conductivity, a thermalConductivity quantity greater than zero (M5.1, ADR-064). Needed only by a steady-state thermal analysis; absent or null until entered.
+   */
+  thermalConductivity?: Quantity | null;
   /**
    * Tensile yield strength, a pressure quantity greater than zero (M3.5, ADR-054). Needed only for the safety factor against yield, which the result shows when every material of the setup has one; absent or null until entered.
    */
@@ -371,6 +382,19 @@ export interface TemperatureLoad {
   type: "temperature";
   name: ItemName;
   change: OptionalQuantity;
+}
+/**
+ * The faces held at one temperature in a steady-state thermal analysis (M5.1, ADR-064). temperature is an absolute temperature quantity (with its offset: 20 °C is 293.15 K), null until entered.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "FixedTemperatureLoad".
+ */
+export interface FixedTemperatureLoad {
+  id: ItemId;
+  type: "fixed_temperature";
+  name: ItemName;
+  faces: FaceTags;
+  temperature: OptionalQuantity;
 }
 /**
  * A point in global coordinates; each coordinate a length quantity, null until entered.
@@ -549,7 +573,7 @@ export interface MeshSettings {
   local?: LocalMeshSize[];
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the review of the bonds between touching bodies (M4.2). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), and the mesh settings: a global size, the element order and local sizes (M2.8), and the review of the bonds between touching bodies (M4.2). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -823,7 +847,7 @@ export interface BalanceCheck {
   momentRatio: number;
 }
 /**
- * Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons.
+ * Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons, temperature in kelvin. A linear static run has displacement, vonMises and reactions; a steady-state thermal run has temperature instead (M5.1, ADR-064).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SolveResult".
@@ -836,20 +860,27 @@ export interface SolveResult {
   /**
    * Largest displacement magnitude.
    */
-  displacement: {
+  displacement?: {
     max: NodeValue;
   };
   /**
    * Smallest and largest von Mises stress of CalculiX's nodal stresses.
    */
-  vonMises: {
+  vonMises?: {
+    min: NodeValue;
+    max: NodeValue;
+  };
+  /**
+   * Smallest and largest nodal temperature of a steady-state thermal run, in kelvin (M5.1).
+   */
+  temperature?: {
     min: NodeValue;
     max: NodeValue;
   };
   /**
    * One entry per support, in spec order.
    */
-  reactions: SupportReaction[];
+  reactions?: SupportReaction[];
   /**
    * One entry per load, in spec order. Absent for runs solved before M3.2.
    */
@@ -1048,7 +1079,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), and the mesh settings: a global size, the element order and local sizes (M2.8), and the review of the bonds between touching bodies (M4.2). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), and the mesh settings: a global size, the element order and local sizes (M2.8), and the review of the bonds between touching bodies (M4.2). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -1101,7 +1132,7 @@ export const validateOptionalQuantity = validator<OptionalQuantity>(schema, "Opt
 export const validateItemId = validator<ItemId>(schema, "ItemId");
 export const validateItemName = validator<ItemName>(schema, "ItemName");
 export const validateFaceTags = validator<FaceTags>(schema, "FaceTags");
-export const AnalysisTypeValues = ["linear_static"] as const satisfies readonly AnalysisType[];
+export const AnalysisTypeValues = ["linear_static", "steady_thermal"] as const satisfies readonly AnalysisType[];
 export const validateAnalysisType = validator<AnalysisType>(schema, "AnalysisType");
 export const validateBodyAssignment = validator<BodyAssignment>(schema, "BodyAssignment");
 export const BondStatusValues = ["detected", "accepted", "removed"] as const satisfies readonly BondStatus[];
@@ -1123,6 +1154,7 @@ export const validatePressureLoad = validator<PressureLoad>(schema, "PressureLoa
 export const validateForceLoad = validator<ForceLoad>(schema, "ForceLoad");
 export const validateGravityLoad = validator<GravityLoad>(schema, "GravityLoad");
 export const validateTemperatureLoad = validator<TemperatureLoad>(schema, "TemperatureLoad");
+export const validateFixedTemperatureLoad = validator<FixedTemperatureLoad>(schema, "FixedTemperatureLoad");
 export const validateAxisPoint = validator<AxisPoint>(schema, "AxisPoint");
 export const validateAxisDirection = validator<AxisDirection>(schema, "AxisDirection");
 export const validateCentrifugalLoad = validator<CentrifugalLoad>(schema, "CentrifugalLoad");

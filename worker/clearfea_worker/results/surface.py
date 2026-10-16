@@ -32,7 +32,7 @@ from pathlib import Path
 from ..deck.elements import GMSH_EDGES
 from ..geometry.display import FacePatch, write_display
 from ..meshing.volume import NODES_PER_ELEMENT, TET_FACES, VolumeMesh
-from .fields import NodalFields, principal_field, von_mises_field
+from .fields import NodalFields, ThermalFields, principal_field, von_mises_field
 
 MAGIC = b"CFRF"
 VERSION = 1
@@ -107,9 +107,12 @@ def extract_surface(mesh: VolumeMesh) -> Surface:
     return Surface(patches, nodes)
 
 
-def node_fields(fields: NodalFields) -> list[SurfaceField]:
+def node_fields(fields: NodalFields | ThermalFields) -> list[SurfaceField]:
     """Every result field at every node of the mesh, in the order of result-fields.md: what
-    nodes.bin holds for cut planes (M3.4, ADR-053)."""
+    nodes.bin holds for cut planes (M3.4, ADR-053). A thermal run has the temperature only
+    (M5.1)."""
+    if isinstance(fields, ThermalFields):
+        return [SurfaceField("temperature", "temperature", 1, array("f", fields.temperature))]
     return [
         SurfaceField("displacement", "length", 3, array("f", fields.displacement)),
         SurfaceField("vonMises", "pressure", 1, array("f", von_mises_field(fields))),
@@ -190,7 +193,9 @@ class ViewerFiles:
     nodes_path: Path
 
 
-def write_viewer_files(mesh: VolumeMesh, fields: NodalFields, out_dir: Path) -> ViewerFiles:
+def write_viewer_files(
+    mesh: VolumeMesh, fields: NodalFields | ThermalFields, out_dir: Path
+) -> ViewerFiles:
     """Writes surface.bin, fields.bin and (for cut planes, M3.4) nodes.bin into ``out_dir``."""
     surface = extract_surface(mesh)
     surface_path = out_dir / "surface.bin"

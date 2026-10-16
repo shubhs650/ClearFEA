@@ -21,7 +21,14 @@ from ..deck.loads.tie import tie_forces, ties
 from ..meshing.volume import VolumeMesh
 from ..spec.simulation_schema import ElasticSupport, SimulationSpec, SolveResult
 from .dat import DatError, read_node_displacements, read_node_forces
-from .fields import NodalFields, displacement_magnitude, read_fields, von_mises_field
+from .fields import (
+    NodalFields,
+    ThermalFields,
+    displacement_magnitude,
+    read_fields,
+    read_thermal_fields,
+    von_mises_field,
+)
 from .safety import safety_factor_field
 
 
@@ -140,11 +147,27 @@ def summarize(
     )
 
 
+def summarize_thermal(mesh: VolumeMesh, fields: ThermalFields, calculix: str) -> SolveResult:
+    """A steady-state thermal run's summary (M5.1): the smallest and largest temperature."""
+    t = fields.temperature
+    return SolveResult.model_validate(
+        {
+            "nodes": fields.node_count,
+            "temperature": {"min": _at(mesh, t, _argmin(t)), "max": _at(mesh, t, _argmax(t))},
+            "software": {"calculix": calculix},
+        }
+    )
+
+
 def read_results(
     spec: SimulationSpec, mesh: VolumeMesh, frd: Path, dat: Path, calculix: str
-) -> tuple[NodalFields, SolveResult]:
+) -> tuple[NodalFields | ThermalFields, SolveResult]:
     """Reads the solver output of a deck made from ``spec`` and ``mesh``, with the safety
-    factor against yield when every material has a yield strength (ADR-054)."""
+    factor against yield when every material has a yield strength (ADR-054). A steady-state
+    thermal run has temperatures only (M5.1)."""
+    if spec.analysis == "steady_thermal":
+        thermal = read_thermal_fields(frd, mesh.node_count)
+        return thermal, summarize_thermal(mesh, thermal, calculix)
     fields = read_fields(frd, mesh.node_count)
     fields = replace(fields, safety_factor=safety_factor_field(spec, mesh, fields))
     return fields, summarize(spec, mesh, fields, read_reactions(spec, mesh, dat), calculix)

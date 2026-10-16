@@ -20,13 +20,22 @@ from clearfea_worker.results import (
     read_node_displacements,
     read_node_forces,
     read_results,
+    read_thermal_fields,
     von_mises,
+    write_viewer_files,
 )
 from clearfea_worker.results.summary import Reaction, balance
+from clearfea_worker.results.surface import read_fields as read_fields_file
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
-from .deck_meshes import two_tets
-from .test_deck import elastic_spec, elastic_sym_spec, fixture_spec, supports_spec
+from .deck_meshes import bonded_tets, two_tets
+from .test_deck import (
+    elastic_spec,
+    elastic_sym_spec,
+    fixture_spec,
+    heat_two_bodies_spec,
+    supports_spec,
+)
 
 SOLVE = Path(__file__).resolve().parent / "fixtures" / "solve"
 
@@ -374,3 +383,44 @@ def test_balance_of_a_load_that_cancels_itself_is_measured_against_its_gross_siz
     got = balance(mesh, [bore], end)
     assert got["forceScale"] == 7.5e5
     assert got["forceRatio"] == pytest.approx(4e-4 / 7.5e5, rel=1e-6)
+
+
+# --- Steady-state thermal runs (M5.1, ADR-064) ---
+
+#: What CalculiX 2.21 wrote for the heat-two-bodies-c3d4 deck snapshot: two one-element
+#: bodies with no shared nodes, body 1 held at 373.15 K on one face, body 2 at 293.15 K.
+HEAT = Path(__file__).resolve().parent / "fixtures" / "heat"
+
+
+def test_reads_the_temperature_of_every_node() -> None:
+    fields = read_thermal_fields(HEAT / "heat-two-bodies-c3d4.frd", 8)
+    assert list(fields.temperature) == [373.15] * 4 + [293.15] * 4
+
+
+def test_thermal_run_summary_has_temperatures_and_no_structural_results(tmp_path: Path) -> None:
+    spec = SimulationSpec.model_validate(heat_two_bodies_spec())
+    mesh = bonded_tets(1)
+    fields, result = read_results(
+        spec, mesh, HEAT / "heat-two-bodies-c3d4.frd", tmp_path / "absent.dat", "2.21"
+    )
+    assert result.temperature is not None
+    assert result.temperature.max.value == 373.15
+    assert result.temperature.max.node == 0
+    assert result.temperature.min.value == 293.15
+    assert result.temperature.min.node == 4
+    assert result.temperature.min.position == list(mesh.positions[12:15])
+    dumped = result.model_dump(mode="json", by_alias=True, exclude_none=True)
+    assert set(dumped) == {"nodes", "temperature", "software"}
+    files = write_viewer_files(mesh, fields, tmp_path)
+    for path in (files.fields_path, files.nodes_path):
+        _, written = read_fields_file(path)
+        assert [(f.name, f.kind, f.components) for f in written] == [
+            ("temperature", "temperature", 1)
+        ]
+    _, nodes = read_fields_file(files.nodes_path)
+    assert list(nodes[0].values) == pytest.approx(list(fields.temperature), rel=1e-7)
+
+
+def test_refuses_a_thermal_result_file_without_temperatures() -> None:
+    with pytest.raises(FrdError, match="no NDTEMP block"):
+        read_thermal_fields(SOLVE / "job.frd", 14)

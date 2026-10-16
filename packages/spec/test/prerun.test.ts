@@ -364,3 +364,95 @@ describe("bodies no support holds (M4.4)", () => {
     return preRunProblems(s, assembly).map((p) => p.message);
   }
 });
+
+describe("pre-run validation of a steady-state thermal analysis (M5.1)", () => {
+  function thermal(): SimulationSpec {
+    const s = spec();
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    return {
+      ...s,
+      analysis: "steady_thermal",
+      supports: [],
+      materials: [{ ...steel, thermalConductivity: { value: 45, unit: "W/(m·K)" } }],
+      loads: [
+        { id: "hot", type: "fixed_temperature", name: "Hot", faces: [1], temperature: { value: 100, unit: "°C" } },
+      ],
+    };
+  }
+
+  it("finds nothing to fix in a complete thermal setup, which needs no support or elastic values", () => {
+    const s = thermal();
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    expect(preRunProblems({ ...s, materials: [{ ...steel, youngsModulus: null, poissonsRatio: null }] }, topology)).toEqual([]);
+  });
+
+  it("asks for a conductivity, a fixed temperature and its faces and value", () => {
+    const s = thermal();
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    expect(preRunProblems({ ...s, materials: [{ ...steel, thermalConductivity: null }], loads: [] }, topology)).toEqual([
+      {
+        item: "steel",
+        message: 'Material "Structural steel" has no thermal conductivity, which a thermal analysis needs. Enter it.',
+      },
+      {
+        item: "loads",
+        message: "There is no fixed temperature, so the temperatures are not set anywhere. Add a fixed temperature under Loads.",
+      },
+    ]);
+    expect(
+      messages({
+        ...s,
+        loads: [{ id: "hot", type: "fixed_temperature", name: "Hot", faces: [], temperature: null }],
+      }),
+    ).toEqual([
+      'Load "Hot" has no faces. Select the faces it holds and add them to it.',
+      'Load "Hot" has no temperature. Enter it.',
+    ]);
+  });
+
+  it("flags supports and structural loads in a thermal analysis, and a fixed temperature in a static one", () => {
+    const s = thermal();
+    const fixture = spec();
+    expect(preRunProblems({ ...s, supports: fixture.supports, loads: [...s.loads, ...fixture.loads] }, topology)).toEqual([
+      {
+        item: "fixed-1",
+        message:
+          'Fixed support "Fixed support 1" has no effect in a steady-state thermal analysis. Delete it, or set the analysis type to linear static.',
+      },
+      {
+        item: "pressure-1",
+        message:
+          'Pressure "Pressure 1" has no effect in a steady-state thermal analysis. Delete it, or set the analysis type to linear static.',
+      },
+    ]);
+    expect(preRunProblems({ ...fixture, loads: [...fixture.loads, ...s.loads] }, topology)).toEqual([
+      {
+        item: "hot",
+        message: 'Fixed temperature "Hot" has no effect in a linear static analysis. Delete it, or set the analysis type to steady-state thermal.',
+      },
+    ]);
+  });
+
+  it("refuses bonded bodies and asks for a fixed temperature on every body", () => {
+    const assembly = {
+      bodies: [{ tag: 1, name: "Base" }, { tag: 2, name: "Lug" }],
+      faces: [
+        { tag: 1, bodies: [1] },
+        { tag: 2, bodies: [1] },
+        { tag: 3, bodies: [2] },
+      ],
+      bonds: [{ faces: [2, 3] as [number, number], bodies: [1, 2] as [number, number] }],
+    };
+    const s = { ...thermal(), bodies: [{ tag: 1, material: "steel" }, { tag: 2, material: "steel" }] };
+    expect(preRunProblems(s, assembly).map((p) => p.message)).toEqual([
+      "Bonds do not carry heat in a steady-state thermal analysis yet, so bonded bodies cannot be run. Remove the bonds under Bonds to run each body on its own.",
+      'Body "Lug" has no fixed temperature, so its temperature is not set. Add a fixed temperature on one of its faces.',
+    ]);
+    const apart = { ...s, bonds: [{ faces: [2, 3] as [number, number], status: "removed" as const }] };
+    const both = { ...apart, loads: [...apart.loads, { ...(apart.loads[0] as SimulationSpec["loads"][0]), id: "lug", faces: [3] }] };
+    expect(preRunProblems(both, assembly)).toEqual([]);
+  });
+});

@@ -5,6 +5,7 @@
 // pre-run validation's job (preRunProblems in prerun.ts, M1.12).
 
 import type {
+  AnalysisType,
   Bond,
   BondStatus,
   ElementOrder,
@@ -138,7 +139,25 @@ export const loadKinds = {
   gravity: "Gravity",
   centrifugal: "Centrifugal load",
   temperature: "Temperature change",
+  fixed_temperature: "Fixed temperature",
 } as const;
+
+/** The analysis types as the setup names them (M5.1, ADR-064). */
+export const analysisKinds = {
+  linear_static: "Linear static",
+  steady_thermal: "Steady-state thermal",
+} as const;
+
+/** The load types each analysis type takes (M5.1, ADR-064); supports belong to linear static only. */
+export const analysisLoads: Record<AnalysisType, readonly Load["type"][]> = {
+  linear_static: ["pressure", "force", "remote", "hydrostatic", "gravity", "centrifugal", "temperature"],
+  steady_thermal: ["fixed_temperature"],
+};
+
+/** True for an analysis that solves temperatures only, with no displacement or stress (M5.1). */
+export function isThermal(spec: Pick<SimulationSpec, "analysis">): boolean {
+  return spec.analysis === "steady_thermal";
+}
 
 /** What a local mesh size applies to, as the setup and its messages name it (M2.8). */
 export const localScopes = {
@@ -228,7 +247,13 @@ export function meshSettingsText(settings: {
 
 /** True when the load acts on faces the user picks (gravity, centrifugal and temperature act on every body). */
 export function loadHasFaces(load: Load): load is Extract<Load, { faces: number[] }> {
-  return load.type === "pressure" || load.type === "force" || load.type === "remote" || load.type === "hydrostatic";
+  return (
+    load.type === "pressure" ||
+    load.type === "force" ||
+    load.type === "remote" ||
+    load.type === "hydrostatic" ||
+    load.type === "fixed_temperature"
+  );
 }
 
 /** True when the setup has a gravity or centrifugal load, which need every material's density. */
@@ -271,6 +296,8 @@ const kindNames = {
   foundationStiffness: "a foundation stiffness",
   temperatureDifference: "a temperature difference",
   thermalExpansion: "a thermal expansion",
+  temperature: "a temperature",
+  thermalConductivity: "a thermal conductivity",
 } as const;
 
 function unitProblem(
@@ -304,6 +331,12 @@ export function materialProblems(material: IsotropicMaterial): string[] {
     unitProblem(material.density ?? null, "density", `The density of material "${material.name}"`, true),
     unitProblem(material.thermalExpansion ?? null, "thermalExpansion", `The thermal expansion of material "${material.name}"`, false),
     unitProblem(material.yieldStrength ?? null, "pressure", `The yield strength of material "${material.name}"`, true),
+    unitProblem(
+      material.thermalConductivity ?? null,
+      "thermalConductivity",
+      `The thermal conductivity of material "${material.name}"`,
+      true,
+    ),
   ].filter((problem) => problem !== null);
 }
 
@@ -400,6 +433,8 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
       if (temperature === 2) {
         add(load.id, `Load "${load.name}" is a second temperature change. A setup can have one; delete the other.`);
       }
+    } else if (load.type === "fixed_temperature") {
+      add(load.id, unitProblem(load.temperature, "temperature", `The temperature of load "${load.name}"`, false));
     } else {
       add(load.id, unitProblem(load.angularVelocity, "angularVelocity", `The angular velocity of load "${load.name}"`, false));
       for (const axis of displacementAxes) {

@@ -24,6 +24,7 @@ from clearfea_worker.deck.elements import (
     FACE_NODES,
 )
 from clearfea_worker.deck.generator import FIELD_WIDTH
+from clearfea_worker.deck.loads import fixed_support_nodes
 from clearfea_worker.meshing.volume import NODES_PER_ELEMENT, TET_FACES, VolumeMesh
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
@@ -286,6 +287,74 @@ def thermal_spec() -> dict:
     return spec
 
 
+def heat_spec() -> dict:
+    """A steady-state thermal analysis of M5.1 on the one-body mesh: face 1 held at 100 °C and
+    face 3 at 212 °F, conductivity in US units, an unassigned material without one."""
+    return {
+        "version": 1,
+        "analysis": "steady_thermal",
+        "geometryId": "00000000-0000-4000-8000-000000000005",
+        "bodies": [{"tag": 1, "material": "steel"}],
+        "materials": [
+            {
+                "id": "unused",
+                "name": "Not assigned",
+                "model": "isotropic_elastic",
+                "youngsModulus": None,
+                "poissonsRatio": None,
+            },
+            {
+                "id": "steel",
+                "name": "Steel\n(US units)",
+                "model": "isotropic_elastic",
+                "youngsModulus": None,
+                "poissonsRatio": None,
+                "thermalConductivity": {"value": 26, "unit": "BTU/(h·ft·°F)"},
+            },
+        ],
+        "supports": [],
+        "loads": [
+            {
+                "id": "hot-1",
+                "type": "fixed_temperature",
+                "name": "Hot side",
+                "faces": [1],
+                "temperature": {"value": 100, "unit": "°C"},
+            },
+            {
+                "id": "cold-1",
+                "type": "fixed_temperature",
+                "name": "Cold side",
+                "faces": [3],
+                "temperature": {"value": 373.15, "unit": "K"},
+            },
+        ],
+        "mesh": {"size": {"value": 5, "unit": "mm"}},
+    }
+
+
+def heat_two_bodies_spec() -> dict:
+    """heat_spec on the bonded mesh with its bond removed, a material per body (the second in
+    W/(mm·K)), and each body's own fixed temperature: 100 °C under body 1 and 68 °F on top of
+    body 2 (bodies share no nodes, so the two may differ)."""
+    spec = heat_spec()
+    spec["bodies"] = [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "copper"}]
+    spec["bonds"] = [{"faces": [1, 3], "status": "removed"}]
+    spec["loads"][0]["faces"] = [2]
+    spec["loads"][1] |= {"faces": [6], "temperature": {"value": 68, "unit": "°F"}}
+    spec["materials"].append(
+        {
+            "id": "copper",
+            "name": "Copper",
+            "model": "isotropic_elastic",
+            "youngsModulus": {"value": 117, "unit": "GPa"},
+            "poissonsRatio": 0.34,
+            "thermalConductivity": {"value": 0.39, "unit": "W/(mm·K)"},
+        }
+    )
+    return spec
+
+
 def two_body_loads_spec() -> dict:
     return loads_spec() | {
         "bodies": [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
@@ -369,6 +438,8 @@ SNAPSHOT_CASES = {
     "thermal-two-bodies-c3d10": (thermal_spec, lambda: two_tets(order=2, bodies=2)),
     "bonded-c3d10": (lambda: bonded_spec().model_dump(by_alias=True), lambda: bonded_tets(2)),
     "bonded-slide-c3d4": (bonded_slide_spec, lambda: bonded_tets(1)),
+    "heat-c3d10": (heat_spec, lambda: two_tets(order=2)),
+    "heat-two-bodies-c3d4": (heat_two_bodies_spec, lambda: bonded_tets(1)),
 }
 
 
@@ -959,3 +1030,136 @@ def test_refuses_an_unknown_solver_name() -> None:
         generate_deck(
             SimulationSpec.model_validate(fixture_spec()), two_tets(order=2), solver="PARDISO"
         )
+
+
+# --- Steady-state thermal analysis (M5.1, ADR-064) ---
+
+
+def test_heat_transfer_deck_holds_fixed_temperatures_in_kelvin() -> None:
+    lines = deck(heat_spec(), two_tets(order=2)).splitlines()
+    step = lines.index("*STEP")
+    assert lines[step + 1 : step + 4] == ["*HEAT TRANSFER, STEADY STATE", "1.0, 1.0", "*BOUNDARY"]
+    # 100 °C and 373.15 K are the same temperature, so the shared edge is held consistently.
+    assert lines[step + 4 : step + 6] == ["T1, 11, 11, 373.15", "T2, 11, 11, 373.15"]
+    assert lines[step + 6 :] == ["*NODE FILE", "NT", "*END STEP"]
+    assert not any(x.startswith(("*STATIC", "*ELASTIC", "*EL FILE")) for x in lines)
+
+
+def test_conductivity_is_written_in_watts_per_metre_kelvin() -> None:
+    text = deck(heat_two_bodies_spec(), bonded_tets(1))
+    values = [float(part.splitlines()[0]) for part in text.split("*CONDUCTIVITY\n")[1:]]
+    # 26 BTU/(h·ft·°F) and 0.39 W/(mm·K); the unassigned material gets no *MATERIAL.
+    assert values == pytest.approx([26 * 1.7307346663713912, 390.0], rel=1e-15)
+    assert "*MATERIAL, NAME=M1" not in text
+    assert "*SOLID SECTION, ELSET=B1, MATERIAL=M2" in text
+    assert "*SOLID SECTION, ELSET=B2, MATERIAL=M3" in text
+
+
+def test_a_fixed_temperature_holds_every_node_of_its_faces() -> None:
+    mesh = two_tets(order=2)
+    lines = deck(heat_spec(), mesh).splitlines()
+    first = lines.index("*NSET, NSET=T1")
+    nodes = [int(n) for n in lines[first + 1].split(", ")]
+    assert nodes == [n + 1 for n in fixed_support_nodes(mesh, [1])]
+    assert len(nodes) == 6  # three corners and three mid-edge nodes
+
+
+def test_fahrenheit_temperatures_convert_with_their_offset() -> None:
+    spec = heat_spec()
+    spec["loads"][1]["temperature"] = {"value": 212, "unit": "°F"}
+    spec["loads"][0]["temperature"] = {"value": 212, "unit": "°F"}
+    lines = deck(spec, two_tets(order=1)).splitlines()
+    held = [x for x in lines if x.startswith("T1, 11, 11, ")]
+    assert float(held[0].split(", ")[3]) == pytest.approx(373.15, rel=1e-14)
+
+
+def test_a_solver_name_goes_on_the_heat_transfer_line() -> None:
+    spec, mesh = SimulationSpec.model_validate(heat_spec()), two_tets(order=2)
+    lines = generate_deck(spec, mesh, solver="PASTIX").splitlines()
+    assert "*HEAT TRANSFER, STEADY STATE, SOLVER=PASTIX" in lines
+
+
+def heat_load_spec(change) -> dict:  # type: ignore[no-untyped-def]
+    spec = heat_spec()
+    change(spec)
+    return spec
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        (
+            lambda s: s["supports"].append(
+                {"id": "f", "type": "fixed", "name": "Base", "faces": [2]}
+            ),
+            '"Base" has no effect in a steady-state thermal analysis',
+        ),
+        (
+            lambda s: s["loads"].append(
+                {
+                    "id": "p",
+                    "type": "pressure",
+                    "name": "Inside",
+                    "faces": [2],
+                    "magnitude": {"value": 1, "unit": "MPa"},
+                }
+            ),
+            '"Inside" has no effect in a steady-state thermal analysis',
+        ),
+        (lambda s: s.update(loads=[]), "no fixed temperature"),
+        (lambda s: s["loads"][0].update(faces=[]), "Hot side has no faces"),
+        (lambda s: s["loads"][0].update(faces=[9]), "uses faces [9], which the mesh does not have"),
+        (lambda s: s["loads"][0].update(temperature=None), '"Hot side" has no value'),
+        (
+            lambda s: s["loads"][0].update(temperature={"value": -273.15, "unit": "°C"}),
+            "at or below absolute zero",
+        ),
+        (
+            lambda s: s["loads"][0].update(temperature={"value": 1, "unit": "MPa"}),
+            "not a temperature unit",
+        ),
+        (
+            lambda s: s["loads"][0].update(temperature={"value": 50, "unit": "°C"}),
+            '"Hot side" and "Cold side" hold the same nodes',
+        ),
+        (
+            lambda s: s["materials"][1].update(thermalConductivity=None),
+            '"Steel (US units)" has no thermal conductivity'.replace(" (", "\n("),
+        ),
+        (
+            lambda s: s["materials"][1].update(thermalConductivity={"value": 0, "unit": "W/(m·K)"}),
+            "thermal conductivity must be greater than zero",
+        ),
+        (
+            lambda s: s["materials"][1].update(thermalConductivity={"value": 45, "unit": "1/K"}),
+            "not a thermal conductivity unit",
+        ),
+    ],
+)
+def test_refuses_thermal_setups_it_cannot_translate(change, message: str) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(DeckError, match=re.escape(message)):
+        deck(heat_load_spec(change), two_tets(order=2))
+
+
+def test_refuses_bonded_bodies_in_a_thermal_analysis() -> None:
+    spec = heat_spec()
+    spec["bodies"] = [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
+    spec["bonds"] = [{"faces": [1, 3], "status": "accepted"}]
+    with pytest.raises(DeckError, match="Bonds do not carry heat"):
+        deck(spec, bonded_tets(2))
+
+
+def test_refuses_a_body_without_a_fixed_temperature() -> None:
+    spec = heat_spec()
+    spec["bodies"] = [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
+    spec["bonds"] = [{"faces": [1, 3], "status": "removed"}]
+    spec["loads"] = [spec["loads"][0] | {"faces": [2]}]
+    with pytest.raises(DeckError, match="Body 2 has no fixed temperature"):
+        deck(spec, bonded_tets(2))
+
+
+def test_refuses_a_fixed_temperature_in_a_static_analysis() -> None:
+    spec = fixture_spec()
+    spec["loads"].append(heat_spec()["loads"][0])
+    with pytest.raises(DeckError, match='"Hot side" has no effect in a linear static analysis'):
+        deck(spec, two_tets(order=2))

@@ -14,7 +14,9 @@
 // (ADR-051), named as in the run's own frozen setup. From M3.7 the result can be shown in units
 // of its own, picked per kind, instead of the unit system's (ADR-056). From M3.8 a succeeded run
 // can be exported as CSV and VTK files (ADR-057). From M4.5 a run whose setup ties bonds shows
-// the report's note on stresses near bonded faces under its results (ADR-062).
+// the report's note on stresses near bonded faces under its results (ADR-062). From M5.1 a
+// steady-state thermal run shows its highest and lowest temperature instead of displacement,
+// stress and reactions, and offers only the temperature to show on the undeformed model.
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import {
@@ -33,8 +35,22 @@ import { duration, memory } from "../billing/estimate";
 import type { Deformation } from "../layout/Viewer";
 import { fromSi } from "../units/convert";
 import { useUnitSystem } from "../units/system";
-import { DISPLAY_KINDS, type DisplayKind, type DisplayUnitChoice, type ResultUnits, unitsOf } from "./displayUnits";
-import { QUANTITIES, type Quantity, type QuantityGroup, SAFETY_FACTOR_CAP } from "../viewer/resultFields";
+import {
+  type DisplayKind,
+  type DisplayUnitChoice,
+  type ResultUnits,
+  STATIC_KINDS,
+  THERMAL_KINDS,
+  unitsOf,
+} from "./displayUnits";
+import {
+  isThermalRun,
+  QUANTITIES,
+  type Quantity,
+  type QuantityGroup,
+  runQuantities,
+  SAFETY_FACTOR_CAP,
+} from "../viewer/resultFields";
 import { Notes } from "./ItemPanels";
 import { RunExport } from "./RunExport";
 import { type ItemStatus, sameSpec } from "./spec";
@@ -47,6 +63,7 @@ const KIND_LABELS: Record<DisplayKind, string> = {
   force: "Force",
   moment: "Moment",
   strain: "Strain",
+  temperature: "Temperature",
 };
 
 /**
@@ -55,20 +72,23 @@ const KIND_LABELS: Record<DisplayKind, string> = {
  * legend, markers and probes from the stored SI values, without running again.
  */
 function DisplayUnits({
+  kinds,
   choice,
   onChange,
   onReset,
 }: {
+  /** The kinds the run shows, in order. */
+  kinds: readonly DisplayKind[];
   choice: DisplayUnitChoice;
   onChange: (kind: DisplayKind, unit: string | null) => void;
   onReset: () => void;
 }) {
   const system = useUnitSystem();
-  const picked = DISPLAY_KINDS.some((kind) => choice[kind] !== undefined);
+  const picked = kinds.some((kind) => choice[kind] !== undefined);
   return (
     <fieldset className="result-choice result-units">
       <legend>Units shown</legend>
-      {DISPLAY_KINDS.map((kind) => {
+      {kinds.map((kind) => {
         return (
           <label key={kind}>
             {KIND_LABELS[kind]}
@@ -94,7 +114,7 @@ function DisplayUnits({
 }
 
 /** The headings of the quantity list, in order. */
-const QUANTITY_GROUPS: readonly QuantityGroup[] = ["Displacement", "Stress", "Strain", "Safety factor"];
+const QUANTITY_GROUPS: readonly QuantityGroup[] = ["Displacement", "Stress", "Strain", "Safety factor", "Temperature"];
 
 /** One reason the setup cannot be run now, and the tree item that fixes it (null for none). */
 export interface RunBlocker {
@@ -247,7 +267,7 @@ function Reactions({ result, spec, units }: { result: SolveResult; spec: Simulat
   const balance = result.balance;
   return (
     <>
-      {result.reactions.map((reaction) => (
+      {(result.reactions ?? []).map((reaction) => (
         <Fragment key={reaction.supportId}>
           <dt>Reaction, {supportName.get(reaction.supportId) ?? reaction.supportId}</dt>
           <dd>
@@ -296,6 +316,35 @@ function Reactions({ result, spec, units }: { result: SolveResult; spec: Simulat
         </>
       )}
     </>
+  );
+}
+
+/** The figures of a steady-state thermal run (M5.1): its highest and lowest temperature, where
+ * they are. Absolute temperatures, converted with their offset. Numbers only. */
+function ThermalFigures({ result, units }: { result: SolveResult; units: ResultUnits }) {
+  const { temperature } = result;
+  return (
+    <dl className="geometry-facts" aria-label="Run results">
+      {temperature === undefined ? (
+        <>
+          <dt>Temperature</dt>
+          <dd className="field-hint">The run reported no temperatures. Run it again.</dd>
+        </>
+      ) : (
+        <>
+          <dt>Highest temperature</dt>
+          <dd>
+            {figure(temperature.max.value, units.temperature, "temperature")}{" "}
+            <span className="field-hint">{at(temperature.max.position, units.length)}</span>
+          </dd>
+          <dt>Lowest temperature</dt>
+          <dd>
+            {figure(temperature.min.value, units.temperature, "temperature")}{" "}
+            <span className="field-hint">{at(temperature.min.position, units.length)}</span>
+          </dd>
+        </>
+      )}
+    </dl>
   );
 }
 
@@ -447,6 +496,9 @@ export function RunPanel({
 }) {
   const solving = run?.status === "solving";
   const result = run?.status === "succeeded" ? run.result : null;
+  // A steady-state thermal run (M5.1) has temperatures only.
+  const thermal = run !== null && isThermalRun(run);
+  const quantities = run === null ? [] : runQuantities(run);
   // The size to run on: the recommended one (the largest when none fits) until the user picks
   // another for this estimate.
   const [picked, setPicked] = useState<{ estimate: RunEstimate; size: string } | null>(null);
@@ -492,9 +544,9 @@ export function RunPanel({
               value={choice.quantity}
               onChange={(event) => onChoiceChange({ ...choice, quantity: event.target.value as Quantity })}
             >
-              {QUANTITY_GROUPS.map((group) => (
+              {QUANTITY_GROUPS.filter((group) => quantities.some((q) => QUANTITIES[q].group === group)).map((group) => (
                 <optgroup key={group} label={group}>
-                  {(Object.keys(QUANTITIES) as Quantity[])
+                  {quantities
                     .filter((q) => QUANTITIES[q].group === group)
                     .map((q) => (
                       <option key={q} value={q}>
@@ -505,38 +557,55 @@ export function RunPanel({
               ))}
             </select>
           </label>
-          <label>
-            Shape
-            <select
-              value={choice.deformation}
-              onChange={(event) => onChoiceChange({ ...choice, deformation: event.target.value as Deformation })}
-            >
-              {(Object.keys(DEFORMATIONS) as Deformation[]).map((d) => (
-                <option key={d} value={d}>
-                  {DEFORMATIONS[d]}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* A thermal run has no displacement, so it is drawn undeformed. */}
+          {!thermal && (
+            <label>
+              Shape
+              <select
+                value={choice.deformation}
+                onChange={(event) => onChoiceChange({ ...choice, deformation: event.target.value as Deformation })}
+              >
+                {(Object.keys(DEFORMATIONS) as Deformation[]).map((d) => (
+                  <option key={d} value={d}>
+                    {DEFORMATIONS[d]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </fieldset>
       )}
       {result && (
-        <DisplayUnits choice={unitChoice} onChange={onUnitChange} onReset={onUnitReset} />
+        <DisplayUnits
+          kinds={thermal ? THERMAL_KINDS : STATIC_KINDS}
+          choice={unitChoice}
+          onChange={onUnitChange}
+          onReset={onUnitReset}
+        />
       )}
-      {result && (
+      {result && thermal && <ThermalFigures result={result} units={units} />}
+      {result && !thermal && (
         <dl className="geometry-facts" aria-label="Run results">
-          <dt>Largest displacement</dt>
-          <dd>
-            {figure(result.displacement.max.value, units.length, "length")}{" "}
-            <span className="field-hint">{at(result.displacement.max.position, units.length)}</span>
-          </dd>
-          <dt>Largest von Mises stress</dt>
-          <dd>
-            {figure(result.vonMises.max.value, units.pressure, "pressure")}{" "}
-            <span className="field-hint">{at(result.vonMises.max.position, units.length)}</span>
-          </dd>
-          <dt>Smallest von Mises stress</dt>
-          <dd>{figure(result.vonMises.min.value, units.pressure, "pressure")}</dd>
+          {result.displacement && (
+            <>
+              <dt>Largest displacement</dt>
+              <dd>
+                {figure(result.displacement.max.value, units.length, "length")}{" "}
+                <span className="field-hint">{at(result.displacement.max.position, units.length)}</span>
+              </dd>
+            </>
+          )}
+          {result.vonMises && (
+            <>
+              <dt>Largest von Mises stress</dt>
+              <dd>
+                {figure(result.vonMises.max.value, units.pressure, "pressure")}{" "}
+                <span className="field-hint">{at(result.vonMises.max.position, units.length)}</span>
+              </dd>
+              <dt>Smallest von Mises stress</dt>
+              <dd>{figure(result.vonMises.min.value, units.pressure, "pressure")}</dd>
+            </>
+          )}
           <dt>Smallest safety factor against yield</dt>
           <dd>
             {result.safetyFactor ? (
@@ -558,7 +627,7 @@ export function RunPanel({
             <strong>{note.title}.</strong> {note.text}
           </p>
         ))}
-      {run !== null && result && <RunExport run={run} result={result} units={units} />}
+      {run !== null && result && <RunExport run={run} result={result} units={units} thermal={thermal} />}
       {run !== null && <RunRecord run={run} currentSpec={currentSpec} />}
       {run !== null && (
         <details className="run-log" open={solving}>

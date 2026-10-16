@@ -205,7 +205,8 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 | Gravity, centrifugal | `*DLOAD` `GRAV` and `CENTRIF` on each body's element set, with `*DENSITY` per material; gravity loads added into one vector, one centrifugal load per setup (ADR-040) |
 | Uniform temperature change | Initial and final temperature fields: every node at 0 in `*INITIAL CONDITIONS, TYPE=TEMPERATURE` and at the change in the step's `*TEMPERATURE`, with `*EXPANSION` per material; the change counts from the stress-free state and applies no nodal load (ADR-044) |
 | Bonded interface | Every bond not removed: each node of the face with the finer mesh follows the closest point of the other face, as `*EQUATION` lines in the nodes' own directions (u_s = Σ N_m u_m, master shape functions at that point); not CalculiX's `*TIE`, whose printed nodal forces leave out the tie forces a held node carries (ADR-060) |
-| Fixed temperature | `*BOUNDARY` on the temperature degree of freedom |
+| Steady-state thermal analysis | A `*HEAT TRANSFER, STEADY STATE` step on the same C3D10 or C3D4 elements, `*CONDUCTIVITY` per material and no `*ELASTIC`; faces with no thermal load are insulated; the nodal temperatures (`NT`) are the result (ADR-064) |
+| Fixed temperature | `*BOUNDARY` on the temperature degree of freedom (11) for every node on the faces, in kelvin; two fixed temperatures that meet at a node with different values are refused (ADR-064) |
 | Heat flux, internal heat generation | `*DFLUX` |
 | Convection | `*FILM` |
 | Radiation to ambient | `*RADIATE` with the absolute-zero and Stefan-Boltzmann constants set for SI |

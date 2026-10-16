@@ -12,7 +12,8 @@
 // (M3.4, ADR-053) across x, y or z hides the model on one side and colours the section the
 // plane makes through the run's volume mesh, from the run's values at every node. Bodies can
 // be hidden in every mode (M3.6, ADR-055), and the camera, hidden bodies and the result display
-// can be saved as named views of the simulation and brought back.
+// can be saved as named views of the simulation and brought back. A steady-state thermal run
+// (M5.1) has no displacement: its temperatures are drawn on the undeformed shape.
 
 import type {
   Deformation as DeformationName,
@@ -45,6 +46,7 @@ import {
   bandEdges,
   deformedPositions,
   extremeVertices,
+  isViewQuantity,
   QUANTITIES,
   type Quantity,
   type ResultFields,
@@ -160,12 +162,17 @@ function diagonal(positions: Float32Array): number {
   return positions.length === 0 ? 0 : Math.hypot(...hi.map((h, axis) => h - (lo[axis] ?? h)));
 }
 
-/** The run's surface as drawn: deformed or not, and the scale used. */
-type Shape = { mesh: DisplayMesh; scale: number | null; displacement: ResultField };
+/** The run's surface as drawn: deformed or not, and the scale used; no displacement for a
+ * steady-state thermal run (M5.1). */
+type Shape = { mesh: DisplayMesh; scale: number | null; displacement: ResultField | null };
 
 /** The shape the result view draws the run's surface in, or a reason it cannot be drawn. */
 export function shapeOf(mesh: DisplayMesh, results: ResultFields, deformation: Deformation): Shape | string {
   const displacement = results.fields.get("displacement");
+  // A steady-state thermal run keeps the temperature alone; it is drawn undeformed.
+  if (displacement === undefined && results.fields.has("temperature") && results.vertexCount === mesh.positions.length / 3) {
+    return { mesh, scale: null, displacement: null };
+  }
   if (displacement?.components !== 3 || results.vertexCount !== mesh.positions.length / 3) {
     return "The result files of this run do not belong together. Run the simulation again; if it happens again, report it as a bug.";
   }
@@ -190,6 +197,8 @@ type Contour = {
   unit: string;
   label: string;
   scale: number | null;
+  /** False for a run with no displacement (a thermal run), whose shape is never deformed. */
+  deformable: boolean;
   /** Smallest values drawn red, largest blue (the safety factor, ADR-054). */
   smallestRed: boolean;
   /** The safety factor's cap when the largest value drawn reaches it, so the legend says so. */
@@ -215,6 +224,12 @@ export function contourOf(
   const field = results.fields.get(name);
   if (!field && name === "safetyFactor") {
     return "This run has no safety factor against yield. It needs a yield strength for every material, and runs solved before ClearFEA worked it out have none. Enter the yield strength under Materials and run the simulation again.";
+  }
+  if (!field && name === "temperature") {
+    return "This run has no temperatures. Only a steady-state thermal analysis solves them; set the analysis type under Analysis and run the simulation again.";
+  }
+  if (!field && name === "displacement") {
+    return "This run has no displacement. A steady-state thermal analysis solves temperatures only; show the temperature instead.";
   }
   if (!field) {
     // Runs solved before M3.1 kept displacement and von Mises stress only.
@@ -243,6 +258,7 @@ export function contourOf(
     unit,
     label,
     scale: shape.scale,
+    deformable: shape.displacement !== null,
     smallestRed,
     cap: name === "safetyFactor" && max >= SAFETY_FACTOR_CAP ? SAFETY_FACTOR_CAP : null,
     cut: cut === null ? null : { coordinates: cut.values.map(band), values: cut.values, kept: cut.kept },
@@ -364,13 +380,15 @@ function Legend({ contour }: { contour: Contour }) {
       {contour.cap !== null && (
         <div className="viewer-legend-note">{`Factors of ${contour.cap} and more are shown as ${contour.cap}`}</div>
       )}
-      <div className="viewer-legend-note">
-        {contour.scale === null
-          ? "Undeformed shape"
-          : contour.scale === 1
-            ? "Deformed shape, true scale"
-            : `Deformed shape, scale ×${contour.scale.toLocaleString("en-US")}`}
-      </div>
+      {contour.deformable && (
+        <div className="viewer-legend-note">
+          {contour.scale === null
+            ? "Undeformed shape"
+            : contour.scale === 1
+              ? "Deformed shape, true scale"
+              : `Deformed shape, scale ×${contour.scale.toLocaleString("en-US")}`}
+        </div>
+      )}
     </section>
   );
 }
@@ -807,12 +825,13 @@ export function Viewer({
   );
 
   // A cut plane needs the run's mesh, the quantity's field at every node and, to draw the
-  // section on the deformed shape, the displacement too.
+  // section on the deformed shape, the displacement too; a thermal run (M5.1) has none to ask for.
   const quantityField = QUANTITIES[quantity].field;
-  const wanted = useMemo(
-    () => (cutSetting === null || !model?.results ? null : [...new Set(["displacement", quantityField])]),
-    [cutSetting, model, quantityField],
-  );
+  const wanted = useMemo(() => {
+    if (cutSetting === null || !model?.results) return null;
+    const displacement = model.results.fields.has("displacement") ? ["displacement"] : [];
+    return [...new Set([...displacement, quantityField])];
+  }, [cutSetting, model, quantityField]);
   const volume = useVolume(runId, wanted, onSignedOut);
   const volumeBox = useMemo(() => (volume?.mesh ? boxOf(volume.mesh) : null), [volume?.mesh]);
   const plane = useMemo(
@@ -934,7 +953,9 @@ export function Viewer({
     return {
       camera,
       hiddenBodies: model.bodies.filter((tag) => hiddenBodies.has(tag)),
-      result: legendShown ? { quantity, deformation, extremes, cut: cutSetting } : null,
+      // A view keeps only the quantities view.schema.json lists; the temperature (M5.1) is not one
+      // yet, so its view keeps the camera and hidden bodies alone.
+      result: legendShown && isViewQuantity(quantity) ? { quantity, deformation, extremes, cut: cutSetting } : null,
     };
   };
   const saveView = async (name: string): Promise<string | null> => {

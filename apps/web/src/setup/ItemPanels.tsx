@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Settings panels for the setup tree's items (M1.5): a material, a support, a load, and the
-// three groups. Each edit produces a whole new spec, which the caller saves.
+// three groups; from M5.1 also the analysis type. Each edit produces a whole new spec, which the
+// caller saves.
 
 import {
+  type AnalysisType,
+  analysisKinds,
+  analysisLoads,
   type CentrifugalLoad,
   type DisplacementComponent,
   displacementAxes,
@@ -32,6 +36,7 @@ import {
   type LoadType,
   removeItem,
   type SupportType,
+  setAnalysis,
   updateLoad,
   updateSupport,
 } from "./spec";
@@ -58,7 +63,54 @@ const loadAdds: { type: LoadType; label: string }[] = [
   { type: "gravity", label: "Add gravity" },
   { type: "centrifugal", label: "Add a centrifugal load" },
   { type: "temperature", label: "Add a temperature change" },
+  { type: "fixed_temperature", label: "Add a fixed temperature" },
 ];
+
+/** What each analysis type does, in one line (M5.1). */
+const analysisHints: Record<AnalysisType, string> = {
+  linear_static: "Small displacements of linear elastic bodies under supports and loads: displacements, stresses and reactions.",
+  steady_thermal:
+    "Steady-state heat conduction: temperatures from fixed temperatures on faces; every other face is insulated.",
+};
+
+/**
+ * The analysis type (M5.1, ADR-064). Changing it changes only the spec's analysis; supports and
+ * loads that do not belong to the new type stay and are marked until deleted.
+ */
+export function AnalysisPanel({
+  spec,
+  status,
+  onChange,
+}: {
+  spec: SimulationSpec;
+  status: ItemStatus | undefined;
+  onChange: (spec: SimulationSpec) => void;
+}) {
+  return (
+    <section className="setup-panel" aria-label="Analysis">
+      <h2 className="pane-title">Analysis</h2>
+      <Notes status={status} />
+      <fieldset className="setup-components">
+        <legend>Analysis type</legend>
+        {(Object.keys(analysisKinds) as AnalysisType[]).map((analysis) => (
+          <div key={analysis}>
+            <label className="checkbox">
+              <input
+                type="radio"
+                name="analysis"
+                value={analysis}
+                checked={spec.analysis === analysis}
+                onChange={() => onChange(setAnalysis(spec, analysis))}
+              />
+              {analysisKinds[analysis]}
+            </label>
+            <p className="field-hint">{analysisHints[analysis]}</p>
+          </div>
+        ))}
+      </fieldset>
+    </section>
+  );
+}
 
 export function Notes({ status }: { status: ItemStatus | undefined }) {
   if (status === undefined || status.notes.length === 0) return null;
@@ -74,35 +126,56 @@ export function Notes({ status }: { status: ItemStatus | undefined }) {
 export function GroupPanel({
   group,
   status,
+  analysis = "linear_static",
   onAdd,
   children,
 }: {
   group: Group;
   status: ItemStatus | undefined;
+  /** The setup's analysis type (M5.1): it decides which supports and loads are offered. */
+  analysis?: AnalysisType;
   /** Adds an item; for supports and loads, of the type chosen. */
   onAdd: (type?: SupportType | LoadType) => void;
   /** Shown below the add buttons: the material library for Materials. */
   children?: ReactNode;
 }) {
-  const adds = group === "supports" ? supportAdds : group === "loads" ? loadAdds : null;
+  const thermal = analysis === "steady_thermal";
+  // Supports belong to a linear static analysis only (ADR-064).
+  const adds =
+    group === "supports"
+      ? thermal
+        ? []
+        : supportAdds
+      : group === "loads"
+        ? loadAdds.filter(({ type }) => analysisLoads[analysis].includes(type))
+        : null;
   return (
     <section className="setup-panel" aria-label={groupTitles[group]}>
       <h2 className="pane-title">{groupTitles[group]}</h2>
       <Notes status={status} />
-      {group === "supports" && (
-        <p className="field-hint">Select faces in the viewer first to give the new item those faces.</p>
-      )}
-      {group === "loads" && (
-        <p className="field-hint">
-          Select faces in the viewer first to give a new pressure, force, remote load or hydrostatic pressure those faces. Gravity, a centrifugal load and
-          a temperature change act on every body.
-        </p>
-      )}
+      {group === "supports" &&
+        (thermal ? (
+          <p className="field-hint">
+            Supports have no effect in a steady-state thermal analysis. Delete them, or set the analysis type to linear
+            static.
+          </p>
+        ) : (
+          <p className="field-hint">Select faces in the viewer first to give the new item those faces.</p>
+        ))}
+      {group === "loads" &&
+        (thermal ? (
+          <p className="field-hint">Select faces in the viewer first to give the new fixed temperature those faces.</p>
+        ) : (
+          <p className="field-hint">
+            Select faces in the viewer first to give a new pressure, force, remote load or hydrostatic pressure those faces. Gravity, a centrifugal load and
+            a temperature change act on every body.
+          </p>
+        ))}
       {adds === null ? (
         <button type="button" onClick={() => onAdd()}>
           Add an empty material
         </button>
-      ) : (
+      ) : adds.length === 0 ? null : (
         <div className="field-actions field-actions-column">
           {adds.map(({ type, label }) => (
             <button key={type} type="button" onClick={() => onAdd(type)}>
@@ -180,6 +253,14 @@ export function MaterialPanel({
         value={material.thermalExpansion ?? null}
         hint="Coefficient of linear thermal expansion, for example 12e-6 1/°C for steel. Needed for a temperature change."
         onChange={(thermalExpansion) => set({ thermalExpansion })}
+      />
+      <QuantityInput
+        label="Thermal conductivity"
+        positive
+        kind="thermalConductivity"
+        value={material.thermalConductivity ?? null}
+        hint="For example 45 W/(m·K) for carbon steel. Needed for a steady-state thermal analysis."
+        onChange={(thermalConductivity) => set({ thermalConductivity })}
       />
       <QuantityInput
         label="Yield strength"
@@ -356,6 +437,8 @@ const loadHints: Record<LoadType, string> = {
     "Every body spinning steadily about an axis, pushed outwards by density × angular velocity² × distance from the axis. The sense of rotation does not matter. A setup can have one.",
   temperature:
     "Every body warms (positive) or cools (negative) by the same amount from the temperature at which it is free of stress. Each material expands by its thermal expansion × the change, and the supports resist it. A setup can have one.",
+  fixed_temperature:
+    "Holds every node of the faces at this temperature. Faces with no fixed temperature are insulated: no heat crosses them.",
 };
 
 function PressureFields({ load, set }: { load: PressureLoad; set: (changes: Partial<PressureLoad>) => void }) {
@@ -496,6 +579,14 @@ export function LoadPanel({
           kind="temperatureDifference"
           value={load.change}
           onChange={(change) => set({ change })}
+        />
+      )}
+      {load.type === "fixed_temperature" && (
+        <QuantityInput
+          label="Temperature"
+          kind="temperature"
+          value={load.temperature}
+          onChange={(temperature) => set({ temperature })}
         />
       )}
       {loadHasFaces(load) && (

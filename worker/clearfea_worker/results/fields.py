@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Nodal displacement, stress and strain from the solver output, and the derived von Mises
-and principal stresses.
+and principal stresses; nodal temperatures of a steady-state thermal run (M5.1).
 
 Physics-critical (ADR-030, ADR-050). CalculiX writes stresses and strains extrapolated from the
 integration points to the nodes and averaged over the elements that share a node; von Mises
@@ -35,6 +35,23 @@ class NodalFields:
     stress: array
     strain: array
     safety_factor: array | None = None
+
+
+@dataclass(frozen=True)
+class ThermalFields:
+    """``temperature[n]``: the temperature of node n in kelvin, as CalculiX wrote it (M5.1)."""
+
+    node_count: int
+    temperature: array
+
+
+def read_thermal_fields(frd: Path, node_count: int) -> ThermalFields:
+    """The temperature of every node from the ``.frd`` file of a heat transfer step."""
+    block = read_nodal_blocks(frd, node_count, {"NDTEMP"})["NDTEMP"]
+    temperature = _ordered(block, ("T",))
+    if not all(math.isfinite(v) for v in temperature):
+        raise FrdError("The result file holds values that are not finite numbers.")
+    return ThermalFields(node_count, temperature)
 
 
 def von_mises(sxx: float, syy: float, szz: float, sxy: float, syz: float, szx: float) -> float:

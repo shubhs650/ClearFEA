@@ -266,6 +266,27 @@ describe("checkSimulationSpec", () => {
     ]);
   });
 
+  it("accepts a thermal analysis with conductivity and fixed temperatures and checks their units (M5.1)", () => {
+    const s = spec();
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    s.analysis = "steady_thermal";
+    s.supports = [];
+    s.materials = [{ ...steel, thermalConductivity: { value: 26, unit: "BTU/(h·ft·°F)" } }];
+    s.loads = [
+      { id: "hot", type: "fixed_temperature", name: "Hot", faces: [1], temperature: { value: 300, unit: "°F" } },
+      { id: "cold", type: "fixed_temperature", name: "Cold", faces: [9], temperature: null },
+    ];
+    expect(validateSimulationSpec(s).ok).toBe(true);
+    expect(checkSimulationSpec(s, topology)).toEqual(['Load "Cold" uses face 9, which the geometry does not have.']);
+    s.materials = [{ ...steel, thermalConductivity: { value: 0, unit: "W/(m·K)" } }];
+    s.loads = [{ id: "hot", type: "fixed_temperature", name: "Hot", faces: [1], temperature: { value: 300, unit: "°F/s" } }];
+    expect(checkSimulationSpec(s, topology)).toEqual([
+      `The thermal conductivity of material "${steel.name}" must be greater than zero; it is 0 W/(m·K).`,
+      'The temperature of load "Hot" is given in "°F/s", which is not a temperature unit. Use one of: K, °C, °F.',
+    ]);
+  });
+
   it("accepts an elastic support and checks its stiffness (M2.6)", () => {
     const s = spec();
     s.supports.push({ id: "soil-1", type: "elastic", name: "Soil", faces: [3], stiffness: { value: 50, unit: "MN/m³" } });

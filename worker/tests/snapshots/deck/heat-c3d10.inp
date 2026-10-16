@@ -1,0 +1,46 @@
+** ClearFEA solver input, deck format 3. Generated from the simulation's
+** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa, K, W).
+** Geometry 00000000-0000-4000-8000-000000000005
+*HEADING
+ClearFEA steady-state thermal analysis
+** 14 nodes, 2 C3D10 elements
+*NODE, NSET=NALL
+1, 0.0, 0.0, 0.0
+2, 0.01, 0.0, 0.0
+3, 0.0, 0.01, 0.0
+4, 0.0, 0.0, 0.01
+5, 0.01, 0.01, 0.01
+6, 0.005, 0.0, 0.0
+7, 0.005, 0.005, 0.0
+8, 0.0, 0.005, 0.0
+9, 0.0, 0.0, 0.005
+10, 0.0, 0.005, 0.005
+11, 0.005, 0.0, 0.005
+12, 0.01, 0.005, 0.005
+13, 0.005, 0.005, 0.01
+14, 0.005, 0.01, 0.005
+** Body 1
+*ELEMENT, TYPE=C3D10, ELSET=B1
+1, 1, 2, 3, 4, 6, 7, 8, 9, 11, 10
+2, 2, 3, 4, 5, 7, 10, 11, 12, 14, 13
+** Fixed temperature hot-1 "Hot side", faces 1: 100.0 °C = 373.15 K
+*NSET, NSET=T1
+1, 3, 4, 8, 9, 10
+** Fixed temperature cold-1 "Cold side", faces 3: 373.15 K = 373.15 K
+*NSET, NSET=T2
+2, 3, 4, 5, 7, 11, 12, 13, 14
+** Material steel "Steel (US units)"
+*MATERIAL, NAME=M2
+** Thermal conductivity 26.0 BTU/(h·ft·°F)
+*CONDUCTIVITY
+44.99910132565617
+*SOLID SECTION, ELSET=B1, MATERIAL=M2
+*STEP
+*HEAT TRANSFER, STEADY STATE
+1.0, 1.0
+*BOUNDARY
+T1, 11, 11, 373.15
+T2, 11, 11, 373.15
+*NODE FILE
+NT
+*END STEP
