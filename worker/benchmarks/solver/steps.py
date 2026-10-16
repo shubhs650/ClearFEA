@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """M2.12 job-step benchmark: wall time of each step of a solve job, and the solver's peak memory,
 on the M2.11 block meshed at several sizes with both element orders (ADR-049), for each equation
-solver a run can use (ADR-063).
+solver a run can use (ADR-063), as a linear static run or as a modal run (M6.3).
 
 Script only, not part of the worker package or its tests. It runs the steps the worker's solve
 job runs (``clearfea_worker.jobs.run_solve``) in the same order and with the same functions,
@@ -11,11 +11,13 @@ The estimator and the element limits are fitted from the rows (``fit.py``). The 
 must be the worker image's build (``worker/ccx/build.sh``).
 
     cd worker && uv run python benchmarks/solver/steps.py --out DIR --solver pastix 3000:2 ...
-        [--results benchmarks/solver/steps.json]
+        [--analysis modal --modes 10] [--results benchmarks/solver/steps.json]
 
 Each argument is a target element count and an element order. One mesh is solved per process
 call, so the peak memory of the solver is that solve's alone; rows are added to the results
-file, replacing a row with the same target, order and solver.
+file, replacing a row with the same target, order, solver, analysis and number of modes. A
+modal run is the same block held at the same end, with no load, the material's density and
+``--modes`` modes (ADR-070).
 """
 
 import argparse
@@ -35,7 +37,13 @@ sys.path.insert(0, str(HERE))
 import bench  # noqa: E402  (the M2.11 script beside this one: the block, its spec, the machine)
 
 
-def solve_one(root: Path, target: int, order: int, solver: str) -> dict[str, object]:
+#: Steel's density for the modal runs, kg/m³.
+DENSITY = 7850.0
+
+
+def solve_one(
+    root: Path, target: int, order: int, solver: str, analysis: str, modes: int
+) -> dict[str, object]:
     from clearfea_worker.deck import generate_deck
     from clearfea_worker.geometry.importer import import_geometry
     from clearfea_worker.meshing.mesher import ELEMENTS_PER_SIZE_CUBED, mesh_geometry
@@ -61,6 +69,11 @@ def solve_one(root: Path, target: int, order: int, solver: str) -> dict[str, obj
     spec = bench.spec(fixed, loaded, size * 1000).model_dump(mode="json", by_alias=True)
     spec["mesh"] = {"size": {"value": size * 1000, "unit": "mm"}, "order": order}
     spec["solver"] = solver
+    if analysis == "modal":
+        spec["analysis"] = "modal"
+        spec["modes"] = modes
+        spec["loads"] = []
+        spec["materials"][0]["density"] = {"value": DENSITY, "unit": "kg/m³"}
     spec = SimulationSpec.model_validate(spec)
 
     seconds: dict[str, float] = {}
@@ -90,10 +103,12 @@ def solve_one(root: Path, target: int, order: int, solver: str) -> dict[str, obj
     frd_bytes = frd.stat().st_size
     for path in (frd, dat):
         path.unlink()
+    modal = {"analysis": "modal", "modes": modes} if analysis == "modal" else {}
     return {
         "targetElements": target,
         "order": order,
         "solver": solver,
+        **modal,
         "elements": mesh.element_count,
         "nodes": mesh.node_count,
         "stepSeconds": seconds,
@@ -104,6 +119,11 @@ def solve_one(root: Path, target: int, order: int, solver: str) -> dict[str, obj
         "machine": bench.machine(),
         "date": datetime.now(UTC).strftime("%Y-%m-%d"),
     }
+
+
+def analysis_of(row: dict[str, object]) -> str:
+    """A row's analysis; rows measured before M6.3 are linear static and do not say so."""
+    return str(row.get("analysis", "linear_static"))
 
 
 def save_row(path: Path, row: dict[str, object]) -> None:
@@ -117,11 +137,13 @@ def save_row(path: Path, row: dict[str, object]) -> None:
     )
 
     def key(r: dict[str, object]) -> tuple[object, ...]:
-        return (r["targetElements"], r["order"], r["solver"])
+        return (r["targetElements"], r["order"], r["solver"], analysis_of(r), r.get("modes", 0))
 
     data["runs"] = [r for r in data["runs"] if key(r) != key(row)]
     data["runs"].append(row)
-    data["runs"].sort(key=lambda r: (r["solver"], r["order"], r["nodes"]))
+    data["runs"].sort(
+        key=lambda r: (analysis_of(r) != "linear_static", analysis_of(r), r["solver"], r["order"], r.get("modes", 0), r["nodes"])
+    )
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
@@ -135,12 +157,14 @@ def main() -> int:
         default="pastix",
         choices=("pastix", "spooles", "iterative_cholesky", "iterative_scaling"),
     )
+    parser.add_argument("--analysis", default="linear_static", choices=("linear_static", "modal"))
+    parser.add_argument("--modes", type=int, default=10, help="modes of a modal run")
     parser.add_argument("cases", nargs="*", help="TARGET:ORDER, for example 25000:2")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     if args.one:
         target, order = (int(part) for part in args.one.split(":"))
-        print(json.dumps(solve_one(args.out, target, order, args.solver)), flush=True)
+        print(json.dumps(solve_one(args.out, target, order, args.solver, args.analysis, args.modes)), flush=True)
         return 0
     for case in args.cases:
         # A fresh process per solve, so the peak memory of its children is this solve's.
@@ -152,6 +176,10 @@ def main() -> int:
                 str(args.out),
                 "--solver",
                 args.solver,
+                "--analysis",
+                args.analysis,
+                "--modes",
+                str(args.modes),
                 "--one",
                 case,
             ],
@@ -161,8 +189,9 @@ def main() -> int:
         )
         row = json.loads(found.stdout.strip().splitlines()[-1])
         save_row(args.results, row)
+        what = f"modal ({args.modes} modes) " if args.analysis == "modal" else ""
         print(
-            f"{args.solver} {case}: {row['elements']:,} elements, {row['nodes']:,} nodes, "
+            f"{what}{args.solver} {case}: {row['elements']:,} elements, {row['nodes']:,} nodes, "
             f"job {row['jobSeconds']} s, solver peak {row['peakMemoryBytes'] / 2**30:.2f} GiB",
             flush=True,
         )
