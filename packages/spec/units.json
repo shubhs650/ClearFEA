@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "kinds": {
     "length": {
       "description": "Lengths and coordinates.",
@@ -435,6 +435,24 @@
         }
       }
     },
+    "frequency": {
+      "description": "Frequencies: cycles per unit of time, such as a natural frequency of a modal analysis (M6.1).",
+      "si": "Hz",
+      "units": {
+        "Hz": {
+          "factor": 1,
+          "definition": "SI derived unit, 1 Hz = 1 cycle/s"
+        },
+        "kHz": {
+          "factor": 1000,
+          "definition": "1 kHz = 1000 Hz exactly"
+        },
+        "cpm": {
+          "factor": 0.016666666666666666,
+          "definition": "cycles per minute: 1/60 Hz (nearest double)"
+        }
+      }
+    },
     "ratio": {
       "description": "Ratios of two quantities of the same kind, dimensionless, such as the safety factor against yield (M3.5). Shown without a unit.",
       "si": "1",
@@ -468,6 +486,7 @@
         "heatGeneration": "W/m³",
         "heatFlow": "W",
         "strain": "mm/mm",
+        "frequency": "Hz",
         "ratio": "1"
       }
     },
@@ -492,6 +511,7 @@
         "heatGeneration": "W/m³",
         "heatFlow": "W",
         "strain": "m/m",
+        "frequency": "Hz",
         "ratio": "1"
       }
     },
@@ -516,6 +536,7 @@
         "heatGeneration": "BTU/(h·ft³)",
         "heatFlow": "BTU/h",
         "strain": "in/in",
+        "frequency": "Hz",
         "ratio": "1"
       }
     }

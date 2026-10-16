@@ -33,6 +33,7 @@ from ..deck.elements import GMSH_EDGES
 from ..geometry.display import FacePatch, write_display
 from ..meshing.volume import NODES_PER_ELEMENT, TET_FACES, VolumeMesh
 from .fields import NodalFields, ThermalFields, principal_field, von_mises_field
+from .modal import ModalFields
 
 MAGIC = b"CFRF"
 VERSION = 1
@@ -107,11 +108,13 @@ def extract_surface(mesh: VolumeMesh) -> Surface:
     return Surface(patches, nodes)
 
 
-def node_fields(fields: NodalFields | ThermalFields) -> list[SurfaceField]:
+def node_fields(fields: NodalFields | ThermalFields | ModalFields) -> list[SurfaceField]:
     """Every result field at every node of the mesh, in the order of result-fields.md: what
     nodes.bin holds for cut planes (M3.4, ADR-053). A thermal run has the temperature only
     (M5.1) and its heat flux (M5.3); a thermal stress run has both the structural fields and
-    those two after them (M5.4)."""
+    those two after them (M5.4). A modal run has none yet (M6.1); its mode shapes are M6.2's."""
+    if isinstance(fields, ModalFields):
+        return []
     if isinstance(fields, ThermalFields):
         return _thermal_fields(fields)
     return [
@@ -203,7 +206,7 @@ class ViewerFiles:
 
 
 def write_viewer_files(
-    mesh: VolumeMesh, fields: NodalFields | ThermalFields, out_dir: Path
+    mesh: VolumeMesh, fields: NodalFields | ThermalFields | ModalFields, out_dir: Path
 ) -> ViewerFiles:
     """Writes surface.bin, fields.bin and (for cut planes, M3.4) nodes.bin into ``out_dir``."""
     surface = extract_surface(mesh)

@@ -6,7 +6,8 @@ safety factor against yield with the node and position where each occurs, the re
 and moment of every support, each load's total force and moment, and the balance check of the
 two. For a steady-state thermal run, the smallest and largest temperature (M5.1), the largest
 heat flux, each thermal load's heat flow and the heat balance (M5.3, results.heat); a thermal
-stress run has both (M5.4). SI throughout.
+stress run has both (M5.4). A modal run has its natural frequencies (M6.1, results.modal).
+SI throughout.
 """
 
 import math
@@ -33,6 +34,7 @@ from .fields import (
     von_mises_field,
 )
 from .heat import THERMAL_LOADS, HeatFlow, balance_floor, heat_balance, read_heat_flows
+from .modal import ModalFields, frequency, read_eigenvalues
 from .safety import safety_factor_field
 
 
@@ -183,6 +185,17 @@ def summarize_thermal(
     )
 
 
+def summarize_modal(eigenvalues: list[float], mesh: VolumeMesh, calculix: str) -> SolveResult:
+    """A modal run's summary (M6.1): the frequency of each mode in hertz, lowest first."""
+    return SolveResult.model_validate(
+        {
+            "nodes": mesh.node_count,
+            "frequencies": [frequency(value) for value in eigenvalues],
+            "software": {"calculix": calculix},
+        }
+    )
+
+
 def _thermal_summary(
     spec: SimulationSpec, mesh: VolumeMesh, fields: ThermalFields, flows: list[HeatFlow]
 ) -> dict[str, object]:
@@ -212,12 +225,15 @@ def _read_thermal(
 
 def read_results(
     spec: SimulationSpec, mesh: VolumeMesh, frd: Path, dat: Path, calculix: str
-) -> tuple[NodalFields | ThermalFields, SolveResult]:
+) -> tuple[NodalFields | ThermalFields | ModalFields, SolveResult]:
     """Reads the solver output of a deck made from ``spec`` and ``mesh``, with the safety
     factor against yield when every material has a yield strength (ADR-054). A steady-state
     thermal run has temperatures and heat fluxes (M5.1, M5.3); a thermal stress run has those
     of its heat transfer step beside the structural results of its static step (M5.4): each
-    block of the result files is asked for in one step only, so each is read as before."""
+    block of the result files is asked for in one step only, so each is read as before. A
+    modal run has its natural frequencies (M6.1, ADR-070) and no fields yet."""
+    if spec.analysis == "modal":
+        return ModalFields(mesh.node_count), summarize_modal(read_eigenvalues(dat), mesh, calculix)
     if spec.analysis == "steady_thermal":
         thermal, flows = _read_thermal(spec, mesh, frd, dat)
         return thermal, summarize_thermal(spec, mesh, thermal, flows, calculix)

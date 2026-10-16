@@ -51,9 +51,9 @@ Face tags from the geometry's topology.json (ARCHITECTURE.md section 3). Empty w
 """
 
 
-type AnalysisType = Literal["linear_static", "steady_thermal", "thermal_stress"]
+type AnalysisType = Literal["linear_static", "steady_thermal", "thermal_stress", "modal"]
 """
-linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports. thermal_stress: a steady-state thermal step followed by a linear static step on the temperatures it solved, in one deck (M5.4, ADR-067); it uses supports, the structural loads other than a uniform temperature change, and the thermal loads, and needs the spec's stressFreeTemperature.
+linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports. thermal_stress: a steady-state thermal step followed by a linear static step on the temperatures it solved, in one deck (M5.4, ADR-067); it uses supports, the structural loads other than a uniform temperature change, and the thermal loads, and needs the spec's stressFreeTemperature. modal: the natural frequencies of the bodies as they are held, one *FREQUENCY step (M6.1, ADR-070); it uses supports and no loads, and needs the spec's modes; bodies no support holds have rigid-body modes at or near zero.
 """
 
 
@@ -562,6 +562,12 @@ CalculiX's equation solver for a run (ADR-063). pastix, the default, and spooles
 """
 
 
+type Modes = Annotated[int, Field(ge=1, le=100)]
+"""
+How many natural frequencies a modal analysis finds, the lowest first (M6.1, ADR-070); absent or null until entered.
+"""
+
+
 type ElementOrder = Literal[1, 2]
 """
 1: four-node tetrahedra (CalculiX C3D4). 2: ten-node tetrahedra with curved edges on curved faces (C3D10), the default (ADR-028, ADR-045).
@@ -893,7 +899,7 @@ class Software2(BaseModel):
 
 class SolveResult(BaseModel):
     """
-    Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons, temperature in kelvin, heat flux in W/m², heat flows in watts. A linear static run has displacement, vonMises and reactions; a steady-state thermal run has temperature instead (M5.1, ADR-064), and since M5.3 heatFlux, heatFlows and heatBalance.
+    Result summary of a succeeded solve job (ADR-030). Displacement in metres, stress in pascals, forces in newtons, temperature in kelvin, heat flux in W/m², heat flows in watts. A linear static run has displacement, vonMises and reactions; a steady-state thermal run has temperature instead (M5.1, ADR-064), and since M5.3 heatFlux, heatFlows and heatBalance. A modal run has frequencies only (M6.1, ADR-070).
     """
 
     model_config = ConfigDict(
@@ -927,6 +933,10 @@ class SolveResult(BaseModel):
     heat_balance: Annotated[HeatBalance | None, Field(alias="heatBalance")] = None
     """
     Absent for thermal runs solved before M5.3.
+    """
+    frequencies: list[float] | None = None
+    """
+    The natural frequencies of a modal run in hertz, lowest first: entry k is mode k + 1 (M6.1, ADR-070). Each is the square root of CalculiX's eigenvalue (rad²/s²) over 2π; an eigenvalue below zero, which only rounding gives (the rigid-body modes of a body free to move), gives minus the square root of its size over 2π.
     """
     reactions: list[SupportReaction] | None = None
     """
@@ -1263,7 +1273,7 @@ class MeshSettings(BaseModel):
 
 class SimulationSpec(BaseModel):
     """
-    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), or one thermal stress analysis with its stress-free temperature (M5.4), material properties against temperature (M5.5), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), or one thermal stress analysis with its stress-free temperature (M5.4), or one modal analysis with its number of modes (M6.1), material properties against temperature (M5.5), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
     """
 
     model_config = ConfigDict(
@@ -1288,6 +1298,10 @@ class SimulationSpec(BaseModel):
     stress_free_temperature: Annotated[Quantity | None, Field(alias="stressFreeTemperature")] = None
     """
     The temperature at which the bodies have no thermal strain, an absolute temperature quantity above 0 K (M5.4, ADR-067). Used by a thermal stress analysis, whose thermal strain is the thermal expansion times the solved temperature minus this one; absent or null until entered.
+    """
+    modes: Modes | None = None
+    """
+    How many natural frequencies a modal analysis finds, the lowest first (M6.1, ADR-070); absent or null until entered.
     """
     bonds: list[Bond] | None = None
     """
