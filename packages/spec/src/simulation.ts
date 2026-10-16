@@ -24,7 +24,8 @@ import { unitsTable } from "./units";
 export interface TopologyTags {
   /** name: the body's part name from the STEP file, when it has one (M4.1, ADR-058). */
   bodies: readonly { tag: number; name?: string }[];
-  faces: readonly { tag: number; type?: string }[];
+  /** bodies: the body each face belongs to, as topology.json lists it (used by unheldBodies, M4.4). */
+  faces: readonly { tag: number; type?: string; bodies?: readonly number[] }[];
   edges?: readonly { tag: number }[];
   /**
    * Candidate bonds between touching faces of different bodies (M4.2, ADR-059), with the contact
@@ -58,6 +59,45 @@ export function specBonds(spec: SimulationSpec, topology?: TopologyTags): Bond[]
 /** True when a bond with this review is tied in the solver deck: every bond the user has not removed. */
 export function bondIsTied(status: BondStatus): boolean {
   return status !== "removed";
+}
+
+/**
+ * The bodies no support holds (M4.4), as groups of body tags: bodies joined by tied bonds
+ * (bondIsTied) are one piece, and a piece is held when a support has a face on one of its bodies.
+ * Each group is sorted, groups in order of their smallest tag. Bodies are meshed apart and share
+ * no nodes (ADR-058), so a body no bond joins to a held body is free to move whatever holds the
+ * others. Empty for a single body, when no support has faces yet (the setup asks for a support
+ * then), or when the topology does not say which body each face is on. Whether the supports hold
+ * every rigid-body motion of a piece needs the mesh and is checked by the deck generator.
+ */
+export function unheldBodies(spec: SimulationSpec, topology?: TopologyTags): number[][] {
+  if (topology === undefined || topology.bodies.length < 2) return [];
+  const bodiesOf = new Map<number, readonly number[]>();
+  for (const face of topology.faces) if (face.bodies !== undefined) bodiesOf.set(face.tag, face.bodies);
+  const supported = spec.supports.flatMap((s) => s.faces);
+  if (bodiesOf.size === 0 || supported.length === 0) return [];
+
+  const parent = new Map<number, number>(topology.bodies.map((b) => [b.tag, b.tag]));
+  const root = (tag: number): number => {
+    let r = tag;
+    while ((parent.get(r) ?? r) !== r) r = parent.get(r) ?? r;
+    return r;
+  };
+  const candidates = new Map((topology.bonds ?? []).map((b) => [bondKey(b.faces), b.bodies]));
+  for (const bond of specBonds(spec, topology)) {
+    const [first, second] = candidates.get(bondKey(bond.faces)) ?? [];
+    if (!bondIsTied(bond.status) || first === undefined || second === undefined) continue;
+    const [a, b] = [root(first), root(second)];
+    if (a !== b && parent.has(a) && parent.has(b)) parent.set(Math.max(a, b), Math.min(a, b));
+  }
+  const held = new Set(supported.flatMap((f) => bodiesOf.get(f) ?? []).map(root));
+  const groups = new Map<number, number[]>();
+  for (const tag of topology.bodies.map((b) => b.tag).sort((a, b) => a - b)) {
+    const r = root(tag);
+    if (!held.has(r)) groups.set(r, [...(groups.get(r) ?? []), tag]);
+  }
+  // Groups are made in tag order, so they come out in order of their smallest tag.
+  return [...groups.values()];
 }
 
 /**

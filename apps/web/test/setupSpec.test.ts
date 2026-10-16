@@ -9,6 +9,7 @@ import {
   addPressure,
   addSupport,
   assignMaterial,
+  bodyItem,
   facesOf,
   meshIsCurrent,
   meshStatus,
@@ -419,5 +420,48 @@ describe("bonds (M4.2)", () => {
   it("does not block a run: detected bonds are tied", () => {
     const spec = emptySimulationSpec("g1", assembly);
     expect(preRunProblems(spec, assembly).some((p) => p.item === "bonds")).toBe(false);
+  });
+});
+
+describe("bodies no support holds (M4.4)", () => {
+  const assembly = {
+    bodies: [{ tag: 1 }, { tag: 2, name: "Pad" }],
+    faces: [
+      { tag: 1, bodies: [1] },
+      { tag: 2, bodies: [1] },
+      { tag: 3, bodies: [2] },
+      { tag: 4, bodies: [2] },
+    ],
+    bonds: [{ faces: [2, 3] as [number, number], bodies: [1, 2] as [number, number] }],
+  };
+
+  function assemblySpec(status: "accepted" | "removed"): SimulationSpec {
+    const full = complete();
+    const [material] = full.materials;
+    const [support] = full.supports;
+    if (!material || !support) throw new Error("incomplete fixture");
+    return {
+      ...full,
+      bodies: [1, 2].map((tag) => ({ tag, material: material.id })),
+      supports: [{ ...support, faces: [1] }],
+      bonds: [{ faces: [2, 3], status }],
+      mesh: { size: { value: 5, unit: "mm" } },
+    };
+  }
+
+  it("marks the free body and Bodies incomplete, as the pre-run list refuses the run", () => {
+    const removed = setupStatus(assemblySpec("removed"), assembly);
+    expect(removed.get(bodyItem(1))).toEqual({ mark: "complete", notes: [] });
+    expect(removed.get(bodyItem(2))).toEqual({
+      mark: "incomplete",
+      notes: ["No support holds it and no bond joins it to a held body. Add a support on one of its faces."],
+    });
+    expect(removed.get("bodies")?.notes).toEqual([
+      'Body "Pad" is not bonded to a held body and no support holds it, so it is free to move. Add a support on one of its faces, or restore a removed bond under Bonds that joins it to a held body.',
+    ]);
+    expect(preRunProblems(assemblySpec("removed"), assembly).map((p) => p.item)).toEqual(["bodies"]);
+    const accepted = setupStatus(assemblySpec("accepted"), assembly);
+    expect([...accepted.values()].every((s) => s.mark === "complete")).toBe(true);
+    expect(preRunProblems(assemblySpec("accepted"), assembly)).toEqual([]);
   });
 });
