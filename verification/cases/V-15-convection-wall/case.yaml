@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-15: a flat wall between two fluids, convection on both sides (M5.2).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-15
+title: Wall with convection on both sides
+analysis: steady_thermal
+features: [steady-state thermal analysis, convection, thermal conductivity, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  hot: { min: [0, 0, 0], max: [0, 60, 60] }
+  cold: { min: [40, 0, 0], max: [40, 60, 60] }
+  side: { min: [0, 0, 0], max: [40, 0, 60] }
+# Both sizes divide the 40 mm thickness, so the mesh has nodes on the side face's edges at
+# x = 20 mm, where the midplane check reads the profile.
+mesh:
+  coarse: { value: 10, unit: mm }
+  full: { value: 2.5, unit: mm }
+# The profile is linear in x, which the mesh represents exactly (reference.md); the result
+# files keep five significant digits, 0.01 K at 300 K, so every check is tight on both tiers.
+checks:
+  - name: Hot surface, T∞1 − q/h1
+    quantity: temperature
+    face: hot
+    reference: { value: 181.759303, unit: °C }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Cold surface, T∞2 + q/h2
+    quantity: temperature
+    face: cold
+    reference: { value: 140.278381, unit: °F }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Halfway through, the mean of the surface temperatures
+    quantity: temperature
+    face: side
+    box: { min: [20, 0, 0], max: [20, 0, 60] }
+    reference: { value: 120.956980, unit: °C }
+    tolerance: { coarse: 0.0001, full: 0.0001 }

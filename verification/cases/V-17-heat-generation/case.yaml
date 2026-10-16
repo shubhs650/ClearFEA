@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-17: a flat slab producing heat inside, both faces held at one temperature (M5.2).
+# Reference values and their derivation: reference.md. Layout: verification/README.md.
+id: V-17
+title: Slab with internal heat generation
+analysis: steady_thermal
+features: [steady-state thermal analysis, internal heat generation, fixed temperature, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  left: { min: [0, 0, 0], max: [0, 60, 60] }
+  right: { min: [40, 0, 0], max: [40, 60, 60] }
+  side: { min: [0, 0, 0], max: [40, 0, 60] }
+# Both sizes divide the 40 mm thickness, so the mesh has nodes on the side face's edges at
+# x = 10, 20 and 30 mm, where the checks read the profile.
+mesh:
+  coarse: { value: 10, unit: mm }
+  full: { value: 2.5, unit: mm }
+# The profile is quadratic in x, which ten-node tetrahedra represent exactly (reference.md).
+checks:
+  - name: Centre, T0 + q‴L²/2k (L the half-thickness)
+    quantity: temperature
+    face: side
+    box: { min: [20, 0, 0], max: [20, 0, 60] }
+    reference: { value: 183.333333, unit: °C }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: A quarter of the way through
+    quantity: temperature
+    face: side
+    box: { min: [10, 0, 0], max: [10, 0, 60] }
+    reference: { value: 150, unit: °C }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Three quarters of the way through
+    quantity: temperature
+    face: side
+    box: { min: [30, 0, 0], max: [30, 0, 60] }
+    reference: { value: 302, unit: °F }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
+  - name: Faces held at 50 °C
+    quantity: temperature
+    face: left
+    reference: { value: 122, unit: °F }
+    tolerance: { coarse: 0.0001, full: 0.0001 }
