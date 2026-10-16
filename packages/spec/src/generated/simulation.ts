@@ -34,12 +34,12 @@ export type ItemName = string;
  */
 export type FaceTags = number[];
 /**
- * linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports.
+ * linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports. thermal_stress: a steady-state thermal step followed by a linear static step on the temperatures it solved, in one deck (M5.4, ADR-067); it uses supports, the structural loads other than a uniform temperature change, and the thermal loads, and needs the spec's stressFreeTemperature.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "AnalysisType".
  */
-export type AnalysisType = "linear_static" | "steady_thermal";
+export type AnalysisType = "linear_static" | "steady_thermal" | "thermal_stress";
 /**
  * detected: found by bond detection and not yet reviewed; it is tied. accepted: the user reviewed it and keeps it; it is tied. removed: the user removed it; it is not tied, and stays listed so it can be restored.
  *
@@ -215,11 +215,11 @@ export interface IsotropicMaterial {
    */
   density?: Quantity | null;
   /**
-   * Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.
+   * Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change and a thermal stress analysis; absent or null until entered.
    */
   thermalExpansion?: Quantity | null;
   /**
-   * Thermal conductivity, a thermalConductivity quantity greater than zero (M5.1, ADR-064). Needed only by a steady-state thermal analysis; absent or null until entered.
+   * Thermal conductivity, a thermalConductivity quantity greater than zero (M5.1, ADR-064). Needed only by a steady-state thermal and a thermal stress analysis; absent or null until entered.
    */
   thermalConductivity?: Quantity | null;
   /**
@@ -638,7 +638,7 @@ export interface MeshSettings {
   local?: LocalMeshSize[];
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), or one thermal stress analysis with its stress-free temperature (M5.4), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationSpec".
@@ -659,6 +659,10 @@ export interface SimulationSpec {
    * The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
    */
   solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
+  /**
+   * The temperature at which the bodies have no thermal strain, an absolute temperature quantity above 0 K (M5.4, ADR-067). Used by a thermal stress analysis, whose thermal strain is the thermal expansion times the solved temperature minus this one; absent or null until entered.
+   */
+  stressFreeTemperature?: Quantity | null;
   /**
    * Every candidate bond of the geometry with the user's review of it (M4.2), in the order of topology.json. Absent in specs saved before M4.2, where every candidate counts as detected.
    */
@@ -1194,7 +1198,7 @@ export interface RunView {
   finishedAt: string | null;
 }
 /**
- * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+ * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), or one thermal stress analysis with its stress-free temperature (M5.4), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
  */
 export interface SimulationSpec1 {
   version: 1;
@@ -1212,6 +1216,10 @@ export interface SimulationSpec1 {
    * The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
    */
   solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
+  /**
+   * The temperature at which the bodies have no thermal strain, an absolute temperature quantity above 0 K (M5.4, ADR-067). Used by a thermal stress analysis, whose thermal strain is the thermal expansion times the solved temperature minus this one; absent or null until entered.
+   */
+  stressFreeTemperature?: Quantity | null;
   /**
    * Every candidate bond of the geometry with the user's review of it (M4.2), in the order of topology.json. Absent in specs saved before M4.2, where every candidate counts as detected.
    */
@@ -1251,7 +1259,7 @@ export const validateOptionalQuantity = validator<OptionalQuantity>(schema, "Opt
 export const validateItemId = validator<ItemId>(schema, "ItemId");
 export const validateItemName = validator<ItemName>(schema, "ItemName");
 export const validateFaceTags = validator<FaceTags>(schema, "FaceTags");
-export const AnalysisTypeValues = ["linear_static", "steady_thermal"] as const satisfies readonly AnalysisType[];
+export const AnalysisTypeValues = ["linear_static", "steady_thermal", "thermal_stress"] as const satisfies readonly AnalysisType[];
 export const validateAnalysisType = validator<AnalysisType>(schema, "AnalysisType");
 export const validateBodyAssignment = validator<BodyAssignment>(schema, "BodyAssignment");
 export const BondStatusValues = ["detected", "accepted", "removed"] as const satisfies readonly BondStatus[];

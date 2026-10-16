@@ -24,6 +24,7 @@ import {
   setsTemperature,
   type SpecProblem,
   simulationSpecProblems,
+  solvesStress,
   specBonds,
   supportKinds,
   type TopologyTags,
@@ -79,21 +80,24 @@ export function unheldBodyMessages(spec: SimulationSpec, topology?: TopologyTags
 /**
  * Why a support or load does not belong to the setup's analysis type (M5.1, ADR-064), or null when
  * it does: supports and structural loads in a steady-state thermal analysis, a fixed temperature
- * in a linear static one.
+ * in a linear static one, a uniform temperature change in a thermal stress one (M5.4, ADR-067),
+ * whose temperatures come from its thermal step.
  */
 export function wrongAnalysisMessage(spec: SimulationSpec, item: Support | Load): string | null {
   const isSupport = (Object.keys(supportKinds) as string[]).includes(item.type);
-  if (isSupport ? spec.analysis === "linear_static" : analysisLoads[spec.analysis].includes(item.type as Load["type"])) {
+  if (isSupport ? solvesStress(spec) : analysisLoads[spec.analysis].includes(item.type as Load["type"])) {
     return null;
   }
   const kind = isSupport ? supportKinds[item.type as Support["type"]] : loadKinds[item.type as Load["type"]];
-  const other = spec.analysis === "steady_thermal" ? "linear_static" : "steady_thermal";
-  return `${kind} "${item.name}" has no effect in a ${analysisKinds[spec.analysis].toLowerCase()} analysis. Delete it, or set the analysis type to ${analysisKinds[other].toLowerCase()}.`;
+  // The analysis type that takes the item.
+  const other = isSupport || analysisLoads.linear_static.includes(item.type as Load["type"]) ? "linear_static" : "steady_thermal";
+  const why = spec.analysis === "thermal_stress" ? ", whose temperatures come from its thermal step" : "";
+  return `${kind} "${item.name}" has no effect in a ${analysisKinds[spec.analysis].toLowerCase()} analysis${why}. Delete it, or set the analysis type to ${analysisKinds[other].toLowerCase()}.`;
 }
 
 /**
- * What stops the bodies of a steady-state thermal analysis from having a temperature (M5.1,
- * ADR-064): bonds do not carry heat yet, so bodies bonded to each other cannot be run, and every
+ * What stops the bodies of a steady-state thermal or thermal stress analysis from having a
+ * temperature (M5.1, ADR-064; M5.4): bonds do not carry heat yet, so bodies bonded to each other cannot be run, and every
  * body needs a fixed temperature, convection or radiation on one of its faces (M5.2, ADR-065).
  * Empty for a single body or without the topology's face bodies.
  */
@@ -102,7 +106,7 @@ export function thermalBodyMessages(spec: SimulationSpec, topology?: TopologyTag
   const messages: string[] = [];
   if (specBonds(spec, topology).some((b) => b.status !== "removed")) {
     messages.push(
-      "Bonds do not carry heat in a steady-state thermal analysis yet, so bonded bodies cannot be run. Remove the bonds under Bonds to run each body on its own.",
+      `Bonds do not carry heat in a ${analysisKinds[spec.analysis].toLowerCase()} analysis yet, so bonded bodies cannot be run. Remove the bonds under Bonds to run each body on its own.`,
     );
   }
   const bodiesOf = new Map<number, readonly number[]>();
@@ -127,7 +131,12 @@ export function thermalBodyMessages(spec: SimulationSpec, topology?: TopologyTag
   return messages;
 }
 
-/** The missing values and items of a steady-state thermal setup, after the materials and bodies (M5.1, M5.2). */
+/**
+ * The missing values and items of the thermal step of a steady-state thermal or thermal stress
+ * setup, after the materials and bodies (M5.1, M5.2, M5.4): the bodies' temperatures, each
+ * material's conductivity, supports a steady-state thermal analysis has no use for, a load that
+ * sets the temperature. The loads' own values are thermalLoadProblems'.
+ */
 function thermalProblems(spec: SimulationSpec, topology: TopologyTags | undefined, add: (item: string, message: string) => void) {
   for (const message of thermalBodyMessages(spec, topology)) add("bodies", message);
   for (const material of spec.materials) {
@@ -145,33 +154,33 @@ function thermalProblems(spec: SimulationSpec, topology: TopologyTags | undefine
       "There is no fixed temperature, convection or radiation, so the temperatures are not set anywhere. Add one under Loads.",
     );
   }
-  for (const load of spec.loads) {
-    const message = wrongAnalysisMessage(spec, load);
-    if (message !== null) {
-      add(load.id, message);
-      continue;
-    }
-    const missing = (what: string) => add(load.id, `Load "${load.name}" has no ${what}. Enter it.`);
-    if (loadHasFaces(load) && load.faces.length === 0) {
-      const verb = load.type === "fixed_temperature" ? "holds" : "acts on";
-      add(load.id, `Load "${load.name}" has no faces. Select the faces it ${verb} and add them to it.`);
-    }
-    if (load.type === "fixed_temperature") {
-      if (load.temperature === null) missing("temperature");
-    } else if (load.type === "heat_flux") {
-      if (load.flux === null) missing("heat flux");
-    } else if (load.type === "convection") {
-      if (load.coefficient === null) missing("convection coefficient");
-      if (load.ambientTemperature === null) missing("ambient temperature");
-    } else if (load.type === "radiation") {
-      if (load.emissivity === null) missing("emissivity");
-      if (load.ambientTemperature === null) missing("ambient temperature");
-    } else if (load.type === "heat_generation") {
-      if (load.bodies.length === 0) add(load.id, `Load "${load.name}" has no bodies. Pick the bodies that produce the heat.`);
-      if (load.power === null) missing("heat generation");
-    }
+}
+
+/** What a thermal load still needs (M5.1, M5.2); nothing for any other load. */
+function thermalLoadProblems(load: Load, add: (item: string, message: string) => void) {
+  const missing = (what: string) => add(load.id, `Load "${load.name}" has no ${what}. Enter it.`);
+  if (load.type === "fixed_temperature") {
+    if (load.temperature === null) missing("temperature");
+  } else if (load.type === "heat_flux") {
+    if (load.flux === null) missing("heat flux");
+  } else if (load.type === "convection") {
+    if (load.coefficient === null) missing("convection coefficient");
+    if (load.ambientTemperature === null) missing("ambient temperature");
+  } else if (load.type === "radiation") {
+    if (load.emissivity === null) missing("emissivity");
+    if (load.ambientTemperature === null) missing("ambient temperature");
+  } else if (load.type === "heat_generation") {
+    if (load.bodies.length === 0) add(load.id, `Load "${load.name}" has no bodies. Pick the bodies that produce the heat.`);
+    if (load.power === null) missing("heat generation");
   }
-  for (const conflict of faceHeatConflicts(spec)) add(conflict.item, conflict.message);
+}
+
+/** The faces a load acts on, missing (M1.12). */
+function loadFaceProblem(load: Load, add: (item: string, message: string) => void) {
+  if (loadHasFaces(load) && load.faces.length === 0) {
+    const verb = load.type === "fixed_temperature" ? "holds" : "acts on";
+    add(load.id, `Load "${load.name}" has no faces. Select the faces it ${verb} and add them to it.`);
+  }
 }
 
 /**
@@ -205,8 +214,31 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
   }
   if (isThermal(spec)) {
     thermalProblems(spec, topology, add);
+    for (const load of spec.loads) {
+      const message = wrongAnalysisMessage(spec, load);
+      if (message !== null) {
+        add(load.id, message);
+        continue;
+      }
+      loadFaceProblem(load, add);
+      thermalLoadProblems(load, add);
+    }
+    for (const conflict of faceHeatConflicts(spec)) add(conflict.item, conflict.message);
     meshProblems(spec, add);
     return problems;
+  }
+  // A thermal stress analysis (M5.4, ADR-067) has a thermal step before its static step: it
+  // needs what a steady-state thermal one does, the stress-free temperature, and every
+  // material's thermal expansion.
+  const thermalStress = spec.analysis === "thermal_stress";
+  if (thermalStress) {
+    thermalProblems(spec, topology, add);
+    if ((spec.stressFreeTemperature ?? null) === null) {
+      add(
+        "analysis",
+        "There is no stress-free temperature, the temperature at which the bodies have no thermal strain. Enter it under Analysis.",
+      );
+    }
   }
   for (const message of unheldBodyMessages(spec, topology)) add("bodies", message);
   const bodyLoad = hasBodyLoad(spec);
@@ -221,7 +253,9 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
     if (bodyLoad && (material.density ?? null) === null) {
       add(material.id, `Material "${material.name}" has no density, which gravity and centrifugal loads need. Enter it.`);
     }
-    if (temperatureChange && (material.thermalExpansion ?? null) === null) {
+    if (thermalStress && (material.thermalExpansion ?? null) === null) {
+      add(material.id, `Material "${material.name}" has no thermal expansion, which a thermal stress analysis needs. Enter it.`);
+    } else if (temperatureChange && (material.thermalExpansion ?? null) === null) {
       add(material.id, `Material "${material.name}" has no thermal expansion, which a temperature change needs. Enter it.`);
     }
   }
@@ -252,8 +286,8 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
   }
 
   // A prescribed displacement other than zero loads the part by itself (ADR-034 item 3,
-  // narrowed by ADR-039).
-  if (spec.loads.length === 0 && !movesByDisplacement(spec)) {
+  // narrowed by ADR-039); so does the temperature of a thermal stress analysis.
+  if (!thermalStress && spec.loads.length === 0 && !movesByDisplacement(spec)) {
     add(
       "loads",
       "There is no load, so every result would be zero. Add a load under Loads, or give a prescribed displacement a value other than zero.",
@@ -265,10 +299,8 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
       add(load.id, wrong);
       continue;
     }
-    if (loadHasFaces(load) && load.faces.length === 0) {
-      const verb = load.type === "fixed_temperature" ? "holds" : "acts on";
-      add(load.id, `Load "${load.name}" has no faces. Select the faces it ${verb} and add them to it.`);
-    }
+    loadFaceProblem(load, add);
+    thermalLoadProblems(load, add);
     if (load.type === "pressure") {
       if (load.magnitude === null) add(load.id, `Load "${load.name}" has no pressure value. Enter it.`);
     } else if (load.type === "force" || load.type === "gravity") {
@@ -306,6 +338,9 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
     }
   }
 
+  if (thermalStress) {
+    for (const conflict of faceHeatConflicts(spec)) add(conflict.item, conflict.message);
+  }
   meshProblems(spec, add);
   return problems;
 }

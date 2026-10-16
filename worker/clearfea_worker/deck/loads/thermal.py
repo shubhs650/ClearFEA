@@ -30,9 +30,11 @@ def temperature_change(spec: SimulationSpec) -> tuple[TemperatureLoad, float] | 
     return found
 
 
-def expansions(spec: SimulationSpec, mesh: VolumeMesh) -> dict[str, float]:
+def expansions(
+    spec: SimulationSpec, mesh: VolumeMesh, needed_by: str = "A temperature change"
+) -> dict[str, float]:
     """Thermal expansion coefficient (1/K) of every material a body of the mesh uses, by
-    material id; DeckError for a material without one."""
+    material id; DeckError for a material without one, saying what ``needed_by`` it."""
     material = {m.id: m for m in spec.materials}
     assigned = {b.tag: b.material for b in spec.bodies}
     out = {}
@@ -44,8 +46,25 @@ def expansions(spec: SimulationSpec, mesh: VolumeMesh) -> dict[str, float]:
             continue
         what = f'Material "{m.name}"'
         if m.thermal_expansion is None:
-            raise DeckError(
-                f"{what} has no thermal expansion. A temperature change needs it; enter it."
-            )
+            raise DeckError(f"{what} has no thermal expansion. {needed_by} needs it; enter it.")
         out[m.id] = si(m.thermal_expansion, "thermalExpansion", f"{what}: thermal expansion")
     return out
+
+
+def stress_free_temperature(spec: SimulationSpec) -> float:
+    """The stress-free temperature of a thermal stress analysis in kelvin (M5.4, ADR-067): the
+    temperature at which the bodies have no thermal strain. DeckError when it is missing or at
+    or below absolute zero."""
+    entered = spec.stress_free_temperature
+    if entered is None:
+        raise DeckError(
+            "The setup has no stress-free temperature, the temperature at which the bodies have "
+            "no thermal strain. Enter it under Analysis."
+        )
+    kelvin = si(entered, "temperature", "Stress-free temperature")
+    if kelvin <= 0.0:
+        raise DeckError(
+            "The stress-free temperature is at or below absolute zero. Enter a temperature "
+            "above 0 K."
+        )
+    return kelvin

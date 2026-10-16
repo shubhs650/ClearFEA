@@ -51,9 +51,9 @@ Face tags from the geometry's topology.json (ARCHITECTURE.md section 3). Empty w
 """
 
 
-type AnalysisType = Literal["linear_static", "steady_thermal"]
+type AnalysisType = Literal["linear_static", "steady_thermal", "thermal_stress"]
 """
-linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports.
+linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports. thermal_stress: a steady-state thermal step followed by a linear static step on the temperatures it solved, in one deck (M5.4, ADR-067); it uses supports, the structural loads other than a uniform temperature change, and the thermal loads, and needs the spec's stressFreeTemperature.
 """
 
 
@@ -130,11 +130,11 @@ class IsotropicMaterial(BaseModel):
     """
     thermal_expansion: Annotated[Quantity | None, Field(alias="thermalExpansion")] = None
     """
-    Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change; absent or null until entered.
+    Coefficient of linear thermal expansion, a thermalExpansion quantity (M2.7); zero and negative values are allowed. Needed only by a temperature change and a thermal stress analysis; absent or null until entered.
     """
     thermal_conductivity: Annotated[Quantity | None, Field(alias="thermalConductivity")] = None
     """
-    Thermal conductivity, a thermalConductivity quantity greater than zero (M5.1, ADR-064). Needed only by a steady-state thermal analysis; absent or null until entered.
+    Thermal conductivity, a thermalConductivity quantity greater than zero (M5.1, ADR-064). Needed only by a steady-state thermal and a thermal stress analysis; absent or null until entered.
     """
     yield_strength: Annotated[Quantity | None, Field(alias="yieldStrength")] = None
     """
@@ -1201,7 +1201,7 @@ class MeshSettings(BaseModel):
 
 class SimulationSpec(BaseModel):
     """
-    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
+    Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), or one thermal stress analysis with its stress-free temperature (M5.4), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
     """
 
     model_config = ConfigDict(
@@ -1222,6 +1222,10 @@ class SimulationSpec(BaseModel):
     solver: Solver | None = None
     """
     The equation solver (ADR-063). Absent in specs saved before ADR-063, which means pastix. A run's frozen spec always names it, except for runs made before ADR-063, which were solved with spooles.
+    """
+    stress_free_temperature: Annotated[Quantity | None, Field(alias="stressFreeTemperature")] = None
+    """
+    The temperature at which the bodies have no thermal strain, an absolute temperature quantity above 0 K (M5.4, ADR-067). Used by a thermal stress analysis, whose thermal strain is the thermal expansion times the solved temperature minus this one; absent or null until entered.
     """
     bonds: list[Bond] | None = None
     """

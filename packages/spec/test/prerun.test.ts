@@ -550,3 +550,98 @@ describe("pre-run validation of a steady-state thermal analysis (M5.1)", () => {
     ]);
   });
 });
+
+describe("pre-run validation of a thermal stress analysis (M5.4)", () => {
+  function thermalStress(): SimulationSpec {
+    const s = spec();
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    return {
+      ...s,
+      analysis: "thermal_stress",
+      stressFreeTemperature: { value: 20, unit: "°C" },
+      materials: [
+        {
+          ...steel,
+          thermalConductivity: { value: 45, unit: "W/(m·K)" },
+          thermalExpansion: { value: 12, unit: "µm/(m·K)" },
+        },
+      ],
+      loads: [{ id: "hot", type: "fixed_temperature", name: "Hot", faces: [3], temperature: { value: 100, unit: "°C" } }],
+    };
+  }
+
+  it("finds nothing to fix with supports, a fixed temperature and no structural load", () => {
+    expect(preRunProblems(thermalStress(), topology)).toEqual([]);
+  });
+
+  it("takes structural and thermal loads together", () => {
+    const s = thermalStress();
+    expect(preRunProblems({ ...s, loads: [...s.loads, ...spec().loads] }, topology)).toEqual([]);
+  });
+
+  it("asks for the stress-free temperature, a conductivity, a thermal expansion, a support and a temperature", () => {
+    const s = thermalStress();
+    const [steel] = s.materials;
+    if (!steel) throw new Error("no material");
+    expect(
+      preRunProblems(
+        {
+          ...s,
+          stressFreeTemperature: null,
+          supports: [],
+          loads: [],
+          materials: [{ ...steel, thermalConductivity: null, thermalExpansion: null }],
+        },
+        topology,
+      ),
+    ).toEqual([
+      {
+        item: "steel",
+        message: 'Material "Structural steel" has no thermal conductivity, which a thermal analysis needs. Enter it.',
+      },
+      {
+        item: "loads",
+        message:
+          "There is no fixed temperature, convection or radiation, so the temperatures are not set anywhere. Add one under Loads.",
+      },
+      {
+        item: "analysis",
+        message:
+          "There is no stress-free temperature, the temperature at which the bodies have no thermal strain. Enter it under Analysis.",
+      },
+      {
+        item: "steel",
+        message: 'Material "Structural steel" has no thermal expansion, which a thermal stress analysis needs. Enter it.',
+      },
+      { item: "supports", message: "There is no support, so the part is free to move. Add a support under Supports." },
+    ]);
+  });
+
+  it("flags a uniform temperature change, whose temperatures the thermal step replaces", () => {
+    const s = thermalStress();
+    expect(
+      messages({
+        ...s,
+        loads: [...s.loads, { id: "dt", type: "temperature", name: "Warm", change: { value: 10, unit: "K" } }],
+      }),
+    ).toEqual([
+      'Temperature change "Warm" has no effect in a thermal stress analysis, whose temperatures come from its thermal step. Delete it, or set the analysis type to linear static.',
+    ]);
+  });
+
+  it("asks thermal loads for their values and checks the stress-free temperature's unit", () => {
+    const s = thermalStress();
+    expect(
+      messages({
+        ...s,
+        stressFreeTemperature: { value: 20, unit: "K/m" },
+        loads: [...s.loads, { id: "h", type: "convection", name: "Air", faces: [2], coefficient: null, ambientTemperature: null }],
+      }),
+    ).toEqual([
+      'The stress-free temperature is given in "K/m", which is not a temperature unit. Use one of: K, °C, °F.',
+      'Load "Air" has no convection coefficient. Enter it.',
+      'Load "Air" has no ambient temperature. Enter it.',
+    ]);
+  });
+});

@@ -10,6 +10,7 @@ through units.py.
 
 import re
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 
 from ..meshing.volume import NODES_PER_ELEMENT, VolumeMesh
 from ..spec.simulation_schema import (
@@ -70,7 +71,7 @@ from .loads.heat import (
     heat_generation,
     radiations,
 )
-from .loads.thermal import expansions, temperature_change
+from .loads.thermal import expansions, stress_free_temperature, temperature_change
 from .loads.tie import Equation, body_groups, tied_bonds, ties
 
 #: Version of the deck layout below. Bump it when the text for the same inputs changes.
@@ -282,7 +283,7 @@ def _nodes_and_elements(
     out = [
         f"** ClearFEA solver input, deck format {DECK_FORMAT}. Generated from the simulation's",
         "** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa"
-        + (", K, W)." if spec.analysis == "steady_thermal" else ")."),
+        + (", K, W)." if spec.analysis != "linear_static" else ")."),
         f"** Geometry {spec.geometry_id}",
         "*HEADING",
         heading,
@@ -312,17 +313,83 @@ STEFAN_BOLTZMANN = 5.670374419e-8
 #: The loads a steady-state thermal analysis takes (M5.1, M5.2).
 _THERMAL_LOADS = (FixedTemperatureLoad, HeatGenerationLoad, *FACE_LOAD_KINDS)
 
+#: Each analysis type's name in the deck's heading and in messages.
+_ANALYSIS_NAMES = {
+    "linear_static": "linear static",
+    "steady_thermal": "steady-state thermal",
+    "thermal_stress": "thermal stress",
+}
 
-def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> str:
-    """CalculiX input for a steady-state thermal analysis (M5.1, ADR-064; M5.2, ADR-065):
-    conduction, with fixed temperatures, heat fluxes, convection and radiation on faces and
-    heat generation in bodies; every other face insulated. Temperatures in kelvin."""
-    wrong = [*spec.supports, *(x for x in spec.loads if not isinstance(x, _THERMAL_LOADS))]
-    if wrong:
-        raise DeckError(
-            f'"{wrong[0].name}" has no effect in a steady-state thermal analysis. Delete it, or '
-            "set the analysis type to linear static."
-        )
+
+@dataclass
+class _Parts:
+    """The deck text of one step and what the model section needs for it, in deck order:
+    node sets and other model data before the materials, each used material's lines (by
+    material id, after its *MATERIAL line), lines after the solid sections, the comments that
+    describe the loads, lines before the first step, and the step itself."""
+
+    sets: list[str] = field(default_factory=list)
+    materials: dict[str, list[str]] = field(default_factory=dict)
+    sections: list[str] = field(default_factory=list)
+    comments: list[str] = field(default_factory=list)
+    prelude: list[str] = field(default_factory=list)
+    step: list[str] = field(default_factory=list)
+
+
+def _deck(
+    spec: SimulationSpec,
+    mesh: VolumeMesh,
+    bodies: list[tuple[int, int, str]],
+    parts: list[_Parts],
+) -> str:
+    """The whole deck: header, nodes and elements, then each part's text in deck order, steps
+    last in the order given."""
+    out = _nodes_and_elements(
+        spec, mesh, bodies, f"ClearFEA {_ANALYSIS_NAMES[spec.analysis]} analysis"
+    )
+    for part in parts:
+        out.extend(part.sets)
+    for j, material in enumerate(spec.materials):
+        lines = [x for part in parts for x in part.materials.get(material.id, [])]
+        if not lines:
+            continue
+        out.append(f'** Material {material.id} "{_label(material.name)}"')
+        out.append(f"*MATERIAL, NAME=M{j + 1}")
+        out.extend(lines)
+    for tag, _, name in bodies:
+        out.append(f"*SOLID SECTION, ELSET=B{tag}, MATERIAL={name}")
+    for part in parts:
+        out.extend(part.sections)
+    for part in parts:
+        out.extend(part.comments)
+    for part in parts:
+        out.extend(part.prelude)
+    for part in parts:
+        out.extend(part.step)
+    return "\n".join(out) + "\n"
+
+
+def _heat_parts(
+    spec: SimulationSpec,
+    mesh: VolumeMesh,
+    bodies: list[tuple[int, int, str]],
+    solver: str,
+    *,
+    initial: float | None = None,
+) -> _Parts:
+    """The heat transfer step (M5.1, ADR-064; M5.2, ADR-065): conduction, with fixed
+    temperatures, heat fluxes, convection and radiation on faces and heat generation in bodies;
+    every other face insulated. Temperatures in kelvin. ``initial``, when given, is every
+    node's starting temperature (a thermal stress analysis's stress-free temperature, M5.4);
+    otherwise radiation starts every node at the mean of the known temperatures."""
+    analysis = _ANALYSIS_NAMES[spec.analysis]
+    if spec.analysis == "steady_thermal":
+        wrong = [*spec.supports, *(x for x in spec.loads if not isinstance(x, _THERMAL_LOADS))]
+        if wrong:
+            raise DeckError(
+                f'"{wrong[0].name}" has no effect in a steady-state thermal analysis. Delete it, '
+                "or set the analysis type to linear static."
+            )
     fixed = [x for x in spec.loads if isinstance(x, FixedTemperatureLoad)]
     face_loads = face_heat_loads(spec)
     # Convection and radiation tie the temperature to their ambient, as a fixed temperature does.
@@ -338,10 +405,9 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> 
     check_face_heat_loads(spec)
     if len(mesh.bodies) > 1 and tied_bonds(spec):
         raise DeckError(
-            "Bonds do not carry heat in a steady-state thermal analysis yet, so bonded bodies "
+            f"Bonds do not carry heat in a {analysis} analysis yet, so bonded bodies "
             "cannot be run. Remove the bonds to run each body on its own."
         )
-    bodies = _materials(spec, mesh)
     k = conductivities(spec, mesh)
     _check_nodes(mesh)
     held = fixed_temperatures(spec, mesh)
@@ -361,7 +427,8 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> 
             "radiation, so its temperature is not set. Add one on one of its faces."
         )
 
-    out = _nodes_and_elements(spec, mesh, bodies, "ClearFEA steady-state thermal analysis")
+    parts = _Parts()
+    out = parts.sets
     for j, item in enumerate(held):
         load, entered = item.load, item.load.temperature
         assert entered is not None  # fixed_temperatures refuses a missing temperature
@@ -381,18 +448,17 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> 
     if exchanged:
         out.append(f"*NSET, NSET={EXCHANGE_SET}")
         out.extend(_lines(exchanged))
-    for j, material in enumerate(spec.materials):
+    for material in spec.materials:
         if material.id not in k:
             continue
         entered = material.thermal_conductivity
         assert entered is not None  # conductivities() refuses a missing one
-        out.append(f'** Material {material.id} "{_label(material.name)}"')
-        out.append(f"*MATERIAL, NAME=M{j + 1}")
-        out.append(f"** Thermal conductivity {_number(entered.value)} {entered.unit}")
-        out.append("*CONDUCTIVITY")
-        out.append(_number(k[material.id]))
-    for tag, _, name in bodies:
-        out.append(f"*SOLID SECTION, ELSET=B{tag}, MATERIAL={name}")
+        parts.materials[material.id] = [
+            f"** Thermal conductivity {_number(entered.value)} {entered.unit}",
+            "*CONDUCTIVITY",
+            _number(k[material.id]),
+        ]
+    out = parts.comments
     for load in spec.loads:
         if isinstance(load, HeatFluxLoad):
             entered = load.flux
@@ -433,6 +499,7 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> 
             + f": emissivity {_number(item.value)} to {_number(t.value)} {t.unit} = "
             + f"{_number(item.ambient)} K"
         )
+    out = parts.prelude
     if radiates:
         # Temperatures are in kelvin. Radiation makes the step nonlinear, and CalculiX starts
         # its iterations from the initial temperature, 0 unless given (the linearised
@@ -441,10 +508,14 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> 
         out.append(
             f"*PHYSICAL CONSTANTS, ABSOLUTE ZERO=0.0, STEFAN BOLTZMANN={_number(STEFAN_BOLTZMANN)}"
         )
-        known = [x.kelvin for x in held] + [x.ambient for x in [*films, *radiates]]
+        if initial is None:
+            known = [x.kelvin for x in held] + [x.ambient for x in [*films, *radiates]]
+            initial = sum(known) / len(known)
+    if initial is not None:
         out.append("*INITIAL CONDITIONS, TYPE=TEMPERATURE")
-        out.append(f"NALL, {_number(sum(known) / len(known))}")
+        out.append(f"NALL, {_number(initial)}")
 
+    out = parts.step
     out.append("*STEP")
     step = "*HEAT TRANSFER, STEADY STATE"
     out.append(f"{step}, SOLVER={solver}")
@@ -488,14 +559,15 @@ def _heat_transfer_deck(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> 
         out.append(f"*NODE PRINT, NSET={EXCHANGE_SET}")
         out.append("NT")
     out.append("*END STEP")
-    return "\n".join(out) + "\n"
+    return parts
 
 
 def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None = None) -> str:
-    """CalculiX input for the analysis of ``spec`` on ``mesh``: linear static, or steady-state
-    thermal (M5.1).
+    """CalculiX input for the analysis of ``spec`` on ``mesh``: linear static, steady-state
+    thermal (M5.1), or thermal stress (M5.4): a heat transfer step, then a static step on the
+    temperatures it solved.
 
-    The step line (``*STATIC`` or ``*HEAT TRANSFER``) names the spec's equation solver
+    The step lines (``*STATIC`` or ``*HEAT TRANSFER``) name the spec's equation solver
     (ADR-063); ``solver``, a CalculiX name from SOLVERS, replaces it for the solver benchmark
     (M2.11). Raises DeckError when the spec is incomplete or does not fit the mesh.
     """
@@ -504,20 +576,49 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
     elif solver not in SOLVERS:
         raise DeckError(f"Unknown equation solver '{solver}'.")
     if spec.analysis == "steady_thermal":
-        return _heat_transfer_deck(spec, mesh, solver)
+        bodies = _materials(spec, mesh)
+        return _deck(spec, mesh, bodies, [_heat_parts(spec, mesh, bodies, solver)])
+    if spec.analysis == "thermal_stress":
+        # The static step's thermal strain is the expansion times the solved temperature minus
+        # every node's initial temperature, so the nodes start at the stress-free temperature
+        # (checked with ccx 2.21: a bar with a linear temperature, free to grow, moved as the
+        # closed form says and had no stress; ADR-067).
+        reference = stress_free_temperature(spec)
+        static = _static_parts(spec, mesh, solver)
+        bodies = _materials(spec, mesh)
+        heat = _heat_parts(spec, mesh, bodies, solver, initial=reference)
+        return _deck(spec, mesh, bodies, [heat, static])
     if spec.analysis != "linear_static":
         raise DeckError(f"Analysis type '{spec.analysis}' is not supported.")
+    static = _static_parts(spec, mesh, solver)
+    return _deck(spec, mesh, _materials(spec, mesh), [static])
+
+
+def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts:
+    """The linear static step and its model data (supports, springs, bonds, elastic
+    materials). In a thermal stress analysis (M5.4) it follows the heat transfer step, takes
+    its temperatures, and has no temperature change of its own."""
+    thermal_stress = spec.analysis == "thermal_stress"
     thermal_loads = [x for x in spec.loads if isinstance(x, _THERMAL_LOADS)]
-    if thermal_loads:
+    if thermal_loads and not thermal_stress:
         kind = {FixedTemperatureLoad: "Fixed temperature", HeatGenerationLoad: "Heat generation"}
         what = (kind | FACE_LOAD_KINDS)[type(thermal_loads[0])]
         raise DeckError(
             f'{what} "{thermal_loads[0].name}" has no effect in a linear static analysis. '
             "Delete it, or set the analysis type to steady-state thermal."
         )
+    if thermal_stress:
+        changes = [x for x in spec.loads if isinstance(x, TemperatureLoad)]
+        if changes:
+            raise DeckError(
+                f'Temperature change "{changes[0].name}" has no effect in a thermal stress '
+                "analysis, whose temperatures come from its thermal step. Delete it, or set the "
+                "analysis type to linear static."
+            )
     if not spec.supports:
         raise DeckError("The setup has no supports, so the part is free to move. Add a support.")
-    for item in (*spec.supports, *spec.loads):
+    structural = [x for x in spec.loads if not isinstance(x, _THERMAL_LOADS)]
+    for item in (*spec.supports, *structural):
         if not isinstance(item, (GravityLoad, CentrifugalLoad, TemperatureLoad)):
             _check_faces(mesh, item.faces, f"{item.name}")
     bodies = _materials(spec, mesh)
@@ -525,7 +626,10 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
     if gravity is not None or spin is not None:
         densities(spec, mesh)  # body loads need every body's density; DeckError names a gap
     thermal = temperature_change(spec)
-    alpha = {} if thermal is None else expansions(spec, mesh)
+    if thermal_stress:
+        alpha = expansions(spec, mesh, "A thermal stress analysis")
+    else:
+        alpha = {} if thermal is None else expansions(spec, mesh)
 
     _check_nodes(mesh)
     held = holds(spec, mesh)
@@ -535,8 +639,8 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
     fixed_only = only_fixed_supports(spec)
     normals = {} if fixed_only else frictionless_normals(spec, mesh)
 
-    out = _nodes_and_elements(spec, mesh, bodies, "ClearFEA linear static analysis")
-
+    parts = _Parts()
+    out = parts.sets
     support_sets = support_set_names(spec)
     fixed_nodes: set[int] = set()
     for support, name in zip(spec.supports, support_sets, strict=True):
@@ -553,16 +657,16 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
                 f"{support.stiffness.unit} = {_number(k)} N/m^3"
             )
         elif isinstance(support, PrescribedDisplacement):
-            parts = []
+            given = []
             for axis, component in zip("xyz", (support.x, support.y, support.z), strict=True):
                 if component == "free" or component is None:
-                    parts.append(f"{axis} free")
+                    given.append(f"{axis} free")
                 else:
                     value = _si(component, "length", f"{support.name}: {axis} component")
-                    parts.append(
+                    given.append(
                         f"{axis} {_number(component.value)} {component.unit} = {_number(value)} m"
                     )
-            line += ": " + ", ".join(parts)
+            line += ": " + ", ".join(given)
         elif not isinstance(support, FixedSupport):
             line += "; normals " + "; ".join(
                 f"{tag}: ({_vector(normals[tag])})" for tag in support.faces
@@ -648,14 +752,13 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
     for k, material in enumerate(spec.materials):
         if not any(index == k for _, index, _ in bodies):
             continue
+        out = parts.materials.setdefault(material.id, [])
         what = f"Material {material.name}"
         modulus = _si(material.youngs_modulus, "pressure", f"{what}: Young's modulus")
         if modulus <= 0:
             raise DeckError(f"{what}: Young's modulus must be greater than zero.")
         if material.poissons_ratio is None:
             raise DeckError(f"{what}: Poisson's ratio has no value. Enter one before running.")
-        out.append(f'** Material {material.id} "{_label(material.name)}"')
-        out.append(f"*MATERIAL, NAME=M{k + 1}")
         out.append("*ELASTIC")
         out.append(f"{_number(modulus)}, {_number(material.poissons_ratio)}")
         if material.density is not None:
@@ -671,15 +774,15 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
             out.append(f"** Thermal expansion {_number(entered.value)} {entered.unit}")
             out.append("*EXPANSION")
             out.append(_number(alpha[material.id]))
-    for tag, _, name in bodies:
-        out.append(f"*SOLID SECTION, ELSET=B{tag}, MATERIAL={name}")
+    out = parts.sections
     for j, (key, stiffness) in enumerate(spring_sets):
         name, dof, _ = directions[key]
         out.append(f"*SPRING, ELSET=K{j + 1}" + ("" if name is None else f", ORIENTATION={name}"))
         out.append(str(dof))
         out.append(stiffness)
 
-    for load in spec.loads:
+    out = parts.comments
+    for load in structural:
         if isinstance(load, PressureLoad):
             value = _si(load.magnitude, "pressure", f"{load.name}: magnitude")
             entered = load.magnitude
@@ -753,11 +856,16 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
     # Pressures on the same element face add up (linear analysis), so each face gets one line.
     pressure = element_face_pressures(spec, mesh)
     if thermal is not None:
-        out.append("*INITIAL CONDITIONS, TYPE=TEMPERATURE")
-        out.append("NALL, 0.0")
+        parts.prelude.append("*INITIAL CONDITIONS, TYPE=TEMPERATURE")
+        parts.prelude.append("NALL, 0.0")
 
+    out = parts.step
     out.append("*STEP")
     out.append(f"*STATIC, SOLVER={solver}")
+    if thermal_stress:
+        # After a heat transfer step CalculiX treats the static step as nonlinear and warns
+        # unless its increments are given; it is linear, so one increment of the whole step.
+        out.append("1.0, 1.0, 1.0, 1.0")
     out.append("*BOUNDARY")
     for support, name in zip(spec.supports, support_sets, strict=True):
         if isinstance(support, FixedSupport):
@@ -812,4 +920,4 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
         out.append(f"*NODE PRINT, NSET={TIE_SET}, GLOBAL=YES")
         out.append("RF")
     out.append("*END STEP")
-    return "\n".join(out) + "\n"
+    return parts

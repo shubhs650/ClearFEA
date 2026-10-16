@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""M5.1 to M5.3 heat check: solve steady-state thermal decks with CalculiX through the deck
+"""M5.1 to M5.4 heat check: solve steady-state thermal decks with CalculiX through the deck
 generator and the result reader, and compare every node with the closed-form one-dimensional
 profile (ADR-064, ADR-065): fixed temperatures, a heat flux, convection, radiation and heat
 generation. Since M5.3 also the heat flux at every node, each load's heat flow and the run's
-heat balance, and a bar with every thermal load on it at once for the balance.
+heat balance, and a bar with every thermal load on it at once for the balance. Since M5.4 the
+thermal stress decks of the linear profiles (ADR-067): the bar held on every side and at one
+end, so its stresses and displacements have a closed form at every node.
 
 Script only, not part of the worker package or its tests (the fast tier runs no solver). It
 checks what the platform path cannot see exactly: the temperature degree of freedom, the
@@ -246,6 +248,79 @@ def scenarios(hot: int, cold: int) -> list[Scenario]:
     ]
 
 
+#: M5.4: steel in mixed units, 29,000 ksi (199.9 GPa), ν = 0.3, 6.5 µin/(in·°F) (11.7e-6/K),
+#: stress-free at 122 °F (50 °C), between the bar's end temperatures so it is in compression
+#: at the hot end and in tension at the cold one.
+E_KSI, NU, ALPHA_US = 29000.0, 0.3, 6.5
+E = E_KSI * 6894757.293168361
+ALPHA = ALPHA_US * 1e-6 * 1.8
+REFERENCE, REFERENCE_K = (122.0, "°F"), 323.15
+
+
+def stress_spec(loads: list[dict], sides: list[int]) -> SimulationSpec:
+    """spec() as a thermal stress analysis: the x = 0 end and the four sides on frictionless
+    supports (``sides``, x = 0 first), so the bar can only grow along x. Every point then has
+    εyy = εzz = 0 and, with the far end free, σxx = 0: σyy = σzz = −E α (T − T₀)/(1 − ν) and
+    εxx = α (T − T₀)(1 + ν)/(1 − ν), exact for any temperature that varies along x only."""
+    setup = spec(loads).model_dump(by_alias=True)
+    setup["analysis"] = "thermal_stress"
+    setup["stressFreeTemperature"] = {"value": REFERENCE[0], "unit": REFERENCE[1]}
+    setup["materials"][0] |= {
+        "youngsModulus": {"value": E_KSI, "unit": "ksi"},
+        "poissonsRatio": NU,
+        "thermalExpansion": {"value": ALPHA_US, "unit": "µin/(in·°F)"},
+    }
+    setup["supports"] = [
+        {"id": f"s{face}", "type": "frictionless", "name": f"Face {face}", "faces": [face]}
+        for face in sides
+    ]
+    return SimulationSpec.model_validate(setup)
+
+
+def stress_checks(
+    case: Scenario, mesh, fields, result, order: int
+) -> list[tuple[str, float, float, str]]:  # type: ignore[no-untyped-def]
+    """The thermal stress checks of a linear profile at every node: temperature, σyy and σzz
+    against the closed form and σxx, the shears and the sideways displacements against zero
+    (as a fraction of the largest exact stress or displacement), the end's growth, and the
+    balance of the supports' reactions (no load is applied).
+
+    Ten-node tetrahedra represent the linear thermal strain exactly. Four-node ones have one
+    strain each, so a thermal strain that changes along the bar leaves each element off by
+    about half its change across the element (4 K of the bar's 80 K in 10 mm elements, against
+    at most 50 K from the stress-free temperature), most where the nodal average is one-sided,
+    at the ends."""
+    p = mesh.positions
+    xs = [p[3 * n] for n in range(mesh.node_count)]
+    a, b = case.exact(0.0), (case.exact(LM) - case.exact(0.0)) / LM
+    factor = E * ALPHA / (1 - NU)
+
+    def sigma(x: float) -> float:
+        return -factor * (case.exact(x) - REFERENCE_K)
+
+    def ux(x: float) -> float:
+        return ALPHA * (1 + NU) / (1 - NU) * ((a - REFERENCE_K) * x + b * x * x / 2)
+
+    peak = max(abs(sigma(x)) for x in xs)
+    grow = max(abs(ux(x)) for x in xs)
+    s, u, t = fields.stress, fields.displacement, fields.thermal.temperature
+    stress_off = max(
+        max(abs(s[6 * n] - 0.0), abs(s[6 * n + 1] - sigma(x)), abs(s[6 * n + 2] - sigma(x)))
+        for n, x in enumerate(xs)
+    )
+    shear_off = max(abs(s[6 * n + i]) for n in range(mesh.node_count) for i in (3, 4, 5))
+    move_off = max(
+        max(abs(u[3 * n] - ux(x)), abs(u[3 * n + 1]), abs(u[3 * n + 2])) for n, x in enumerate(xs)
+    )
+    return [
+        ("temperature", max(abs(t[n] - case.exact(x)) for n, x in enumerate(xs)), 0.01, "K"),
+        ("normal stresses", stress_off / peak, _pick((0.05, 1e-3), order), "of the largest"),
+        ("shear stresses", shear_off / peak, _pick((0.02, 1e-3), order), "of the largest"),
+        ("displacements", move_off / grow, _pick((0.005, 1e-3), order), "of the largest"),
+        ("reaction balance", result.balance.force_ratio, 1e-6, ""),
+    ]
+
+
 def side_faces(topology: Topology) -> tuple[int, int]:
     """The tags of the bar's y = 0 and y = H faces."""
     sides = {}
@@ -254,6 +329,16 @@ def side_faces(topology: Topology) -> tuple[int, int]:
             if abs(face.centroid[1] - y) < 1e-9:
                 sides[y] = face.tag
     return sides[0.0], sides[H / 1000]
+
+
+def bottom_top_faces(topology: Topology) -> tuple[int, int]:
+    """The tags of the bar's z = 0 and z = H faces."""
+    faces = {}
+    for face in topology.faces:
+        for z in (0.0, H / 1000):
+            if abs(face.centroid[2] - z) < 1e-9:
+                faces[z] = face.tag
+    return faces[0.0], faces[H / 1000]
 
 
 def every_load(hot: int, cold: int, low: int, high: int) -> list[dict]:
@@ -327,6 +412,7 @@ def main() -> int:
     topology = Topology.model_validate_json((root / "import" / "topology.json").read_bytes())
     hot, cold = end_faces(topology)
     low, high = side_faces(topology)
+    bottom, top = bottom_top_faces(topology)
 
     failed = False
     rows = []
@@ -372,6 +458,17 @@ def main() -> int:
                 rows.append(
                     f"| {label} | {case.name} | {what} | {value:.3g} {unit} | {allowed:g} | "
                     f"{'ok' if ok else 'off'} |"
+                )
+        # M5.4: thermal stress on each linear profile (the first four cases).
+        for k, case in enumerate(scenarios(hot, cold)[:4]):
+            setup = stress_spec(case.loads, [hot, low, high, bottom, top])
+            fields, result = solve(setup, mesh, root / f"stress-p{order}-{k}")
+            for what, value, allowed, unit in stress_checks(case, mesh, fields, result, order):
+                ok = value <= allowed
+                failed |= not ok
+                rows.append(
+                    f"| {label} | thermal stress, {case.name} | {what} | {value:.3g} {unit} | "
+                    f"{allowed:g} | {'ok' if ok else 'off'} |"
                 )
         _, result = solve(
             spec(every_load(hot, cold, low, high)), mesh, root / f"solve-p{order}-all"
