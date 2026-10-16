@@ -7,18 +7,23 @@
 // rigid-body motion needs the mesh's face normals and is checked by the deck generator (ADR-039);
 // a body of an assembly that no support or bond reaches at all is found here (M4.4).
 
-import type { SimulationSpec } from "./generated/simulation";
+import type { Load, SimulationSpec, Support } from "./generated/simulation";
 import {
+  analysisKinds,
+  analysisLoads,
   bodyLabels,
   bondKey,
   displacementAxes,
   hasBodyLoad,
   hasTemperatureChange,
+  isThermal,
   loadHasFaces,
+  loadKinds,
   localScopes,
   type SpecProblem,
   simulationSpecProblems,
   specBonds,
+  supportKinds,
   type TopologyTags,
   unheldBodies,
 } from "./simulation";
@@ -70,6 +75,82 @@ export function unheldBodyMessages(spec: SimulationSpec, topology?: TopologyTags
 }
 
 /**
+ * Why a support or load does not belong to the setup's analysis type (M5.1, ADR-064), or null when
+ * it does: supports and structural loads in a steady-state thermal analysis, a fixed temperature
+ * in a linear static one.
+ */
+export function wrongAnalysisMessage(spec: SimulationSpec, item: Support | Load): string | null {
+  const isSupport = (Object.keys(supportKinds) as string[]).includes(item.type);
+  if (!isSupport && analysisLoads[spec.analysis].includes(item.type as Load["type"])) return null;
+  const kind = isSupport ? supportKinds[item.type as Support["type"]] : loadKinds[item.type as Load["type"]];
+  const other = spec.analysis === "steady_thermal" ? "linear_static" : "steady_thermal";
+  return `${kind} "${item.name}" has no effect in a ${analysisKinds[spec.analysis].toLowerCase()} analysis. Delete it, or set the analysis type to ${analysisKinds[other].toLowerCase()}.`;
+}
+
+/**
+ * What stops the bodies of a steady-state thermal analysis from having a temperature (M5.1,
+ * ADR-064): bonds do not carry heat yet, so bodies bonded to each other cannot be run, and every
+ * body needs a fixed temperature on one of its faces. Empty for a single body or without the
+ * topology's face bodies.
+ */
+export function thermalBodyMessages(spec: SimulationSpec, topology?: TopologyTags): string[] {
+  if (topology === undefined || topology.bodies.length < 2) return [];
+  const messages: string[] = [];
+  if (specBonds(spec, topology).some((b) => b.status !== "removed")) {
+    messages.push(
+      "Bonds do not carry heat in a steady-state thermal analysis yet, so bonded bodies cannot be run. Remove the bonds under Bonds to run each body on its own.",
+    );
+  }
+  const bodiesOf = new Map<number, readonly number[]>();
+  for (const face of topology.faces) if (face.bodies !== undefined) bodiesOf.set(face.tag, face.bodies);
+  if (bodiesOf.size === 0) return messages;
+  const fixed = new Set(
+    spec.loads.flatMap((l) => (l.type === "fixed_temperature" ? l.faces : [])).flatMap((f) => bodiesOf.get(f) ?? []),
+  );
+  const labels = bodyLabels(topology);
+  const unset = topology.bodies.map((b) => b.tag).filter((tag) => !fixed.has(tag));
+  if (unset.length > 0 && fixed.size > 0) {
+    const names = unset.map((tag) => bodyName(tag, labels));
+    messages.push(
+      unset.length === 1
+        ? `Body ${names[0]} has no fixed temperature, so its temperature is not set. Add a fixed temperature on one of its faces.`
+        : `Bodies ${names.join(", ")} have no fixed temperature, so their temperatures are not set. Add a fixed temperature on a face of each.`,
+    );
+  }
+  return messages;
+}
+
+/** The missing values and items of a steady-state thermal setup, after the materials and bodies (M5.1). */
+function thermalProblems(spec: SimulationSpec, topology: TopologyTags | undefined, add: (item: string, message: string) => void) {
+  for (const message of thermalBodyMessages(spec, topology)) add("bodies", message);
+  for (const material of spec.materials) {
+    if ((material.thermalConductivity ?? null) === null) {
+      add(material.id, `Material "${material.name}" has no thermal conductivity, which a thermal analysis needs. Enter it.`);
+    }
+  }
+  for (const support of spec.supports) {
+    const message = wrongAnalysisMessage(spec, support);
+    if (message !== null) add(support.id, message);
+  }
+  if (!spec.loads.some((l) => l.type === "fixed_temperature")) {
+    add(
+      "loads",
+      "There is no fixed temperature, so the temperatures are not set anywhere. Add a fixed temperature under Loads.",
+    );
+  }
+  for (const load of spec.loads) {
+    const message = wrongAnalysisMessage(spec, load);
+    if (message !== null) {
+      add(load.id, message);
+      continue;
+    }
+    if (load.type !== "fixed_temperature") continue;
+    if (load.faces.length === 0) add(load.id, `Load "${load.name}" has no faces. Select the faces it holds and add them to it.`);
+    if (load.temperature === null) add(load.id, `Load "${load.name}" has no temperature. Enter it.`);
+  }
+}
+
+/**
  * What stops the setup from being run, in the order of the setup tree, each with the item it
  * belongs to (as in SpecProblem); an empty list when the setup can be run. Problems that make
  * the spec wrong (checkSimulationSpec) come first, then what is still missing.
@@ -97,6 +178,11 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
           : `Bodies ${unassigned.join(", ")} have no material. Pick one for each under Bodies.`,
       );
     }
+  }
+  if (isThermal(spec)) {
+    thermalProblems(spec, topology, add);
+    meshProblems(spec, add);
+    return problems;
   }
   for (const message of unheldBodyMessages(spec, topology)) add("bodies", message);
   const bodyLoad = hasBodyLoad(spec);
@@ -150,6 +236,11 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
     );
   }
   for (const load of spec.loads) {
+    const wrong = wrongAnalysisMessage(spec, load);
+    if (wrong !== null) {
+      add(load.id, wrong);
+      continue;
+    }
     if (loadHasFaces(load) && load.faces.length === 0) {
       add(load.id, `Load "${load.name}" has no faces. Select the faces it acts on and add them to it.`);
     }
@@ -179,7 +270,7 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
       }
     } else if (load.type === "temperature") {
       if (load.change === null) add(load.id, `Load "${load.name}" has no temperature change. Enter it (negative for cooling).`);
-    } else {
+    } else if (load.type === "centrifugal") {
       if (load.angularVelocity === null) add(load.id, `Load "${load.name}" has no angular velocity. Enter it.`);
       if (displacementAxes.some((axis) => load.axisPoint[axis] === null)) {
         add(load.id, `Load "${load.name}" has no complete point on its axis. Enter x, y and z.`);
@@ -190,6 +281,12 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
     }
   }
 
+  meshProblems(spec, add);
+  return problems;
+}
+
+/** What the mesh settings still need. */
+function meshProblems(spec: SimulationSpec, add: (item: string, message: string) => void) {
   if (spec.mesh.size === null) add("mesh", "There is no global mesh size. Enter one under Mesh.");
   for (const item of spec.mesh.local ?? []) {
     const { many } = localScopes[item.scope];
@@ -198,5 +295,4 @@ export function preRunProblems(spec: SimulationSpec, topology?: TopologyTags): S
     }
     if (item.size === null) add(item.id, `Local mesh size "${item.name}" has no size. Enter it.`);
   }
-  return problems;
 }
