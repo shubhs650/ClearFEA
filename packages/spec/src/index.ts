@@ -33,6 +33,7 @@ export {
   solvesTemperature,
   specBonds,
   unheldBodies,
+  unreachedBodies,
   supportKinds,
   tableProblems,
   type TableProperty,

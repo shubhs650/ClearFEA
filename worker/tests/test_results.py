@@ -37,8 +37,10 @@ from .test_deck import (
     elastic_sym_spec,
     fixture_spec,
     heat_loads_spec,
+    heat_bonded_spec,
     heat_two_bodies_spec,
     supports_spec,
+    thermal_stress_bonded_spec,
     thermal_stress_spec,
 )
 
@@ -600,3 +602,37 @@ def test_a_thermal_stress_run_has_both_steps_results() -> None:
     ]
     # The structural fields are the static step's: the heated part grows.
     assert result.displacement is not None and result.displacement.max.value > 0
+
+
+# --- Bonds carry heat (M5.6, ADR-069) ---
+
+
+def test_heat_through_a_bond_reaches_the_fixed_temperature_that_holds_its_master_nodes() -> None:
+    # heat-bonded-c3d10 as CalculiX 2.21 solved it (SPOOLES): body 1's fixed temperature holds
+    # every master node of the bond, so all the heat body 2's convection takes out arrives
+    # through the ties, and CalculiX's RFL at the held nodes is rounding (1e-15 W). The
+    # reader adds the tie heat back from the tied nodes' RFL.
+    spec = SimulationSpec.model_validate(heat_bonded_spec())
+    rfl = read_node_heat_flows(HEAT / "heat-bonded-c3d10.dat", "TALL")
+    assert max(abs(q) for q in rfl.values()) < 1e-14
+    _, result = read_results(
+        spec, bonded_tets(2), HEAT / "heat-bonded-c3d10.frd", HEAT / "heat-bonded-c3d10.dat", "2.21"
+    )
+    hot, air = result.heat_flows or []
+    assert hot.heat == pytest.approx(0.0648246, rel=1e-5)
+    assert air.heat == pytest.approx(-hot.heat, rel=1e-6)
+    assert result.heat_balance is not None and result.heat_balance.ratio < 1e-6
+
+
+def test_a_bonded_thermal_stress_run_balances_heat_and_forces() -> None:
+    spec = SimulationSpec.model_validate(thermal_stress_bonded_spec())
+    name = "thermal-stress-bonded-c3d4"
+    fields, result = read_results(
+        spec, bonded_tets(1), HEAT / f"{name}.frd", HEAT / f"{name}.dat", "2.21"
+    )
+    assert fields.thermal is not None
+    assert result.heat_balance is not None and result.heat_balance.ratio < 1e-6
+    assert result.balance is not None and result.balance.force_ratio < 1e-9
+    # Body 2 is cooler than body 1 and its temperature comes only through the bond.
+    t = fields.thermal.temperature
+    assert max(t[4:8]) < min(t[0:4]) + 1e-9 and min(t[4:8]) > 293.15

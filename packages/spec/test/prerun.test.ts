@@ -437,7 +437,7 @@ describe("pre-run validation of a steady-state thermal analysis (M5.1)", () => {
     ]);
   });
 
-  it("refuses bonded bodies and asks for a fixed temperature on every body", () => {
+  it("lets a bond carry the temperature to a body and asks for one on every group (M5.6)", () => {
     const assembly = {
       bodies: [{ tag: 1, name: "Base" }, { tag: 2, name: "Lug" }],
       faces: [
@@ -448,13 +448,32 @@ describe("pre-run validation of a steady-state thermal analysis (M5.1)", () => {
       bonds: [{ faces: [2, 3] as [number, number], bodies: [1, 2] as [number, number] }],
     };
     const s = { ...thermal(), bodies: [{ tag: 1, material: "steel" }, { tag: 2, material: "steel" }] };
-    expect(preRunProblems(s, assembly).map((p) => p.message)).toEqual([
-      "Bonds do not carry heat in a steady-state thermal analysis yet, so bonded bodies cannot be run. Remove the bonds under Bonds to run each body on its own.",
-      'Body "Lug" has no fixed temperature, convection or radiation, so its temperature is not set. Add one on one of its faces.',
-    ]);
+    // The bond to Base, which has the fixed temperature, sets Lug's temperature too.
+    expect(preRunProblems(s, assembly)).toEqual([]);
+    expect(preRunProblems({ ...s, analysis: "thermal_stress" as const }, assembly).map((p) => p.item)).not.toContain("bodies");
     const apart = { ...s, bonds: [{ faces: [2, 3] as [number, number], status: "removed" as const }] };
+    expect(preRunProblems(apart, assembly).map((p) => p.message)).toEqual([
+      'Body "Lug" has no fixed temperature, convection or radiation and is not bonded to a body that has one, so its temperature is not set. Add one on one of its faces, or restore a removed bond under Bonds that joins it to a body that has one.',
+    ]);
     const both = { ...apart, loads: [...apart.loads, { ...(apart.loads[0] as SimulationSpec["loads"][0]), id: "lug", faces: [3] }] };
     expect(preRunProblems(both, assembly)).toEqual([]);
+    const three = {
+      bodies: [...assembly.bodies, { tag: 3, name: "Pad" }],
+      faces: [...assembly.faces, { tag: 4, bodies: [3] }, { tag: 5, bodies: [3] }, { tag: 6, bodies: [2] }],
+      bonds: [...assembly.bonds, { faces: [5, 6] as [number, number], bodies: [2, 3] as [number, number] }],
+    };
+    const chained = { ...s, bodies: [...s.bodies, { tag: 3, material: "steel" }] };
+    expect(preRunProblems(chained, three)).toEqual([]);
+    const pair = {
+      ...chained,
+      bonds: [
+        { faces: [2, 3] as [number, number], status: "removed" as const },
+        { faces: [5, 6] as [number, number], status: "accepted" as const },
+      ],
+    };
+    expect(preRunProblems(pair, three).map((p) => p.message)).toEqual([
+      'Bodies "Lug" and "Pad" are bonded only to each other and none has a fixed temperature, convection or radiation, so their temperatures are not set. Add one on a face of one of them, or restore a removed bond under Bonds that joins them to a body that has one.',
+    ]);
   });
 
   it("asks each M5.2 load for its values, faces and bodies (M5.2)", () => {

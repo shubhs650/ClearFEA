@@ -405,6 +405,38 @@ def heat_two_bodies_spec() -> dict:
     return spec
 
 
+def heat_bonded_spec() -> dict:
+    """heat_two_bodies_spec with its bond accepted, so it carries heat (M5.6, ADR-069), and
+    body 2 cooled by convection on its top instead of held at a temperature of its own."""
+    spec = heat_two_bodies_spec()
+    spec["bonds"] = [{"faces": [1, 3], "status": "accepted"}]
+    spec["loads"][1] = {
+        "id": "h-1",
+        "type": "convection",
+        "name": "Air",
+        "faces": [6],
+        "coefficient": {"value": 5, "unit": "BTU/(h·ft²·°F)"},
+        "ambientTemperature": {"value": 68, "unit": "°F"},
+    }
+    return spec
+
+
+def thermal_stress_bonded_spec() -> dict:
+    """heat_bonded_spec as a thermal stress analysis (M5.6): body 1 fixed on its other faces,
+    body 2 held through the bond, which ties both displacements and temperatures."""
+    spec = heat_bonded_spec()
+    spec["analysis"] = "thermal_stress"
+    spec["stressFreeTemperature"] = {"value": 20, "unit": "°C"}
+    spec["materials"][1] |= {
+        "youngsModulus": {"value": 29000, "unit": "ksi"},
+        "poissonsRatio": 0.29,
+        "thermalExpansion": {"value": 6.5, "unit": "µin/(in·°F)"},
+    }
+    spec["materials"][2] |= {"thermalExpansion": {"value": 17, "unit": "µm/(m·K)"}}
+    spec["supports"] = [{"id": "fixed-1", "type": "fixed", "name": "Base", "faces": [2]}]
+    return spec
+
+
 def two_body_loads_spec() -> dict:
     return loads_spec() | {
         "bodies": [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
@@ -563,6 +595,8 @@ SNAPSHOT_CASES = {
     "bonded-slide-c3d4": (bonded_slide_spec, lambda: bonded_tets(1)),
     "heat-c3d10": (heat_spec, lambda: two_tets(order=2)),
     "heat-two-bodies-c3d4": (heat_two_bodies_spec, lambda: bonded_tets(1)),
+    "heat-bonded-c3d10": (heat_bonded_spec, lambda: bonded_tets(2)),
+    "thermal-stress-bonded-c3d4": (thermal_stress_bonded_spec, lambda: bonded_tets(1)),
     "heat-loads-c3d10": (heat_loads_spec, lambda: two_tets(order=2)),
     "thermal-stress-c3d10": (thermal_stress_spec, lambda: two_tets(order=2)),
     "thermal-stress-tables-c3d10": (tables_spec, lambda: two_tets(order=2)),
@@ -1302,12 +1336,40 @@ def test_refuses_thermal_setups_it_cannot_translate(change, message: str) -> Non
         deck(heat_load_spec(change), two_tets(order=2))
 
 
-def test_refuses_bonded_bodies_in_a_thermal_analysis() -> None:
-    spec = heat_spec()
-    spec["bodies"] = [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
-    spec["bonds"] = [{"faces": [1, 3], "status": "accepted"}]
-    with pytest.raises(DeckError, match="Bonds do not carry heat"):
-        deck(spec, bonded_tets(2))
+@pytest.mark.parametrize("order", [1, 2])
+def test_a_bond_carries_heat_as_temperature_equations(order: int) -> None:
+    # M5.6 (ADR-069): body 2 has no fixed temperature of its own; the bond sets it.
+    text = deck(heat_bonded_spec(), bonded_tets(order))
+    nodes = 3 if order == 1 else 6
+    assert f"{nodes} of {nodes} nodes tied," in text
+    assert "*NSET, NSET=TTIED" in text
+    step = text[text.index("*STEP") :]
+    assert "*NODE PRINT, NSET=TTIED\nRFL" in step
+    model = text[: text.index("*STEP")]
+    block = model[model.index("\n*EQUATION\n") + 1 :].splitlines()[1:]
+    block = block[: next(k for k, line in enumerate(block) if line.startswith("*"))]
+    # Each equation: its number of terms, then node, degree of freedom 11, coefficient.
+    counts = [line for line in block if "," not in line]
+    entries = ", ".join(x for x in block if "," in x).split(", ")
+    assert len(counts) == nodes and len(entries) == 3 * sum(int(c) for c in counts)
+    assert set(entries[1::3]) == {"11"}
+
+
+def test_a_slave_node_at_a_fixed_temperature_is_not_tied_in_the_deck() -> None:
+    spec = heat_bonded_spec()
+    spec["loads"][1] = heat_two_bodies_spec()["loads"][1] | {"faces": [3, 6]}
+    text = deck(spec, bonded_tets(1))
+    assert "0 of 3 nodes tied," in text and "3 at a fixed temperature" in text
+    assert "\n*EQUATION\n" not in text and "TTIED" not in text
+
+
+def test_refuses_a_group_of_bonded_bodies_without_a_fixed_temperature() -> None:
+    spec = heat_bonded_spec()
+    spec["loads"] = spec["loads"][:1]
+    deck(spec, bonded_tets(1))  # the bond sets body 2's temperature
+    spec["bonds"] = [{"faces": [1, 3], "status": "removed"}]
+    with pytest.raises(DeckError, match="Body 2 has no fixed temperature, convection or radiation"):
+        deck(spec, bonded_tets(1))
 
 
 def test_refuses_a_body_without_a_fixed_temperature() -> None:
@@ -1611,13 +1673,14 @@ def test_refuses_thermal_stress_setups_it_cannot_translate(change, message: str)
         deck(spec, two_tets(order=2))
 
 
-def test_refuses_bonded_bodies_in_a_thermal_stress_analysis() -> None:
-    spec = thermal_stress_spec()
-    spec["bodies"] = [{"tag": 1, "material": "steel"}, {"tag": 2, "material": "steel"}]
-    spec["bonds"] = [{"faces": [1, 3], "status": "accepted"}]
-    spec["loads"] = [spec["loads"][0]]
-    with pytest.raises(DeckError, match="Bonds do not carry heat in a thermal stress analysis"):
-        deck(spec, bonded_tets(2))
+def test_a_bond_ties_displacements_and_temperatures_in_a_thermal_stress_analysis() -> None:
+    text = deck(thermal_stress_bonded_spec(), bonded_tets(2))
+    model = text[: text.index("*STEP")]
+    assert "** Bond of faces 1 and 3" in model and "** Heat bond of faces 1 and 3" in model
+    assert model.count("\n*EQUATION\n") == 2
+    heat, static = text.split("*END STEP")[:2]
+    assert "*NODE PRINT, NSET=TTIED\nRFL" in heat
+    assert "*NODE PRINT, NSET=TIED, GLOBAL=YES\nRF" in static
 
 
 # --- Temperature-dependent properties (M5.5, ADR-068) ---

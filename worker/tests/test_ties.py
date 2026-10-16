@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Bonds as ties (M4.3, ADR-060): which bonds are tied, the slave side, the equations and the
-tie forces the result reader passes on to held nodes (no solver runs)."""
+tie forces the result reader passes on to held nodes; since M5.6 (ADR-069) the temperature ties
+and the heat they pass on (no solver runs)."""
 
 import math
 import random
@@ -11,10 +12,12 @@ from clearfea_worker.deck import DeckError, generate_deck
 from clearfea_worker.deck.constraints import FREE, Frame, hold_frame, holds, node_frames
 from clearfea_worker.deck.linalg import cross
 from clearfea_worker.deck.loads.tie import (
+    TEMPERATURE,
     Tie,
     body_groups,
     closest_point,
     tie_forces,
+    tie_heat,
     tied_bonds,
     ties,
 )
@@ -288,3 +291,53 @@ def test_hold_frame_is_global_for_axis_holds_and_turned_otherwise() -> None:
                 assert math.isclose(d, 1.0 if i == j else 0.0, abs_tol=1e-12)
         assert frame.transformed == (not h.on_axes and len(h.basis) < 3)
         assert len(frame.held) == len(h.basis)
+
+
+# --- Temperature ties (M5.6, ADR-069) ---
+
+
+@pytest.mark.parametrize("order", [1, 2])
+def test_a_temperature_tie_is_one_equation_per_slave_node_on_degree_of_freedom_11(
+    order: int,
+) -> None:
+    mesh = bonded_tets(order)
+    (tie,) = ties(bonded_spec(), mesh, {}, temperature=set())
+    nodes = 3 if order == 1 else 6
+    assert (tie.slave, tie.master, tie.nodes, tie.tied, tie.held) == (3, 1, nodes, nodes, 0)
+    assert len(tie.equations) == nodes
+    for equation in tie.equations:
+        assert {t.direction for t in equation} == {TEMPERATURE}
+        assert equation[0].coefficient == 1.0
+        assert math.isclose(sum(t.coefficient for t in equation[1:]), -1.0, abs_tol=1e-12)
+    # Any linear temperature field satisfies them: the master face interpolates it exactly.
+    p = mesh.positions
+
+    def field(n: int) -> float:
+        return 300.0 + 2e3 * p[3 * n] - 5e3 * p[3 * n + 1] + 7e3 * p[3 * n + 2]
+
+    for equation in tie.equations:
+        assert abs(sum(t.coefficient * field(t.node) for t in equation)) < 1e-9
+
+
+def test_a_slave_node_at_a_fixed_temperature_is_not_tied_and_supports_do_not_matter() -> None:
+    mesh = bonded_tets(1)
+    spec = bonded_spec(
+        supports=[
+            {"id": "fixed-1", "type": "fixed", "name": "Base", "faces": [2]},
+            {"id": "fixed-2", "type": "fixed", "name": "Top", "faces": [3]},
+        ]
+    )
+    # Structural ties leave the held slave nodes out; temperature ties do not look at supports.
+    (tie,) = ties(spec, mesh, {}, temperature={4})
+    assert (tie.tied, tie.held, len(tie.equations)) == (2, 1, 2)
+    assert {e[0].node for e in tie.equations} == {5, 6}
+
+
+def test_tie_heat_passes_a_slave_nodes_heat_to_its_master_nodes() -> None:
+    mesh = bonded_tets(1)
+    (tie,) = ties(bonded_spec(), mesh, {}, temperature=set())
+    heat = tie_heat([tie], {4: 1.0, 5: 0.0, 6: 0.0})
+    # E at (2, 1) mm lies at l = (0.7, 0.2, 0.1) of A, B, C on face A C B.
+    assert [heat[n] for n in (0, 1, 2)] == pytest.approx([0.7, 0.2, 0.1], abs=1e-12)
+    total = tie_heat([tie], {4: 1.5, 5: -2.0, 6: 4.0})
+    assert sum(total.values()) == pytest.approx(3.5, abs=1e-12)

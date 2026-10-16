@@ -16,6 +16,15 @@ nodes with a *TRANSFORM take part correctly. No node depends on another dependen
 a slave node already tied, or already used as a master node, is not tied again, and a slave
 node whose closest master element face has a tied node is left untied. That only happens
 where three bodies meet, and the deck comment counts such nodes.
+
+Bonds carry heat too (M5.6): in a steady-state thermal or thermal stress analysis each slave
+node's temperature equals the master surface's temperature at the same closest point, one
+equation on degree of freedom 11 per node, with the same shape-function weights. A slave node a
+fixed temperature holds is not tied (its temperature is given). CalculiX's nodal heat flow
+(RFL) at a master node with a fixed temperature leaves out the heat that reaches it through
+the ties, as its nodal force leaves out the tie forces, and the result reader adds it back
+(tie_heat). Temperature ties are a family of their own: a node tied for its displacement may
+be a master node for its temperature, since the two never meet in one equation.
 """
 
 import math
@@ -43,10 +52,15 @@ ROUNDING = 1e-12
 _STEPS = 8
 
 
+#: Term.direction of a temperature: CalculiX's degree of freedom 11, less one.
+TEMPERATURE = 10
+
+
 @dataclass(frozen=True)
 class Term:
     """``coefficient`` times the displacement of ``node`` along its deck direction
-    ``direction`` (0-based, deck.constraints.Frame)."""
+    ``direction`` (0-based, deck.constraints.Frame), or times its temperature when
+    ``direction`` is TEMPERATURE."""
 
     node: int
     direction: int
@@ -72,7 +86,8 @@ class Tie:
     equations: tuple[Equation, ...]
     #: Slave nodes with at least one equation.
     tied: int
-    #: Slave nodes held in every direction by supports, so nothing is left to tie.
+    #: Slave nodes held in every direction by supports (by a fixed temperature, for a
+    #: temperature tie), so nothing is left to tie.
     held: int
     #: Slave nodes farther from the master face than the tolerance (an overhang).
     off: int
@@ -228,10 +243,17 @@ def _slave_and_master(mesh: VolumeMesh, bond: Bond) -> tuple[int, int, list[_Pat
     return (a, b, pa, pb) if slave_first else (b, a, pb, pa)
 
 
-def ties(spec: SimulationSpec, mesh: VolumeMesh, frames: dict[int, Frame]) -> list[Tie]:
+def ties(
+    spec: SimulationSpec,
+    mesh: VolumeMesh,
+    frames: dict[int, Frame],
+    *,
+    temperature: set[int] | None = None,
+) -> list[Tie]:
     """The ties of every bond not removed, in spec order. ``frames`` holds each held node's
-    deck directions (deck.constraints.node_frames). DeckError when a bond does not fit the
-    mesh."""
+    deck directions (deck.constraints.node_frames). With ``temperature``, the nodes fixed
+    temperatures hold, the ties are of the temperature instead (M5.6) and ``frames`` is not
+    used. DeckError when a bond does not fit the mesh."""
     out: list[Tie] = []
     dependent: set[int] = set()
     masters: set[int] = set()
@@ -257,7 +279,10 @@ def ties(spec: SimulationSpec, mesh: VolumeMesh, frames: dict[int, Frame]) -> li
         tied = held = off = shared = 0
         for s in nodes:
             frame = frames.get(s, FREE)
-            free = [j for j in range(3) if j not in frame.held]
+            if temperature is not None:
+                free = [] if s in temperature else [TEMPERATURE]
+            else:
+                free = [j for j in range(3) if j not in frame.held]
             if not free:
                 held += 1
                 continue
@@ -279,16 +304,25 @@ def ties(spec: SimulationSpec, mesh: VolumeMesh, frames: dict[int, Frame]) -> li
                 shared += 1
                 continue
             shape, _ = _triangle_shape(mesh.order, l1, l2)
-            for j in free:
-                e = frame.axes[j]
-                terms = [Term(s, j, 1.0)]
-                for n, weight in zip(patch.nodes, shape, strict=True):
-                    axes = frames.get(n, FREE).axes
-                    for m in range(3):
-                        c = -weight * dot(e, axes[m])
-                        if abs(c) > ROUNDING:
-                            terms.append(Term(n, m, c))
+            if temperature is not None:
+                terms = [Term(s, TEMPERATURE, 1.0)]
+                terms.extend(
+                    Term(n, TEMPERATURE, -weight)
+                    for n, weight in zip(patch.nodes, shape, strict=True)
+                    if abs(weight) > ROUNDING
+                )
                 equations.append(tuple(terms))
+            else:
+                for j in free:
+                    e = frame.axes[j]
+                    terms = [Term(s, j, 1.0)]
+                    for n, weight in zip(patch.nodes, shape, strict=True):
+                        axes = frames.get(n, FREE).axes
+                        for m in range(3):
+                            c = -weight * dot(e, axes[m])
+                            if abs(c) > ROUNDING:
+                                terms.append(Term(n, m, c))
+                    equations.append(tuple(terms))
             tied += 1
             dependent.add(s)
             masters.update(patch.nodes)
@@ -332,6 +366,20 @@ def tie_forces(
                 for i in range(3):
                     f[i] -= term.coefficient * lam * axis[i]
     return {n: (f[0], f[1], f[2]) for n, f in sorted(out.items())}
+
+
+def tie_heat(ties_: Sequence[Tie], residual: dict[int, float]) -> dict[int, float]:
+    """The heat (W) each node receives through temperature ties, from the solver's
+    ``residual`` at every tied slave node (its nodal heat flow less the heat loads apply
+    there): as tie_forces, for the one degree of freedom of the temperature (M5.6)."""
+    out: dict[int, float] = {}
+    for tie in ties_:
+        for equation in tie.equations:
+            first = equation[0]
+            lam = residual[first.node] / first.coefficient
+            for term in equation[1:]:
+                out[term.node] = out.get(term.node, 0.0) - term.coefficient * lam
+    return dict(sorted(out.items()))
 
 
 def body_groups(mesh: VolumeMesh, ties_: Sequence[Tie]) -> list[list[int]]:

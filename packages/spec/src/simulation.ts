@@ -74,11 +74,24 @@ export function bondIsTied(status: BondStatus): boolean {
  * every rigid-body motion of a piece needs the mesh and is checked by the deck generator.
  */
 export function unheldBodies(spec: SimulationSpec, topology?: TopologyTags): number[][] {
+  return unreachedBodies(
+    spec,
+    topology,
+    spec.supports.flatMap((s) => s.faces),
+  );
+}
+
+/**
+ * The bodies no face of ``reached`` is on, as groups of bodies joined by tied bonds: a group is
+ * reached when one of the faces is on one of its bodies. Supports for unheldBodies; the faces of
+ * loads that set the temperature for a thermal analysis, since bonds carry heat (M5.6). Empty for
+ * a single body, without faces, or when the topology does not say which body each face is on.
+ */
+export function unreachedBodies(spec: SimulationSpec, topology: TopologyTags | undefined, reached: readonly number[]): number[][] {
   if (topology === undefined || topology.bodies.length < 2) return [];
   const bodiesOf = new Map<number, readonly number[]>();
   for (const face of topology.faces) if (face.bodies !== undefined) bodiesOf.set(face.tag, face.bodies);
-  const supported = spec.supports.flatMap((s) => s.faces);
-  if (bodiesOf.size === 0 || supported.length === 0) return [];
+  if (bodiesOf.size === 0 || reached.length === 0) return [];
 
   const parent = new Map<number, number>(topology.bodies.map((b) => [b.tag, b.tag]));
   const root = (tag: number): number => {
@@ -93,7 +106,7 @@ export function unheldBodies(spec: SimulationSpec, topology?: TopologyTags): num
     const [a, b] = [root(first), root(second)];
     if (a !== b && parent.has(a) && parent.has(b)) parent.set(Math.max(a, b), Math.min(a, b));
   }
-  const held = new Set(supported.flatMap((f) => bodiesOf.get(f) ?? []).map(root));
+  const held = new Set(reached.flatMap((f) => bodiesOf.get(f) ?? []).map(root));
   const groups = new Map<number, number[]>();
   for (const tag of topology.bodies.map((b) => b.tag).sort((a, b) => a - b)) {
     const r = root(tag);

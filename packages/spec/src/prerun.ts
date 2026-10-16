@@ -34,6 +34,7 @@ import {
   type TopologyTags,
   tableProblems,
   unheldBodies,
+  unreachedBodies,
   usesTable,
 } from "./simulation";
 
@@ -55,6 +56,16 @@ function bodyName(tag: number, labels: Map<number, string>): string {
   return label === undefined || label === `Body ${tag}` ? `${tag}` : `"${label}"`;
 }
 
+/** The bodies a bond the user removed would join. */
+function removedBondBodies(spec: SimulationSpec, topology: TopologyTags): Set<number> {
+  const candidates = new Map((topology.bonds ?? []).map((b) => [bondKey(b.faces), b.bodies]));
+  return new Set(
+    specBonds(spec, topology)
+      .filter((b) => b.status === "removed")
+      .flatMap((b) => candidates.get(bondKey(b.faces)) ?? []),
+  );
+}
+
 /**
  * One message for each group of bodies no support holds (unheldBodies, M4.4): a body no bond
  * joins to a held body, or bodies bonded only to each other. Where a removed bond touches the
@@ -64,12 +75,7 @@ export function unheldBodyMessages(spec: SimulationSpec, topology?: TopologyTags
   const groups = unheldBodies(spec, topology);
   if (topology === undefined || groups.length === 0) return [];
   const labels = bodyLabels(topology);
-  const candidates = new Map((topology.bonds ?? []).map((b) => [bondKey(b.faces), b.bodies]));
-  const removed = new Set(
-    specBonds(spec, topology)
-      .filter((b) => b.status === "removed")
-      .flatMap((b) => candidates.get(bondKey(b.faces)) ?? []),
-  );
+  const removed = removedBondBodies(spec, topology);
   return groups.map((group) => {
     const names = group.map((tag) => bodyName(tag, labels));
     const one = group.length === 1;
@@ -103,38 +109,29 @@ export function wrongAnalysisMessage(spec: SimulationSpec, item: Support | Load)
 
 /**
  * What stops the bodies of a steady-state thermal or thermal stress analysis from having a
- * temperature (M5.1, ADR-064; M5.4): bonds do not carry heat yet, so bodies bonded to each other cannot be run, and every
- * body needs a fixed temperature, convection or radiation on one of its faces (M5.2, ADR-065).
- * Empty for a single body or without the topology's face bodies.
+ * temperature (M5.1, ADR-064; M5.2, ADR-065): every body needs a fixed temperature, convection or
+ * radiation on one of its faces, or a bond to a body that has one, since bonds carry heat (M5.6,
+ * ADR-069). One message for each group of bonded bodies none reaches; where a removed bond
+ * touches the group, restoring it is offered as the other way. Empty for a single body, before any
+ * load sets a temperature (the setup asks for one then), or without the topology's face bodies.
  */
 export function thermalBodyMessages(spec: SimulationSpec, topology?: TopologyTags): string[] {
-  if (topology === undefined || topology.bodies.length < 2) return [];
-  const messages: string[] = [];
-  if (specBonds(spec, topology).some((b) => b.status !== "removed")) {
-    messages.push(
-      `Bonds do not carry heat in a ${analysisKinds[spec.analysis].toLowerCase()} analysis yet, so bonded bodies cannot be run. Remove the bonds under Bonds to run each body on its own.`,
-    );
-  }
-  const bodiesOf = new Map<number, readonly number[]>();
-  for (const face of topology.faces) if (face.bodies !== undefined) bodiesOf.set(face.tag, face.bodies);
-  if (bodiesOf.size === 0) return messages;
-  const fixed = new Set(
-    spec.loads
-      .filter(setsTemperature)
-      .flatMap((l) => l.faces)
-      .flatMap((f) => bodiesOf.get(f) ?? []),
-  );
+  const reached = spec.loads.filter(setsTemperature).flatMap((l) => l.faces);
+  const groups = unreachedBodies(spec, topology, reached);
+  if (topology === undefined || groups.length === 0) return [];
   const labels = bodyLabels(topology);
-  const unset = topology.bodies.map((b) => b.tag).filter((tag) => !fixed.has(tag));
-  if (unset.length > 0 && fixed.size > 0) {
-    const names = unset.map((tag) => bodyName(tag, labels));
-    messages.push(
-      unset.length === 1
-        ? `Body ${names[0]} has no fixed temperature, convection or radiation, so its temperature is not set. Add one on one of its faces.`
-        : `Bodies ${names.join(", ")} have no fixed temperature, convection or radiation, so their temperatures are not set. Add one on a face of each.`,
-    );
-  }
-  return messages;
+  const removed = removedBondBodies(spec, topology);
+  return groups.map((group) => {
+    const names = group.map((tag) => bodyName(tag, labels));
+    const one = group.length === 1;
+    const what = one
+      ? `Body ${names[0]} has no fixed temperature, convection or radiation and is not bonded to a body that has one, so its temperature is not set.`
+      : `Bodies ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are bonded only to each other and none has a fixed temperature, convection or radiation, so their temperatures are not set.`;
+    const restore = group.some((tag) => removed.has(tag))
+      ? `, or restore a removed bond under Bonds that joins ${one ? "it" : "them"} to a body that has one`
+      : "";
+    return `${what} Add one on ${one ? "one of its faces" : "a face of one of them"}${restore}.`;
+  });
 }
 
 /**
