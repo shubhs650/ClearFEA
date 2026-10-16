@@ -49,6 +49,8 @@ vi.mock("../src/viewer/ModelView", () => ({
       scene.edgeSelections.push([...tags].sort((a, b) => a - b));
     }
     setMarkers() {}
+    setBands() {}
+    setCut() {}
     resetView() {}
     dispose() {}
   },

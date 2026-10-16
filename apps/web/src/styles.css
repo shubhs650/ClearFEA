@@ -800,3 +800,41 @@ fieldset.field {
   padding: 0;
   line-height: 18px;
 }
+
+/* Cut plane controls (M3.4), under the viewer's toolbar. */
+.viewer-cut {
+  position: absolute;
+  top: 40px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgb(255 255 255 / 85%);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 220px;
+}
+
+.viewer-cut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.viewer-cut-row label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.viewer-cut-row input[type="range"] {
+  flex: 1;
+}
+
+.viewer-cut-status {
+  color: var(--muted, #495057);
+}

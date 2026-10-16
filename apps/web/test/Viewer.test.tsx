@@ -5,10 +5,11 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type Deformation, toggleFace, Viewer } from "../src/layout/Viewer";
 import type { DisplayMesh } from "../src/viewer/displayMesh";
-import type { Marker, ModelViewEvents } from "../src/viewer/ModelView";
+import type { Cut, Marker, ModelViewEvents } from "../src/viewer/ModelView";
 import type { Quantity } from "../src/viewer/resultFields";
 import { readFixture } from "./fixtures";
-import { twoFacesFields } from "./resultFiles";
+import { encodeFields, twoFacesFields } from "./resultFiles";
+import { boxMesh } from "./volumeBox";
 
 // jsdom has no WebGL, so the three.js scene is replaced by a stand-in that records what the
 // viewer asks of it and lets a test play the part of the mouse.
@@ -22,6 +23,8 @@ type Recorded = {
   edgeSelections: number[][];
   /** Each setMarkers call. */
   markers: Marker[][];
+  /** Each setCut call (M3.4). */
+  cuts: (Cut | null)[];
   disposed: boolean;
 };
 
@@ -32,7 +35,7 @@ vi.mock("../src/viewer/ModelView", () => ({
     record: Recorded;
     constructor(_host: HTMLElement, events: ModelViewEvents) {
       if (scene.failToStart) throw new Error("no WebGL");
-      this.record = { events, meshes: [], bands: [], selections: [], edges: [], edgeSelections: [], markers: [], disposed: false };
+      this.record = { events, meshes: [], bands: [], selections: [], edges: [], edgeSelections: [], markers: [], cuts: [], disposed: false };
       scene.instances.push(this.record);
     }
     setMesh(mesh: DisplayMesh, _edges?: string, _keep?: boolean, bands?: Float32Array) {
@@ -50,6 +53,13 @@ vi.mock("../src/viewer/ModelView", () => ({
     }
     setMarkers(markers: Marker[]) {
       this.record.markers.push(markers);
+    }
+    // A recolouring counts as the latest bands drawn.
+    setBands(bands: Float32Array) {
+      this.record.bands.push(bands);
+    }
+    setCut(cut: Cut | null) {
+      this.record.cuts.push(cut);
     }
     resetView() {}
     dispose() {
@@ -412,6 +422,70 @@ describe("result view", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear probes" }));
     expect(probes.textContent).toMatch(/^Click the model to probe/);
     expect(probes.textContent).not.toMatch(/pass|fail|complian/i);
+  });
+
+  it("cuts the model across x and colours the section from the values at every node", async () => {
+    // A 1 m cube with von Mises 200 MPa per metre of x at every node, and no displacement.
+    const cube = boxMesh(2);
+    const view0 = new DataView(cube);
+    const nodes = view0.getUint32(12, true);
+    const x = (n: number) => view0.getFloat64(32 + n * 24, true);
+    serve({
+      ...results,
+      "/api/runs/r1/mesh": { status: 200, bytes: cube },
+      "/api/runs/r1/nodes?field=displacement": {
+        status: 200,
+        bytes: encodeFields(nodes, [{ name: "displacement", kind: "length", components: 3, values: new Array(nodes * 3).fill(0) }]),
+      },
+      "/api/runs/r1/nodes?field=vonMises": {
+        status: 200,
+        bytes: encodeFields(nodes, [
+          { name: "vonMises", kind: "pressure", components: 1, values: Array.from({ length: nodes }, (_, n) => 200e6 * x(n)) },
+        ]),
+      },
+    });
+    render(<ResultHarness quantity="vonMises" deformation="auto" />);
+    await screen.findByLabelText("Legend");
+    const view = scene.instances[0];
+    fireEvent.click(screen.getByLabelText("Cut plane"));
+    const panel = screen.getByLabelText("Cut plane", { selector: "section" });
+    await vi.waitFor(() => expect(panel.textContent).toContain("Cuts 24 elements."));
+    expect(panel.textContent).toContain("x = 500 mm");
+    const cut = view?.cuts.at(-1);
+    expect(cut?.plane).toEqual({ normal: [1, 0, 0], offset: 0.5 });
+    // The section is the cube's 1 m² cross-section at x = 0.5 m, where von Mises is 100 MPa,
+    // above the surface's 90 MPa: the legend and the max marker now reach it.
+    expect(cut?.positions.filter((_, i) => i % 3 === 0).every((value) => Math.abs(value - 0.5) < 1e-6)).toBe(true);
+    expect([...(cut?.coordinates ?? [])].every((u) => u === 1)).toBe(true);
+    const rows = [...screen.getByLabelText("Legend").querySelectorAll("li")].map((li) => li.textContent);
+    expect(rows[0]).toBe("88.89 to 100");
+    await vi.waitFor(() => expect(view?.markers.at(-1)?.[0]).toMatchObject({ kind: "max", text: "Max 100 MPa", onSection: true }));
+    // Across z, then turned round, then off again.
+    fireEvent.click(screen.getByLabelText("z"));
+    await vi.waitFor(() => expect(view?.cuts.at(-1)?.plane).toEqual({ normal: [0, 0, 1], offset: 0.5 }));
+    fireEvent.click(screen.getByLabelText("Keep the other side"));
+    await vi.waitFor(() => expect(view?.cuts.at(-1)?.plane).toEqual({ normal: [0, 0, -1], offset: -0.5 }));
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "50" } });
+    await vi.waitFor(() => expect(view?.cuts.at(-1)?.plane).toEqual({ normal: [0, 0, -1], offset: -0.25 }));
+    fireEvent.click(screen.getByLabelText("Cut plane", { selector: "input" }));
+    await vi.waitFor(() => expect(view?.cuts.at(-1)).toBeNull());
+    expect(screen.queryByLabelText("Cut plane", { selector: "section" })).toBeNull();
+  });
+
+  it("says to run again when the run has no values inside the body", async () => {
+    const before = "This run was solved before ClearFEA kept results inside the body, so it cannot be cut. Run the simulation again to use a cut plane.";
+    serve({
+      ...results,
+      "/api/runs/r1/mesh": { status: 200, bytes: boxMesh(1) },
+      "/api/runs/r1/nodes?field=displacement": { status: 404, json: { error: before } },
+      "/api/runs/r1/nodes?field=vonMises": { status: 404, json: { error: before } },
+    });
+    render(<ResultHarness quantity="vonMises" deformation="auto" />);
+    await screen.findByLabelText("Legend");
+    fireEvent.click(screen.getByLabelText("Cut plane"));
+    const panel = screen.getByLabelText("Cut plane", { selector: "section" });
+    await vi.waitFor(() => expect(panel.textContent).toContain(before));
+    expect(scene.instances[0]?.cuts.at(-1) ?? null).toBeNull();
   });
 
   it("says the run's files do not match when their vertex counts differ", async () => {
