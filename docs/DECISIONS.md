@@ -519,7 +519,7 @@ M2.7 adds the uniform temperature change (DECISIONS product table; ARCHITECTURE 
 5. **Verification.** V-08 (a 200 × 20 × 10 mm bar between frictionless ends with two symmetry planes, warmed by 90 °F, steel in ksi and µin/(in·°F)) checks von Mises EαΔT, both end reactions ±EαΔT·A, which show the compression's sign, and the sideways growth (1 + ν)αΔT to 0.1 percent. `worker/spikes/load_check` adds a bar warmed freely on three planes (every node moves αΔT·x, no stress, no reaction) and the same bar held at both ends (−EαΔT along x and nothing else at every node, the end reactions, the sideways growth).
 
 ### ADR-045: Local mesh sizes as Gmsh distance fields growing at 20 percent, a free element order, and a quality summary per mesh
-2026-10-15 · Accepted (under Shubham's standing M2 instruction; pending his later review)
+2026-10-15 · Accepted (under Shubham's standing M2 instruction; reviewed and accepted by Shubham on 2026-10-15 in the M2.8 thread)
 
 M2.8 adds local mesh sizes on faces, edges and bodies, the element order choice and the mesh quality summary (DECISIONS product table, "Meshing"). Choices it needed:
 
