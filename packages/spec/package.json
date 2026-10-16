@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./units.json": "./units.json",
     "./estimator.json": "./estimator.json",
+    "./report-notes.json": "./report-notes.json",
     "./fixtures/*": "./fixtures/*"
   },
   "scripts": {

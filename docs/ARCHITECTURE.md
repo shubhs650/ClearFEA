@@ -186,7 +186,7 @@ Python package `clearfea_worker`:
 | `deck` | Pure function: spec + mesh → CalculiX input text. Physics-critical |
 | `deck.loads` | Translation of each load and support type. Physics-critical |
 | `results` | Parse `.frd` and `.dat`, derive fields, reaction sums, write viewer files. Physics-critical |
-| `report` | Assemble DOCX and PDF from run records and figures |
+| `report` | Assemble DOCX and PDF from run records and figures, with the standing notes of `packages/spec/report-notes.json` that the run's frozen spec calls for (ADR-062) |
 | `units` | Load `units.json`, convert to SI |
 
 ### Load and support translation
@@ -282,7 +282,7 @@ Not built in Phase 0, but the design must not block them.
 | Face tags drift between import and mesh | Pinned versions, topology comparison on every mesh job, M1 spike |
 | Docker unavailable in the development environment | Checked in M0; fallback is running the worker as a plain process with the same code |
 | CalculiX direct solver too slow or memory-hungry at the size target | Benchmark task in M2, solver build chosen by data |
-| Tied interfaces give poor stresses near bonds | Stated in the report; verification case comparing a bonded pair with a single body |
+| Tied interfaces give poor stresses near bonds | Stated in the report: a run that ties bonds carries the note in `packages/spec/report-notes.json`, with the measured figures, shown under its results and printed by the report (M4.5, ADR-062); verification cases V-11 and V-12 compare bonded bodies with single-body references |
 | Remote-load coupling behaves differently from expectation | Dedicated verification cases for force and moment equilibrium and stress distribution |
 | Real-world STEP files fail to import or mesh | Collect failing files as test cases (with permission); clear error messages; the beta exists to find these |
 | Local R2 and D1 emulation differ from production | Keep storage and database access behind thin interfaces; deploy a staging copy early in Phase 1 |

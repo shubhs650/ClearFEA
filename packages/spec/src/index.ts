@@ -28,6 +28,7 @@ export {
   type TopologyTags,
 } from "./simulation";
 export { checkEstimatorTable, estimateMesh, estimatorTable, type MeshEstimate, memoryFits, powerLaw } from "./estimator";
+export { checkReportNotes, hasTiedBonds, reportNotes, runReportNotes } from "./report";
 export { checkUnitsTable, isUnitSystem, systemUnit, unitsTable } from "./units";
 export { type Validation, validator } from "./validate";
 export { checkMaterialLibrary, materialLibrary } from "./library";
