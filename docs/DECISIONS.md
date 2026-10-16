@@ -723,7 +723,7 @@ M3.8 adds CSV and VTK export (DECISIONS product table, Results row "CSV and VTK 
 7. **Verification.** No physics-critical module is touched: the values are the stored ones, converted only through `convert.ts`. Web unit tests cover the columns, units and conversions of both CSV files, a field the run lacks, a mismatched node count, the VTK file read back by its own offsets, the node order and both element orders; a panel test covers a run without `nodes.bin`. E-01 downloads all three files: the node CSV has a row per node and its largest von Mises stress equals the panel's, the reactions CSV's support and load balance in z, and the VTK file names the run's node count.
 
 ### ADR-058: Bodies of an assembly are listed by their STEP part names, each with one material picked in a Bodies group
-2026-10-16 · Accepted (under Shubham's standing autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M4.1 adds multi-body import with bodies listed and a material per body (PLAN M4.1; DECISIONS product table, Assemblies row "One material per body"). Choices it needed:
 
@@ -735,7 +735,7 @@ M4.1 adds multi-body import with bodies listed and a material per body (PLAN M4.
 6. **Not done here.** Whether every body is held or bonded before a run is M4.4; bodies that overlap rather than touch are not detected (M4.2's tolerance search is where that belongs). No physics-critical module is touched: the deck, units, loads and results are unchanged, and a multi-body model already ran through the deck generator (two-body snapshot, ADR-029).
 
 ### ADR-059: Bonds are found at import by sampling the display tessellation within a tolerance of 1e-4 of the model size, and reviewed in a Bonds group
-2026-10-16 · Accepted (under Shubham's standing autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M4.2 adds bond detection between touching faces with a tolerance, a bond list with accept and remove, and highlighting in the viewer (PLAN M4.2; DECISIONS product table, Assemblies row: "touching faces auto-detected and tied. User reviews and can remove bonds"). Choices it needed:
 
@@ -748,7 +748,7 @@ M4.2 adds bond detection between touching faces with a tolerance, a bond list wi
 7. **Not done here.** Ties in the deck and per-body meshing are M4.3; reporting unbonded or unheld bodies before a run is M4.4. Overlapping (interfering) bodies are not bonded: their faces cross rather than lie on each other. No physics-critical module is touched: the deck, units, loads and results are unchanged.
 
 ### ADR-060: Bonds are tied with equations the deck generator writes, slave nodes following the closest point of the other face
-2026-10-16 · Accepted (under Shubham's standing autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M4.3 adds per-body meshing and ties in the deck (PLAN M4.3; DECISIONS product table, Assemblies row: "Each body meshed separately; touching faces auto-detected and tied"). Choices it needed:
 
@@ -764,7 +764,7 @@ M4.3 adds per-body meshing and ties in the deck (PLAN M4.3; DECISIONS product ta
 10. **Not done here.** Reporting bodies that are not bonded or held before a run is M4.4; the rigid-body check (ADR-039) still looks at the whole model, which the ties now join.
 
 ### ADR-061: A body no support or bond reaches is refused before the run; the rigid-body check looks at each bonded group
-2026-10-16 · Accepted (under Shubham's standing autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M4.4 reports unbonded or unrestrained bodies before a run (PLAN M4.4). Bodies of an assembly are meshed apart and share no nodes (ADR-058), so a body is held only by its own supports or by bonds to a held body; until now the rigid-body check (ADR-039) looked at the whole model, so a free body next to a held one passed and CalculiX solved a singular model. Choices it needed:
 
@@ -774,7 +774,7 @@ M4.4 reports unbonded or unrestrained bodies before a run (PLAN M4.4). Bodies of
 4. **Not checked.** A bond is taken to hold its two bodies together in every direction. A tie written over too few nodes to stop the bodies turning about one another (a bond whose nodes are almost all held, or all off the other face) is not found. Deck text and snapshots are unchanged: the check refuses setups, it writes nothing.
 
 ### ADR-062: The report's tied-interface note is stored once in packages/spec and chosen by the run's frozen bond list
-2026-10-16 · Accepted (under Shubham's standing autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M4.5 adds report text noting reduced stress accuracy at tied interfaces, stored for M7 (PLAN M4.5; ARCHITECTURE risks: "Tied interfaces give poor stresses near bonds: stated in the report"). Choices it needed:
 
