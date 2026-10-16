@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 4. Generated from the simulation's
+** ClearFEA solver input, deck format 5. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa).
 ** Geometry 00000000-0000-4000-8000-000000000002
 *HEADING

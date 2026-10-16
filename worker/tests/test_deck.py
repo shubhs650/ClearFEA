@@ -1116,8 +1116,18 @@ def test_heat_transfer_deck_holds_fixed_temperatures_in_kelvin() -> None:
     ]
     # 100 °C and 373.15 K are the same temperature, so the shared edge is held consistently.
     assert lines[step + 4 : step + 6] == ["T1, 11, 11, 373.15", "T2, 11, 11, 373.15"]
-    assert lines[step + 6 :] == ["*NODE FILE", "NT", "*END STEP"]
-    assert not any(x.startswith(("*STATIC", "*ELASTIC", "*EL FILE")) for x in lines)
+    # Temperatures and heat fluxes to the .frd file, and the nodal heat flows of the fixed
+    # temperatures for their heat flow (M5.3); no convection or radiation, so no XALL.
+    assert lines[step + 6 :] == [
+        "*NODE FILE",
+        "NT",
+        "*EL FILE",
+        "HFL",
+        "*NODE PRINT, NSET=TALL",
+        "RFL",
+        "*END STEP",
+    ]
+    assert not any(x.startswith(("*STATIC", "*ELASTIC")) for x in lines)
 
 
 def test_conductivity_is_written_in_watts_per_metre_kelvin() -> None:
@@ -1258,7 +1268,44 @@ def test_thermal_loads_are_written_in_si_on_their_element_faces() -> None:
     assert [float(x[3]) for x in rows] == pytest.approx([h, h], rel=1e-15)
     radiate = lines.index("*RADIATE")
     assert lines[radiate + 1 : radiate + 3] == ["1, R2, 300.0, 0.8", "2, R3, 300.0, 0.8"]
-    assert lines[radiate + 3 :] == ["*NODE FILE", "NT", "*END STEP"]
+    assert lines[radiate + 3 :] == [
+        "*NODE FILE",
+        "NT",
+        "*EL FILE",
+        "HFL",
+        "*NODE PRINT, NSET=TALL",
+        "RFL",
+        "*NODE PRINT, NSET=XALL",
+        "NT",
+        "*END STEP",
+    ]
+
+
+def test_heat_sets_hold_the_fixed_and_the_exchanging_nodes() -> None:
+    # M5.3: TALL is every node a fixed temperature holds, XALL every node on a face with
+    # convection or radiation (an edge they share puts a node in both).
+    spec = SimulationSpec.model_validate(heat_loads_spec())
+    mesh = two_tets(order=2)
+    lines = generate_deck(spec, mesh).splitlines()
+
+    def members(name: str) -> set[int]:
+        start = lines.index(f"*NSET, NSET={name}") + 1
+        end = next(k for k in range(start, len(lines)) if lines[k].startswith("*"))
+        return {int(v) for line in lines[start:end] for v in line.split(", ")}
+
+    fixed = {f for x in spec.loads if x.type == "fixed_temperature" for f in x.faces}
+    exchanged = {f for x in spec.loads if x.type in ("convection", "radiation") for f in x.faces}
+    assert members("TALL") == {n + 1 for n in fixed_support_nodes(mesh, sorted(fixed))}
+    assert members("XALL") == {n + 1 for n in fixed_support_nodes(mesh, sorted(exchanged))}
+
+
+def test_a_thermal_deck_without_exchange_or_fixed_temperature_prints_neither() -> None:
+    # Flux in, radiation out: no fixed temperature, so no TALL and no RFL.
+    spec = heat_loads_spec()
+    spec["loads"] = [x for x in spec["loads"] if x["type"] in ("heat_flux", "radiation")]
+    lines = deck(spec, two_tets(order=2)).splitlines()
+    assert "*NSET, NSET=TALL" not in lines and "RFL" not in lines
+    assert "*NODE PRINT, NSET=XALL" in lines
 
 
 def test_radiation_sets_the_constants_and_starts_from_the_mean_known_temperature() -> None:

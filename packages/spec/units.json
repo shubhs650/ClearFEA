@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "kinds": {
     "length": {
       "description": "Lengths and coordinates.",
@@ -391,6 +391,24 @@
         }
       }
     },
+    "heatFlow": {
+      "description": "Heat flow: heat per unit of time crossing a face or produced in a body (M5.3).",
+      "si": "W",
+      "units": {
+        "W": {
+          "factor": 1,
+          "definition": "SI derived unit"
+        },
+        "kW": {
+          "factor": 1000,
+          "definition": "1 kW = 1000 W exactly"
+        },
+        "BTU/h": {
+          "factor": 0.2930710701722222,
+          "definition": "BTU (International Table) = 1055.05585262 J, h = 3600 s: 1055.05585262 / 3600 = 0.29307107017... W (nearest double)"
+        }
+      }
+    },
     "strain": {
       "description": "Strains: change of length per unit of length, dimensionless.",
       "si": "m/m",
@@ -448,6 +466,7 @@
         "heatFlux": "W/m²",
         "heatTransferCoefficient": "W/(m²·°C)",
         "heatGeneration": "W/m³",
+        "heatFlow": "W",
         "strain": "mm/mm",
         "ratio": "1"
       }
@@ -471,6 +490,7 @@
         "heatFlux": "W/m²",
         "heatTransferCoefficient": "W/(m²·K)",
         "heatGeneration": "W/m³",
+        "heatFlow": "W",
         "strain": "m/m",
         "ratio": "1"
       }
@@ -494,6 +514,7 @@
         "heatFlux": "BTU/(h·ft²)",
         "heatTransferCoefficient": "BTU/(h·ft²·°F)",
         "heatGeneration": "BTU/(h·ft³)",
+        "heatFlow": "BTU/h",
         "strain": "in/in",
         "ratio": "1"
       }

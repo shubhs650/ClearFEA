@@ -53,9 +53,13 @@ type ResultQuantity = Literal[
     "strainZX",
     "safetyFactor",
     "temperature",
+    "heatFlux",
+    "heatFluxX",
+    "heatFluxY",
+    "heatFluxZ",
 ]
 """
-A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1).
+A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1), and its heat flux magnitude and components (M5.3).
 """
 
 

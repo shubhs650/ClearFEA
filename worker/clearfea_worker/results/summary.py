@@ -4,7 +4,9 @@
 Largest displacement magnitude, smallest and largest von Mises stress and (M3.5) the smallest
 safety factor against yield with the node and position where each occurs, the reaction force
 and moment of every support, each load's total force and moment, and the balance check of the
-two. SI throughout.
+two. For a steady-state thermal run, the smallest and largest temperature (M5.1), the largest
+heat flux, each thermal load's heat flow and the heat balance (M5.3, results.heat). SI
+throughout.
 """
 
 import math
@@ -25,10 +27,12 @@ from .fields import (
     NodalFields,
     ThermalFields,
     displacement_magnitude,
+    heat_flux_magnitude,
     read_fields,
     read_thermal_fields,
     von_mises_field,
 )
+from .heat import THERMAL_LOADS, HeatFlow, balance_floor, heat_balance, read_heat_flows
 from .safety import safety_factor_field
 
 
@@ -147,13 +151,29 @@ def summarize(
     )
 
 
-def summarize_thermal(mesh: VolumeMesh, fields: ThermalFields, calculix: str) -> SolveResult:
-    """A steady-state thermal run's summary (M5.1): the smallest and largest temperature."""
+def summarize_thermal(
+    spec: SimulationSpec,
+    mesh: VolumeMesh,
+    fields: ThermalFields,
+    flows: list[HeatFlow],
+    calculix: str,
+) -> SolveResult:
+    """A steady-state thermal run's summary: the smallest and largest temperature (M5.1), the
+    largest heat flux, and the heat flow of each thermal load (``flows``, in spec order, from
+    results.heat) with the heat balance (M5.3)."""
     t = fields.temperature
+    q = heat_flux_magnitude(fields)
+    loads = [x for x in spec.loads if isinstance(x, THERMAL_LOADS)]
     return SolveResult.model_validate(
         {
             "nodes": fields.node_count,
             "temperature": {"min": _at(mesh, t, _argmin(t)), "max": _at(mesh, t, _argmax(t))},
+            "heatFlux": {"max": _at(mesh, q, _argmax(q))},
+            "heatFlows": [
+                {"loadId": load.id, "heat": flow.heat}
+                for load, flow in zip(loads, flows, strict=True)
+            ],
+            "heatBalance": heat_balance(flows, balance_floor(spec, mesh, t)),
             "software": {"calculix": calculix},
         }
     )
@@ -164,10 +184,14 @@ def read_results(
 ) -> tuple[NodalFields | ThermalFields, SolveResult]:
     """Reads the solver output of a deck made from ``spec`` and ``mesh``, with the safety
     factor against yield when every material has a yield strength (ADR-054). A steady-state
-    thermal run has temperatures only (M5.1)."""
+    thermal run has temperatures and heat fluxes (M5.1, M5.3)."""
     if spec.analysis == "steady_thermal":
         thermal = read_thermal_fields(frd, mesh.node_count)
-        return thermal, summarize_thermal(mesh, thermal, calculix)
+        try:
+            flows = read_heat_flows(spec, mesh, thermal.temperature, dat)
+        except ValueError as error:
+            raise DatError(str(error)) from None
+        return thermal, summarize_thermal(spec, mesh, thermal, flows, calculix)
     fields = read_fields(frd, mesh.node_count)
     fields = replace(fields, safety_factor=safety_factor_field(spec, mesh, fields))
     return fields, summarize(spec, mesh, fields, read_reactions(spec, mesh, dat), calculix)

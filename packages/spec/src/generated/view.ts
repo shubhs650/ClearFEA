@@ -16,7 +16,7 @@ import { validator } from "../validate";
  */
 export type ViewPoint = [number, number, number];
 /**
- * A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1).
+ * A quantity the result view can colour the model by (apps/web/src/viewer/resultFields.ts); temperature for a steady-state thermal run (M5.1), and its heat flux magnitude and components (M5.3).
  *
  * This interface was referenced by `View`'s JSON-Schema
  * via the `definition` "ResultQuantity".
@@ -40,7 +40,11 @@ export type ResultQuantity =
   | "strainYZ"
   | "strainZX"
   | "safetyFactor"
-  | "temperature";
+  | "temperature"
+  | "heatFlux"
+  | "heatFluxX"
+  | "heatFluxY"
+  | "heatFluxZ";
 /**
  * How the result view draws the shape: undeformed, at true scale, or exaggerated to be seen.
  *
@@ -152,7 +156,7 @@ export interface ViewListResponse {
 
 export const validateViewPoint = validator<ViewPoint>(schema, "ViewPoint");
 export const validateViewCamera = validator<ViewCamera>(schema, "ViewCamera");
-export const ResultQuantityValues = ["displacement", "vonMises", "principal1", "principal2", "principal3", "stressXX", "stressYY", "stressZZ", "stressXY", "stressYZ", "stressZX", "strainXX", "strainYY", "strainZZ", "strainXY", "strainYZ", "strainZX", "safetyFactor", "temperature"] as const satisfies readonly ResultQuantity[];
+export const ResultQuantityValues = ["displacement", "vonMises", "principal1", "principal2", "principal3", "stressXX", "stressYY", "stressZZ", "stressXY", "stressYZ", "stressZX", "strainXX", "strainYY", "strainZZ", "strainXY", "strainYZ", "strainZX", "safetyFactor", "temperature", "heatFlux", "heatFluxX", "heatFluxY", "heatFluxZ"] as const satisfies readonly ResultQuantity[];
 export const validateResultQuantity = validator<ResultQuantity>(schema, "ResultQuantity");
 export const DeformationValues = ["undeformed", "true", "auto"] as const satisfies readonly Deformation[];
 export const validateDeformation = validator<Deformation>(schema, "Deformation");

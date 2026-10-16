@@ -1,4 +1,4 @@
-** ClearFEA solver input, deck format 4. Generated from the simulation's
+** ClearFEA solver input, deck format 5. Generated from the simulation's
 ** setup and mesh; do not edit. Units: SI (m, kg, s, N, Pa, K, W).
 ** Geometry 00000000-0000-4000-8000-000000000005
 *HEADING
@@ -25,6 +25,8 @@ ClearFEA steady-state thermal analysis
 ** Fixed temperature cold-1 "Cold side", faces 6: 68.0 °F = 293.15000000000003 K
 *NSET, NSET=T2
 6, 7, 8
+*NSET, NSET=TALL
+1, 2, 3, 4, 6, 7, 8
 ** Material steel "Steel (US units)"
 *MATERIAL, NAME=M2
 ** Thermal conductivity 26.0 BTU/(h·ft·°F)
@@ -45,4 +47,8 @@ T1, 11, 11, 373.15
 T2, 11, 11, 293.15000000000003
 *NODE FILE
 NT
+*EL FILE
+HFL
+*NODE PRINT, NSET=TALL
+RFL
 *END STEP
