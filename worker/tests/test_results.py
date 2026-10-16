@@ -381,6 +381,16 @@ def test_balance_without_applied_load_measures_reactions_against_each_other() ->
     assert balance(mesh, [], [])["forceRatio"] == 0.0
 
 
+def test_balance_without_applied_load_measures_one_support_against_its_nodal_forces() -> None:
+    # A body heated on one fixed support (M5.4): the support pushes back at every node, and
+    # its total is rounding, which must be measured against the nodal forces, not itself.
+    mesh = two_tets(order=1)
+    end = [Reaction((2e-4, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), 4e4)]
+    got = balance(mesh, [NO_LOAD], end)
+    assert got["forceScale"] == 4e4
+    assert got["forceRatio"] == pytest.approx(2e-4 / 4e4, rel=1e-9)
+
+
 def test_balance_of_a_load_that_cancels_itself_is_measured_against_its_gross_size() -> None:
     # A pressure all round a bore adds up to nothing, and so do the reactions; their tiny
     # rounding must be measured against the pressure's size, not against itself (V-01).

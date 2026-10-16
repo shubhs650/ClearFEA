@@ -2,7 +2,8 @@
 """V-18 geometry: a quarter of a thick-walled tube between the half-planes x = 0 and y = 0, a
 slice along z, written as a STEP file in millimetres.
 
-    uv run --directory worker python ../verification/cases/V-18-thermal-stress-cylinder/geometry.py OUT.step
+    cd worker
+    uv run python ../verification/cases/V-18-thermal-stress-cylinder/geometry.py OUT.step
 
 Inner radius 40 mm, outer radius 60 mm, from z = 0 to z = 20 mm.
 """

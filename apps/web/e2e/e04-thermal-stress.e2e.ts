@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // E-04 (docs/VERIFICATION.md): a thermal stress analysis from upload to results, through the UI
 // (M5.4). The setup takes the thermal stress analysis type and its stress-free temperature, a
-// material with both elastic and thermal values, a support and two fixed temperatures; the run
+// material with both elastic and thermal values, a support, a fixed temperature and convection; the run
 // shows its stresses on the deformed shape and its temperatures, heat flows and heat balance,
 // and the temperature can be drawn from the same result.
 //
 // The model is E-01's 40 × 20 × 10 mm block (e2e/block.py). Its top face, z = 10 mm, is held at
-// 120 °C and its x = 40 mm end at 20 °C, the stress-free temperature, and fixed. Both faces look
-// towards the viewer's starting camera, as in E-01. The test signs in as the second seeded user,
-// as E-03 does, after it.
+// 120 °C, and its x = 40 mm end is fixed and cooled by convection to 20 °C, the stress-free
+// temperature. (Two fixed temperatures on faces that share an edge are refused, ADR-064.) Both
+// faces look towards the viewer's starting camera, as in E-01. The test signs in as the second
+// seeded user, as E-03 does, after it.
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
@@ -123,7 +124,7 @@ test("E-04: a thermal stress analysis from upload to results", async ({ page }) 
   const top = await faceWithBox(page, [0, 0, 0.01], [0.04, 0.02, 0.01]);
   const selection = page.getByRole("region", { name: "Selected faces", exact: true });
 
-  await test.step("fixed support and 20 °C on the end", async () => {
+  await test.step("fixed support and convection on the end", async () => {
     await clickFace(page, end);
     await expect(selection).toContainText(`1 face selected: ${end}`);
     await treeRow(page, "Supports").click();
@@ -135,10 +136,12 @@ test("E-04: a thermal stress analysis from upload to results", async ({ page }) 
     const loads = settings.getByRole("region", { name: "Loads", exact: true });
     await expect(loads.getByRole("button", { name: "Add a pressure" })).toBeVisible();
     await expect(loads.getByRole("button", { name: "Add a temperature change" })).toHaveCount(0);
-    await loads.getByRole("button", { name: "Add a fixed temperature" }).click();
-    const fixed = page.getByRole("region", { name: "Fixed temperature", exact: true });
-    await fixed.getByLabel("Name", { exact: true }).fill("Cold end");
-    await fixed.getByLabel("Temperature", { exact: true }).fill("20");
+    await loads.getByRole("button", { name: "Add convection" }).click();
+    const convection = page.getByRole("region", { name: "Convection", exact: true });
+    await convection.getByLabel("Name", { exact: true }).fill("Cooled end");
+    await convection.getByLabel("Convection coefficient", { exact: true }).fill("1000");
+    await convection.getByLabel("Convection coefficient unit").selectOption("W/(m²·K)");
+    await convection.getByLabel("Ambient temperature", { exact: true }).fill("20");
     await saved(page);
   });
 
@@ -175,15 +178,22 @@ test("E-04: a thermal stress analysis from upload to results", async ({ page }) 
     await expect(results).toContainText("Largest von Mises stress", { timeout: 180_000 });
     await expect(legend).toContainText("Von Mises stress (MPa)", { timeout: 60_000 });
     await expect(legend).toContainText("Deformed shape, scale ×");
+    // No load is applied, so the support's forces balance each other node by node (ADR-067).
+    const balance = /Out of balance.*force ([\d.e+-]+) % of [\d.]+ N, moment ([\d.e+-]+) % of [\d.]+ N·mm/;
+    await expect(results).toContainText(balance);
+    const [, force, moment] = balance.exec((await results.textContent()) ?? "") ?? [];
+    expect(Number(force)).toBeLessThan(0.1);
+    expect(Number(moment)).toBeLessThan(0.1);
     await page.screenshot({ path: `${OUT}/e04-stress.png` });
   });
 
   await test.step("the same run's temperatures, heat flows and heat balance", async () => {
     const thermal = run.getByLabel("Thermal results");
-    // The fixed temperatures bound the field; the result keeps five significant digits.
+    // The fixed temperature is the highest; the result keeps five significant digits.
     await expect(thermal).toContainText(/Highest temperature\s*120 °C/);
-    await expect(thermal).toContainText(/Lowest temperature\s*20 °C/);
-    const flows = /Heat flow, Cold end\s*([\d.]+) W out.*Heat flow, Hot top\s*([\d.]+) W in/;
+    await expect(thermal).toContainText("Lowest temperature");
+    // What the top takes in, the cooled end gives off.
+    const flows = /Heat flow, Cooled end\s*([\d.]+) W out.*Heat flow, Hot top\s*([\d.]+) W in/;
     await expect(thermal).toContainText(flows);
     const [, out, into] = flows.exec((await thermal.textContent()) ?? "") ?? [];
     expect(Number(out)).toBeGreaterThan(0);

@@ -39,12 +39,15 @@ from .safety import safety_factor_field
 @dataclass(frozen=True)
 class Reaction:
     """One support's reaction: total force (N), its moment (N·m) about ``point`` (m), the area
-    centroid of the support's faces, and its moment about the origin for the balance check."""
+    centroid of the support's faces, its moment about the origin for the balance check, and
+    the sum of the sizes of its nodal forces (N), which the balance check is measured against
+    when no load is applied (M5.4)."""
 
     force: Vector
     moment: Vector
     point: Vector
     origin_moment: Vector
+    gross: float = 0.0
 
 
 def _at(mesh: VolumeMesh, field: array, node: int) -> dict[str, object]:
@@ -82,13 +85,17 @@ def balance(
     temperature change or a prescribed displacement applies no load, and its reactions must
     balance each other, as in the verification harness, ADR-039); its moment also against
     that force times the model's size, so a load through the origin does not leave the
-    moment measured against nothing.
+    moment measured against nothing. With no load at all, the reactions' sizes are those of
+    their nodal forces: a body heated on one fixed support pushes on it at every node while
+    the total is zero, which would otherwise measure the rounding against itself (ADR-067).
     """
     applied_f = [sum(load.force[i] for load in loads) for i in range(3)]
     applied_m = [sum(load.moment[i] for load in loads) for i in range(3)]
     reaction_f = [sum(r.force[i] for r in reactions) for i in range(3)]
     reaction_m = [sum(r.origin_moment[i] for r in reactions) for i in range(3)]
-    force_scale = max(sum(load.gross for load in loads), sum(norm(r.force) for r in reactions))
+    applied = sum(load.gross for load in loads)
+    held = sum(max(r.gross, norm(r.force)) if applied == 0.0 else norm(r.force) for r in reactions)
+    force_scale = max(applied, held)
     moment_scale = max(
         norm(applied_m),
         sum(norm(r.origin_moment) for r in reactions),
@@ -274,7 +281,9 @@ def _reaction(mesh: VolumeMesh, faces: list[int], nodal: dict[int, Vector]) -> R
     force = [0.0, 0.0, 0.0]
     moment = [0.0, 0.0, 0.0]
     origin = [0.0, 0.0, 0.0]
+    gross = 0.0
     for node, f in nodal.items():
+        gross += norm(f)
         x = (p[3 * node], p[3 * node + 1], p[3 * node + 2])
         about = cross([x[i] - point[i] for i in range(3)], f)
         m0 = cross(x, f)
@@ -287,6 +296,7 @@ def _reaction(mesh: VolumeMesh, faces: list[int], nodal: dict[int, Vector]) -> R
         (moment[0], moment[1], moment[2]),
         point,
         (origin[0], origin[1], origin[2]),
+        gross,
     )
 
 

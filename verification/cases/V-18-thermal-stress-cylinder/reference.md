@@ -39,3 +39,5 @@ The frictionless supports give no shear on the cuts and ends, which is what the 
 Stress 3 percent coarse and 1 percent full, displacement, force and heat flow 1 percent coarse and 0.5 percent full, the same as V-01. The temperature varies as ln r and the stress is extrapolated from the integration points to the nodes.
 
 Measured while the case was written (2026-10-16, CalculiX 2.21, Gmsh 4.15.2, coarse, 5 mm, four quadratic elements through the wall): σθ −0.13 % (bore) and +0.20 % (outside), σz +0.03 % and +0.63 %, von Mises −0.63 % and +0.37 %, radial displacement +0.01 % and 0.00 %, axial force and heat flow 0.00 %.
+
+Full (2.5 mm): σθ −0.04 % and +0.04 %, σz +0.01 % and +0.15 %, von Mises −0.19 % and +0.10 %, radial displacement, axial force and heat flow below 0.01 %.
