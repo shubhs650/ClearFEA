@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M3 Results tools (M2 closed 2026-10-16 on a green phase-end run on main)
-- **Next task:** M3.3
+- **Next task:** M3.4
 - **Blocked on:** nothing
 
 ## Milestones
@@ -75,7 +75,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 
 - [x] M3.1 Principal stresses, stress and strain components
 - [x] M3.2 Reaction forces and moments per support; applied-load totals; balance check shown on every result
-- [ ] M3.3 Min/max markers and probe at a picked point
+- [x] M3.3 Min/max markers and probe at a picked point
 - [ ] M3.4 Cut planes. Settle the large-model approach by measurement and record an ADR
 - [ ] M3.5 Safety factor against yield
 - [ ] M3.6 Hide/show bodies; saved views
@@ -99,12 +99,14 @@ Things only the maintainer can do.
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, all 13 cases, 143 of 143 checks (M3.2) |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1) |
-| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps and the M3.2 reaction and balance step |
+| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 with the M3.1 quantity steps, the M3.2 reaction and balance step and the M3.3 marker and probe step |
 | Phase end (CI) | 2026-10-16 (`phase-end.yml` by hand on main b355155, [run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635); closed M2) | Green: full tier 116 of 116 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26); E-01 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M3.3 (2026-10-16): min/max markers and probes in the result view (ADR-052, accepted under Shubham's standing M3 instruction, pending his review). Web only; no worker, schema or physics-critical change. The viewer marks the surface's smallest and largest value of the quantity shown (the legend's ends; the Run panel's figures stay whole-mesh), with a "Min and max" toggle in the toolbar; a click on the model in result mode probes the nearest corner of the triangle under the pointer, so the value is the node's own. Probes are numbered on the model and listed bottom right with value and undeformed position; they follow the quantity and reset with the run. Markers are an HTML layer over the canvas (`ModelView.setMarkers`) and show through the model. E-01 gains a probe step (`e01-probe.png`). Next: M3.4.
 
 > M3.2 (2026-10-16): reaction moments, load totals and the balance check (ADR-051, accepted under Shubham's standing M3 instruction, pending his review). The deck prints every held node's RF (`RALL`) for every setup (deck format 3; fixed-only snapshots gained the set and print, all changed their first line; `solve` and `elastic-fixed` `.dat` fixtures re-run). The reader now takes uniform pressure on held nodes out of reactions with CalculiX's own three-point face rule (found by solving; `spikes/load_check` pressed ring), so reactions on pressed faces touching supports changed (M1 fixture: (100, 0, −33.3) → (100, 0, −50) N). `SolveResult` gains `reactions[].moment`/`point` (about the support faces' area centroid), `loads[]` and `balance` (ratios against the loads' gross size, since V-01's bore pressure cancels itself). Run panel shows them; old runs say to run again. Harness: `moment.x/y/z` quantities, V-04 clamp torque and bending moment, and the run's balance row on every case. Next: M3.3.
 >
@@ -208,6 +210,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-16
 
+- M3.3: min/max markers and node probes in the result view (ADR-052). Learned: nothing surprising; the markers stay a pure view of `fields.bin`.
 - M3.2: reaction forces and moments per support, load totals and the balance check on every result (ADR-051). Learned: CalculiX integrates a `*DLOAD` face pressure with a three-point rule (the seven-point rule is 3e-4 off on curved C3D10 faces); a balance ratio must be measured against the loads' gross size, or a self-cancelling pressure reads 100 percent.
 - M3.1: principal stresses, stress and strain components in the result view (ADR-050). Learned: CalculiX's `E` is total strain (elastic plus thermal) with tensor shear components; the nodal radial stress at a pressed bore converges slowly (V-01).
 - M2 closed: phase-end workflow run by hand on main b355155 ([run 38837385635](https://github.com/shubhs650/ClearFEA/actions/runs/38837385635)) green, `make verify` full tier 116 of 116 checks in all 13 cases (V-01 to V-10, V-24, V-25, V-26) and `make e2e` E-01. "Now" header brought up to date (it still said M0). Next: M3.
