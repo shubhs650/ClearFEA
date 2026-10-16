@@ -821,7 +821,7 @@ Shubham decided two things before M4: make PaStiX the default solver, with SPOOL
 10. **Later, on larger machines.** Larger machine sizes get their own limits when benchmarked on such machines (`limitMemoryBytes` is per table; a table per memory size is the likely shape). For PaStiX that needs a 64-bit-integer build first: ccx's `Makefile_i8` recipe with 64-bit SPOOLES, ARPACK, Scotch and BLAS. Until then the larger sizes are still listed and priced (ADR-049), but every run is held to the 16 GiB limits.
 
 ### ADR-064: Steady-state thermal is an analysis type of the same setup, solved as a CalculiX heat transfer step with fixed temperatures on faces
-2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M5.1 adds the steady-state thermal analysis type and thermal material properties (PLAN M5.1; DECISIONS scope: analyses, thermal loads). Choices it needed:
 
@@ -835,7 +835,7 @@ M5.1 adds the steady-state thermal analysis type and thermal material properties
 8. **Verification.** V-13 (plane wall) checks the fixed temperatures with their offsets and the linear profile at three depths through the API, at 0.01 percent of the absolute temperature; its heat-flux check arrives with flux results in M5.3. The harness reads a `temperature` quantity and skips the force balance rows for thermal runs (the heat balance is M5.3). `worker/spikes/heat_check` solves generated thermal decks on a meshed bar with first- and second-order elements and compares every node with the exact profile, which the API path cannot see node by node.
 
 ### ADR-065: Heat flux, convection, radiation to ambient and heat generation are loads of the steady-state thermal analysis, written as CalculiX's distributed heat loads
-2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M5.2 adds the rest of the thermal loads of DECISIONS' scope (the fixed temperature came with M5.1, ADR-064). Choices it needed:
 
@@ -848,7 +848,7 @@ M5.2 adds the rest of the thermal loads of DECISIONS' scope (the fixed temperatu
 
 
 ### ADR-066: Heat flux is a result field from CalculiX; each thermal load's heat flow is worked out the way CalculiX applies it, and the heat balance is measured against half the loads' gross heat flow
-2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M5.3 adds temperature and heat-flux results and the heat balance check (PLAN M5.3; DECISIONS scope: results). The temperature came with M5.1 (ADR-064). Choices it needed:
 
@@ -862,7 +862,7 @@ M5.3 adds temperature and heat-flux results and the heat balance check (PLAN M5.
 8. **Verification.** Every thermal case gets two automatic rows: the run's own heat balance within 0.1 percent, and, where the case has a heat flux or heat generation, the heat those bring in against the case's own integration over the run's surface (flux times area, power times volume). V-13 (plane wall) gains its heat flux kΔT/L and the heat through each face, V-15 the flux through the wall and films and each film's heat, V-16 the flux at the radiating face and the heat in and radiated, V-17 the flux at the cooled face and a quarter of the way in and the heat leaving through the cooled faces; all at 0.01 percent. `worker/spikes/heat_check` checks the flux at every node, each load's heat flow and the balance on the bar, and the balance with every thermal load at once.
 
 ### ADR-067: Thermal stress is its own analysis type, solved in one deck as a heat transfer step followed by a static step, with a stress-free temperature in the setup
-2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M5.4 adds thermal stress (PLAN M5.4; DECISIONS scope: steady-state thermal and thermal stress). Choices it needed:
 
@@ -877,7 +877,7 @@ M5.4 adds thermal stress (PLAN M5.4; DECISIONS scope: steady-state thermal and t
 9. **Verification.** V-18 (a quarter of a thick tube, hot bore, cool outside, frictionless cuts and ends, so plane strain holds everywhere) checks the hoop and axial stresses, von Mises stress, radial displacement at both surfaces, the axial force on an end and the heat flow, against the closed form (Timoshenko and Goodier). The harness gives a thermal stress case both the heat balance and the force balance rows. `worker/spikes/heat_check` solves four of its thermal setups as thermal stress on the bar, with the ends and sides on frictionless supports, and compares every node's stress and displacement with the closed form.
 
 ### ADR-068: Conductivity, Young's modulus, Poisson's ratio and thermal expansion may each be a table against temperature, read only by analyses that solve temperatures
-2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M5.5 adds temperature-dependent property tables (PLAN M5.5; DECISIONS scope: materials with temperature-dependent property tables). Choices it needed:
 
@@ -890,7 +890,7 @@ M5.5 adds temperature-dependent property tables (PLAN M5.5; DECISIONS scope: mat
 7. **Verification.** V-19, a wall between 400 °C and 20 °C whose four properties are all tables in mixed units, held sideways between frictionless walls and free to grow through its thickness: the heat flux (conductivity at the mean temperature times ΔT / L, since k is linear), heat flows, the exact profile at three depths, the sideways stress −E(T) ε(T)/(1 − ν(T)) at four depths with ε from the mean coefficients, a stress-free temperature of 50 °C and a reference of 20 °C (so both terms of item 4 count), the growth of the hot face and the force on one wall. `worker/spikes/heat_check` adds the bar with a conductivity table, every node against the exact profile.
 
 ### ADR-069: Bonds carry heat: each tied node's temperature follows the other face at the same closest point, and the reader adds the heat CalculiX leaves out of held nodes
-2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing M5 autodrive instruction; reviewed and accepted by Shubham on 2026-10-16).
 
 M5.6 lets bonds carry heat (PLAN M5.6), so thermal and thermal stress setups with bonded bodies run instead of being refused (ADR-064 item 5, ADR-067 item 5, which this replaces). Choices it needed:
 
