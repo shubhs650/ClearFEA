@@ -23,7 +23,14 @@ from pathlib import Path
 
 from clearfea_worker.deck import REACTION_SET, DeckError, generate_deck
 from clearfea_worker.deck.applied import force_loads
-from clearfea_worker.deck.loads import body_load, body_nodal_forces, densities
+from clearfea_worker.deck.constraints import node_constraints
+from clearfea_worker.deck.loads import (
+    body_load,
+    body_nodal_forces,
+    densities,
+    element_face_pressures,
+    pressure_nodal_loads,
+)
 from clearfea_worker.geometry.importer import import_geometry
 from clearfea_worker.meshing.mesher import mesh_geometry
 from clearfea_worker.meshing.volume import VolumeMesh, read_volume_mesh
@@ -774,6 +781,68 @@ def refusals(root: Path) -> list[Row]:
     return rows
 
 
+def pressed_ring(root: Path, order: int) -> list[Row]:
+    """The quarter ring on its three symmetry planes, pressed on its curved outside and on
+    one cut plane, which the bottom plane holds along z (M3.2, ADR-051).
+
+    The nodal loads CalculiX applies for a *DLOAD pressure are read off its RF at free nodes
+    (there RF is the applied load, to the solver's precision) and compared with
+    pressure_nodal_loads; then the reactions, with the pressure on held nodes taken out, must
+    balance the pressures' total, force and moment."""
+    mesh, topo = prepare(root, "ring", ring, order, 0.005)
+    sym_x = face(topo, lambda x, y, z: abs(x) < 1e-6)
+    sym_y = face(topo, lambda x, y, z: abs(y) < 1e-6)
+    bottom = face(topo, lambda x, y, z: abs(z) < 1e-6)
+    outside = face(
+        topo, lambda x, y, z: abs(z - T / 2) < 1e-6 and min(x, y) > 1 and math.hypot(x, y) > 86
+    )
+    supports = [
+        frictionless("sym-x", [sym_x]),
+        frictionless("sym-y", [sym_y]),
+        frictionless("bottom", [bottom]),
+    ]
+    pressures = [
+        {"id": "p", "type": "pressure", "name": "p", "faces": [outside], "magnitude": q(10, "MPa")},
+        {"id": "c", "type": "pressure", "name": "c", "faces": [sym_x], "magnitude": q(2, "MPa")},
+    ]
+    s = spec(supports, pressures)
+    work = root / f"pressed-p{order}"
+    work.mkdir(parents=True)
+    expected = pressure_nodal_loads(mesh, element_face_pressures(s, mesh))
+    deck = generate_deck(s, mesh).replace(
+        "*END STEP",
+        "*NSET, NSET=PRESSED\n"
+        + "\n".join(str(n + 1) for n in expected)
+        + "\n*NODE PRINT, NSET=PRESSED, GLOBAL=YES\nRF\n*END STEP",
+    )
+    (work / "job.inp").write_text(deck)
+    run = run_calculix(work / "job.inp", lambda line: None, threading.Event())
+    if run.returncode != 0 or run.errors():
+        raise RuntimeError(f"CalculiX failed in {work}: {run.errors()}")
+    rf = read_node_forces(work / "job.dat", "PRESSED")
+    free = [n for n in expected if n not in node_constraints(s, mesh)]
+    size = max(math.dist(expected[n], (0, 0, 0)) for n in free)
+    worst = max(math.dist(expected[n], rf[n]) for n in free) / size
+    result = read_results(s, mesh, work / "job.frd", work / "job.dat", "check")[1]
+    b = result.balance
+    assert b is not None
+    label = f"C3D{4 if order == 1 else 10} pressed ring"
+    return [
+        (
+            f"{label}: CalculiX's nodal pressure loads at {len(free)} free nodes",
+            "the three-point face rule's, within 1e-6",
+            f"worst {worst:.2g} of the largest",
+            worst < 1e-6,
+        ),
+        (
+            f"{label}: reactions balance the pressures, force and moment",
+            "within 1e-6",
+            f"force {b.force_ratio:.2g}, moment {b.moment_ratio:.2g}",
+            max(b.force_ratio, b.moment_ratio) < 1e-6,
+        ),
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=None)
@@ -788,6 +857,7 @@ def main() -> int:
         rows += remote_load(root, order)
         rows += hydrostatic(root, order)
         rows += heated(root, order)
+        rows += pressed_ring(root, order)
     rows += refusals(root)
     print("| Check | Expected | Got | OK |\n| --- | --- | --- | --- |")
     for name, expected, got, ok in rows:

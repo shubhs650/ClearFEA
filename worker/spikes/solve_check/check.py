@@ -24,7 +24,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deck_check"))
 from check import E_SI, P_SI, H, L, box_faces, spec, write_bar  # noqa: E402
 
 from clearfea_worker.deck import generate_deck  # noqa: E402
-from clearfea_worker.deck.elements import FACE_NODES  # noqa: E402
 from clearfea_worker.geometry.display import read_display  # noqa: E402
 from clearfea_worker.geometry.importer import import_geometry  # noqa: E402
 from clearfea_worker.meshing.mesher import mesh_geometry  # noqa: E402
@@ -273,32 +272,42 @@ def main() -> int:
             uy < 0 and rel(-uy, beam) < 0.03,
         )
     )
-    # CalculiX's reaction total leaves out the load that lands on nodes the support holds
-    # (ADR-029, M1.7 handoff): here the mid-edge nodes of the top face's triangles on the
-    # clamped edge. On a flat 6-node triangle a uniform pressure puts nothing on the corners
-    # and a third of p A on each mid-edge node, so the free part of the load is known exactly.
-    reaction = result.reactions[0].force
+    # Every load at a held node is taken out of CalculiX's RF (M3.2, ADR-051; before, a third
+    # of p A on each mid-edge node of the top face's triangles on the clamped edge was left
+    # out), so the clamp carries the whole load W = p L b, with the moment W L / 2 about the
+    # clamped face's centre (0, b/2, b/2), and the run's balance closes.
+    reaction = result.reactions[0]
     load = P_SI * length * side
-    held = 0.0
-    for element, local in mesh.faces[faces["y+"][0]]:
-        nodes = [mesh.elements[10 * element + k] for k in FACE_NODES[2][local]]
-        a, b, c = (mesh.positions[3 * n : 3 * n + 3] for n in nodes[:3])
-        ab = [b[i] - a[i] for i in range(3)]
-        ac = [c[i] - a[i] for i in range(3)]
-        cross = [
-            ab[1] * ac[2] - ab[2] * ac[1],
-            ab[2] * ac[0] - ab[0] * ac[2],
-            ab[0] * ac[1] - ab[1] * ac[0],
-        ]
-        triangle = 0.5 * math.sqrt(sum(v * v for v in cross))
-        held += sum(P_SI * triangle / 3 for n in nodes[3:] if mesh.positions[3 * n] == 0.0)
-    free = load - held
     rows.append(
         (
             "cantilever: reaction of the clamped end",
-            f"0, {free:.6g}, 0 N ({load:.6g} N less {held:.4g} N on held nodes)",
-            ", ".join(f"{r:.6g}" for r in reaction) + " N",
-            math.dist(reaction, [0, free, 0]) < 1e-6 * load,
+            f"0, {load:.6g}, 0 N",
+            ", ".join(f"{r:.6g}" for r in reaction.force) + " N",
+            math.dist(reaction.force, [0, load, 0]) < 1e-6 * load,
+        )
+    )
+    expected_moment = [0.0, 0.0, load * length / 2]
+    assert reaction.moment is not None and reaction.point is not None
+    rows.append(
+        (
+            "cantilever: reaction moment about the clamped face's centre",
+            f"0, 0, {expected_moment[2]:.6g} N m about 0, {side / 2:g}, {side / 2:g} m",
+            ", ".join(f"{r:.6g}" for r in reaction.moment)
+            + " N m about "
+            + ", ".join(f"{r:.6g}" for r in reaction.point)
+            + " m",
+            math.dist(reaction.moment, expected_moment) < 1e-6 * load * length
+            and math.dist(reaction.point, [0, side / 2, side / 2]) < 1e-12,
+        )
+    )
+    balance = result.balance
+    assert balance is not None
+    rows.append(
+        (
+            "cantilever: the run's balance check",
+            "force and moment within 1e-6",
+            f"force {balance.force_ratio:.2g}, moment {balance.moment_ratio:.2g}",
+            max(balance.force_ratio, balance.moment_ratio) < 1e-6,
         )
     )
     viewer_dir = root / "beam-viewer"

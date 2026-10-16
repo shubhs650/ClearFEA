@@ -18,10 +18,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-from clearfea_worker.deck import generate_deck
+from clearfea_worker.deck import REACTION_SET, generate_deck
 from clearfea_worker.geometry.importer import import_geometry
 from clearfea_worker.meshing.mesher import mesh_geometry
 from clearfea_worker.meshing.volume import VolumeMesh, read_volume_mesh
+from clearfea_worker.results.dat import read_node_forces
 from clearfea_worker.spec.geometry_schema import Topology
 from clearfea_worker.spec.simulation_schema import SimulationSpec
 
@@ -103,9 +104,9 @@ def solve(deck: str, work: Path, name: str) -> tuple[list[float], dict[int, list
     run = subprocess.run(["ccx", "-i", name], cwd=work, capture_output=True, text=True)
     if run.returncode != 0 or "*ERROR" in run.stdout:
         raise RuntimeError(f"CalculiX failed on {name}:\n{run.stdout[-2000:]}")
-    lines = (work / f"{name}.dat").read_text().splitlines()
-    total = next(i for i, line in enumerate(lines) if "total force" in line)
-    reaction = [float(v) for v in lines[total + 2].split()]
+    # The deck prints every held node's reaction (M3.2); the support's total is their sum.
+    forces = read_node_forces(work / f"{name}.dat", REACTION_SET).values()
+    reaction = [sum(f[i] for f in forces) for i in range(3)]
     displacements: dict[int, list[float]] = {}
     in_disp = False
     for line in (work / f"{name}.frd").read_text().splitlines():
