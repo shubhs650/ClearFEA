@@ -16,6 +16,8 @@
 // (M5.1) has no displacement: its temperatures are drawn on the undeformed shape. A modal run
 // (M6.2, ADR-071) shows the shape of one mode, coloured by its relative displacement and drawn
 // deformed with its largest displacement at a tenth of the model's size, and can swing it.
+// Through a share link (M8.7, ADR-082) it draws a run's results read-only, with the run's files
+// read through the link instead of the owner's routes.
 
 import type {
   Deformation as DeformationName,
@@ -24,6 +26,7 @@ import type {
   MeshView,
   RunView,
   SavedView,
+  Topology,
   TopologyEdge,
   TopologyFace,
   ViewCut,
@@ -33,6 +36,7 @@ import { bodyLabels as labelBodies } from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchDisplayMesh, fetchTopology } from "../api/geometries";
 import { fetchMeshDisplay } from "../api/meshes";
+import type { ApiResult } from "../api/request";
 import { fetchRunFields, fetchRunMesh, fetchRunNodeField, fetchRunSurface } from "../api/runs";
 import { useViews } from "../setup/useViews";
 import { fromSi } from "../units/convert";
@@ -79,9 +83,27 @@ import {
  * Listed once in packages/spec/schemas/view.schema.json, since a saved view keeps one (M3.6). */
 export type Deformation = DeformationName;
 
+/** Where the viewer reads a geometry's topology and a run's files from. */
+export interface ViewerSource {
+  topology(geometryId: string): Promise<ApiResult<Topology>>;
+  runSurface(runId: string): Promise<ApiResult<ArrayBuffer>>;
+  runFields(runId: string): Promise<ApiResult<ArrayBuffer>>;
+  runMesh(runId: string): Promise<ApiResult<ArrayBuffer>>;
+  runNodeField(runId: string, field: string): Promise<ApiResult<ArrayBuffer>>;
+}
+
+/** The signed-in owner's routes. */
+export const OWNER_SOURCE: ViewerSource = {
+  topology: fetchTopology,
+  runSurface: fetchRunSurface,
+  runFields: fetchRunFields,
+  runMesh: fetchRunMesh,
+  runNodeField: fetchRunNodeField,
+};
+
 /** What the viewer shows of a succeeded run. */
 export type ResultDisplay = {
-  run: RunView;
+  run: Pick<RunView, "id" | "status" | "spec" | "result">;
   quantity: Quantity;
   deformation: Deformation;
   /** Display unit of each quantity kind (length, pressure): the project system's. */
@@ -502,7 +524,12 @@ type Volume = {
  * Fetches the run's mesh and the named fields at every node, once each, while `wanted` is not
  * null; keeps what it has fetched until the run changes.
  */
-function useVolume(runId: string | null, wanted: readonly string[] | null, onSignedOut: (problem: string) => void): Volume | null {
+function useVolume(
+  source: ViewerSource,
+  runId: string | null,
+  wanted: readonly string[] | null,
+  onSignedOut: (problem: string) => void,
+): Volume | null {
   const [volume, setVolume] = useState<Volume | null>(null);
   const current = volume !== null && volume.runId === runId ? volume : null;
   const asked = useRef(new Set<string>());
@@ -516,7 +543,7 @@ function useVolume(runId: string | null, wanted: readonly string[] | null, onSig
     if (!asked.current.has("mesh")) {
       asked.current.add("mesh");
       fetches.push(
-        fetchRunMesh(runId).then((reply) => {
+        source.runMesh(runId).then((reply) => {
           if (reply.kind === "signedOut") return onSignedOut(reply.problem);
           if (reply.kind === "error") return fail(reply.problem);
           try {
@@ -533,7 +560,7 @@ function useVolume(runId: string | null, wanted: readonly string[] | null, onSig
       if (asked.current.has(name)) continue;
       asked.current.add(name);
       fetches.push(
-        fetchRunNodeField(runId, name).then((reply) => {
+        source.runNodeField(runId, name).then((reply) => {
           if (reply.kind === "signedOut") return onSignedOut(reply.problem);
           if (reply.kind === "error") return fail(reply.problem);
           try {
@@ -551,7 +578,7 @@ function useVolume(runId: string | null, wanted: readonly string[] | null, onSig
       );
     }
     void Promise.all(fetches);
-  }, [runId, key, current, onSignedOut]);
+  }, [source, runId, key, current, onSignedOut]);
   return current;
 }
 
@@ -755,8 +782,10 @@ export function Viewer({
   simulationId = null,
   onResultChange,
   onSignedOut,
+  source = OWNER_SOURCE,
 }: {
-  geometry: GeometryView | null;
+  /** The geometry to draw; a shared run's page passes what it knows of it (M8.7). */
+  geometry: Pick<GeometryView, "id" | "status" | "scaling"> | null;
   /** A ready analysis mesh of the geometry to draw instead of the geometry itself. */
   mesh?: MeshView | null;
   /** A succeeded run of the geometry whose results to draw instead of the geometry or mesh. */
@@ -772,6 +801,8 @@ export function Viewer({
   /** Shows another quantity, deformation or mode, when a saved view brings them back. */
   onResultChange?: (next: Pick<ResultDisplay, "quantity" | "deformation" | "mode">) => void;
   onSignedOut: (problem: string) => void;
+  /** Where the topology and the run's files are read from: the owner's routes unless given. */
+  source?: ViewerSource;
 }) {
   const canvasHost = useRef<HTMLDivElement>(null);
   const view = useRef<ModelView | null>(null);
@@ -852,9 +883,9 @@ export function Viewer({
     const shownMesh = runId === null ? analysisNow.current : null;
     setLoad((was) => (was.kind === "shown" && was.key === key ? was : { kind: "loading" }));
     const surface =
-      runId !== null ? fetchRunSurface(runId) : shownMesh === null ? fetchDisplayMesh(id) : fetchMeshDisplay(shownMesh.id);
-    const fields = runId !== null ? fetchRunFields(runId) : Promise.resolve(null);
-    void Promise.all([surface, fetchTopology(id), fields]).then(([display, topology, values]) => {
+      runId !== null ? source.runSurface(runId) : shownMesh === null ? fetchDisplayMesh(id) : fetchMeshDisplay(shownMesh.id);
+    const fields = runId !== null ? source.runFields(runId) : Promise.resolve(null);
+    void Promise.all([surface, source.topology(id), fields]).then(([display, topology, values]) => {
       if (!current) return;
       for (const reply of [display, topology, values]) {
         if (reply === null) continue;
@@ -882,7 +913,7 @@ export function Viewer({
     return () => {
       current = false;
     };
-  }, [key, id, runId, onSignedOut]);
+  }, [key, id, runId, source, onSignedOut]);
 
   const model = load.kind === "shown" ? load.model : null;
   // Hidden bodies the model has; a saved view may name bodies of nothing else.
@@ -919,7 +950,7 @@ export function Viewer({
     const displacement = model.results.fields.has("displacement") ? ["displacement"] : [];
     return [...new Set([...displacement, quantityField])];
   }, [cutSetting, model, quantityField]);
-  const volume = useVolume(runId, wanted, onSignedOut);
+  const volume = useVolume(source, runId, wanted, onSignedOut);
   const volumeBox = useMemo(() => (volume?.mesh ? boxOf(volume.mesh) : null), [volume?.mesh]);
   const plane = useMemo(
     () => (cutSetting === null || volumeBox === null ? null : planeOf(cutSetting, volumeBox)),

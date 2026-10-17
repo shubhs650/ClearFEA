@@ -1152,3 +1152,22 @@ fieldset.field {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* A run's read-only share link (M8.7). */
+.share-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.share-link input {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.shared-name {
+  font-weight: 600;
+  margin: 0 0 8px;
+}
