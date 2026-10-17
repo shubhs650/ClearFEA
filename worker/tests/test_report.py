@@ -453,3 +453,19 @@ def test_section_titles_match_the_options() -> None:
     text = (REPO / "packages/spec/src/reportOptions.ts").read_text(encoding="utf-8")
     for key, title in SECTION_TITLES.items():
         assert re.search(rf'\b{key}: "{re.escape(title)}', text), f"{key}: {title}"
+
+
+def test_rounding_noise_in_the_balance_tables_prints_as_zero() -> None:
+    params = static_params()
+    result = params["run"]["result"]
+    # A sum that is zero, left as rounding noise, beside a small force that is real.
+    result["reactions"][0]["force"] = [-2000.0, 3.1e-5, -1.8e-15]
+    result["reactions"][0]["moment"] = [1.3e-6, 0.0, 0.5]
+    result["loads"][0]["force"] = [2000.0, -1.791e-15, 0.0]
+    result["balance"]["reactionForce"] = [-2000.0, 3.1e-5, 0.01]
+    text = texts(build(params))
+    assert "Fixed 1 | -2000 | 0 | 0 | 0 | 0 | 500" in text
+    assert "Pressure 1 | 2000 | 0 | 0 | 0 | 0 | 0" in text
+    assert "Reaction force | (-2000, 0, 0.01) N" in text
+    assert "smaller than one millionth of these scales print as 0" in text
+    assert re.search(r"\de-\d", text.split("Reactions")[1].split("Minimum and maximum")[0]) is None

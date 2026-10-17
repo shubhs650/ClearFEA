@@ -942,7 +942,7 @@ M6.3 adds the estimator terms for modal runs (PLAN M6.3; ADR-070 item 7 left the
 
 
 ### ADR-073: The report's standing statements live beside its notes in packages/spec and are filled from the run's frozen record
-2026-10-17 · Accepted (under Shubham's standing M7 autodrive instruction, pending his review).
+2026-10-17 · Accepted (under Shubham's standing M7 autodrive instruction; reviewed and accepted by Shubham on 2026-10-17).
 
 M7.5 adds the statements every report prints: analysis-tool positioning, versions and a verification link, beside M4.5's tied-interface note, with no verdict wording anywhere (PLAN M7.5; DECISIONS Positioning). Choices it needed:
 
@@ -955,7 +955,7 @@ M7.5 adds the statements every report prints: analysis-tool positioning, version
 7. **No verdict.** The tests refuse pass, fail, compliant, compliance, acceptable, safe, OK and their forms in every statement and note, raw and filled. No physics-critical module is touched.
 
 ### ADR-074: Report options: sections, views and title block per simulation; company name and logo per user
-2026-10-17 · Accepted (under Shubham's M7 autodrive; pending his review).
+2026-10-17 · Accepted (under Shubham's M7 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M7.1 adds the report options (PLAN M7.1; DECISIONS product table, Report row: "User selects sections and saved views; title block, company name, logo"). Nothing is printed yet: figure capture is M7.2 and the DOCX and PDF are M7.3 and M7.4. Choices it needed:
 
@@ -970,7 +970,7 @@ M7.1 adds the report options (PLAN M7.1; DECISIONS product table, Report row: "U
 9. **Verification.** No physics-critical module is touched: no deck, solver, result or cost change. API tests cover defaults, saving, the section order, view checks, owner scoping and the logo checks; web tests cover the panel; E-01 sets the options with a generated PNG logo, reloads and finds them kept.
 
 ### ADR-075: Report figures are drawn in the browser per run, one per support, load and picked view
-2026-10-17 · Accepted (under Shubham's M7 autodrive; pending his review).
+2026-10-17 · Accepted (under Shubham's M7 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M7.2 captures the report's pictures (PLAN M7.2; DECISIONS product table, Report row: "each load and support with a picture", "result plots"; ADR-011: rendered by the same three.js viewer and uploaded as images). Nothing is printed yet: the DOCX and PDF are M7.3 and M7.4. Choices it needed:
 
@@ -984,7 +984,7 @@ M7.2 captures the report's pictures (PLAN M7.2; DECISIONS product table, Report 
 8. **Verification.** No physics-critical module is touched: no deck, solver, result, unit or cost change; the arrows read quantities through `toSi` for direction only. API tests cover storage, replacement, the item, PNG, size and state checks and owner scoping; web tests cover the plan, captions, framing and arrows, and the panel listing stored figures; E-01 draws the support, pressure and cut σ1 view figures, reloads and fetches them.
 
 ### ADR-076: The report prints in its own unit system, chosen in the report options and converted in the worker
-2026-10-17 · Accepted (under Shubham's M7 autodrive; pending his review).
+2026-10-17 · Accepted (under Shubham's M7 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M7.6 makes the report print its values in the report's chosen unit system (PLAN M7.6). ADR-056 already kept the result view's unit picks out of the report: they are a viewing preference in one browser. Choices it needed:
 
@@ -996,7 +996,7 @@ M7.6 makes the report print its values in the report's chosen unit system (PLAN 
 6. **Verification.** No physics-critical module is changed: `units.py`, `units.json`, the deck and the result reader are as they were; the new module only calls `to_si`/`from_si`. Worker tests check each system's printing of results, setup values with and without their entered form, temperature against temperature difference, rounding and refusals; API tests the default, keeping, the fallback and the refusal; web tests and E-01 the Report panel's choice.
 
 ### ADR-077: The Word report is made by a report job from parameters the API freezes, laid out with python-docx
-2026-10-17 · Accepted (under Shubham's M7 autodrive; pending his review).
+2026-10-17 · Accepted (under Shubham's M7 autodrive; reviewed and accepted by Shubham on 2026-10-17). ADR-079 prints rounding noise in the reaction and balance tables as 0.
 
 M7.3 assembles the DOCX with every section of DECISIONS' Report row (PLAN M7.3). Choices it needed:
 
@@ -1012,7 +1012,7 @@ M7.3 assembles the DOCX with every section of DECISIONS' Report row (PLAN M7.3).
 10. **Verification.** No physics-critical module is touched: the deck, results reader, units table and conversion and billing are unchanged, and the report prints stored values through M7.6's converter. Worker tests check the content of static, thermal and modal reports, units in two systems, the section order and the DOCX itself; API tests check the frozen parameters, transfers, owner scoping and the download; a web test checks the panel; the new browser test E-05 makes a report through the UI and reads the downloaded file.
 
 ### ADR-078: The PDF report is the Word report printed by LibreOffice in the worker
-2026-10-17 · Accepted (under Shubham's M7 autodrive; pending his review).
+2026-10-17 · Accepted (under Shubham's M7 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M7.4 makes the PDF "matching the DOCX" (PLAN M7.4; DECISIONS product table, Report row: "PDF and Word"). Choices it needed:
 
@@ -1021,3 +1021,13 @@ M7.4 makes the PDF "matching the DOCX" (PLAN M7.4; DECISIONS product table, Repo
 3. **How it is run.** One conversion per job, with its own LibreOffice profile in a temporary folder (so parallel jobs never share one), a 300 s limit, and Writer's PDF export with lossless pictures, so the PNG figures stay PNG instead of being turned into JPEG. LibreOffice writes the Word headings as PDF bookmarks and the DOCX's title as the PDF's. A conversion that fails, times out or writes something that is not a PDF fails the job as a fault in ClearFEA (`pdf_failed`); the Word file is not offered alone.
 4. **Stored and offered beside the Word file.** One report job makes both; the PDF is stored under the job as `owners/<id>/runs/<run>/reports/<job>.pdf` and downloaded from `GET /api/runs/:id/report/pdf`, named like the DOCX ("CF-001 Block rev A.pdf"). `ReportJobResult` and `RunReport` gain `pdfSizeBytes`; a report made before M7.4 has none, and asking for its PDF says to make the report again. The Report panel's "Make the report" (before: "Make the Word report") offers both downloads with their sizes.
 5. **Verification.** No physics-critical module is touched. Worker tests run the conversion against a stand-in LibreOffice (arguments, failure, timeout, a missing program) in the fast tier, and print a real report and check its pages, bookmarks and embedded font where LibreOffice is installed (the worker image, the sandbox; the fast tier's runner may not have it). E-05 downloads the PDF through the UI at every phase end and checks its name, pages, title and that its bookmarks are the DOCX's twelve section headings in order.
+
+### ADR-079: Rounding noise in the report's reaction and balance tables prints as 0
+2026-10-17 · Accepted (Shubham's decision at the M7 close: "Round those values to 0").
+
+The report printed stored sums that are zero as the solver's rounding noise, for example an applied force component of -1.791e-15 N or a V-02 reaction of Fx = -0.00003084 lbf against a 500 lbf load, which also wrapped in its narrow table cell. Choices it needed:
+
+1. **Relative to the run's own balance scales.** A force component prints as 0 when its size is below one millionth (`NOISE_SHARE`, `worker/clearfea_worker/report/content.py`) of the run's balance check `forceScale`, and a moment component when below one millionth of `momentScale` (ADR-051): the scales the balance check already measures imbalance against, so the rule follows the size of the loads and of the model. One millionth is far below the 0.1 percent the verification cases hold reactions to and above the noise of the direct solvers (V-02's is about 3e-8 of its scale); the iterative solvers' noise (relative residual 1e-4, ADR-063 item 8) can stay above it and print, which is honest for them.
+2. **Where.** The reactions table, the load totals table and the applied and reaction vectors of the balance table. The out-of-balance percentages are computed from the stored values as before and print unrounded, since they are the measure of the noise. A paragraph under the balance table says that components below one millionth of the scales print as 0. Nothing stored changes: the run's result, the app's panels and the exports keep the values as solved.
+3. **Runs without a balance check** (solved before M3.2) have no scales, so their values print as stored.
+4. **Verification.** No physics-critical module is touched: printing only. A worker test checks that noise prints as 0, a small real value still prints, and no exponent is left in the section.
