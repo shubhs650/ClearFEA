@@ -331,13 +331,18 @@ def test_a_mesh_size_in_an_unknown_unit_is_a_platform_fault(tmp_path: Path) -> N
 SOLVE = Path(__file__).resolve().parent / "fixtures" / "solve"
 
 
-def solve_job(api: FakeApi, tmp_path: Path, spec: dict[str, Any]) -> None:
+def solve_job(
+    api: FakeApi, tmp_path: Path, spec: dict[str, Any], machine: dict[str, Any] | None = None
+) -> None:
     mesh_path = tmp_path / "mesh.bin"
     write_volume_mesh(mesh_path, two_tets(order=2))
+    params: dict[str, Any] = {"meshId": "m1", "spec": spec}
+    if machine is not None:
+        params["machine"] = machine
     api.enqueue(
         "j1",
         "solve",
-        params={"meshId": "m1", "spec": spec},
+        params=params,
         downloads={"mesh.bin": mesh_path.read_bytes()},
         uploads=(
             "deck.inp",
@@ -351,14 +356,26 @@ def solve_job(api: FakeApi, tmp_path: Path, spec: dict[str, Any]) -> None:
     )
 
 
-def fake_calculix(returncode: int = 0, lines: tuple[str, ...] = ("Job finished\n",)) -> Any:
-    """Stands in for run_calculix: writes the fixture's output beside the deck."""
+def fake_calculix(
+    returncode: int = 0,
+    lines: tuple[str, ...] = ("Job finished\n",),
+    out_of_memory: bool = False,
+    machines: list[Any] | None = None,
+) -> Any:
+    """Stands in for run_calculix: writes the fixture's output beside the deck, and keeps the
+    simulated machine it was given in ``machines``."""
 
-    def run(deck: Path, on_output: Any, cancelled: threading.Event) -> SolverRun:
+    def run(
+        deck: Path, on_output: Any, cancelled: threading.Event, machine: Any = None
+    ) -> SolverRun:
+        if machines is not None:
+            machines.append(machine)
         log = deck.with_name("solver.log")
         log.write_text("".join(lines))
         for line in lines:
             on_output(line)
+        if out_of_memory:
+            return SolverRun(None, log, out_of_memory=True)
         for suffix in (".frd", ".dat"):
             shutil.copy(SOLVE / f"job{suffix}", deck.with_suffix(suffix))
         return SolverRun(returncode, log)
@@ -436,6 +453,37 @@ def test_a_solver_error_is_a_platform_fault_and_keeps_deck_and_log(
             "solver_error",
         )
         assert "node set S9" in outcome["failureMessage"]
+        assert set(api.uploads) == {("j1", "deck.inp"), ("j1", "solver.log")}
+
+
+def test_the_solver_runs_on_the_jobs_simulated_machine(tmp_path: Path, no_calculix: Any) -> None:
+    machines: list[Any] = []
+    no_calculix.setattr(solver, "run_calculix", fake_calculix(machines=machines))
+    machine = {"size": "small", "cores": 2, "memoryLimitBytes": 7301444403}
+    with FakeApi() as api:
+        solve_job(api, tmp_path, fixture_spec(), machine)
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        assert api.jobs["j1"]["status"] == "succeeded"
+    [given] = machines
+    assert (given.size, given.cores, given.memory_limit_bytes) == ("small", 2, 7301444403)
+
+
+def test_a_solver_out_of_memory_keeps_deck_and_log_and_leaves_who_pays_to_the_api(
+    tmp_path: Path, no_calculix: Any
+) -> None:
+    no_calculix.setattr(solver, "run_calculix", fake_calculix(out_of_memory=True))
+    machine = {"size": "small", "cores": 2, "memoryLimitBytes": 7301444403}
+    with FakeApi() as api:
+        solve_job(api, tmp_path, fixture_spec(), machine)
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert (outcome["failureCategory"], outcome["failureCause"]) == (
+            "platform_fault",
+            "out_of_memory",
+        )
+        assert "6.8 GiB" in outcome["failureMessage"]
         assert set(api.uploads) == {("j1", "deck.inp"), ("j1", "solver.log")}
 
 

@@ -736,7 +736,19 @@
       "required": ["meshId", "spec"],
       "properties": {
         "meshId": { "description": "The mesh whose mesh.bin the job reads.", "type": "string" },
-        "spec": { "$ref": "#/$defs/SimulationSpec" }
+        "spec": { "$ref": "#/$defs/SimulationSpec" },
+        "machine": { "$ref": "#/$defs/SimulatedMachine" }
+      }
+    },
+    "SimulatedMachine": {
+      "description": "How the worker simulates the run's machine size on one physical machine (M8.5, ADR-081): the solver process is held to `cores` processors and is stopped as out of memory when its resident memory passes memoryLimitBytes, the size's usable memory (the estimator's usableMemoryFraction of it). Jobs queued before M8.5 have none and run unlimited.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["size", "cores", "memoryLimitBytes"],
+      "properties": {
+        "size": { "description": "The machine size's name.", "type": "string", "minLength": 1 },
+        "cores": { "description": "Processors the solver process may run on.", "type": "integer", "minimum": 1 },
+        "memoryLimitBytes": { "description": "Resident memory past which the solver is stopped as out of memory.", "type": "integer", "minimum": 1 }
       }
     },
     "XYZ": { "description": "x, y and z components.", "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },

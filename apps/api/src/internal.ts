@@ -19,6 +19,7 @@ import {
 } from "@clearfea/spec";
 import { Hono } from "hono";
 import { chargeFor, type JobCharge } from "./billing/cost";
+import { outOfMemoryFault } from "./billing/estimate";
 import { readBody } from "./body";
 import { recordImportOutcome } from "./db/geometries";
 import {
@@ -31,7 +32,7 @@ import {
   recordHeartbeat,
 } from "./db/jobs";
 import { recordMeshOutcome } from "./db/meshes";
-import { recordRunOutcome } from "./db/runs";
+import { getRun, recordRunOutcome } from "./db/runs";
 import type { Env } from "./env";
 import { jobFiles, transfers } from "./jobs/files";
 
@@ -182,6 +183,38 @@ async function checkedCompletion(
   return { status: "succeeded", result };
 }
 
+/** The worker's cause code for a solver stopped past its machine size's memory (M8.5, ADR-081). */
+export const OUT_OF_MEMORY = "out_of_memory";
+
+function gib(bytes: number): string {
+  return `${Number((bytes / 2 ** 30).toFixed(1))} GiB`;
+}
+
+/**
+ * A solve job that ran out of memory, with who pays decided here rather than by the worker
+ * (DECISIONS "Failed runs", ADR-081): the user when they chose a size against the estimate, the
+ * platform when it picked or would have accepted the size. Other completions pass unchanged.
+ */
+async function withMemoryFault(db: D1Database, job: Job, completion: Completion): Promise<Completion> {
+  if (job.type !== "solve" || completion.status !== "failed" || completion.failureCause !== OUT_OF_MEMORY) {
+    return completion;
+  }
+  const run = job.targetId === null ? null : await getRun(db, job.ownerId, job.targetId);
+  const estimate = run?.estimate ?? null;
+  const category = outOfMemoryFault(estimate, job.machineSize);
+  const size = estimate?.sizes.find((s) => s.size === job.machineSize);
+  const on = size === undefined ? `the ${job.machineSize} machine size` : `the ${size.size} machine size (${gib(size.memoryBytes)})`;
+  const failureMessage =
+    category === "user_fault"
+      ? `The run ran out of memory on ${on}, which was chosen although the estimate needs more memory than it has, so the time it used is charged. ${
+          estimate?.recommended
+            ? `Run it again on the recommended size, ${estimate.recommended}, or larger.`
+            : "Run it again on the largest size, or make the mesh coarser or use linear elements."
+        }`
+      : `The run ran out of memory on ${on}, which by ClearFEA's estimate has enough memory, so the estimate was too low and the time is not charged. Run it again on a larger size; if it fails again, report it.`;
+  return { ...completion, failureCategory: category, failureMessage };
+}
+
 function validatedImportResult(result: unknown) {
   const checked = validateImportResult(result);
   if (!checked.ok) throw new Error("checkedCompletion lets only valid import results through.");
@@ -207,9 +240,13 @@ async function storedFiles(env: Env, job: Job): Promise<RunFileName[]> {
   return uploads.filter((_, i) => stored[i] !== null).map((f) => f.name as RunFileName);
 }
 
-/** What the owner is told about a failed job: the worker's message when it is their fault. */
+/**
+ * What the owner is told about a failed job: the worker's message when it is their fault, and
+ * the API's own when a run ran out of memory, whoever pays.
+ */
 function problem(completion: Completion & { status: "failed" }, ours: string): string {
-  if (completion.failureCategory === "user_fault" && completion.failureMessage) {
+  const explained = completion.failureCategory === "user_fault" || completion.failureCause === OUT_OF_MEMORY;
+  if (explained && completion.failureMessage) {
     return completion.failureMessage;
   }
   return ours.replace("{cause}", completion.failureCause);
@@ -240,7 +277,7 @@ internal.post("/jobs/:id/complete", async (c) => {
   const gone = "This worker holds no active job with that id; it may have been cancelled.";
   const held = await getClaimedJob(c.env.DB, request.workerId, c.req.param("id"));
   if (held === null) return c.json({ error: gone }, 409);
-  const completion = await checkedCompletion(c.env, held, request);
+  const completion = await withMemoryFault(c.env.DB, held, await checkedCompletion(c.env, held, request));
   const { billableMs } = request.metering;
   // A metered job costs its measured time at the rate it was queued with (ADR-033).
   const charge: JobCharge | null =

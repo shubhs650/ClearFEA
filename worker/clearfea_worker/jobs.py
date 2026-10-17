@@ -223,12 +223,21 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     deck = work / "job.inp"
     deck.write_text(deck_text, encoding="utf-8")
     context.set_stage("solving")
-    run = run_calculix(deck, context.log, context.cancelled)
+    run = run_calculix(deck, context.log, context.cancelled, machine=params.machine)
     if run.cancelled:
         return {}
     context.set_stage("uploading")
     files.upload("deck.inp", deck)
     files.upload("solver.log", run.log_path)
+    if run.out_of_memory:
+        # Who pays is the API's call: it knows whether the size was chosen against the
+        # recommendation (ADR-081). The message is replaced there.
+        limit = params.machine.memory_limit_bytes if params.machine else None
+        raise JobFailure(
+            "platform_fault",
+            "out_of_memory",
+            "CalculiX ran out of memory" + (f" (limit {limit / 2**30:.1f} GiB)." if limit else "."),
+        )
     errors = run.errors()
     if run.returncode != 0 or errors:
         detail = errors[0] if errors else f"exit status {run.returncode}"
