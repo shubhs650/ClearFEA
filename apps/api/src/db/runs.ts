@@ -111,7 +111,7 @@ function toRun(row: RunRow): Run {
         ? null
         : { billedSeconds: row.job_billed_seconds, amount: row.job_cost, charged: row.job_charged === 1 },
     // The runs table keeps 'failed' for every run that ended without results; the job says
-    // whether its owner cancelled it (M8.2, ADR-084).
+    // whether its owner cancelled it (M8.2, ADR-085).
     status: row.status === "failed" && row.job_status === "cancelled" ? "cancelled" : row.status,
     problem: row.problem,
     result: row.result === null ? null : JSON.parse(row.result),
@@ -252,7 +252,7 @@ export async function recordRunOutcome(
         WHERE id = ? AND owner_id = ? AND job_id = ? AND status = 'solving'`,
     )
     .bind(
-      // Every run that ended without results is 'failed' in the table (ADR-084).
+      // Every run that ended without results is 'failed' in the table (ADR-085).
       succeeded ? "succeeded" : "failed",
       succeeded ? null : outcome.problem,
       succeeded ? JSON.stringify(outcome.result) : null,

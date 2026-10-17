@@ -28,7 +28,7 @@ class JobFailure(Exception):
 
 class JobStopped(Exception):
     """The API asked for the job to end, because its owner cancelled it or it reached its stop
-    limit (M8.2, ADR-084). The runner reports the time it used; the API decides the rest."""
+    limit (M8.2, ADR-085). The runner reports the time it used; the API decides the rest."""
 
 
 @dataclass

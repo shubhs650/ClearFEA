@@ -370,7 +370,7 @@ M1.10 completes the run record (ARCHITECTURE section 4: spec, mesh, deck, versio
 7. **Deck and log are served as plain text.** `GET /api/runs/:id/files/deck.inp` and `/solver.log` answer `text/plain; charset=utf-8` with `nosniff` and a `sandbox` content security policy, because the deck carries names the user typed; `?download=1` makes it an attachment named `clearfea-run-<first 8 of id>-<file>`. Other run files are not served here. The Run panel links to both (view opens a new tab), so the browser streams large decks itself instead of the app holding them in memory. While the run solves, the live log stays in the panel; the stored files appear when it has finished (409 before, 404 for another user's run).
 
 ### ADR-033: Jobs are metered by the worker's handler time, billed per started second at the rate fixed when queued, and charged in whole micro-credits in the same batch that completes them
-2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16). ADR-084 settles item 6: a cancelled job is charged the time it used.
+2026-10-15 · Accepted (auto-approved under Shubham's standing M1 instruction; reviewed and accepted by Shubham on 2026-10-16). ADR-085 settles item 6: a cancelled job is charged the time it used.
 
 M1.11 adds metering and the ledger (ARCHITECTURE section 6, "Metering"; DECISIONS "Unit of charge" and "Phase 0 wallet"). Choices it needed:
 
@@ -1080,7 +1080,7 @@ M8.7 adds the read-only share link per run (PLAN M8.7; DECISIONS "Privacy": read
 4. **The page.** `/share/<token>` opens a page with the run's record (simulation name, analysis, times, mesh, versions) on the left, the viewer in the centre and the Run panel's results on the right (`RunResults`, the same component): quantity, shape, display units, figures and notes. The viewer reads the run's files through the link (`ViewerSource`); saved views, export and everything that edits are absent. Choices made there are kept until the page is reloaded and are not stored.
 5. **Tests.** API tests cover making, replacing and revoking a link, the stored hash, what the link serves and refuses, and that only the owner can manage it. E-07 (`e07-share-link.e2e.ts`) opens a link in a browser that is not signed in, checks that bob reaches none of alice's geometry, simulation or run, revokes the link and finds it no longer works. The full isolation sweep across every route and file key is M8.8's.
 
-### ADR-084: A run is cancelled by asking its worker at the next heartbeat; the worker reports the time it used and the owner pays it, and a run cancelled before the worker takes it ends at once and costs nothing
+### ADR-085: A run is cancelled by asking its worker at the next heartbeat; the worker reports the time it used and the owner pays it, and a run cancelled before the worker takes it ends at once and costs nothing
 2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
 
 M8.2 adds the running-job view and cancel (PLAN M8.2; DECISIONS "Running jobs" and "Failed runs": the user pays for time used on a cancellation; ARCHITECTURE section 6). Choices it needed:
