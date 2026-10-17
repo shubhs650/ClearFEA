@@ -1,0 +1,7 @@
+[
+  {
+    "file": "suite.md",
+    "title": "Verification cases",
+    "description": "the [phase-end run](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289) on `main` at commit c34302a on 2026-10-17, which closed M8 (`make verify` in GitHub Actions, ADR-037)."
+  }
+]

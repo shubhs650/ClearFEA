@@ -59,7 +59,8 @@ describe("the report notes file", () => {
       expect(text("softwareVersions")).toContain(field);
     }
     expect(text("verificationLink")).toContain("{verificationUrl}");
-    expect(reportNotes.verificationUrl).toMatch(/^https:\/\/.*VERIFICATION\.md$/);
+    // The published results page (M9.7, ADR-092), which ADR-073 item 5 left to M9.
+    expect(reportNotes.verificationUrl).toMatch(/^https:\/\/.*VERIFICATION_RESULTS\.md$/);
   });
 
   it("is refused when a statement names something no run fills, or a note names anything", () => {

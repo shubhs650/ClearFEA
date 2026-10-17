@@ -143,7 +143,14 @@ Once over the whole run (M8 exit): the harness user's ledger reconciles exactly.
 
 ## Published results
 
-From M9, the nightly run writes a results page (case, quantity, reference, computed, percentage error, mesh size, software versions) that is published with the documentation and linked from every report.
+[VERIFICATION_RESULTS.md](VERIFICATION_RESULTS.md) lists, for every case and check, the reference, the computed value, the percentage error, the tolerance, the mesh size and the software versions (M9.7, ADR-092). Every report links to it. It is published with the documentation in the repository and states numbers only, with no verdict wording.
+
+It is written by `python -m harness.page` (run from `verification/`) from result tables kept in `verification/results/`, each named with its run in `sources.json`:
+
+- `suite.md`: the verification cases from the phase-end run that closed the latest milestone (ADR-037). To refresh it, download that run's log from the Actions tab and run `python -m harness.page --from-log LOG --to results/suite.md`.
+- `acceptance.md`: the two acceptance cases, which the phase-end run does not run, from a local `VERIFY_TIER=full CASES="A B" make verify` (its `results.md`).
+
+Then update `sources.json` and run `python -m harness.page`. `make test` fails when the committed page is not what the committed tables give.
 
 ## Browser end-to-end tests
 
