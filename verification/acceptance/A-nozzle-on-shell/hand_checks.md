@@ -12,8 +12,8 @@ nozzle, along and around the nozzle.
 | 2 | Reaction balance closes | Closes: the held end's reaction equals statics to the shown digits, out of balance 1e-7 percent |
 | 3 | Membrane stress away from discontinuities against hand values | Within 1.4 percent of Lamé at both surfaces; the section's mean and beam bending within 0.1 and 2 percent |
 | 4 | Local stresses against a WRC-style calculation | Done, differences listed below; the peaks agree within about 15 percent, single components differ by up to 25 MPa |
-| 5 | FreeCAD FEM within 5 percent on a matching mesh | Within 5 percent everywhere for the pressure; under the piping load the nozzle differs by up to 13 MPa because FreeCAD can only apply it through a rigid end (below) |
-| 6 | A report fit for a reviewer | For the maintainer to judge: Word and PDF in the project's `m9.5/` folder |
+| 5 | FreeCAD FEM within 5 percent on a matching mesh | Met (the maintainer, 2026-10-17): within 5 percent everywhere for the pressure; under the piping load the nozzle differs by up to 13 MPa because FreeCAD can only apply it through a rigid end (below) |
+| 6 | A report fit for a reviewer | Met (the maintainer, 2026-10-17: good enough for the gate); Word and PDF in the project's `m9.5/` folder |
 
 ## The runs
 
@@ -276,15 +276,12 @@ Reading it:
 
 So check 5 is met for the pressure and away from the nozzle, and the remaining difference
 under the piping load is a difference in what the two tools can apply, explained above,
-rather than a disagreement in the solution. The maintainer decides whether that counts as
-met; a rigid remote load in ClearFEA is already in "Parked ideas" (ADR-041 item 2) and would
+rather than a disagreement in the solution. The maintainer counts it as met (2026-10-17); a rigid remote load in ClearFEA is already in "Parked ideas" (ADR-041 item 2) and would
 let the two be compared like for like.
 
 ## Open
 
 - Check 1 on the laptop (M9.2).
-- Check 5 on the nozzle under the piping load: the maintainer's call (see check 5).
-- Check 6: the maintainer's judgement of the report.
 
 ## How to rerun
 
