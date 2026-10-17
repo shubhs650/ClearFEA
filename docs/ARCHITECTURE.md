@@ -85,6 +85,7 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | `views` | Saved views of a simulation: name (unique per simulation), camera, hidden bodies and the result display as JSON (`view.schema.json`, ADR-055). The report picks its pictures from them |
 | `report_options` | A simulation's report options: sections, saved views for the result plots and the title block as JSON (`report.schema.json`, ADR-074) |
 | `report_branding` | A user's company name and logo (type, bytes, pixel size); the logo itself is in R2 (ADR-074) |
+| `report_figures` | A run's report figures, drawn in the browser: kind (support, load or view), item id, caption, order, pixel size; the PNGs are in R2 under the run (ADR-011, ADR-075) |
 | `share_links` | Run, token hash, revoked flag |
 | `machine_sizes` | Name, cores, memory, hourly rate. Configuration |
 | `settings` | Free storage quota, retention days, stop-limit multiplier. Configuration |

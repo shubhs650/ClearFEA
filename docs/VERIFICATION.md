@@ -122,6 +122,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Hidden bodies and saved views (display only) | E-01 saves a view and brings it back; viewer unit tests hide bodies |
 | CSV and VTK export (stored values, no new physics) | E-01 downloads the node and reaction CSV and the VTK file and checks them against the run's figures; web unit tests check columns, units and the VTK node order |
 | Report options (sections, views, title block, company name, logo; no physics) | E-01 sets them with a generated PNG logo, reloads and finds them kept; API and web unit tests check the defaults, section order, view checks, logo checks and owner scoping |
+| Report figures (drawn in the browser; no physics) | E-01 draws the support, pressure and cut σ1 view figures, reloads, finds them listed in order and fetches each PNG; API tests check storage, replacement, item checks, PNG and size checks and owner scoping; web unit tests check which figures a report needs, captions, framing and load arrows |
 | Mixed input units | all; E-02 enters them through the UI |
 
 ### Automatic checks on every case
