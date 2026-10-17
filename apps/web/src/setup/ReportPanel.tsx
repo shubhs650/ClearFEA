@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Report panel (M7.1, ADR-074): which sections the report prints, the saved views it draws as
 // result plots, the title block, and the user's company name and logo. Options are saved per
-// simulation, the company name and logo once per user. Generating the report comes with M7.3.
+// simulation, the company name and logo once per user. Below them, the report's figures are drawn
+// for the latest solved run (M7.2). Generating the report comes with M7.3.
 
 import {
   type ReportBranding,
   type ReportOptions,
   type ReportSection,
   ReportSectionValues,
+  type RunView,
   type SavedView,
   type TitleBlock,
   reportSectionLabels,
@@ -24,6 +26,7 @@ import {
 } from "../api/report";
 import type { ApiResult } from "../api/request";
 import { Notes } from "./ItemPanels";
+import { ReportFigures } from "./ReportFigures";
 import type { ItemStatus } from "./spec";
 import { useViews } from "./useViews";
 
@@ -57,10 +60,18 @@ function viewLabel(view: SavedView): string {
 export function ReportPanel({
   simulationId,
   status,
+  run,
+  geometryId,
+  units,
   onSignedOut,
 }: {
   simulationId: string;
   status: ItemStatus | undefined;
+  /** The simulation's latest run, whose figures the panel draws once it has succeeded. */
+  run: RunView | null;
+  geometryId: string | null;
+  /** Display units of the result quantities, for the figures' legends. */
+  units: Readonly<Record<string, string>>;
   onSignedOut: (problem: string) => void;
 }) {
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
@@ -301,6 +312,15 @@ export function ReportPanel({
         </p>
       )}
       {changed && outcome === null && <p className="field-hint">Unsaved changes.</p>}
+      <ReportFigures
+        run={run}
+        geometryId={geometryId}
+        options={loaded.options}
+        views={viewList.kind === "ok" ? viewList.views : null}
+        unsaved={changed}
+        units={units}
+        onSignedOut={onSignedOut}
+      />
     </section>
   );
 }

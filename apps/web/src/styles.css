@@ -1053,3 +1053,26 @@ fieldset.field {
   border: 1px solid var(--border);
   background: #fff;
 }
+
+.report-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.report-figures li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.report-figures img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+}
