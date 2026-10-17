@@ -30,9 +30,10 @@ export function apiUpload<T>(
   path: string,
   validate: (value: unknown) => Validation<T>,
   file: Blob,
+  method = "POST",
 ): Promise<ApiResult<T>> {
   return send(path, validate, {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/octet-stream" },
     body: file,
   });

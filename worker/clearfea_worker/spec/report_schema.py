@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 type Report = Annotated[Any, Field(title="Report")]
 """
-Report options (M7.1, ADR-074): what a simulation's report prints (its sections, the saved views drawn as result plots, the title block) and the user's own company name and logo, which every report of theirs carries. The report job (M7.3) reads them. Text is printed as typed. Each message is a definition under $defs.
+Report options (M7.1, ADR-074): what a simulation's report prints (its sections, the saved views drawn as result plots, the title block) and the user's own company name and logo, which every report of theirs carries. The report job (M7.3) reads them, with the figures captured in the browser for a run (M7.2, ADR-011). Text is printed as typed. Each message is a definition under $defs.
 """
 
 
@@ -68,7 +68,7 @@ class ReportOptions(BaseModel):
     title_block: Annotated[TitleBlock, Field(alias="titleBlock")]
     unit_system: Annotated[str, Field(alias="unitSystem", max_length=50, min_length=1)]
     """
-    Id of the unit system in packages/spec/units.json that every value of the report prints in (M7.6, ADR-075), whatever the browser's result view shows. Starts as the project's unit system; an id the table no longer lists is answered as the project's.
+    Id of the unit system in packages/spec/units.json that every value of the report prints in (M7.6, ADR-076), whatever the browser's result view shows. Starts as the project's unit system; an id the table no longer lists is answered as the project's.
     """
 
 
@@ -137,3 +137,58 @@ class ReportBrandingResponse(BaseModel):
         populate_by_name=True,
     )
     branding: ReportBranding
+
+
+type ReportFigureKind = Literal["support", "load", "view"]
+"""
+What a report figure shows (M7.2): one support or one load of the run's setup, drawn on the geometry with its faces picked out, or one saved view of the simulation drawn as saved (a result plot, or the geometry for a view saved without results).
+"""
+
+
+class ReportFigure(BaseModel):
+    """
+    A figure captured in the browser for a run's report (M7.2, ADR-011): a PNG drawn by the same viewer the user sees. kind and item name what it shows: a support or load by its id in the run's frozen setup, or a saved view by its id. The image is GET /api/runs/:id/figures/:kind/:item.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    kind: ReportFigureKind
+    item: Annotated[str, Field(pattern="^[A-Za-z0-9_-]{1,64}$")]
+    caption: ReportText
+    """
+    The caption printed under the figure, as captured.
+    """
+    position: Annotated[int, Field(ge=0, le=999)]
+    """
+    Where the figure comes among the run's figures, from 0.
+    """
+    width: Annotated[int, Field(ge=1)]
+    height: Annotated[int, Field(ge=1)]
+    size_bytes: Annotated[int, Field(alias="sizeBytes", ge=1)]
+    created_at: Annotated[str, Field(alias="createdAt")]
+
+
+class ReportFigureResponse(BaseModel):
+    """
+    Answer to PUT /api/runs/:id/figures/:kind/:item, which takes the PNG as the body and the caption and position in the query.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    figure: ReportFigure
+
+
+class ReportFigureListResponse(BaseModel):
+    """
+    Answer to GET and DELETE /api/runs/:id/figures: the run's figures in order of position (none after a DELETE).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    figures: list[ReportFigure]

@@ -2300,6 +2300,45 @@ describe("report options (M7.1)", () => {
     expect(sentBranding).toEqual([{ companyName: "Acme Engineering" }]);
     expect(save.disabled).toBe(true);
     expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
+    // Figures (M7.2) are drawn from a solved run.
+    expect(settings().getByText("Run the simulation to draw the figures. They are drawn from its latest solved run.")).toBeTruthy();
+  });
+
+  it("lists the figures stored for the latest solved run and asks for saved options before drawing (M7.2)", async () => {
+    const figure = {
+      kind: "support",
+      item: "fixed-1",
+      caption: "Base (fixed support)",
+      position: 0,
+      width: 1600,
+      height: 1000,
+      sizeBytes: 52000,
+      createdAt: "2026-10-17T02:00:00.000Z",
+    };
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/runs": {
+          status: 200,
+          json: { runs: [run({ status: "succeeded", stage: null, finishedAt: "2026-10-17T01:00:00.000Z" })] },
+        },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/simulations/s1/report-options": { status: 200, json: { options: defaults, saved: true, updatedAt: null } },
+        "GET /api/report-branding": { status: 200, json: { branding: { companyName: "", logo: null } } },
+        "GET /api/simulations/s1/views": { status: 200, json: { views } },
+        "GET /api/runs/r1/figures": { status: 200, json: { figures: [figure] } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Report, complete" }));
+    const figures = within(await settings().findByRole("list", { name: "Figures" }));
+    const image = figures.getByRole("img", { name: "Base (fixed support)" }) as HTMLImageElement;
+    expect(image.getAttribute("src")).toBe("/api/runs/r1/figures/support/fixed-1?v=2026-10-17T02%3A00%3A00.000Z");
+    expect(figures.getByText("Base (fixed support)")).toBeTruthy();
+    const draw = settings().getByRole("button", { name: "Draw the figures again" }) as HTMLButtonElement;
+    expect(draw.disabled).toBe(false);
+    fireEvent.click(settings().getByRole("checkbox", { name: "Run warnings" }));
+    expect(draw.disabled).toBe(true);
+    expect(settings().getByText("Save the report options first: the figures follow the saved ones.")).toBeTruthy();
   });
 
   it("uploads a logo, shows it with its size, and removes it", async () => {

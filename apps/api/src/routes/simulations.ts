@@ -431,7 +431,7 @@ simulations.delete("/:id/views/:viewId", async (c) => {
 
 // Report options (M7.1, ADR-074). Views must be saved views of the simulation; a view deleted
 // later is left out of the answer, and the report draws only the views still there. The report's
-// unit system (M7.6, ADR-075) starts as the project's; options saved before M7.6 have none, and a
+// unit system (M7.6, ADR-076) starts as the project's; options saved before M7.6 have none, and a
 // system units.json no longer lists is answered as the project's too.
 async function reportOptionsView(
   db: D1Database,

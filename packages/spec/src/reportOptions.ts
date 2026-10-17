@@ -21,7 +21,7 @@ export const reportSectionLabels: Record<ReportSection, string> = {
 
 /**
  * Every section, no views, the simulation's name as the title, and the project's unit system,
- * which the report prints every value in (M7.6, ADR-075).
+ * which the report prints every value in (M7.6, ADR-076).
  */
 export function defaultReportOptions(simulationName: string, unitSystem: string): ReportOptions {
   return {

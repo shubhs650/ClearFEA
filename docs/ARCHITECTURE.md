@@ -85,6 +85,7 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | `views` | Saved views of a simulation: name (unique per simulation), camera, hidden bodies and the result display as JSON (`view.schema.json`, ADR-055). The report picks its pictures from them |
 | `report_options` | A simulation's report options: sections, saved views for the result plots and the title block as JSON (`report.schema.json`, ADR-074) |
 | `report_branding` | A user's company name and logo (type, bytes, pixel size); the logo itself is in R2 (ADR-074) |
+| `report_figures` | A run's report figures, drawn in the browser: kind (support, load or view), item id, caption, order, pixel size; the PNGs are in R2 under the run (ADR-011, ADR-075) |
 | `share_links` | Run, token hash, revoked flag |
 | `machine_sizes` | Name, cores, memory, hourly rate. Configuration |
 | `settings` | Free storage quota, retention days, stop-limit multiplier. Configuration |
@@ -118,7 +119,7 @@ A run stores a frozen copy of the spec. Editing a simulation never changes an ex
 - **Conversion to SI for solving** happens in exactly one place, the Python deck generator. The frontend converts only for display.
 - **Temperature:** stored in kelvin. Temperature differences and absolute temperatures are distinct quantity kinds, so that a 50 °C rise is never converted with an offset.
 - **Results** are stored in SI and converted on display, which is why display units can change without a rerun. The Run panel can pick a unit per kind over the system's for results only (ADR-056), kept per user in the browser.
-- **Reports** print in their own unit system, chosen in the report options and starting as the project's, never the browser's picks; the report job converts through the worker's units module (`clearfea_worker/report/units.py`, ADR-075).
+- **Reports** print in their own unit system, chosen in the report options and starting as the project's, never the browser's picks; the report job converts through the worker's units module (`clearfea_worker/report/units.py`, ADR-076).
 - A shared fixture file of known conversions is tested in both languages.
 
 ## 6. Jobs
