@@ -139,6 +139,8 @@ Besides its own reference values, every case asserts:
 - The solver log contains no unexpected warnings.
 - Billable seconds were recorded and one ledger entry was written.
 
+Once over the whole run (M8 exit): the harness user's ledger reconciles exactly. Every running balance is the previous one plus its entry, the wallet's balance is the sum of the ledger, every job charge is its billed seconds at its rate as the platform prices it, every charged run has one entry for exactly the cost its record shows, and no entry other than the seeded grant lacks a job (`verification/harness/ledger.py`, ADR-090). These rows appear in the result table as case "Ledger".
+
 ## Published results
 
 From M9, the nightly run writes a results page (case, quantity, reference, computed, percentage error, mesh size, software versions) that is published with the documentation and linked from every report.

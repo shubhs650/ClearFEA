@@ -2,7 +2,7 @@
 """Runs verification cases through the platform: upload, setup, mesh, solve, compare.
 
     cd verification && uv run --project ../worker --locked python -m harness \
-        --api http://127.0.0.1:8788 --persist-to DIR [--tier coarse|full] [V-01 ...]
+        --api http://127.0.0.1:8788 [--tier coarse|full] [V-01 ...]
 
 `make verify` starts a fresh API and worker and calls this (infra/verify.sh). The browser
 is not involved. Prints the result table in Markdown and writes it, with the figures as
@@ -43,10 +43,13 @@ from .cases import (
     unexpected_warnings,
 )
 from .client import ApiError, Client
+from .ledger import entries_for_run, reconcile
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / "verification" / "cases"
 LOGIN, PASSWORD = "alice", "alice-local"  # seeded local test user (ADR-022)
+#: The row group of the ledger check over the whole run, shown in the table like a case.
+LEDGER = Case("Ledger", "Wallet ledger over the suite", CASES, "m", {}, {}, [], [], {})
 
 
 @dataclass
@@ -71,6 +74,9 @@ class Outcome:
     #: fitted on the benchmark machine and checked there (benchmarks/solver/check.py).
     estimated_seconds: int | None = None
     billed_seconds: int | None = None
+    #: The run the case made and the cost its record shows, for the ledger check (M8 exit).
+    run_id: str | None = None
+    cost: dict[str, Any] | None = None
 
     @property
     def ok(self) -> bool:
@@ -82,15 +88,14 @@ def _shown(value: float, check: Check) -> str:
     return f"{from_si(value, check.unit, QUANTITIES[check.quantity]):.5g} {check.unit}"
 
 
-def d1_count(persist_to: Path, sql: str) -> int:
-    """One number from the API's local D1 database. Read-only; the harness's own state."""
-    command = [
-        "pnpm", "--silent", "--filter", "@clearfea/api", "exec", "wrangler", "d1", "execute",
-        "DB", "--local", "--persist-to", str(persist_to), "--json", "--command", sql,
-    ]  # fmt: skip
-    out = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=True)
-    rows = json.loads(out.stdout)[0]["results"]
-    return int(next(iter(rows[0].values())))
+def ledger_outcome(api: Client, outcomes: list[Outcome]) -> Outcome:
+    """The M8 exit check over the whole suite (docs/PLAN.md): the harness user's ledger, the
+    costs its runs recorded and its wallet agree to the micro-credit."""
+    outcome = Outcome(LEDGER)
+    runs = {o.run_id: o.cost for o in outcomes if o.run_id is not None and o.cost is not None}
+    for r in reconcile(api.json("GET", "/api/wallet")["wallet"], runs):
+        outcome.rows.append(Row(r.check, r.expected, r.found, "", "exact", r.ok))
+    return outcome
 
 
 def balance_rows(
@@ -169,9 +174,7 @@ def heat_balance_rows(
     )
 
 
-def run_case(
-    api: Client, case: Case, tier: str, work: Path, persist_to: Path, timeout: float
-) -> Outcome:
+def run_case(api: Client, case: Case, tier: str, work: Path, timeout: float) -> Outcome:
     outcome = Outcome(case)
     started = time.monotonic()
     step = work / f"{case.id}.step"
@@ -318,11 +321,8 @@ def run_case(
     cost = run["cost"]
     outcome.estimated_seconds = run["estimate"] and run["estimate"]["seconds"]
     outcome.billed_seconds = cost and cost["billedSeconds"]
-    ledger = d1_count(
-        persist_to,
-        f"SELECT COUNT(*) AS n FROM ledger_entries WHERE job_id = "
-        f"(SELECT job_id FROM runs WHERE id = '{rid}')",
-    )
+    outcome.run_id, outcome.cost = rid, cost
+    ledger = len(entries_for_run(api.json("GET", "/api/wallet")["wallet"], rid))
     billed = cost is not None and cost["charged"] and cost["billedSeconds"] >= 1
     outcome.rows.append(
         Row(
@@ -354,6 +354,8 @@ def table(outcomes: list[Outcome], tier: str) -> str:
             )
     lines.append("")
     for o in outcomes:
+        if o.case.id == "Ledger":
+            continue
         versions = ", ".join(f"{k} {v}" for k, v in o.software.items() if v is not None)
         solve = ""
         if o.estimated_seconds is not None and o.billed_seconds is not None:
@@ -364,7 +366,8 @@ def table(outcomes: list[Outcome], tier: str) -> str:
         )
     checks = [r.ok for o in outcomes for r in o.rows] + [False for o in outcomes if o.problem]
     lines.append("")
-    lines.append(f"{sum(checks)} of {len(checks)} checks passed, {len(outcomes)} cases.")
+    cases = sum(1 for o in outcomes if o.case.id != "Ledger")
+    lines.append(f"{sum(checks)} of {len(checks)} checks passed, {cases} cases.")
     return "\n".join(lines)
 
 
@@ -372,7 +375,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("cases", nargs="*", help="case ids, for example V-01; default all")
     parser.add_argument("--api", required=True, help="API base URL")
-    parser.add_argument("--persist-to", type=Path, required=True, help="the API's local state")
     parser.add_argument("--tier", choices=TIERS, default="coarse")
     parser.add_argument("--timeout", type=float, default=None, help="seconds per mesh or solve")
     parser.add_argument("--out", type=Path, default=None, help="folder for results.md and .json")
@@ -396,11 +398,16 @@ def main() -> int:
         work = out / case.id
         work.mkdir(exist_ok=True)
         try:
-            outcome = run_case(api, case, args.tier, work, args.persist_to, timeout)
+            outcome = run_case(api, case, args.tier, work, timeout)
         except (ApiError, CaseError, subprocess.CalledProcessError) as error:
             outcome = Outcome(case, problem=str(error).replace("\n", " "))
         outcomes.append(outcome)
         print(f"[verify] {case.id}: {'pass' if outcome.ok else 'FAILED'}", flush=True)
+    if outcomes:
+        try:
+            outcomes.append(ledger_outcome(api, outcomes))
+        except ApiError as error:
+            outcomes.append(Outcome(LEDGER, problem=str(error).replace("\n", " ")))
 
     text = table(outcomes, args.tier)
     print("\n" + text)

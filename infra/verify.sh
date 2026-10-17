@@ -29,4 +29,4 @@ stack_start
 say "Running the $tier tier."
 # shellcheck disable=SC2086 # CASES is a space-separated list of case ids
 (cd verification && uv run --project ../worker --locked python -m harness \
-  --api "http://127.0.0.1:$port" --persist-to "$state" --tier "$tier" --out "$out" ${CASES:-})
+  --api "http://127.0.0.1:$port" --tier "$tier" --out "$out" ${CASES:-})

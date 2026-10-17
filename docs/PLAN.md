@@ -142,13 +142,13 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 
 - [x] M8.1 Wallet page: balance, ledger, per-run cost.
 - [x] M8.2 Running-job view: stage, elapsed time, cost so far against estimate, live log, cancel.
-- [ ] M8.3 Stop limit per run with a default multiplier and user override.
-- [ ] M8.4 Failure classification end to end, with category and reason shown on the run.
-- [ ] M8.5 Simulated machine sizes on localhost (thread count, memory limit); out-of-memory path tested.
-- [ ] M8.6 Storage accounting per user, free quota, retention of raw output, pin, regenerate by rerun.
+- [x] M8.3 Stop limit per run with a default multiplier and user override.
+- [x] M8.4 Failure classification end to end, with category and reason shown on the run.
+- [x] M8.5 Simulated machine sizes on localhost (thread count, memory limit); out-of-memory path tested.
+- [x] M8.6 Storage accounting per user, free quota, retention of raw output, pin, regenerate by rerun.
 - [x] M8.7 Read-only share link per run, revocable.
-- [ ] M8.8 Data isolation tests across every route and file key.
-- [ ] M8.9 Estimator check: predicted against measured on the benchmark set.
+- [x] M8.8 Data isolation tests across every route and file key.
+- [x] M8.9 Estimator check: predicted against measured on the benchmark set.
 - [x] M8.10 Self-hosting mode flag: wallet informational.
 
 **Exit:** ledger reconciles exactly over the full verification suite; isolation tests pass.

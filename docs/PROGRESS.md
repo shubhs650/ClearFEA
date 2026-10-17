@@ -5,8 +5,8 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M8 Platform, in progress (under the maintainer's M8 autodrive, 2026-10-17)
-- **Next task:** M8.1
+- **Current milestone:** M8 Platform, verifying (all tasks merged; closing under the maintainer's M8 autodrive, 2026-10-17)
+- **Next task:** Close M8: the phase-end run on main
 - **Blocked on:** nothing
 
 ## Milestones
@@ -21,7 +21,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M5 | Thermal | Done (phase-end run on main green, [run 38931101479](https://github.com/shubhs650/ClearFEA/actions/runs/38931101479)) | 2026-10-16 |
 | M6 | Modal | Done (phase-end run on main green, [run 38991537033](https://github.com/shubhs650/ClearFEA/actions/runs/38991537033)) | 2026-10-17 |
 | M7 | Report | Done (phase-end run on main green, [run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) | 2026-10-17 |
-| M8 | Platform | Not started | |
+| M8 | Platform | Verifying (all tasks merged; branch phase-end run 39020876400 had E-01 to E-07 green and the ledger reconciling over 26 cases) | |
 | M9 | Gate | Not started | |
 
 Status values: Not started, In progress, Verifying, Done.
@@ -153,6 +153,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> Close M8 (2026-10-17): ADR-090. PLAN.md now ticks every M8 task. Nothing listed for M8 was left unbuilt except a check of the exit itself: `make verify` checked one ledger entry per case but never the ledger over the run, so `verification/harness/ledger.py` adds five "Ledger" rows after the last case (balances chain, wallet equals the sum, each job charge priced as `costOf` prices it, each charged run's entry equals its recorded cost, nothing but the grant without a job). The first branch phase-end run (39020876400) had all seven browser tests green and the ledger reconciling over 52 jobs in 26 cases, but V-22 failed: the harness's `wrangler d1 execute` read locked the API's SQLite file (`SQLITE_BUSY`), the same flake M8.5 saw on V-16; a local stress test made the API answer 500 the same way. The harness now reads only through the API and `infra/verify.sh` no longer passes `--persist-to`. Isolation: `apps/api/test/isolation.test.ts` passes in `make test`. Sample screenshots for the maintainer are in the project's `m8-close/` folder, staged on `make dev` through the API (two solves, a cancel, a stop at 0.25 ×, and an out-of-memory run on the small size shrunk to 64 MiB in that dev database only, then restored; storage charged with the free allowance set to 0 there).
 
 > M8.8 (2026-10-17): data isolation tests, no ADR. `apps/api/test/isolation.test.ts` (fast tier) gives alice one of every record. That means a geometry, a simulation, a mesh, a solved and a solving run, a noop job, a material, a view, report options, figures, a finished report, a share link, branding with a logo, a project unit system and a ledger charge, mostly through the API. Bob then calls every route in its `ROUTES` table with her ids. Each owned route must answer 404 with the same body and type as for random ids and show none of her ids or names. Each account route (wallet, storage, lists, branding, project) must show nothing of hers. A snapshot of every row with her `owner_id`, her job logs and every R2 object under `owners/<alice>/` must not change. It also checks references from bob's own records (a figure of her view, her view in his report options, his spec on her geometry), share tokens, 401 without sign-in or worker token, the job file keys and the worker download of a job it does not hold. At the end alice repeats each request and must never get 400, 401, 404 or 415, which proves bob's 404 comes from the owner check. The first test compares `ROUTES` with Hono's `app.routes`, so any new route (M8.4 included) fails `make test` until it has a row. A route that acts on one record gets an `owned` builder; a per-account route gets an `ACCOUNT_CALLS` entry. To prove the sweep catches leaks, I removed the owner filter from `getRun` and then `getGeometry`, and it failed each time. An audit of every SQL statement found nothing exploitable. It found three hardening spots that are safe today because callers check first: `createRun` doesn't check the simulation's owner in SQL, `getRun` joins `meshes` without an owner filter, and `db/geometries.ts`'s `USED` subquery isn't owner-scoped. Worker routes trust the shared token, by design.
 
@@ -342,6 +344,7 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 - A 64-bit-integer PaStiX build and per-size limits for machines above 16 GB (ADR-063 item 10), when larger machines are benchmarked.
 - Re-measure `steps.json` inside the worker container, including the job's downloads and uploads (ADR-081 item 5), so the estimator is fitted to what the platform bills; and a shape term for slender parts (ADR-049 item 3).
 - A modal run's export (CSV of frequencies, VTK with every mode shape) and its modal participation factors and effective masses, which the `.dat` file holds after the eigenvalues (ADR-071 item 2).
+- A spec saved through the API without `bonds` reads as changed against its own run, whose frozen spec has `bonds: []`, so the run record says "The setup has changed since this run" (found staging the M8 close screenshots; the web app always sends `bonds`). Normalise the spec on save, or compare with defaults filled in.
 - Keep a unit system picked before the project has loaded (`apps/web/src/units/useProject.ts` draws the loaded system over it right after sign-in; found by E-02, which waits for the load).
 
 ## Log
@@ -350,6 +353,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- Close M8 (ADR-090): `make verify` now checks that the ledger reconciles over the whole run, the M8 exit, and reads it through the API; reading the API's database from a second process had made V-22 fail with a locked database. Learned: `wrangler d1 execute` beside a running `wrangler dev` can fail either side with SQLITE_BUSY.
 - M8.8 isolation tests: `apps/api/test/isolation.test.ts` signs bob in and calls all 72 routes the API serves with alice's ids. Each owned route answers him exactly as for an id nobody owns, and nothing of hers changes in the database or in storage. Every job's file keys stay under the owner's prefix. A route missing from the sweep fails `make test`. No leak was found, so no route changed. Learned: Hono's `app.routes` lists every served route, so a test can tell when a new one goes unchecked.
 - M8.4 failure classification (ADR-089): a job whose worker sends no heartbeat for 120 s, or whose worker asks for another job after a restart, now fails as a fault in ClearFEA (`worker_lost`, not charged) instead of staying solving; SPOOLES's singular matrix is the user's (`singular_matrix`); the run record shows "Failure" with who is at fault, the cause and what it means for the cost. Learned: on a singular model only SPOOLES complains (exit 255, in `spooles.out`); PaStiX and the iterative solvers return nonsense without an error.
 - M8 fix, V-04 and V-11 out of memory (ADR-088): the worker container's own 4 GiB memory limit, left from M0, killed CalculiX before the simulated size's limit; it is removed, so the size's limit is the only one. The memory estimate was right (5.4 GiB fitted, 4.8 and 4.5 GiB measured). Learned: GitHub's runners have swap and the sandbox has none, so a container limit can pass in CI and fail locally.
