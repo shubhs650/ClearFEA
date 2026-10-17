@@ -319,6 +319,60 @@ export async function completeJob(
 }
 
 /**
+ * Claimed or running jobs whose worker is lost (M8.4): no heartbeat for `timeoutSeconds`, or
+ * held by `claimingWorker`, which asks for a job only when it holds none, so a job it still
+ * holds was lost when it restarted. Used by the sweep, which goes over every owner.
+ */
+export async function lostJobs(db: D1Database, timeoutSeconds: number, claimingWorker: string | null): Promise<Job[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM jobs
+        WHERE status IN ${ACTIVE}
+          AND ((julianday('now') - julianday(heartbeat_at)) * 86400 >= ? OR claimed_by = ?)
+        ORDER BY created_at, id`,
+    )
+    .bind(timeoutSeconds, claimingWorker)
+    .all<JobRow>();
+  return results.map(toJob);
+}
+
+/**
+ * Fails a lost job (M8.4) as a fault in ClearFEA, recording the time it is known to have had
+ * the machine and no charge. Only while it has had no heartbeat since `job` was read, so a worker
+ * that checks in again keeps its job. Returns the failed job, or null when it was not changed.
+ */
+export async function failLostJob(
+  db: D1Database,
+  job: Job,
+  completion: Extract<Completion, { status: "failed" }>,
+  billableMs: number,
+  charge: JobCharge | null,
+): Promise<Job | null> {
+  if (charge?.charged) throw new Error("A lost job is a fault in ClearFEA and is never charged.");
+  const row = await db
+    .prepare(
+      `UPDATE jobs
+          SET status = 'failed', failure_category = ?, failure_cause = ?, failure_message = ?,
+              finished_at = ${NOW}, billable_ms = ?, billed_seconds = ?, cost = ?
+        WHERE id = ? AND status IN ${ACTIVE} AND claimed_by IS ? AND heartbeat_at IS ?
+        RETURNING *`,
+    )
+    .bind(
+      completion.failureCategory,
+      completion.failureCause,
+      completion.failureMessage,
+      billableMs,
+      charge?.billedSeconds ?? null,
+      charge?.cost ?? null,
+      job.id,
+      job.claimedBy,
+      job.heartbeatAt,
+    )
+    .first<JobRow>();
+  return row === null ? null : toJob(row);
+}
+
+/**
  * Appends log text the worker sent with a heartbeat as the job's next chunk. The caller has
  * checked that this worker holds the job.
  */

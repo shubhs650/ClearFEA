@@ -398,6 +398,7 @@ def fake_calculix(
     out_of_memory: bool = False,
     machines: list[Any] | None = None,
     cancelled_run: bool = False,
+    spooles_out: str | None = None,
 ) -> Any:
     """Stands in for run_calculix: writes the fixture's output beside the deck, and keeps the
     simulated machine it was given in ``machines``."""
@@ -409,6 +410,8 @@ def fake_calculix(
             machines.append(machine)
         log = deck.with_name("solver.log")
         log.write_text("".join(lines))
+        if spooles_out is not None:
+            deck.with_name("spooles.out").write_text(spooles_out)
         for line in lines:
             on_output(line)
         if out_of_memory:
@@ -493,6 +496,45 @@ def test_a_solver_error_is_a_platform_fault_and_keeps_deck_and_log(
         )
         assert "node set S9" in outcome["failureMessage"]
         assert set(api.uploads) == {("j1", "deck.inp"), ("j1", "solver.log")}
+
+
+def test_a_singular_matrix_is_the_users_fault_and_keeps_deck_and_log(
+    tmp_path: Path, no_calculix: Any
+) -> None:
+    # SPOOLES exits with status 255 and gives the reason only in spooles.out (ccx 2.21).
+    lines = ("Factoring the system of equations using the symmetric spooles solver\n",)
+    spooles_out = "\n\n matrix found to be singular\n"
+    no_calculix.setattr(
+        solver, "run_calculix", fake_calculix(returncode=255, lines=lines, spooles_out=spooles_out)
+    )
+    with FakeApi() as api:
+        solve_job(api, tmp_path, fixture_spec())
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert (outcome["failureCategory"], outcome["failureCause"]) == (
+            "user_fault",
+            "singular_matrix",
+        )
+        assert "held by no support and no bond" in outcome["failureMessage"]
+        assert set(api.uploads) == {("j1", "deck.inp"), ("j1", "solver.log")}
+
+
+def test_a_crash_with_a_spooles_out_that_is_not_singular_is_a_platform_fault(
+    tmp_path: Path, no_calculix: Any
+) -> None:
+    no_calculix.setattr(
+        solver, "run_calculix", fake_calculix(returncode=-11, spooles_out="\n factor matrix\n")
+    )
+    with FakeApi() as api:
+        solve_job(api, tmp_path, fixture_spec())
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert (outcome["failureCategory"], outcome["failureCause"]) == (
+            "platform_fault",
+            "solver_error",
+        )
 
 
 def test_the_solver_runs_on_the_jobs_simulated_machine(tmp_path: Path, no_calculix: Any) -> None:

@@ -5,6 +5,7 @@ import { probeDatabase, probeStorage } from "./db/health";
 import { sweepStorage } from "./db/storage";
 import type { Env } from "./env";
 import { internal } from "./internal";
+import { sweepLostJobs } from "./jobs/outcome";
 import { geometries } from "./routes/geometries";
 import { jobs } from "./routes/jobs";
 import { materials } from "./routes/materials";
@@ -58,8 +59,11 @@ app.route("/internal", internal);
 /**
  * The daily storage sweep (M8.6, ADR-086), run by the cron trigger in wrangler.jsonc: removes
  * raw solver output past its retention period and charges storage above the free allowance.
+ * It also fails jobs whose worker is lost (M8.4), which every worker's claim does as well.
  */
 async function scheduled(controller: ScheduledController, env: Env): Promise<void> {
+  const lost = await sweepLostJobs(env);
+  if (lost > 0) console.log(`Failed ${lost} jobs whose worker stopped checking in.`);
   const summary = await sweepStorage(env.DB, env.FILES, new Date(controller.scheduledTime));
   console.log(
     `Storage sweep for ${summary.day}: removed the raw output of ${summary.removed} runs, charged ${summary.charged} users.`,

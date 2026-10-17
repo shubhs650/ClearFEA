@@ -21,6 +21,7 @@ import {
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
+import { failureText } from "../src/setup/RunPanel";
 import type { ModelViewEvents } from "../src/viewer/ModelView";
 import { readFixture } from "./fixtures";
 import { encodeFields, twoFacesFields } from "./resultFiles";
@@ -1056,6 +1057,7 @@ function run(overrides: Partial<RunView> = {}): RunView {
     stage: "queued",
     progress: { startedAt: null, elapsedMs: null, costSoFar: null, cancelling: false },
     problem: null,
+    failure: null,
     result: null,
     createdAt: "2026-10-15T12:00:00.000Z",
     finishedAt: null,
@@ -1544,6 +1546,7 @@ describe("run", () => {
                 status: "failed",
                 stage: null,
                 problem: "CalculiX stopped on the deck.",
+                failure: { category: "platform_fault", cause: "solver_error" },
                 files: ["deck.inp", "solver.log"],
                 cost: { billedSeconds: 3, amount: 0, charged: false },
                 finishedAt: "2026-10-15T12:01:00.000Z",
@@ -1566,6 +1569,9 @@ describe("run", () => {
     expect(record.getByText("with OpenCASCADE 7.9.0")).toBeTruthy();
     expect(record.getByText("local, 1 credit per hour")).toBeTruthy();
     expect(record.getByText("Not charged: the run stopped because of a fault in ClearFEA (3 s).")).toBeTruthy();
+    expect(record.getByTestId("run-failure").textContent).toBe(
+      "A fault in ClearFEA: the solver stopped on its input. Nothing is charged.",
+    );
     expect(record.getByRole("link", { name: "View deck.inp" }).getAttribute("href")).toBe("/api/runs/r1/files/deck.inp");
     expect(record.getByRole("link", { name: "View solver.log" }).getAttribute("href")).toBe(
       "/api/runs/r1/files/solver.log",
@@ -1616,7 +1622,18 @@ describe("run", () => {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
         "GET /api/simulations/s1/runs": {
           status: 200,
-          json: { runs: [run({ status: "failed", stage: null, problem, finishedAt: "2026-10-15T12:01:00.000Z" })] },
+          json: {
+            runs: [
+              run({
+                status: "failed",
+                stage: null,
+                problem,
+                failure: { category: "user_fault", cause: "setup_invalid" },
+                cost: { billedSeconds: 3, amount: 833, charged: true },
+                finishedAt: "2026-10-15T12:01:00.000Z",
+              }),
+            ],
+          },
         },
         "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
       }),
@@ -1624,6 +1641,35 @@ describe("run", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Run, has a problem" }));
     expect(settings().getAllByText(problem)).toHaveLength(1);
+    // The failure classification (M8.4): who is at fault, the cause and what it means for the cost.
+    expect(settings().getByTestId("run-failure").textContent).toBe(
+      "Your setup or choice: the setup cannot be solved. The time it used is charged.",
+    );
+  });
+
+  it("names a cause it has no words for by its code, and shows no failure for a cancelled run", async () => {
+    expect(failureText({ category: "platform_fault", cause: "something_new" })).toBe(
+      "A fault in ClearFEA: something_new. Nothing is charged.",
+    );
+    expect(failureText({ category: "platform_fault", cause: "worker_lost" })).toBe(
+      "A fault in ClearFEA: the machine stopped responding. Nothing is charged.",
+    );
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": {
+          status: 200,
+          json: {
+            runs: [run({ status: "cancelled", stage: null, problem: "You cancelled the run.", finishedAt: "2026-10-15T12:01:00.000Z" })],
+          },
+        },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /^Run, / }));
+    await settings().findByLabelText("Run record");
+    expect(settings().queryByTestId("run-failure")).toBeNull();
   });
 });
 

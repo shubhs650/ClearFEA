@@ -301,6 +301,7 @@ const succeeded: RunView = {
   stage: null,
   progress: null,
   problem: null,
+  failure: null,
   result: null,
   createdAt: "2026-10-15T12:00:00.000Z",
   finishedAt: "2026-10-15T12:01:00.000Z",
