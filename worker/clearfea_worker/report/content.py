@@ -41,6 +41,11 @@ from ..spec.simulation_schema import (
 from .labels import ANALYSIS_KINDS, LOAD_KINDS, SECTION_TITLES, SOLVER_LABELS, SUPPORT_KINDS
 from .units import ReportUnits, format_number
 
+#: Force and moment components smaller than this share of the run's balance scales print as 0 in
+#: the reaction and balance tables (ADR-079): far below the solver's precision, they are rounding
+#: noise of sums that are zero, such as -1.8e-15 N or a reaction of 3e-5 lbf against 500 lbf.
+NOISE_SHARE = 1e-6
+
 
 @dataclass(frozen=True)
 class Paragraph:
@@ -614,14 +619,23 @@ class _Builder:
         load_names = {load.id: load.name for load in self.spec.loads}
         blocks: list[Block] = [Heading("Reactions")]
         f = self.head
+        force_scale = 0.0 if r.balance is None else r.balance.force_scale
+        moment_scale = 0.0 if r.balance is None else r.balance.moment_scale
+
+        def force_cell(v: float) -> str:
+            return self.number(_denoised(v, force_scale), "force")
+
+        def moment_cell(v: float) -> str:
+            return self.number(_denoised(v, moment_scale), "moment")
+
         if r.reactions:
             rows = []
             for reaction in r.reactions:
-                force = [self.number(v, "force") for v in reaction.force]
+                force = [force_cell(v) for v in reaction.force]
                 moment = (
                     ["", "", ""]
                     if reaction.moment is None
-                    else [self.number(v, "moment") for v in reaction.moment]
+                    else [moment_cell(v) for v in reaction.moment]
                 )
                 rows.append([names.get(reaction.support_id, reaction.support_id), *force, *moment])
             blocks.append(
@@ -644,8 +658,8 @@ class _Builder:
             rows = [
                 [
                     load_names.get(t.load_id, t.load_id),
-                    *[self.number(v, "force") for v in t.force],
-                    *[self.number(v, "moment") for v in t.moment],
+                    *[force_cell(v) for v in t.force],
+                    *[moment_cell(v) for v in t.moment],
                 ]
                 for t in r.loads
             ]
@@ -673,7 +687,10 @@ class _Builder:
         return blocks
 
     def balance(self, b: BalanceCheck) -> list[Block]:
-        v = self.units.vector_text
+        def v(values: list[float], kind: str) -> str:
+            scale = b.force_scale if kind == "force" else b.moment_scale
+            return self.units.vector_text([_denoised(x, scale) for x in values], kind)
+
         rows = [
             ["Applied force", v(b.applied_force, "force")],
             ["Reaction force", v(b.reaction_force, "force")],
@@ -688,7 +705,8 @@ class _Builder:
                 "The force out of balance is the size of the sum of applied loads and reactions "
                 "over the larger of the loads' gross size and the reactions' total size; the "
                 "moment is measured likewise. They show how closely the solved model is in "
-                "equilibrium."
+                "equilibrium. Force and moment components smaller than one millionth of these "
+                "scales print as 0 in this section."
             ),
         ]
 
@@ -867,6 +885,12 @@ def _assigned(bodies: list, tag: int) -> str | None:
 
 def _count(value: int | None) -> str:
     return "(not recorded)" if value is None else f"{value:,}"
+
+
+def _denoised(value: float, scale: float) -> float:
+    """0 for a component below NOISE_SHARE of its scale (ADR-079); the value otherwise, and always
+    when there is no scale (a run solved before balance checks were recorded)."""
+    return 0.0 if abs(value) < NOISE_SHARE * scale else value
 
 
 def _percent(ratio: float) -> str:
