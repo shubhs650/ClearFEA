@@ -12,6 +12,7 @@ import {
   materialLibrary,
   maxElements,
   type RunEstimate,
+  type RunProgress,
   type RunView,
   type SimulationSpec,
   type SimulationView,
@@ -1052,6 +1053,7 @@ function run(overrides: Partial<RunView> = {}): RunView {
     cost: null,
     status: "solving",
     stage: "queued",
+    progress: { startedAt: null, elapsedMs: null, costSoFar: null, cancelling: false },
     problem: null,
     result: null,
     createdAt: "2026-10-15T12:00:00.000Z",
@@ -1231,6 +1233,71 @@ describe("run", () => {
     expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
     const post = fetchMock.mock.calls.find(([path, init]) => path === "/api/simulations/s1/runs" && init?.method === "POST");
     expect(JSON.parse(String(post?.[1]?.body))).toEqual({ machineSize: "small" });
+  });
+
+  it("shows a solving run's time and cost against the estimate, and cancels it (M8.2)", async () => {
+    const running = run({
+      machine: { size: "small", ratePerHour: 500_000 },
+      estimate: ESTIMATE,
+      stage: "solving",
+      progress: { startedAt: "2026-10-17T07:00:00.000Z", elapsedMs: 65_400, costSoFar: 9_167, cancelling: false },
+    });
+    const cancelling = run({ ...running, progress: { ...(running.progress as RunProgress), cancelling: true } });
+    const fetchMock = serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": { status: 200, json: { runs: [running] } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "POST /api/runs/r1/cancel": { status: 200, json: { run: cancelling } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    const job = within(await settings().findByRole("region", { name: "Running job" }));
+    expect(job.getByRole("status", { name: "Run stage" }).textContent).toBe("Solver: solving…");
+    expect(job.getByTestId("run-elapsed").textContent).toBe("1:05 of about 3 s estimated");
+    expect(job.getByTestId("run-cost-so-far").textContent).toBe("0.009167 credits of about 0.000417 credits estimated");
+    expect(job.getByText(/charged for the time it has used\. It carries on if you close the browser\./)).toBeTruthy();
+    fireEvent.click(job.getByRole("button", { name: "Cancel the run" }));
+    expect(await job.findByText(/^Cancelling: the solver stops/)).toBeTruthy();
+    expect(job.getByRole("button", { name: "Cancel the run" })).toHaveProperty("disabled", true);
+    expect(fetchMock.mock.calls.some(([path, init]) => path === "/api/runs/r1/cancel" && init?.method === "POST")).toBe(true);
+  });
+
+  it("says a run waiting for the solver costs nothing to cancel, and shows a cancelled run (M8.2)", async () => {
+    const problem = "You cancelled the run before the solver started, so nothing was charged. Run it again for results.";
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": { status: 200, json: { runs: [run()] } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "POST /api/runs/r1/cancel": {
+          status: 200,
+          json: {
+            run: run({
+              status: "cancelled",
+              stage: null,
+              progress: null,
+              problem,
+              cost: { billedSeconds: 0, amount: 0, charged: false },
+              finishedAt: "2026-10-17T07:00:01.000Z",
+            }),
+          },
+        },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    const job = within(await settings().findByRole("region", { name: "Running job" }));
+    expect(job.queryByTestId("run-elapsed")).toBeNull();
+    expect(job.getByText(/Cancelled before the solver starts, the run costs nothing\./)).toBeTruthy();
+    fireEvent.click(job.getByRole("button", { name: "Cancel the run" }));
+    await waitFor(() => expect(settings().queryByRole("region", { name: "Running job" })).toBeNull());
+    expect(tree().getByRole("button", { name: "Run, incomplete" }).getAttribute("title")).toBe(problem);
+    expect(
+      within(settings().getByLabelText("Run record")).getByText("Nothing: the run was cancelled before the solver started."),
+    ).toBeTruthy();
+    expect(settings().getByRole("button", { name: "Run again" })).toHaveProperty("disabled", false);
   });
 
   it("chooses the solver, PaStiX first, saves it and estimates for it, warning about the iterative ones", async () => {

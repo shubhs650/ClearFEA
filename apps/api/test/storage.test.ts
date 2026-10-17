@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Storage per user (M8.6, ADR-085): what is kept, by kind, against the free allowance; pins;
+// Storage per user (M8.6, ADR-086): what is kept, by kind, against the free allowance; pins;
 // the daily sweep that removes raw solver output past its retention period and charges storage
 // above the allowance once a day; and a rerun of a run's frozen setup that regenerates it.
 import {

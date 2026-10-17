@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Storage on the wallet page (M8.6, ADR-085): what the user keeps, by kind, against the free
+// Storage on the wallet page (M8.6, ADR-086): what the user keeps, by kind, against the free
 // allowance and its rate above it, and every run still holding raw solver output, with when it
 // is removed and a pin that keeps it.
 

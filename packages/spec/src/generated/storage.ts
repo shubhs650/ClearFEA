@@ -14,7 +14,7 @@ import { validator } from "../validate";
 export type StorageKind = "geometry" | "mesh" | "results" | "rawOutput" | "report";
 
 /**
- * Wire shapes of the storage route (M8.6, ADR-085; docs/ARCHITECTURE.md section 4). Sizes are in bytes; money is in whole micro-credits (1,000,000 is one credit). Each message is a definition under $defs.
+ * Wire shapes of the storage route (M8.6, ADR-086; docs/ARCHITECTURE.md section 4). Sizes are in bytes; money is in whole micro-credits (1,000,000 is one credit). Each message is a definition under $defs.
  */
 export interface Storage {
   [k: string]: unknown;

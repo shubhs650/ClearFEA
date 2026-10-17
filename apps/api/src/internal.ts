@@ -30,6 +30,7 @@ import {
   getClaimedJob,
   type Job,
   recordHeartbeat,
+  type StopReason,
 } from "./db/jobs";
 import { recordMeshOutcome } from "./db/meshes";
 import { getRun, recordRunOutcome } from "./db/runs";
@@ -158,6 +159,10 @@ async function checkedCompletion(
   job: Job,
   request: CompleteRequest,
 ): Promise<Completion> {
+  if (request.status === "stopped") {
+    // The handler checks that the job was asked to stop before it gets here.
+    return { status: job.stopRequested ?? "cancelled" };
+  }
   if (request.status === "failed") {
     return {
       status: "failed",
@@ -241,11 +246,19 @@ async function storedFiles(env: Env, job: Job): Promise<RunFileName[]> {
   return uploads.filter((_, i) => stored[i] !== null).map((f) => f.name as RunFileName);
 }
 
+/** The time a job used, as its owner reads it: seconds below two minutes, then minutes and seconds. */
+function usedTime(billedSeconds: number): string {
+  if (billedSeconds < 120) return `${billedSeconds} s`;
+  return `${Math.floor(billedSeconds / 60)} min ${billedSeconds % 60} s`;
+}
+
 /**
  * What the owner is told about a failed job: the worker's message when it is their fault, and
  * the API's own when a run ran out of memory, whoever pays.
  */
-function problem(completion: Completion & { status: "failed" }, ours: string): string {
+function problem(completion: Exclude<Completion, { status: "succeeded" }>, ours: string): string {
+  // Only runs are cancelled (M8.2), but every job type reads the same completion.
+  if (completion.status !== "failed") return stoppedProblem(completion.status, null);
   const explained = completion.failureCategory === "user_fault" || completion.failureCause === OUT_OF_MEMORY;
   if (explained && completion.failureMessage) {
     return completion.failureMessage;
@@ -259,6 +272,15 @@ const RUN_FAULT =
   "The run stopped because of a fault in ClearFEA, not in your setup ({cause}). The solver log shows what happened. Run it again; if it fails again, report it.";
 const MESH_FAULT =
   "Meshing stopped because of a fault in ClearFEA, not in your setup ({cause}). Generate the mesh again; if it fails again, report it.";
+
+/** What the owner is told about a run that stopped because it was asked to (M8.2). */
+function stoppedProblem(reason: StopReason, charge: JobCharge | null): string {
+  const time = charge === null ? "" : ` after ${usedTime(charge.billedSeconds)}`;
+  const charged = charge?.charged ? " The time it used is charged." : "";
+  return reason === "cancelled"
+    ? `You cancelled the run${time}.${charged} Run it again for results.`
+    : `The run reached its stop limit${time} and was stopped.${charged}`;
+}
 
 internal.post("/jobs/:id/heartbeat", async (c) => {
   const body = await readBody(c.req.raw, validateHeartbeatRequest, "HeartbeatRequest", SCHEMA);
@@ -278,6 +300,9 @@ internal.post("/jobs/:id/complete", async (c) => {
   const gone = "This worker holds no active job with that id; it may have been cancelled.";
   const held = await getClaimedJob(c.env.DB, request.workerId, c.req.param("id"));
   if (held === null) return c.json({ error: gone }, 409);
+  if (request.status === "stopped" && held.stopRequested === null) {
+    return c.json({ error: "Nobody asked this job to stop. Report how it ended instead." }, 409);
+  }
   const completion = await withMemoryFault(c.env.DB, held, await checkedCompletion(c.env, held, request));
   const { billableMs } = request.metering;
   // A metered job costs its measured time at the rate it was queued with (ADR-033).
@@ -309,7 +334,9 @@ internal.post("/jobs/:id/complete", async (c) => {
       job,
       completion.status === "succeeded"
         ? { status: "succeeded", result: validatedSolveResult(completion.result) }
-        : { status: "failed", problem: problem(completion, RUN_FAULT) },
+        : completion.status === "failed"
+          ? { status: "failed", problem: problem(completion, RUN_FAULT) }
+          : { status: completion.status, problem: stoppedProblem(completion.status, charge) },
       await storedFiles(c.env, job),
     );
   }

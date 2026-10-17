@@ -2,7 +2,7 @@
 // Configuration values (docs/ARCHITECTURE.md section 4): rows of `settings`, set by migrations and
 // changed with `wrangler d1 execute`, not by any route. Not user data, so not owner-scoped.
 
-/** The storage rules (M8.6, ADR-085). */
+/** The storage rules (M8.6, ADR-086). */
 export interface StorageSettings {
   /** Bytes each user stores free of charge. */
   freeBytes: number;

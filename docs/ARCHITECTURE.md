@@ -136,6 +136,7 @@ queued -> claimed -> running -> succeeded
 - The API creates a job row and, for metered jobs, checks the wallet balance against the estimate (not in self-hosting mode, where the wallet is informational, ADR-084).
 - A worker calls `POST /internal/jobs/claim` with its worker token and capabilities. The API marks one job claimed, atomically, and returns the job payload (type, target, parameters) plus transfer URLs, one per named input or output file (ADR-024).
 - The worker sends a heartbeat every few seconds with stage, progress and new log text. The response tells it whether to cancel or stop.
+- Since M8.2 (ADR-085) the owner cancels a run with `POST /api/runs/{id}/cancel`. A queued job ends at once, uncharged. A claimed or running job is marked (`jobs.stop_requested`); its next heartbeat answers `cancel`, the worker stops the solver, keeps the deck and log, and completes with `status: "stopped"` and its metering, and the API ends the job as `cancelled` and charges the time used. M8.3's stop limit uses the same path with `stopped_at_limit` and `stop`. While a run solves, its view carries its progress: when the worker took it, the elapsed time and what that time costs so far.
 - A job whose heartbeat goes silent past a timeout is marked failed as a platform fault and may be retried.
 - On completion the worker uploads outputs and posts a result summary with metering figures.
 

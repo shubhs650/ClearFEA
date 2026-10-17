@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Cost of storage above the free allowance (M8.6, ADR-085; DECISIONS.md, storage). Like a job's
+// Cost of storage above the free allowance (M8.6, ADR-086; DECISIONS.md, storage). Like a job's
 // cost (cost.ts) it is pure integer arithmetic, so the ledger adds up exactly. Money is whole
 // micro-credits (1,000,000 is one credit).
 

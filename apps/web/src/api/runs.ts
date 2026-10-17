@@ -57,6 +57,15 @@ export async function getRun(runId: string): Promise<ApiResult<RunView>> {
   return result.kind === "ok" ? { kind: "ok", value: result.value.run } : result;
 }
 
+/**
+ * Cancels a solving run (M8.2): one still waiting ends at once; one the solver is on stops
+ * within a few seconds, and the time it used is charged. Answers the run as it is now.
+ */
+export async function cancelRun(runId: string): Promise<ApiResult<RunView>> {
+  const result = await apiRequest("POST", `/api/runs/${encodeURIComponent(runId)}/cancel`, validateRunResponse);
+  return result.kind === "ok" ? { kind: "ok", value: result.value.run } : result;
+}
+
 /** The solver log written after chunk `after`. */
 export function getRunLog(runId: string, after: number): Promise<ApiResult<RunLogResponse>> {
   return apiRequest("GET", `/api/runs/${encodeURIComponent(runId)}/log?after=${after}`, validateRunLogResponse);
@@ -100,14 +109,14 @@ export function runFileUrl(runId: string, name: RunFileName, download = false): 
   return download ? `${path}?download=1` : path;
 }
 
-/** Pins the run so its raw solver output is kept, or unpins it (M8.6, ADR-085). */
+/** Pins the run so its raw solver output is kept, or unpins it (M8.6, ADR-086). */
 export async function pinRun(runId: string, pinned: boolean): Promise<ApiResult<RunView>> {
   const path = `/api/runs/${encodeURIComponent(runId)}/pin`;
   const result = await apiRequest("PUT", path, validateRunResponse, { pinned });
   return result.kind === "ok" ? { kind: "ok", value: result.value.run } : result;
 }
 
-/** Solves the run's frozen setup again on its mesh, as a new run (M8.6, ADR-085). */
+/** Solves the run's frozen setup again on its mesh, as a new run (M8.6, ADR-086). */
 export async function rerunRun(runId: string): Promise<ApiResult<RunView>> {
   const result = await apiRequest("POST", `/api/runs/${encodeURIComponent(runId)}/rerun`, validateRunResponse);
   return result.kind === "ok" ? { kind: "ok", value: result.value.run } : result;

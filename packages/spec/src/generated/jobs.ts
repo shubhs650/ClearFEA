@@ -38,7 +38,7 @@ export type WorkerId = string;
  * This interface was referenced by `Jobs`'s JSON-Schema
  * via the `definition` "CompleteRequest".
  */
-export type CompleteRequest = CompleteSucceeded | CompleteFailed;
+export type CompleteRequest = CompleteSucceeded | CompleteFailed | CompleteStopped;
 
 /**
  * Wire shapes of the job routes: the worker's internal routes and the signed-in user's public routes (docs/ARCHITECTURE.md sections 6 and 8). Each message is a definition under $defs.
@@ -171,6 +171,17 @@ export interface CompleteFailed {
   failureMessage?: string;
 }
 /**
+ * The worker ended the job because a heartbeat told it to (cancel or stop, M8.2): it reports the time it used. The API records the job as cancelled or stopped at its limit, as it asked, and charges the time (DECISIONS "Failed runs").
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "CompleteStopped".
+ */
+export interface CompleteStopped {
+  workerId: WorkerId;
+  status: "stopped";
+  metering: Metering;
+}
+/**
  * This interface was referenced by `Jobs`'s JSON-Schema
  * via the `definition` "CompletedJob".
  */
@@ -262,6 +273,7 @@ export const validateHeartbeatResponse = validator<HeartbeatResponse>(schema, "H
 export const validateMetering = validator<Metering>(schema, "Metering");
 export const validateCompleteSucceeded = validator<CompleteSucceeded>(schema, "CompleteSucceeded");
 export const validateCompleteFailed = validator<CompleteFailed>(schema, "CompleteFailed");
+export const validateCompleteStopped = validator<CompleteStopped>(schema, "CompleteStopped");
 export const validateCompleteRequest = validator<CompleteRequest>(schema, "CompleteRequest");
 export const validateCompletedJob = validator<CompletedJob>(schema, "CompletedJob");
 export const validateCompleteResponse = validator<CompleteResponse>(schema, "CompleteResponse");

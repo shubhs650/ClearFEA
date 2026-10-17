@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
--- Storage per user (M8.6, ADR-085; docs/ARCHITECTURE.md section 4): a free allowance, retention
+-- Storage per user (M8.6, ADR-086; docs/ARCHITECTURE.md section 4): a free allowance, retention
 -- of raw solver output, pinning, and a daily charge for what is stored above the allowance.
 
 -- Configuration values, not user data: change one with `wrangler d1 execute`. The values below

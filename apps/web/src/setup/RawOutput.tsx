@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// A finished run's raw solver output in the Run panel (M8.6, ADR-085): results.frd and
+// A finished run's raw solver output in the Run panel (M8.6, ADR-086): results.frd and
 // results.dat to download, how long they are kept, a pin that keeps them, and, once the daily
 // sweep has removed them, a rerun of the run's own setup that makes them again.
 

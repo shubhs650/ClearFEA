@@ -56,7 +56,7 @@ app.route("/api/storage", storage);
 app.route("/internal", internal);
 
 /**
- * The daily storage sweep (M8.6, ADR-085), run by the cron trigger in wrangler.jsonc: removes
+ * The daily storage sweep (M8.6, ADR-086), run by the cron trigger in wrangler.jsonc: removes
  * raw solver output past its retention period and charges storage above the free allowance.
  */
 async function scheduled(controller: ScheduledController, env: Env): Promise<void> {

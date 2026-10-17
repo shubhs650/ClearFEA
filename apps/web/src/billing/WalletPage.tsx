@@ -2,7 +2,7 @@
 // The wallet page (M8.1, ADR-080): the balance, what was granted and charged, and every ledger
 // entry with the run or mesh it paid for. Drawn over the workbench, which stays as it was. In
 // self-hosting mode (M8.10, ADR-084) it says that the wallet is information only. Since M8.6
-// (ADR-085) it shows storage too, with the daily storage charges in the ledger.
+// (ADR-086) it shows storage too, with the daily storage charges in the ledger.
 
 import type { WalletEntry, WalletResponse, WalletView } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
@@ -126,7 +126,7 @@ function WalletContent({ wallet, selfHosted }: { wallet: WalletView; selfHosted:
   );
 }
 
-const RUN_STATUS = { solving: "solving", succeeded: "solved", failed: "failed" } as const;
+const RUN_STATUS = { solving: "solving", succeeded: "solved", failed: "failed", cancelled: "cancelled" } as const;
 
 /** What an entry paid for, in a few words. */
 function what(entry: WalletEntry): string {

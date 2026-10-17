@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Client for /api/storage (M8.6, ADR-085). Shapes: packages/spec/schemas/storage.schema.json.
+// Client for /api/storage (M8.6, ADR-086). Shapes: packages/spec/schemas/storage.schema.json.
 
 import { type StorageView, validateStorageResponse } from "@clearfea/spec";
 import { type ApiResult, apiRequest } from "./request";

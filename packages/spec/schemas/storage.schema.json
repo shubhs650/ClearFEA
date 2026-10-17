@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Storage",
-  "description": "Wire shapes of the storage route (M8.6, ADR-085; docs/ARCHITECTURE.md section 4). Sizes are in bytes; money is in whole micro-credits (1,000,000 is one credit). Each message is a definition under $defs.",
+  "description": "Wire shapes of the storage route (M8.6, ADR-086; docs/ARCHITECTURE.md section 4). Sizes are in bytes; money is in whole micro-credits (1,000,000 is one credit). Each message is a definition under $defs.",
   "$defs": {
     "StorageKind": {
       "description": "What stored files are: geometry (the STEP file, topology and display mesh), mesh (volume and display meshes), results (a run's solver input, log and viewer files, kept permanently), rawOutput (a run's results.frd and results.dat, kept for the retention period unless the run is pinned), report (reports, report figures and the report logo).",

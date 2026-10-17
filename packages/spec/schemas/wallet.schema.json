@@ -4,7 +4,7 @@
   "description": "Wire shapes of the wallet route (M8.1, ADR-080; docs/ARCHITECTURE.md sections 4 and 6). Money is in whole micro-credits: 1,000,000 is one credit. Each message is a definition under $defs.",
   "$defs": {
     "LedgerReason": {
-      "description": "What a ledger entry is for: a play-money credit grant, the charge for a mesh or solve job (ADR-033), or a day's charge for storage above the free allowance (M8.6, ADR-085).",
+      "description": "What a ledger entry is for: a play-money credit grant, the charge for a mesh or solve job (ADR-033), or a day's charge for storage above the free allowance (M8.6, ADR-086).",
       "type": "string",
       "enum": ["grant", "mesh", "solve", "storage"]
     },
@@ -30,7 +30,7 @@
         "simulationId": { "type": "string" },
         "simulationName": { "type": "string" },
         "startedAt": { "type": "string" },
-        "status": { "type": "string", "enum": ["solving", "succeeded", "failed"] }
+        "status": { "type": "string", "enum": ["solving", "succeeded", "failed", "cancelled"] }
       }
     },
     "LedgerMesh": {
@@ -46,7 +46,7 @@
       }
     },
     "LedgerStorage": {
-      "description": "What a storage charge was for (M8.6, ADR-085): the UTC day, the bytes the user stored when the daily sweep measured them, the free allowance then, and the rate per GiB per day above it.",
+      "description": "What a storage charge was for (M8.6, ADR-086): the UTC day, the bytes the user stored when the daily sweep measured them, the free allowance then, and the rate per GiB per day above it.",
       "type": "object",
       "additionalProperties": false,
       "required": ["day", "usedBytes", "freeBytes", "ratePerGibDay"],

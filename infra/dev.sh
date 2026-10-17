@@ -88,7 +88,7 @@ run web pnpm --filter @clearfea/web dev
 run worker "${compose[@]}" up --build worker
 
 # Say once where to look when the API and web app answer. Then run the storage sweep (M8.6,
-# ADR-085) now and every hour: wrangler dev does not fire the daily cron trigger by itself, and
+# ADR-086) now and every hour: wrangler dev does not fire the daily cron trigger by itself, and
 # the sweep charges each day once, so running it more often changes nothing.
 (
   for _ in $(seq 1 120); do

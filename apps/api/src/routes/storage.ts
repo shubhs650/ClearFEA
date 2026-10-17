@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The signed-in user's storage (M8.6, ADR-085): what is kept, by kind, against the free
+// The signed-in user's storage (M8.6, ADR-086): what is kept, by kind, against the free
 // allowance, and the runs holding raw solver output with when it goes. Shapes:
 // packages/spec/schemas/storage.schema.json. Pins are set under /api/runs/:id/pin.
 

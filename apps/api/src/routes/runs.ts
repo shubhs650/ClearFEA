@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The signed-in user's runs, their solver logs (M1.8, ADR-030), the viewer's result files
 // (M1.9, ADR-031), the solver input and log to view or download (M1.10, ADR-032), and the raw
-// solver output with its pin and a rerun that regenerates it (M8.6, ADR-085). Runs are started
-// through POST /api/simulations/:id/runs. Shapes: simulation.schema.json.
+// solver output with its pin and a rerun that regenerates it (M8.6, ADR-086). Runs are started
+// through POST /api/simulations/:id/runs; a solving run's progress is in its view and
+// POST /api/runs/:id/cancel cancels it (M8.2, ADR-085). Shapes: simulation.schema.json.
 
 import {
   elementLimitProblem,
   type RunLogResponse,
+  type RunProgress,
   type RunResponse,
   type RunView,
   runSolverProblem,
@@ -15,6 +17,7 @@ import {
   validatePinRunRequest,
 } from "@clearfea/spec";
 import { type Context, Hono } from "hono";
+import { billedSeconds, costOf } from "../billing/cost";
 import { estimateRun, runSize, simulatedMachine } from "../billing/estimate";
 import { balanceOf } from "../billing/ledger";
 import { runFundsProblem } from "../billing/wallet";
@@ -23,6 +26,7 @@ import { readJobLog } from "../db/jobs";
 import { listMachineSizes } from "../db/machines";
 import { getMesh, meshKey } from "../db/meshes";
 import {
+  cancelRun,
   createRun,
   getRun,
   listRuns,
@@ -41,6 +45,23 @@ runs.use("*", requireUser);
 
 const NOT_FOUND = "There is no run with that id in your account.";
 
+/**
+ * A solving run's progress: what its time so far costs at its own rate, billed as metering
+ * bills it (per started second). It counts from the claim, a little before the worker's
+ * billable phase starts, so it is at most a second or so above what the run will be charged
+ * for that time.
+ */
+function progressOf(run: Run): RunProgress | null {
+  if (run.status !== "solving") return null;
+  const elapsed = run.jobClaimedAt === null ? null : run.jobElapsedMs;
+  return {
+    startedAt: run.jobClaimedAt,
+    elapsedMs: elapsed,
+    costSoFar: elapsed === null || run.machine === null ? null : costOf(billedSeconds(elapsed), run.machine.ratePerHour),
+    cancelling: run.stopRequested,
+  };
+}
+
 export function runView(run: Run): RunView {
   return {
     id: run.id,
@@ -55,6 +76,7 @@ export function runView(run: Run): RunView {
     cost: run.cost,
     status: run.status,
     stage: run.status !== "solving" ? null : run.jobStatus === "queued" ? "queued" : run.jobStage,
+    progress: progressOf(run),
     problem: run.problem,
     result: run.result,
     createdAt: run.createdAt,
@@ -68,6 +90,23 @@ runs.get("/:id", async (c) => {
   // Another user's run answers exactly like a missing one, so ids reveal nothing.
   if (run === null) return c.json({ error: NOT_FOUND }, 404);
   return c.json({ run: runView(run) } satisfies RunResponse);
+});
+
+/**
+ * Cancels a solving run (M8.2, ADR-085). One still waiting for the worker ends at once and costs
+ * nothing; one the worker is on is stopped at its next heartbeat, and the time it used is charged
+ * when the worker reports it. Answers the run as it is now; cancelling twice changes nothing.
+ */
+runs.post("/:id/cancel", async (c) => {
+  const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
+  if (run === null) return c.json({ error: NOT_FOUND }, 404);
+  if (run.status !== "solving") {
+    return c.json({ error: "The run has already finished, so there is nothing to cancel." }, 409);
+  }
+  await cancelRun(c.env.DB, c.var.userId, run.id);
+  const now = await getRun(c.env.DB, c.var.userId, run.id);
+  if (now === null) return c.json({ error: NOT_FOUND }, 404);
+  return c.json({ run: runView(now) } satisfies RunResponse);
 });
 
 /** The solver log written after chunk ?after= (0 for the whole log), for polling while it runs. */
@@ -91,7 +130,9 @@ async function succeededRun(c: Context<SessionEnv>): Promise<Run | Response> {
     const why =
       run.status === "solving"
         ? "The run is still solving. Results appear when it has finished."
-        : "The run failed, so it has no results to show. Fix what its message says and run again.";
+        : run.status === "cancelled"
+          ? "The run was cancelled, so it has no results to show. Run it again for results."
+          : "The run failed, so it has no results to show. Fix what its message says and run again.";
     return c.json({ error: why }, 409);
   }
   return run;
@@ -286,7 +327,7 @@ const RAW_REMOVED = (run: Run) =>
 
 /**
  * Pins the run, so its raw solver output is kept past the retention period, or unpins it
- * (M8.6, ADR-085). A run whose raw output was already removed cannot be pinned.
+ * (M8.6, ADR-086). A run whose raw output was already removed cannot be pinned.
  */
 runs.put("/:id/pin", async (c) => {
   const body = await readBody(c.req.raw, validatePinRunRequest, "PinRunRequest", "simulation.schema.json");
@@ -304,7 +345,7 @@ runs.put("/:id/pin", async (c) => {
 
 /**
  * Solves a finished run's frozen spec again on the same mesh, as a new run of the same
- * simulation, to regenerate raw solver output the sweep removed (M8.6, ADR-085). The setup is
+ * simulation, to regenerate raw solver output the sweep removed (M8.6, ADR-086). The setup is
  * the run's, not the simulation's current one, so the new raw output belongs to the same
  * results. The new run is estimated and charged like any other, on the run's machine size while
  * that size exists, else the recommended one, and refused when the wallet cannot cover it.

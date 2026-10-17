@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Storage per user (M8.6, ADR-085): what each user keeps in R2, measured from the files
+// Storage per user (M8.6, ADR-086): what each user keeps in R2, measured from the files
 // themselves under owners/<id>/, and the daily sweep that removes raw solver output past its
 // retention period and charges storage above the free allowance. Reads are owner-scoped; the
 // sweep is the one caller that goes over every user, and it runs only from the scheduled handler.

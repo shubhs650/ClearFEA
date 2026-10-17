@@ -171,6 +171,7 @@ def static_params(**changes: Any) -> dict[str, Any]:
             "cost": {"billedSeconds": 3, "amount": 1, "charged": True},
             "status": "succeeded",
             "stage": None,
+            "progress": None,
             "problem": None,
             "result": {
                 "nodes": 1234,

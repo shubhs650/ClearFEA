@@ -983,10 +983,28 @@ class SolveResult(BaseModel):
     """
 
 
-type RunStatus = Literal["solving", "succeeded", "failed"]
+type RunStatus = Literal["solving", "succeeded", "failed", "cancelled"]
 """
-solving while the solve job is queued or running; succeeded or failed once it ends.
+solving while the solve job is queued or running; succeeded, failed or cancelled (by its owner, M8.2) once it ends.
 """
+
+
+class RunProgress(BaseModel):
+    """
+    A solving run as it goes (M8.2): when the worker took it (null while queued), the time since then when the answer was made, what that time costs so far at the run's rate (elapsed time rounded up to whole seconds, as metering bills it; null while queued and for runs that are not metered), and whether its owner has asked to cancel it and the worker has not stopped yet.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    started_at: Annotated[str | None, Field(alias="startedAt")]
+    elapsed_ms: Annotated[int | None, Field(alias="elapsedMs", ge=0)]
+    cost_so_far: Annotated[int | None, Field(alias="costSoFar", ge=0)]
+    """
+    Micro-credits.
+    """
+    cancelling: bool
 
 
 class RunSoftware(BaseModel):
@@ -1024,7 +1042,7 @@ type RunFileName = Literal[
     "deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin", "nodes.bin"
 ]
 """
-A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}; results.frd and results.dat, the raw solver output, can be downloaded there while they are kept (M8.6, ADR-085).
+A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}; results.frd and results.dat, the raw solver output, can be downloaded there while they are kept (M8.6, ADR-086).
 """
 
 
@@ -1158,7 +1176,7 @@ class CreateRunRequest(BaseModel):
 
 class RunRawOutput(BaseModel):
     """
-    What happens to a run's raw solver output, results.frd and results.dat (M8.6, ADR-085). It is removed by the daily storage sweep once the retention period after the run ended has passed, unless the run is pinned; running the same setup again regenerates it. Everything else a run keeps is kept permanently.
+    What happens to a run's raw solver output, results.frd and results.dat (M8.6, ADR-086). It is removed by the daily storage sweep once the retention period after the run ended has passed, unless the run is pinned; running the same setup again regenerates it. Everything else a run keeps is kept permanently.
     """
 
     model_config = ConfigDict(
@@ -1555,9 +1573,13 @@ class RunView(BaseModel):
     """
     What the solve job is doing: queued, then the worker's stage.
     """
+    progress: RunProgress | None
+    """
+    While the run solves; null once it has ended.
+    """
     problem: str | None
     """
-    Why the run failed, in plain language.
+    Why the run failed, or that it was cancelled, in plain language.
     """
     result: SolveResult | None
     created_at: Annotated[str, Field(alias="createdAt")]

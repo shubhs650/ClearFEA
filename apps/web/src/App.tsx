@@ -346,6 +346,7 @@ export function App() {
           requesting={runs.requesting}
           requestProblem={runs.requestProblem}
           onRun={(machineSize) => void runs.start(machineSize)}
+          onCancel={() => void runs.cancel()}
           onRerun={(id) => void runs.rerun(id)}
           onRunChanged={runs.replace}
           choice={shownChoice}

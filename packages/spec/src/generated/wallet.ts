@@ -6,7 +6,7 @@ import schema from "../../schemas/wallet.schema.json";
 import { validator } from "../validate";
 
 /**
- * What a ledger entry is for: a play-money credit grant, the charge for a mesh or solve job (ADR-033), or a day's charge for storage above the free allowance (M8.6, ADR-085).
+ * What a ledger entry is for: a play-money credit grant, the charge for a mesh or solve job (ADR-033), or a day's charge for storage above the free allowance (M8.6, ADR-086).
  *
  * This interface was referenced by `Wallet`'s JSON-Schema
  * via the `definition` "LedgerReason".
@@ -45,7 +45,7 @@ export interface LedgerRun {
   simulationId: string;
   simulationName: string;
   startedAt: string;
-  status: "solving" | "succeeded" | "failed";
+  status: "solving" | "succeeded" | "failed" | "cancelled";
 }
 /**
  * The mesh a mesh charge paid for. A mesh belongs to a geometry and may serve several simulations (ADR-047), so it is named by its geometry. Counts are null when meshing failed.
@@ -60,7 +60,7 @@ export interface LedgerMesh {
   nodes: number | null;
 }
 /**
- * What a storage charge was for (M8.6, ADR-085): the UTC day, the bytes the user stored when the daily sweep measured them, the free allowance then, and the rate per GiB per day above it.
+ * What a storage charge was for (M8.6, ADR-086): the UTC day, the bytes the user stored when the daily sweep measured them, the free allowance then, and the rate per GiB per day above it.
  *
  * This interface was referenced by `Wallet`'s JSON-Schema
  * via the `definition` "LedgerStorage".

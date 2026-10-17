@@ -16,7 +16,7 @@ Wire shapes of the wallet route (M8.1, ADR-080; docs/ARCHITECTURE.md sections 4 
 
 type LedgerReason = Literal["grant", "mesh", "solve", "storage"]
 """
-What a ledger entry is for: a play-money credit grant, the charge for a mesh or solve job (ADR-033), or a day's charge for storage above the free allowance (M8.6, ADR-085).
+What a ledger entry is for: a play-money credit grant, the charge for a mesh or solve job (ADR-033), or a day's charge for storage above the free allowance (M8.6, ADR-086).
 """
 
 
@@ -51,7 +51,7 @@ class LedgerRun(BaseModel):
     simulation_id: Annotated[str, Field(alias="simulationId")]
     simulation_name: Annotated[str, Field(alias="simulationName")]
     started_at: Annotated[str, Field(alias="startedAt")]
-    status: Literal["solving", "succeeded", "failed"]
+    status: Literal["solving", "succeeded", "failed", "cancelled"]
 
 
 class LedgerMesh(BaseModel):
@@ -71,7 +71,7 @@ class LedgerMesh(BaseModel):
 
 class LedgerStorage(BaseModel):
     """
-    What a storage charge was for (M8.6, ADR-085): the UTC day, the bytes the user stored when the daily sweep measured them, the free allowance then, and the rate per GiB per day above it.
+    What a storage charge was for (M8.6, ADR-086): the UTC day, the bytes the user stored when the daily sweep measured them, the free allowance then, and the rate per GiB per day above it.
     """
 
     model_config = ConfigDict(

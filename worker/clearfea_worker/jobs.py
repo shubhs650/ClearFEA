@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
 
-from .api import ClaimedJob
+from .api import ApiError, ClaimedJob
 from .spec.jobs_schema import FailureCategory
 
 if TYPE_CHECKING:
@@ -24,6 +24,11 @@ class JobFailure(Exception):
         self.category = category
         self.cause = cause
         self.message = message
+
+
+class JobStopped(Exception):
+    """The API asked for the job to end, because its owner cancelled it or it reached its stop
+    limit (M8.2, ADR-085). The runner reports the time it used; the API decides the rest."""
 
 
 @dataclass
@@ -71,6 +76,11 @@ class JobContext:
 
     def set_stage(self, stage: str) -> None:
         self.stage = stage
+
+    def check_stopped(self) -> None:
+        """Ends the handler with JobStopped once the API has asked for the job to end."""
+        if self.cancelled.is_set():
+            raise JobStopped()
 
     def log(self, text: str) -> None:
         """Queues log text for the next heartbeat. Past LOG_STREAM_CHARS, adds one note
@@ -213,6 +223,7 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
         mesh = read_volume_mesh(files.download("mesh.bin"))
     except ValueError as error:
         raise JobFailure("platform_fault", "bad_mesh", f"mesh.bin: {error}") from None
+    context.check_stopped()
     context.set_stage("writing input")
     try:
         deck_text = generate_deck(params.spec, mesh)
@@ -222,10 +233,18 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     work.mkdir()
     deck = work / "job.inp"
     deck.write_text(deck_text, encoding="utf-8")
+    context.check_stopped()
     context.set_stage("solving")
     run = run_calculix(deck, context.log, context.cancelled, machine=params.machine)
     if run.cancelled:
-        return {}
+        # The deck and the log so far stay with the cancelled run, for its owner to look at.
+        context.set_stage("uploading")
+        try:
+            files.upload("deck.inp", deck)
+            files.upload("solver.log", run.log_path)
+        except ApiError:
+            pass  # The run ends cancelled either way; it just has no files to show.
+        raise JobStopped()
     context.set_stage("uploading")
     files.upload("deck.inp", deck)
     files.upload("solver.log", run.log_path)

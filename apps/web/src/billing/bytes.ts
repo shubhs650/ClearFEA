@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Stored sizes on the wallet page (M8.6, ADR-085): binary units, as the storage allowance and
+// Stored sizes on the wallet page (M8.6, ADR-086): binary units, as the storage allowance and
 // rate are per GiB.
 
 const UNITS = ["KiB", "MiB", "GiB", "TiB"] as const;

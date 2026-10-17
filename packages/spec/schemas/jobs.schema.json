@@ -132,9 +132,24 @@
         }
       }
     },
+    "CompleteStopped": {
+      "description": "The worker ended the job because a heartbeat told it to (cancel or stop, M8.2): it reports the time it used. The API records the job as cancelled or stopped at its limit, as it asked, and charges the time (DECISIONS \"Failed runs\").",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workerId", "status", "metering"],
+      "properties": {
+        "workerId": { "$ref": "#/$defs/WorkerId" },
+        "status": { "const": "stopped" },
+        "metering": { "$ref": "#/$defs/Metering" }
+      }
+    },
     "CompleteRequest": {
       "description": "Body of POST /internal/jobs/{id}/complete.",
-      "oneOf": [{ "$ref": "#/$defs/CompleteSucceeded" }, { "$ref": "#/$defs/CompleteFailed" }]
+      "oneOf": [
+        { "$ref": "#/$defs/CompleteSucceeded" },
+        { "$ref": "#/$defs/CompleteFailed" },
+        { "$ref": "#/$defs/CompleteStopped" }
+      ]
     },
     "CompletedJob": {
       "type": "object",
