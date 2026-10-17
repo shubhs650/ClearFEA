@@ -1050,6 +1050,7 @@ function run(overrides: Partial<RunView> = {}): RunView {
     files: [],
     machine: { size: "local", ratePerHour: 1_000_000 },
     estimate: null,
+    stopLimit: null,
     cost: null,
     status: "solving",
     stage: "queued",
@@ -1186,6 +1187,13 @@ describe("run", () => {
       "medium (4 cores, 16 GiB)",
     ]);
     expect(estimate.getByText("about 0.000417 credits on small")).toBeTruthy();
+    // The default stop limit: three times the estimate, but never under 30 s (M8.3).
+    expect((estimate.getByRole("spinbutton", { name: "Stop limit (× the estimated time)" }) as HTMLInputElement).value).toBe(
+      "3",
+    );
+    expect(estimate.getByTestId("stop-limit-hint").textContent).toBe(
+      "The run is stopped if it is still solving after 30 s, and the time it used is charged.",
+    );
     fireEvent.click(button);
     expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
     expect(await settings().findByText("CalculiX Version 2.21")).toBeTruthy();
@@ -1195,7 +1203,72 @@ describe("run", () => {
       "The simulation is being solved.",
     );
     const post = fetchMock.mock.calls.find(([path, init]) => path === "/api/simulations/s1/runs" && init?.method === "POST");
-    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ machineSize: "small" });
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ machineSize: "small", stopMultiplier: 3 });
+  });
+
+  it("runs with the stop limit the user sets, and refuses one out of range (M8.3)", async () => {
+    const slow: RunEstimate = { ...ESTIMATE, seconds: 112 };
+    const fetchMock = serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/estimate?solver=pastix&analysis=linear_static": { status: 200, json: { estimate: slow } },
+        "POST /api/simulations/s1/runs": { status: 201, json: { run: run() } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    const estimate = within(await settings().findByLabelText("Estimate"));
+    const limit = estimate.getByRole("spinbutton", { name: "Stop limit (× the estimated time)" });
+    const hint = estimate.getByTestId("stop-limit-hint");
+    expect(hint.textContent).toBe("The run is stopped if it is still solving after 5:36, and the time it used is charged.");
+    const button = settings().getByRole("button", { name: "Run" });
+    await waitFor(() => expect(button).toHaveProperty("disabled", false));
+    fireEvent.change(limit, { target: { value: "25" } });
+    expect(hint.textContent).toBe("Enter a multiplier from 0.5 to 20.");
+    expect(button).toHaveProperty("disabled", true);
+    fireEvent.change(limit, { target: { value: "1.5" } });
+    expect(hint.textContent).toBe("The run is stopped if it is still solving after 2:48, and the time it used is charged.");
+    expect(button).toHaveProperty("disabled", false);
+    fireEvent.click(button);
+    expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
+    const post = fetchMock.mock.calls.find(([path, init]) => path === "/api/simulations/s1/runs" && init?.method === "POST");
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ machineSize: "small", stopMultiplier: 1.5 });
+  });
+
+  it("shows a run stopped at its limit, and its limit in the record (M8.3)", async () => {
+    const problem =
+      "The run reached its stop limit of 30 s (0.5 × the estimated time) and was stopped after 35 s. The time it used is charged. If it needs longer, raise the stop limit and run it again; a coarser mesh or a faster solver also shortens it.";
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": {
+          status: 200,
+          json: {
+            runs: [
+              run({
+                status: "stopped",
+                stage: null,
+                progress: null,
+                problem,
+                stopLimit: { multiplier: 0.5, seconds: 30 },
+                cost: { billedSeconds: 35, amount: 4861, charged: true },
+                files: ["deck.inp", "solver.log"],
+                finishedAt: "2026-10-17T07:00:35.000Z",
+              }),
+            ],
+          },
+        },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    const record = within(await settings().findByLabelText("Run record"));
+    expect(tree().getByRole("button", { name: "Run, incomplete" }).getAttribute("title")).toBe(problem);
+    expect(record.getByText("30 s")).toBeTruthy();
+    expect(record.getByText("(0.5 × the estimated time)")).toBeTruthy();
+    expect(record.getByText("0.004861 credits for 35 s")).toBeTruthy();
   });
 
   it("runs on the machine size the user picks, and says when it has too little memory", async () => {
@@ -1231,13 +1304,14 @@ describe("run", () => {
     fireEvent.click(button);
     expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
     const post = fetchMock.mock.calls.find(([path, init]) => path === "/api/simulations/s1/runs" && init?.method === "POST");
-    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ machineSize: "small" });
+    expect(JSON.parse(String(post?.[1]?.body))).toEqual({ machineSize: "small", stopMultiplier: 3 });
   });
 
   it("shows a solving run's time and cost against the estimate, and cancels it (M8.2)", async () => {
     const running = run({
       machine: { size: "small", ratePerHour: 500_000 },
       estimate: ESTIMATE,
+      stopLimit: { multiplier: 3, seconds: 90 },
       stage: "solving",
       progress: { startedAt: "2026-10-17T07:00:00.000Z", elapsedMs: 65_400, costSoFar: 9_167, cancelling: false },
     });
@@ -1256,6 +1330,7 @@ describe("run", () => {
     expect(job.getByRole("status", { name: "Run stage" }).textContent).toBe("Solver: solving…");
     expect(job.getByTestId("run-elapsed").textContent).toBe("1:05 of about 3 s estimated");
     expect(job.getByTestId("run-cost-so-far").textContent).toBe("0.009167 credits of about 0.000417 credits estimated");
+    expect(job.getByTestId("run-stop-limit").textContent).toBe("1:30 (3 × the estimate)");
     expect(job.getByText(/charged for the time it has used\. It carries on if you close the browser\./)).toBeTruthy();
     fireEvent.click(job.getByRole("button", { name: "Cancel the run" }));
     expect(await job.findByText(/^Cancelling: the solver stops/)).toBeTruthy();

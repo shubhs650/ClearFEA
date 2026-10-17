@@ -28,11 +28,18 @@ export async function listRuns(simulationId: string): Promise<ApiResult<RunView[
 
 /**
  * Solves the simulation's saved setup on its current mesh, on the machine size named or, without
- * one, on the recommended size.
+ * one, on the recommended size, with the stop limit's multiplier or the default one (M8.3).
  */
-export async function startRun(simulationId: string, machineSize?: string): Promise<ApiResult<RunView>> {
+export async function startRun(
+  simulationId: string,
+  machineSize?: string,
+  stopMultiplier?: number,
+): Promise<ApiResult<RunView>> {
   const path = `/api/simulations/${encodeURIComponent(simulationId)}/runs`;
-  const body = machineSize === undefined ? undefined : { machineSize };
+  const body =
+    machineSize === undefined && stopMultiplier === undefined
+      ? undefined
+      : { ...(machineSize === undefined ? {} : { machineSize }), ...(stopMultiplier === undefined ? {} : { stopMultiplier }) };
   const result = await apiRequest("POST", path, validateRunResponse, body);
   return result.kind === "ok" ? { kind: "ok", value: result.value.run } : result;
 }

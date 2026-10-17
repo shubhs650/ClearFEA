@@ -345,7 +345,7 @@ export function App() {
           onSolverChange={(next) => change({ ...spec, solver: next })}
           requesting={runs.requesting}
           requestProblem={runs.requestProblem}
-          onRun={(machineSize) => void runs.start(machineSize)}
+          onRun={(machineSize, stopMultiplier) => void runs.start(machineSize, stopMultiplier)}
           onCancel={() => void runs.cancel()}
           choice={shownChoice}
           onChoiceChange={setResultChoice}

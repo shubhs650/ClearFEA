@@ -258,7 +258,7 @@ function usedTime(billedSeconds: number): string {
  */
 function problem(completion: Exclude<Completion, { status: "succeeded" }>, ours: string): string {
   // Only runs are cancelled (M8.2), but every job type reads the same completion.
-  if (completion.status !== "failed") return stoppedProblem(completion.status, null);
+  if (completion.status !== "failed") return stoppedProblem(completion.status, null, null);
   const explained = completion.failureCategory === "user_fault" || completion.failureCause === OUT_OF_MEMORY;
   if (explained && completion.failureMessage) {
     return completion.failureMessage;
@@ -273,13 +273,19 @@ const RUN_FAULT =
 const MESH_FAULT =
   "Meshing stopped because of a fault in ClearFEA, not in your setup ({cause}). Generate the mesh again; if it fails again, report it.";
 
-/** What the owner is told about a run that stopped because it was asked to (M8.2). */
-function stoppedProblem(reason: StopReason, charge: JobCharge | null): string {
+/** What the owner is told about a run that stopped because it was asked to (M8.2, M8.3). */
+function stoppedProblem(reason: StopReason, charge: JobCharge | null, job: Job | null): string {
   const time = charge === null ? "" : ` after ${usedTime(charge.billedSeconds)}`;
   const charged = charge?.charged ? " The time it used is charged." : "";
-  return reason === "cancelled"
-    ? `You cancelled the run${time}.${charged} Run it again for results.`
-    : `The run reached its stop limit${time} and was stopped.${charged}`;
+  if (reason === "cancelled") return `You cancelled the run${time}.${charged} Run it again for results.`;
+  const limit =
+    job?.stopAfterSeconds == null || job.stopMultiplier === null
+      ? ""
+      : ` of ${usedTime(job.stopAfterSeconds)} (${job.stopMultiplier} × the estimated time)`;
+  return (
+    `The run reached its stop limit${limit} and was stopped${time}.${charged} ` +
+    "If it needs longer, raise the stop limit and run it again; a coarser mesh or a faster solver also shortens it."
+  );
 }
 
 internal.post("/jobs/:id/heartbeat", async (c) => {
@@ -336,7 +342,7 @@ internal.post("/jobs/:id/complete", async (c) => {
         ? { status: "succeeded", result: validatedSolveResult(completion.result) }
         : completion.status === "failed"
           ? { status: "failed", problem: problem(completion, RUN_FAULT) }
-          : { status: completion.status, problem: stoppedProblem(completion.status, charge) },
+          : { status: completion.status, problem: stoppedProblem(completion.status, charge, job) },
       await storedFiles(c.env, job),
     );
   }

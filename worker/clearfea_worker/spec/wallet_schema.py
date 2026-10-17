@@ -51,7 +51,7 @@ class LedgerRun(BaseModel):
     simulation_id: Annotated[str, Field(alias="simulationId")]
     simulation_name: Annotated[str, Field(alias="simulationName")]
     started_at: Annotated[str, Field(alias="startedAt")]
-    status: Literal["solving", "succeeded", "failed", "cancelled"]
+    status: Literal["solving", "succeeded", "failed", "cancelled", "stopped"]
 
 
 class LedgerMesh(BaseModel):

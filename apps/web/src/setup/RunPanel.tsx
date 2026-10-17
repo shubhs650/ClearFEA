@@ -28,13 +28,16 @@
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import {
+  DEFAULT_STOP_MULTIPLIER,
   type ElementOrder,
   frozenRunSolver,
   ITERATIVE_ACCURACY_NOTE,
   isIterative,
   limitMemoryText,
   MAX_MODES,
+  MAX_STOP_MULTIPLIER,
   maxElements,
+  MIN_STOP_MULTIPLIER,
   type RunEstimate,
   type RunKind,
   type RunFileName,
@@ -47,6 +50,7 @@ import {
   type SimulationSpec,
   type Solver,
   type SolveResult,
+  stopLimitSeconds,
   systemUnit,
 } from "@clearfea/spec";
 import { Fragment, useEffect, useState } from "react";
@@ -248,18 +252,30 @@ function sizeLabel(size: RunEstimate["sizes"][number], recommended: string | nul
   return size.fits ? label : `${label}, too little memory`;
 }
 
+/** The multiplier typed for the stop limit, or null when it is not a number in range (M8.3). */
+export function stopMultiplier(text: string): number | null {
+  const value = Number(text);
+  if (text.trim() === "" || !Number.isFinite(value)) return null;
+  return value >= MIN_STOP_MULTIPLIER && value <= MAX_STOP_MULTIPLIER ? value : null;
+}
+
 /**
- * The estimate for the current mesh (ADR-049) and the machine size to run on. Shown before a
- * run; the chosen size goes with the Run button.
+ * The estimate for the current mesh (ADR-049), the machine size to run on and the stop limit
+ * (M8.3). Shown before a run; the chosen size and limit go with the Run button.
  */
 function Estimate({
   state,
   size,
   onSizeChange,
+  multiplier,
+  onMultiplierChange,
 }: {
   state: EstimateState;
   size: string | null;
   onSizeChange: (size: string) => void;
+  /** The stop limit's multiplier as typed. */
+  multiplier: string;
+  onMultiplierChange: (multiplier: string) => void;
 }) {
   if (state.kind === "none") return null;
   if (state.kind === "loading") return <p className="field-hint">Estimating memory, time and cost…</p>;
@@ -268,6 +284,7 @@ function Estimate({
   }
   const { estimate } = state;
   const chosen = estimate.sizes.find((s) => s.size === size);
+  const factor = stopMultiplier(multiplier);
   return (
     <section aria-label="Estimate">
       <h3 className="pane-subtitle">Estimate</h3>
@@ -295,6 +312,22 @@ function Estimate({
           ))}
         </select>
       </label>
+      <label className="field">
+        Stop limit (× the estimated time)
+        <input
+          type="number"
+          min={MIN_STOP_MULTIPLIER}
+          max={MAX_STOP_MULTIPLIER}
+          step={0.5}
+          value={multiplier}
+          onChange={(event) => onMultiplierChange(event.target.value)}
+        />
+      </label>
+      <p className="field-hint" data-testid="stop-limit-hint">
+        {factor === null
+          ? `Enter a multiplier from ${MIN_STOP_MULTIPLIER} to ${MAX_STOP_MULTIPLIER}.`
+          : `The run is stopped if it is still solving after ${limitTime(stopLimitSeconds(estimate.seconds, factor))}, and the time it used is charged.`}
+      </p>
       <p className="field-hint">
         Estimated for this mesh's {estimate.nodes.toLocaleString("en-US")} nodes
         {estimate.analysis === "modal" && estimate.modes !== undefined && ` and ${estimate.modes} modes`} from the
@@ -315,6 +348,11 @@ function Estimate({
       )}
     </section>
   );
+}
+
+/** A stop limit as minutes and seconds, or hours, minutes and seconds (M8.3). */
+function limitTime(seconds: number): string {
+  return seconds < 60 ? `${seconds} s` : clock(seconds * 1000);
 }
 
 /** The estimate a run started with, on the size it ran on. */
@@ -679,6 +717,15 @@ function RunningJob({
             {clock((progress.elapsedMs ?? 0) + ticked)}
             {estimate !== null && <span className="field-hint"> of about {duration(estimate.seconds)} estimated</span>}
           </dd>
+          {run.stopLimit !== null && (
+            <>
+              <dt>Stop limit</dt>
+              <dd data-testid="run-stop-limit">
+                {limitTime(run.stopLimit.seconds)}
+                <span className="field-hint"> ({run.stopLimit.multiplier} × the estimate)</span>
+              </dd>
+            </>
+          )}
           {progress.costSoFar !== null && (
             <>
               <dt>Cost so far</dt>
@@ -761,6 +808,15 @@ function RunRecord({ run, currentSpec }: { run: RunView; currentSpec: Simulation
           <>
             <dt>Estimate</dt>
             <dd>{estimateText(run)}</dd>
+          </>
+        )}
+        {run.stopLimit !== null && (
+          <>
+            <dt>Stop limit</dt>
+            <dd>
+              {limitTime(run.stopLimit.seconds)}
+              <span className="field-hint"> ({run.stopLimit.multiplier} × the estimated time)</span>
+            </dd>
           </>
         )}
         <dt>Cost</dt>
@@ -971,8 +1027,8 @@ export function RunPanel({
   onSolverChange: (solver: Solver) => void;
   requesting: boolean;
   requestProblem?: string;
-  /** Starts a run on the machine size chosen. */
-  onRun: (machineSize: string | undefined) => void;
+  /** Starts a run on the machine size chosen, with the stop limit's multiplier (M8.3). */
+  onRun: (machineSize: string | undefined, stopMultiplier: number) => void;
   /** Cancels the solving run (M8.2). */
   onCancel: () => void;
   choice: ResultChoice;
@@ -1001,16 +1057,27 @@ export function RunPanel({
   const setSize = (chosen: string) => {
     if (loaded !== null) setPicked({ estimate: loaded, size: chosen });
   };
+  // The stop limit's multiplier as typed; kept for the next run while the panel is open.
+  const [multiplier, setMultiplier] = useState(String(DEFAULT_STOP_MULTIPLIER));
+  const factor = stopMultiplier(multiplier);
   return (
     <section className="setup-panel" aria-label="Run">
       <h2 className="pane-title">Run</h2>
       <Notes status={status} />
       {!solving && <SolverChoice solver={solver} order={meshOrder} kind={specRunKind(currentSpec)} onChange={onSolverChange} />}
-      {!solving && <Estimate state={estimate} size={size} onSizeChange={setSize} />}
+      {!solving && (
+        <Estimate
+          state={estimate}
+          size={size}
+          onSizeChange={setSize}
+          multiplier={multiplier}
+          onMultiplierChange={setMultiplier}
+        />
+      )}
       <button
         type="button"
-        onClick={() => onRun(size ?? undefined)}
-        disabled={blockers.length > 0 || requesting || solving}
+        onClick={() => factor !== null && onRun(size ?? undefined, factor)}
+        disabled={blockers.length > 0 || requesting || solving || factor === null}
       >
         {run === null ? "Run" : "Run again"}
       </button>

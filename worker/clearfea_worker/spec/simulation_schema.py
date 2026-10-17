@@ -983,10 +983,23 @@ class SolveResult(BaseModel):
     """
 
 
-type RunStatus = Literal["solving", "succeeded", "failed", "cancelled"]
+type RunStatus = Literal["solving", "succeeded", "failed", "cancelled", "stopped"]
 """
-solving while the solve job is queued or running; succeeded, failed or cancelled (by its owner, M8.2) once it ends.
+solving while the solve job is queued or running; succeeded, failed, cancelled (by its owner, M8.2) or stopped (at its stop limit, M8.3) once it ends.
 """
+
+
+class StopLimit(BaseModel):
+    """
+    When a run is stopped (M8.3, ADR-086): once its solve job has had the machine for seconds, which is the estimated time times multiplier, rounded up, and never less than 30 s.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    multiplier: Annotated[float, Field(ge=0.5, le=20.0)]
+    seconds: Annotated[int, Field(ge=1)]
 
 
 class RunProgress(BaseModel):
@@ -1164,7 +1177,7 @@ class EstimateResponse(BaseModel):
 
 class CreateRunRequest(BaseModel):
     """
-    Body of POST /api/simulations/{id}/runs, which may also be sent empty. machineSize names the machine size to run on; without it the run takes the recommended size (the largest when none fits).
+    Body of POST /api/simulations/{id}/runs, which may also be sent empty. machineSize names the machine size to run on; without it the run takes the recommended size (the largest when none fits). stopMultiplier sets the run's stop limit as a multiple of its estimated time (M8.3); without it the run is stopped at 3 times the estimate.
     """
 
     model_config = ConfigDict(
@@ -1172,6 +1185,7 @@ class CreateRunRequest(BaseModel):
         populate_by_name=True,
     )
     machine_size: Annotated[str | None, Field(alias="machineSize", min_length=1)] = None
+    stop_multiplier: Annotated[float | None, Field(alias="stopMultiplier", ge=0.5, le=20.0)] = None
 
 
 class ShareLinkView(BaseModel):
@@ -1525,6 +1539,10 @@ class RunView(BaseModel):
     """
     The estimate made when the run started (ADR-049); null for runs made before M2.12.
     """
+    stop_limit: Annotated[StopLimit | None, Field(alias="stopLimit")]
+    """
+    When the run is stopped if it has not finished (M8.3); null for runs made before it.
+    """
     cost: RunCost | None
     """
     Known once the run has finished; null while it solves and for runs that were not metered.
@@ -1540,7 +1558,7 @@ class RunView(BaseModel):
     """
     problem: str | None
     """
-    Why the run failed, or that it was cancelled, in plain language.
+    Why the run failed, or that it was cancelled or stopped at its limit, in plain language.
     """
     result: SolveResult | None
     created_at: Annotated[str, Field(alias="createdAt")]

@@ -532,6 +532,89 @@ describe("cancelling a run (M8.2)", () => {
   });
 });
 
+describe("the stop limit (M8.3)", () => {
+  async function beat(jobId: string): Promise<unknown> {
+    const response = await call("POST", `/internal/jobs/${jobId}/heartbeat`, {
+      json: { workerId: "w1", stage: "solving" },
+      token: TOKEN,
+    });
+    expect(response.status).toBe(200);
+    return response.json();
+  }
+
+  /** As if the worker had taken the job the given number of seconds ago. */
+  async function claimedAgo(jobId: string, seconds: number): Promise<void> {
+    await env.DB.prepare(
+      `UPDATE jobs SET claimed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-${seconds} seconds') WHERE id = ?`,
+    )
+      .bind(jobId)
+      .run();
+  }
+
+  it("is three times the estimated time by default, and never under 30 s", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const seconds = run.estimate?.seconds ?? Number.NaN;
+    expect(run.stopLimit).toEqual({ multiplier: 3, seconds: Math.max(30, Math.ceil(3 * seconds)) });
+  });
+
+  it("takes the multiplier the owner sets, within its range", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id, alice, { stopMultiplier: 12.5 }));
+    const seconds = run.estimate?.seconds ?? Number.NaN;
+    expect(run.stopLimit).toEqual({ multiplier: 12.5, seconds: Math.max(30, Math.ceil(12.5 * seconds)) });
+    const job = await claim("solve");
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    for (const stopMultiplier of [0.25, 21, "3"]) {
+      expect((await startRun(id, alice, { stopMultiplier })).status).toBe(400);
+    }
+  });
+
+  it("stops a run at its limit and charges the time it used", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id, alice, { stopMultiplier: 0.5 }));
+    expect(run.stopLimit?.seconds).toBe(30);
+    const job = await claim("solve");
+    await claimedAgo(job.id, 25);
+    expect(await beat(job.id)).toEqual({ action: "continue" });
+    await claimedAgo(job.id, 31);
+    expect(await beat(job.id)).toEqual({ action: "stop" });
+    // The run reads as solving until the worker has stopped, and an owner's cancel then changes nothing.
+    expect((await readRun(run.id)).status).toBe("solving");
+    await call("POST", `/api/runs/${run.id}/cancel`, { cookie: alice });
+    expect(await beat(job.id)).toEqual({ action: "stop" });
+    await upload(job, ["deck.inp", "solver.log"]);
+    await complete(job.id, { status: "stopped", metering: { billableMs: 34_200 } });
+    const ended = await readRun(run.id);
+    expect(ended).toMatchObject({ status: "stopped", progress: null, files: ["deck.inp", "solver.log"] });
+    expect(ended.problem).toBe(
+      "The run reached its stop limit of 30 s (0.5 × the estimated time) and was stopped after 35 s. " +
+        "The time it used is charged. If it needs longer, raise the stop limit and run it again; " +
+        "a coarser mesh or a faster solver also shortens it.",
+    );
+    // 35 s at 0.5 credit an hour: 4,861.11 rounds to 4,861 micro-credits.
+    expect(ended.cost).toEqual({ billedSeconds: 35, amount: 4861, charged: true });
+    expect((await charges(aliceId)).map((e) => [e.reason, e.amount])).toEqual([
+      ["mesh", -833],
+      ["solve", -4861],
+    ]);
+    expect(await getJob(env.DB, aliceId, job.id)).toMatchObject({ status: "stopped_at_limit", failureCategory: null });
+    const wallet = validateWalletResponse(await (await call("GET", "/api/wallet", { cookie: alice })).json());
+    if (!wallet.ok) throw new Error(wallet.errors.join(" "));
+    expect(wallet.value.wallet.entries.find((e) => e.run?.id === run.id)?.run?.status).toBe("stopped");
+  });
+
+  it("leaves a run its owner cancelled first as cancelled", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id, alice, { stopMultiplier: 0.5 }));
+    const job = await claim("solve");
+    await call("POST", `/api/runs/${run.id}/cancel`, { cookie: alice });
+    await claimedAgo(job.id, 60);
+    expect(await beat(job.id)).toEqual({ action: "cancel" });
+  });
+});
+
 describe("a finished solve job", () => {
   it("stores the result summary and the run's files", async () => {
     const id = await meshed();

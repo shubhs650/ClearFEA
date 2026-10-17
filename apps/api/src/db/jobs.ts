@@ -33,6 +33,9 @@ export interface Job {
   cost: number | null;
   /** How the owner (or M8.3's stop limit) asked a running job to end, until the worker has stopped (M8.2). */
   stopRequested: StopReason | null;
+  /** A run's stop limit (M8.3, ADR-086): the multiplier of its estimate and the seconds it gives; null without one. */
+  stopMultiplier: number | null;
+  stopAfterSeconds: number | null;
   createdAt: string;
   claimedAt: string | null;
   finishedAt: string | null;
@@ -59,6 +62,8 @@ interface JobRow {
   billed_seconds: number | null;
   cost: number | null;
   stop_requested: StopReason | null;
+  stop_multiplier: number | null;
+  stop_after_seconds: number | null;
   created_at: string;
   claimed_at: string | null;
   finished_at: string | null;
@@ -86,6 +91,8 @@ function toJob(row: JobRow): Job {
     billedSeconds: row.billed_seconds,
     cost: row.cost,
     stopRequested: row.stop_requested,
+    stopMultiplier: row.stop_multiplier,
+    stopAfterSeconds: row.stop_after_seconds,
     createdAt: row.created_at,
     claimedAt: row.claimed_at,
     finishedAt: row.finished_at,
@@ -202,13 +209,18 @@ export async function claimJob(
   return row === null ? null : toJob(row);
 }
 
+/** A job not yet asked to stop whose time since it was claimed has reached its stop limit. */
+const AT_LIMIT = `stop_requested IS NULL AND stop_after_seconds IS NOT NULL AND claimed_at IS NOT NULL
+                  AND (julianday('now') - julianday(claimed_at)) * 86400 >= stop_after_seconds`;
+
 export type HeartbeatOutcome = { found: false } | { found: true; action: HeartbeatAction };
 
 /**
  * Records that the worker is alive and at the given stage. The first heartbeat
- * moves a claimed job to running. When the job has been asked to stop (M8.2), or has left the
- * active statuses, tells the worker to give up: `cancel` for its owner's cancel, `stop` at its
- * stop limit.
+ * moves a claimed job to running. A job that has had the machine for its stop limit since it
+ * was claimed is asked to stop there (M8.3, ADR-086), unless its owner has already cancelled it.
+ * When the job has been asked to stop (M8.2), or has left the active statuses, tells the worker
+ * to give up: `cancel` for its owner's cancel, `stop` at its stop limit.
  */
 export async function recordHeartbeat(
   db: D1Database,
@@ -218,7 +230,9 @@ export async function recordHeartbeat(
 ): Promise<HeartbeatOutcome> {
   const updated = await db
     .prepare(
-      `UPDATE jobs SET status = 'running', stage = ?, heartbeat_at = ${NOW}
+      `UPDATE jobs SET status = 'running', stage = ?, heartbeat_at = ${NOW},
+                       stop_requested = CASE WHEN ${AT_LIMIT} THEN 'stopped_at_limit' ELSE stop_requested END,
+                       stop_requested_at = CASE WHEN ${AT_LIMIT} THEN ${NOW} ELSE stop_requested_at END
         WHERE id = ? AND claimed_by = ? AND status IN ${ACTIVE}
         RETURNING stop_requested`,
     )

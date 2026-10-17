@@ -625,6 +625,7 @@ export function runStatus(run: RunView | null): ItemStatus {
   if (run.status === "solving") return { mark: "incomplete", notes: ["The simulation is being solved."] };
   if (run.status === "failed") return { mark: "error", notes: [run.problem ?? "The run failed."] };
   if (run.status === "cancelled") return { mark: "incomplete", notes: [run.problem ?? "The run was cancelled."] };
+  if (run.status === "stopped") return { mark: "incomplete", notes: [run.problem ?? "The run reached its stop limit."] };
   return { mark: "complete", notes: [] };
 }
 
