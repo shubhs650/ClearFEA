@@ -133,7 +133,7 @@ queued -> claimed -> running -> succeeded
                             \-> stopped_at_limit
 ```
 
-- The API creates a job row and, for metered jobs, checks the wallet balance against the estimate.
+- The API creates a job row and, for metered jobs, checks the wallet balance against the estimate (not in self-hosting mode, where the wallet is informational, ADR-084).
 - A worker calls `POST /internal/jobs/claim` with its worker token and capabilities. The API marks one job claimed, atomically, and returns the job payload (type, target, parameters) plus transfer URLs, one per named input or output file (ADR-024).
 - The worker sends a heartbeat every few seconds with stage, progress and new log text. The response tells it whether to cancel or stop.
 - A job whose heartbeat goes silent past a timeout is marked failed as a platform fault and may be retried.
