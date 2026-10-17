@@ -675,14 +675,14 @@ function RunningJob({
       {!waiting && (
         <dl className="geometry-facts">
           <dt>Elapsed</dt>
-          <dd aria-label="Elapsed">
+          <dd data-testid="run-elapsed">
             {clock((progress.elapsedMs ?? 0) + ticked)}
             {estimate !== null && <span className="field-hint"> of about {duration(estimate.seconds)} estimated</span>}
           </dd>
           {progress.costSoFar !== null && (
             <>
               <dt>Cost so far</dt>
-              <dd aria-label="Cost so far">
+              <dd data-testid="run-cost-so-far">
                 {credits(progress.costSoFar)}
                 {size !== undefined && <span className="field-hint"> of about {credits(size.cost)} estimated</span>}
               </dd>

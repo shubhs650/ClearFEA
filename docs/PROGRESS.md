@@ -33,7 +33,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M8 Platform
 
 - [x] M8.1 Wallet page: balance, ledger, per-run cost; seeded play-money grant and low-balance refusal (ADR-080)
-- [ ] M8.2 Running-job view: stage, elapsed time, cost so far against estimate, live log, cancel
+- [x] M8.2 Running-job view: stage, elapsed time, cost so far against estimate, live log, cancel; a cancelled run is charged the time it used (ADR-084)
 - [ ] M8.3 Stop limit per run with a default multiplier and user override
 - [ ] M8.4 Failure classification end to end, with category and reason shown on the run
 - [x] M8.5 Simulated machine sizes on localhost (cores, memory limit); out-of-memory path tested, with who pays decided by the API (ADR-082)
@@ -153,6 +153,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M8.2 (2026-10-17): the running-job view and cancel (ADR-084, accepted under Shubham's M8 autodrive, pending his review). Billing module touched: `isCharged` in `apps/api/src/billing/cost.ts` now charges `cancelled` and `stopped_at_limit` jobs their time, and the wallet's run status reads `cancelled` (`ledger.ts`, a read). `POST /api/runs/:id/cancel` ends a queued job at once (0 s, not charged) or sets `jobs.stop_requested` (migration 0018); the heartbeat answers `cancel` (or `stop` for `stopped_at_limit`), the worker raises `JobStopped`, uploads deck and log and completes with `status: "stopped"` (`CompleteStopped`), and the API ends the job with the status asked for. The `runs` table keeps `failed` for a cancelled run (its CHECK cannot change without a rebuild); `RunStatus` `cancelled` comes from the job. `RunView.progress` (startedAt, elapsedMs, costSoFar, cancelling) feeds `RunningJob` in `RunPanel.tsx`. For M8.3: set `stop_requested = 'stopped_at_limit'` (from the heartbeat, when elapsed passes the limit) and the rest is in place; `stoppedProblem` in `internal.ts` already words the run's message, and the run currently reads `failed` for it (map it in `toRun` if a `stopped` status is wanted). Add the stop-limit test to `e06-running-job.e2e.ts` with its `slowRun` helper (the E-01 block at 1 mm, quadratic, SPOOLES: about 112 s by the estimate). Known gap: a dead worker leaves a pending cancel unanswered (no heartbeat timeout). Screenshots in the project's `m8.2/` folder.
 
 > M8.7 (2026-10-17): the read-only share link (ADR-083, accepted under Shubham's M8 autodrive, pending his review). No physics-critical module touched; no ledger or job-table change. Migration 0017 `share_links` (one row per run, the token's SHA-256 only). Owner routes `GET`/`POST`/`DELETE /api/runs/:id/share` (`apps/api/src/routes/shareLinks.ts`, shapes `ShareLinkResponse`/`CreatedShareLinkResponse` in `simulation.schema.json`); public routes `/api/shared/:token` (`SharedRunResponse`) and `/topology`, `/surface`, `/fields`, `/mesh`, `/nodes`, which reuse `resultFiles` from `routes/runs.ts`. `resolveShareLink` in `db/shareLinks.ts` is the one lookup without a user id; M8.8's isolation sweep should include the `/api/shared` routes (a revoked token answers like an unknown one, 404). Web: a Share section in the Run panel (`setup/ShareLink.tsx`); `/share/<token>` is routed in `main.tsx` to `share/SharedRunPage.tsx`, which reuses the viewer through a `ViewerSource` and the results through `RunResults` (extracted from `RunPanel`). E-07 is in (`e07-share-link.e2e.ts`) and also covers the "second user cannot open first user's project" half with API reads; `make e2e` now runs E-01 to E-05 and E-07. `make e2e e07` does not pass `e07` to Playwright (make takes it as a target); run `infra/e2e.sh e07` instead (CLAUDE.md updated). Screenshots in the project's `m8.7/` folder.
 
@@ -336,6 +338,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M8.2 running-job view and cancel (ADR-084): while a run solves, the Run panel shows its stage, elapsed time against the estimate, cost so far against the estimated cost, the live log and "Cancel the run"; the worker stops at its next heartbeat, keeps deck and log and reports the time used, which is charged; a run cancelled before the worker takes it costs nothing. New browser test E-06 (cancel part). Learned: `pkill -f infra/e2e.sh` also kills the shell that runs it.
 - M8.7 read-only share link (ADR-083): the owner makes, copies once and revokes one link per succeeded run from the Run panel; `/share/<token>` shows the run's results read-only without signing in; only the token's hash is stored. New browser test E-07. Learned: `make e2e <test>` does not reach Playwright; `infra/e2e.sh <test>` does.
 
 - M8.5 simulated machine sizes (ADR-082): each solve job carries its size's cores and memory limit; the worker holds CalculiX to those cores and stops it past the limit as out of memory; the API charges the user only when they chose a size the estimate said was too small, and the run says so with what to do.

@@ -1254,8 +1254,8 @@ describe("run", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
     const job = within(await settings().findByRole("region", { name: "Running job" }));
     expect(job.getByRole("status", { name: "Run stage" }).textContent).toBe("Solver: solving…");
-    expect(job.getByLabelText("Elapsed").textContent).toBe("1:05 of about 3 s estimated");
-    expect(job.getByLabelText("Cost so far").textContent).toBe("0.009167 credits of about 0.000417 credits estimated");
+    expect(job.getByTestId("run-elapsed").textContent).toBe("1:05 of about 3 s estimated");
+    expect(job.getByTestId("run-cost-so-far").textContent).toBe("0.009167 credits of about 0.000417 credits estimated");
     expect(job.getByText(/charged for the time it has used\. It carries on if you close the browser\./)).toBeTruthy();
     fireEvent.click(job.getByRole("button", { name: "Cancel the run" }));
     expect(await job.findByText(/^Cancelling: the solver stops/)).toBeTruthy();
@@ -1288,7 +1288,7 @@ describe("run", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
     const job = within(await settings().findByRole("region", { name: "Running job" }));
-    expect(job.queryByLabelText("Elapsed")).toBeNull();
+    expect(job.queryByTestId("run-elapsed")).toBeNull();
     expect(job.getByText(/Cancelled before the solver starts, the run costs nothing\./)).toBeTruthy();
     fireEvent.click(job.getByRole("button", { name: "Cancel the run" }));
     await waitFor(() => expect(settings().queryByRole("region", { name: "Running job" })).toBeNull());
