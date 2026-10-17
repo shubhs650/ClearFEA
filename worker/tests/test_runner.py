@@ -74,7 +74,7 @@ def test_completes_a_noop_job() -> None:
         assert paths[-1] == "/internal/jobs/j1/complete"
         assert api.calls[0][1] == {
             "workerId": "w1",
-            "jobTypes": ["import", "mesh", "noop", "solve"],
+            "jobTypes": ["import", "mesh", "noop", "report", "solve"],
         }
 
 

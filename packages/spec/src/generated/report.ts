@@ -36,6 +36,13 @@ export type ReportText = string;
  * via the `definition` "ReportFigureKind".
  */
 export type ReportFigureKind = "support" | "load" | "view";
+/**
+ * Where a run's report is: queued for the worker, being made, made (it can be downloaded) or failed.
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "ReportStatus".
+ */
+export type ReportStatus = "queued" | "making" | "succeeded" | "failed";
 
 /**
  * Report options (M7.1, ADR-074): what a simulation's report prints (its sections, the saved views drawn as result plots, the title block) and the user's own company name and logo, which every report of theirs carries. The report job (M7.3) reads them, with the figures captured in the browser for a run (M7.2, ADR-011). Text is printed as typed. Each message is a definition under $defs.
@@ -160,6 +167,132 @@ export interface ReportFigureResponse {
 export interface ReportFigureListResponse {
   figures: ReportFigure[];
 }
+/**
+ * A figure the report job places (M7.3): one of the run's stored figures (ReportFigure), downloaded under file.
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "ReportJobFigure".
+ */
+export interface ReportJobFigure {
+  /**
+   * Its download among the job's transfers, for example figure-0.png.
+   */
+  file: string;
+  kind: ReportFigureKind;
+  item: string;
+  caption: ReportText;
+  width: number;
+  height: number;
+}
+/**
+ * A standing statement or a note as printed, its names already filled from the run (ADR-062, ADR-073).
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "ReportJobText".
+ */
+export interface ReportJobText {
+  id: string;
+  title: string;
+  text: string;
+}
+/**
+ * The geometry a report's run uses: its uploaded file's name and the length unit confirmed for it. Its bodies and size come from topology.json.
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "ReportGeometry".
+ */
+export interface ReportGeometry {
+  name: string;
+  unit: string | null;
+}
+/**
+ * Parameters of a report job (M7.3, ADR-077), built by the API when the report is asked for from the run's frozen record, the simulation's saved report options and the user's company name and logo. The job downloads the figures, the logo, the geometry's topology.json and the run's solver.log, and uploads report.docx. run and meshQuality are a RunView and a MeshQuality of simulation.schema.json, which the job checks against that schema.
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "ReportJobParams".
+ */
+export interface ReportJobParams {
+  runId: string;
+  /**
+   * When the report was asked for (UTC, ISO 8601); its date is the report's date.
+   */
+  generatedAt: string;
+  /**
+   * Id of the unit system in packages/spec/units.json that every value prints in (M7.6).
+   */
+  unitSystem: string;
+  /**
+   * The sections to print, in printing order.
+   */
+  sections: ReportSection[];
+  titleBlock: TitleBlock;
+  companyName: ReportText;
+  /**
+   * The user's logo, downloaded as logo; null when they have none.
+   */
+  logo: ReportLogo | null;
+  projectName: string;
+  simulationName: string;
+  geometry: ReportGeometry;
+  /**
+   * The run as its owner sees it (RunView in simulation.schema.json); it has succeeded.
+   */
+  run: {};
+  /**
+   * The quality summary of the run's mesh (MeshQuality in simulation.schema.json); null for meshes made before M2.8.
+   */
+  meshQuality: {} | null;
+  /**
+   * The run's stored figures in order, without those of sections not printed.
+   *
+   * @maxItems 1000
+   */
+  figures: ReportJobFigure[];
+  /**
+   * The standing statements, in printing order.
+   */
+  statements: ReportJobText[];
+  /**
+   * The notes the run's frozen setup calls for, in printing order.
+   */
+  notes: ReportJobText[];
+}
+/**
+ * Result of a succeeded report job (M7.3): the size of report.docx and how many figures it placed.
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "ReportJobResult".
+ */
+export interface ReportJobResult {
+  sizeBytes: number;
+  figures: number;
+}
+/**
+ * The latest report asked for of a run (M7.3). Its DOCX is GET /api/runs/:id/report/docx once it has succeeded.
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "RunReport".
+ */
+export interface RunReport {
+  id: string;
+  status: ReportStatus;
+  /**
+   * Why it failed, in plain language.
+   */
+  problem: string | null;
+  sizeBytes: number | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+/**
+ * Answer to GET and POST /api/runs/:id/report: the run's latest report, or null when none has been asked for.
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "RunReportResponse".
+ */
+export interface RunReportResponse {
+  report: RunReport | null;
+}
 
 export const ReportSectionValues = ["project", "geometry", "materials", "mesh", "loadsSupports", "solver", "results", "reactions", "extremes", "warnings"] as const satisfies readonly ReportSection[];
 export const validateReportSection = validator<ReportSection>(schema, "ReportSection");
@@ -176,3 +309,12 @@ export const validateReportFigureKind = validator<ReportFigureKind>(schema, "Rep
 export const validateReportFigure = validator<ReportFigure>(schema, "ReportFigure");
 export const validateReportFigureResponse = validator<ReportFigureResponse>(schema, "ReportFigureResponse");
 export const validateReportFigureListResponse = validator<ReportFigureListResponse>(schema, "ReportFigureListResponse");
+export const validateReportJobFigure = validator<ReportJobFigure>(schema, "ReportJobFigure");
+export const validateReportJobText = validator<ReportJobText>(schema, "ReportJobText");
+export const validateReportGeometry = validator<ReportGeometry>(schema, "ReportGeometry");
+export const validateReportJobParams = validator<ReportJobParams>(schema, "ReportJobParams");
+export const validateReportJobResult = validator<ReportJobResult>(schema, "ReportJobResult");
+export const ReportStatusValues = ["queued", "making", "succeeded", "failed"] as const satisfies readonly ReportStatus[];
+export const validateReportStatus = validator<ReportStatus>(schema, "ReportStatus");
+export const validateRunReport = validator<RunReport>(schema, "RunReport");
+export const validateRunReportResponse = validator<RunReportResponse>(schema, "RunReportResponse");

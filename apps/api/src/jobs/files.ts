@@ -2,10 +2,12 @@
 // The files each job type reads and writes (ADR-005). The worker sees only names and the
 // transfer URLs built from them; which storage key a name maps to is decided here.
 
-import type { Transfer } from "@clearfea/spec";
+import type { ReportJobParams, RunView, Transfer } from "@clearfea/spec";
 import { type GeometryFile, geometryKey } from "../db/geometries";
 import type { Job } from "../db/jobs";
 import { type MeshFile, meshKey } from "../db/meshes";
+import { figureKey, logoKey } from "../db/report";
+import { reportKey } from "../db/reports";
 import { type RunFile, runKey } from "../db/runs";
 
 export interface JobFile {
@@ -47,6 +49,22 @@ export function jobFiles(job: Job): JobFile[] {
       { name: "surface.bin", direction: "upload", key: run("surface.bin") },
       { name: "fields.bin", direction: "upload", key: run("fields.bin") },
       { name: "nodes.bin", direction: "upload", key: run("nodes.bin") },
+    ];
+  }
+  if (job.type === "report" && target !== null && job.params !== null) {
+    // The API built these params itself when the report was asked for (routes/reports.ts).
+    const params = job.params as unknown as ReportJobParams;
+    const run = params.run as unknown as RunView;
+    return [
+      { name: "topology.json", direction: "download", key: geometryKey(job.ownerId, run.spec.geometryId, "topology.json") },
+      ...(run.files.includes("solver.log")
+        ? [{ name: "solver.log", direction: "download", key: runKey(job.ownerId, target, "solver.log") } as const]
+        : []),
+      ...params.figures.map(
+        (f) => ({ name: f.file, direction: "download", key: figureKey(job.ownerId, target, f.kind, f.item) }) as const,
+      ),
+      ...(params.logo === null ? [] : [{ name: "logo", direction: "download", key: logoKey(job.ownerId) } as const]),
+      { name: "report.docx", direction: "upload", key: reportKey(job.ownerId, target, job.id) },
     ];
   }
   return [];
