@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// E-05 (docs/VERIFICATION.md): a report made and downloaded through the UI (M7.3). A block is set
-// up and solved as in E-01, a result view is saved, the title block is filled in, and "Make the
-// Word report" draws the figures, has the worker make the report and offers it for download. The
-// downloaded file is opened as the DOCX it is (a zip of WordprocessingML) and checked for its
-// cover, its sections in order, its tables and figures, and the absence of any verdict. The test
-// signs in as the second seeded user, so other tests' geometries are not in its lists.
+// E-05 (docs/VERIFICATION.md): a report made and downloaded through the UI (M7.3, M7.4). A block is
+// set up and solved as in E-01, a result view is saved, the title block is filled in, and "Make the
+// report" draws the figures, has the worker make the report and offers its Word file and PDF for
+// download. The DOCX is opened as the zip of WordprocessingML it is and checked for its cover, its
+// sections in order, its tables and figures, and the absence of any verdict; the PDF, printed from
+// it by the worker's LibreOffice, is checked for its pages, its title and the same sections in its
+// bookmarks. The test signs in as the second seeded user, so other tests' geometries are not in its
+// lists.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
@@ -77,7 +79,13 @@ function docxText(path: string): string {
     .replace(/&apos;/g, "'");
 }
 
-test("E-05: make the Word report of a solved run and download it", async ({ page }) => {
+/** A PDF's bookmark and document titles, which LibreOffice writes as UTF-16 in hex strings. */
+function pdfTitles(pdf: Buffer): string[] {
+  const titles = pdf.toString("latin1").match(/\/Title<FEFF[0-9A-F]*>/g) ?? [];
+  return titles.map((t) => Buffer.from(t.slice(11, -1), "hex").swap16().toString("utf16le"));
+}
+
+test("E-05: make the report of a solved run and download its Word file and PDF", async ({ page }) => {
   expect(MODEL, "CLEARFEA_E2E_MODEL names the STEP file; run the test with `make e2e`").not.toBe("");
 
   await test.step("sign in", async () => {
@@ -166,9 +174,24 @@ test("E-05: make the Word report of a solved run and download it", async ({ page
     await expect(report.getByText("Report options saved.")).toBeVisible();
   });
 
-  await test.step("make the Word report and download it", async () => {
-    const word = report.getByRole("group", { name: "Word report" });
-    await word.getByRole("button", { name: "Make the Word report" }).click();
+  const headings = [
+    "1  About this report",
+    "2  Project and revision",
+    "3  Geometry and units",
+    "4  Materials",
+    "5  Mesh statistics",
+    "6  Loads and supports",
+    "7  Solver settings and versions",
+    "8  Result plots",
+    "9  Reaction and balance check",
+    "10  Minimum and maximum tables",
+    "11  Run warnings",
+    "12  Software and verification",
+  ];
+  const word = report.getByRole("group", { name: "Word and PDF report" });
+
+  await test.step("make the report and download the Word file", async () => {
+    await word.getByRole("button", { name: "Make the report" }).click();
     // The figures are drawn first: the support, the pressure and the view.
     await expect(report.getByRole("group", { name: "Figures" }).getByText("Drew 3 figures.")).toBeVisible({
       timeout: 60_000,
@@ -186,21 +209,7 @@ test("E-05: make the Word report of a solved run and download it", async ({ page
     const lines = text.split("\n");
     expect(lines).toContain("Block under pressure");
     expect(lines).toContain("Finite element analysis report");
-    const headings = lines.filter((line) => /^\d+ {2}\S/.test(line));
-    expect(headings).toEqual([
-      "1  About this report",
-      "2  Project and revision",
-      "3  Geometry and units",
-      "4  Materials",
-      "5  Mesh statistics",
-      "6  Loads and supports",
-      "7  Solver settings and versions",
-      "8  Result plots",
-      "9  Reaction and balance check",
-      "10  Minimum and maximum tables",
-      "11  Run warnings",
-      "12  Software and verification",
-    ]);
+    expect(lines.filter((line) => /^\d+ {2}\S/.test(line))).toEqual(headings);
     expect(text).toContain("Figure 1. Fixed support 1");
     expect(text).toContain("Figure 2. Pressure 1");
     expect(text).toContain('Figure 3. Von Mises stress, view "Overall"');
@@ -209,5 +218,23 @@ test("E-05: make the Word report of a solved run and download it", async ({ page
     expect(text).not.toMatch(/\b(PASS|FAIL)\b|compliant/i);
     const media = execFileSync("unzip", ["-l", path], { encoding: "utf-8" });
     expect(media.match(/word\/media\/\S+\.png/g) ?? []).toHaveLength(3);
+  });
+
+  await test.step("download the PDF printed from it", async () => {
+    const link = word.getByRole("link", { name: "Download the PDF report" });
+    await expect(link).toBeVisible();
+    const [download] = await Promise.all([page.waitForEvent("download"), link.click()]);
+    expect(download.suggestedFilename()).toBe("CF-E05-001 Block under pressure rev B.pdf");
+    const path = `${OUT}/e05-report.pdf`;
+    await download.saveAs(path);
+    const pdf = readFileSync(path);
+    expect(pdf.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    const pages = pdf.toString("latin1").match(/\/Type\s*\/Page[^s]/g) ?? [];
+    expect(pages.length).toBeGreaterThanOrEqual(5);
+    const titles = pdfTitles(pdf);
+    expect(titles).toContain("Block under pressure");
+    // The bookmarks follow the Word headings, with their two spaces written as one.
+    const sections = titles.filter((t) => /^\d+ \S/.test(t));
+    expect(sections).toEqual(headings.map((h) => h.replace("  ", " ")));
   });
 });

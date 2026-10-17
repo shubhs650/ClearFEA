@@ -15,6 +15,8 @@
 #   - CalculiX:   2.21 from Ubuntu's calculix-ccx 2.21-1 source package, built with PaStiX
 #                 (PaStiX4CalculiX and PaRSEC at pinned commits) by ccx/build.sh (ADR-063)
 #   - Gmsh:       gmsh 4.15.2 from PyPI (bundles its own OpenCASCADE), locked in uv.lock
+# LibreOffice Writer (without its GUI) turns the Word report into its PDF (M7.4, ADR-078), with
+# Liberation Sans standing in for Arial at the same widths so the pages break where Word's do.
 
 ARG BASE=mirror.gcr.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
 
@@ -65,6 +67,7 @@ RUN apt-get update \
       libarpack2t64 libspooles2.2t64 libscotch-7.0 libhwloc15 liblapacke libopenblas0-pthread \
       libgfortran5 libcublas12 libcudart12 \
       libgl1 libglu1-mesa libgomp1 libxrender1 libxcursor1 libxft2 libxinerama1 \
+      libreoffice-writer-nogui fonts-liberation fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=ccx /opt/ccx/bin/ccx /usr/local/bin/ccx
 COPY --from=ccx /opt/ccx/lib/libparsec.so.2 /opt/ccx/lib/libparsec.so.2

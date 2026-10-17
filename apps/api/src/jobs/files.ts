@@ -64,7 +64,8 @@ export function jobFiles(job: Job): JobFile[] {
         (f) => ({ name: f.file, direction: "download", key: figureKey(job.ownerId, target, f.kind, f.item) }) as const,
       ),
       ...(params.logo === null ? [] : [{ name: "logo", direction: "download", key: logoKey(job.ownerId) } as const]),
-      { name: "report.docx", direction: "upload", key: reportKey(job.ownerId, target, job.id) },
+      { name: "report.docx", direction: "upload", key: reportKey(job.ownerId, target, job.id, "docx") },
+      { name: "report.pdf", direction: "upload", key: reportKey(job.ownerId, target, job.id, "pdf") },
     ];
   }
   return [];

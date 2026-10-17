@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M7 Report, in progress (under the maintainer's M7 autodrive, 2026-10-17)
-- **Next task:** M7.3 DOCX assembly
+- **Next task:** M7 close (every M7 task merged)
 - **Blocked on:** nothing
 
 ## Milestones
@@ -35,6 +35,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M7.1 Report options: sections, saved views, title block, company name, logo (ADR-074)
 - [x] M7.2 Figure capture in the browser: one per load and support, plus selected result views (ADR-075)
 - [x] M7.3 DOCX assembly with all sections in `DECISIONS.md` (ADR-077); E-05 report browser test
+- [x] M7.4 PDF output matching the DOCX (ADR-078); E-05 downloads the PDF too
 - [x] M7.6 Values printed in the report's chosen unit system (ADR-076)
 - [x] M7.5 Standing statements: analysis-tool positioning, versions, verification link, tied-interface note (ADR-073)
 
@@ -139,6 +140,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M7.4 (2026-10-17): the PDF report (ADR-078, accepted under Shubham's M7 autodrive, pending his review). No physics-critical module touched. The report job prints its `report.docx` to `report.pdf` with headless LibreOffice Writer (`worker/clearfea_worker/report/pdf.py`; own profile per job, 300 s limit, lossless pictures), so the PDF has the DOCX's pages; the worker image gains `libreoffice-writer-nogui`, `fonts-liberation` (Arial's widths) and `fonts-dejavu-core`. Stored as `reports/<job>.pdf`, downloaded from `GET /api/runs/:id/report/pdf`; `pdfSizeBytes` on `ReportJobResult` and `RunReport` (null for reports made before M7.4, whose PDF link says to make the report again). The Report panel's group is now "Word and PDF report" with "Make the report" and two downloads. E-05 downloads the PDF and checks pages, title and the twelve section bookmarks. The real-conversion worker test runs only where `soffice` is installed (the sandbox, the worker image); the fast tier's stand-in tests cover the rest. PLAN.md's M7.3 box is still unticked (PR #82 left it); for the M7 close. Page images beside the DOCX's in the project's `m7.4/` folder. Next: M7 close.
 
 > M7.3 (2026-10-17): the Word report (ADR-077, accepted under Shubham's M7 autodrive, pending his review). No physics-critical module touched. "Make the Word report" in the Report panel draws the figures again, `POST /api/runs/:id/report` freezes everything the report prints into a `report` job (`ReportJobParams`), and the worker writes `report.docx` (`worker/clearfea_worker/report/content.py` decides what is printed, `report/docx.py` lays it out with python-docx 1.2.0, a new worker dependency). Every value goes through M7.6's `ReportUnits`, and the figure legends are drawn in the report's unit system too (`resultUnits(options.unitSystem, {})`), not the viewer's. E-05 makes one through the UI and reads the file back (`unzip` must be on the host). For M7.4: lay the same `ReportDocument` out as a PDF; LibreOffice converts the DOCX cleanly in the sandbox (`soffice --headless --convert-to pdf`) but is not in the worker image. Values that are rounding noise (1e-15 N applied force components) print as they are stored.
 
@@ -309,6 +312,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M7.4: the PDF report, the Word report printed by LibreOffice in the worker, offered beside it (ADR-078); E-05 downloads it. Learned: LibreOffice writes Word headings as PDF bookmarks, which gives a browser test the section list without a PDF text reader.
 - M7.3: the Word report, made by a report job from parameters the API freezes, with every section of DECISIONS' Report row, the standing statements and notes, values in the report's unit system (ADR-077); new browser test E-05. Learned: python-docx's Footer style has its own centre tab stop, so a right-aligned page number needs it cleared.
 - M7.2: the report's figures drawn in the browser by the viewer (ADR-075): one per support and load of the run's frozen setup, one per saved view picked, stored on the run as PNGs. Learned: a WebGL canvas can be copied right after `renderer.render` in the same task without `preserveDrawingBuffer`, so the viewer needs no slower setting for figures.
 - M7.6: values printed in the report's chosen unit system (ADR-076): a unit system in the report options, starting as the project's, and `ReportUnits` in the worker to print results and setup values in it. Learned: the sandbox host needs `libglu1-mesa` (apt) before `make test`'s Gmsh tests run.

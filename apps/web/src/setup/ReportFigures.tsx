@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The Figures and Word report parts of the Report panel. Figures (M7.2, ADR-011): draws the
+// The Figures and Word and PDF report parts of the Report panel. Figures (M7.2, ADR-011): draws the
 // report's figures for the latest solved run (one per support and load, one per view picked) from
-// the saved report options, stores them on the run, and shows what is stored. Word report (M7.3,
-// ADR-077): draws the figures again, so they follow the saved options, then asks the worker to
-// make the report and offers it for download once made.
+// the saved report options, stores them on the run, and shows what is stored. Word and PDF report
+// (M7.3, ADR-077; M7.4, ADR-078): draws the figures again, so they follow the saved options, then
+// asks the worker to make the report and offers its Word file and PDF for download once made.
 
 import type { ReportFigure, ReportOptions, RunReport, RunView, SavedView } from "@clearfea/spec";
 import { useEffect, useState } from "react";
 import { figurePath, listFigures } from "../api/figures";
-import { fetchRunReport, makeRunReport, reportDocxPath } from "../api/reports";
+import { fetchRunReport, makeRunReport, reportFilePath } from "../api/reports";
 import { captureFigures, planFigures } from "../report/figures";
 import { resultUnits } from "./displayUnits";
 
@@ -221,13 +221,14 @@ export function ReportFigures({
       )}
     </fieldset>
     <fieldset className="setup-bodies">
-      <legend>Word report</legend>
+      <legend>Word and PDF report</legend>
       <span className="field-hint">
-        Draws the figures again from the saved options, then makes the report of the latest solved run as a Word file.
+        Draws the figures again from the saved options, then makes the report of the latest solved run as a Word file
+        and a PDF printed from it, page for page.
       </span>
       <div className="field-actions">
         <button type="button" onClick={() => void make()} disabled={busy || unsaved || planned === null}>
-          Make the Word report
+          Make the report
         </button>
       </div>
       {unsaved && <span className="field-hint">Save the report options first: the report follows the saved ones.</span>}
@@ -245,13 +246,29 @@ export function ReportFigures({
         </span>
       )}
       {latest?.status === "succeeded" && (
-        <p className="field-hint" role="status">
-          <a href={reportDocxPath(solved.id, latest)} download>
-            Download the Word report
-          </a>
-          {latest.sizeBytes !== null && ` (${megabytes(latest.sizeBytes)})`}, made{" "}
-          {new Date(latest.finishedAt ?? latest.createdAt).toLocaleString()}.
-        </p>
+        <div className="field-hint" role="status">
+          <p>Made {new Date(latest.finishedAt ?? latest.createdAt).toLocaleString()}:</p>
+          <ul>
+            <li>
+              <a href={reportFilePath(solved.id, latest, "docx")} download>
+                Download the Word report
+              </a>
+              {latest.sizeBytes !== null && ` (${megabytes(latest.sizeBytes)})`}
+            </li>
+            <li>
+              {latest.pdfSizeBytes !== null ? (
+                <>
+                  <a href={reportFilePath(solved.id, latest, "pdf")} download>
+                    Download the PDF report
+                  </a>
+                  {` (${megabytes(latest.pdfSizeBytes)})`}
+                </>
+              ) : (
+                "This report was made before reports had a PDF. Make the report again to get one."
+              )}
+            </li>
+          </ul>
+        </div>
       )}
     </fieldset>
     </>

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Client for a run's Word report (M7.3, ADR-077): ask for one, check on it, download it.
+// Client for a run's report (M7.3, ADR-077): ask for one, check on it, download its Word file or
+// its PDF (M7.4, ADR-078).
 // Shapes: packages/spec/schemas/report.schema.json.
 
 import { type RunReport, validateRunReportResponse } from "@clearfea/spec";
@@ -8,8 +9,8 @@ import { type ApiResult, apiRequest } from "./request";
 const reportPath = (runId: string) => `/api/runs/${encodeURIComponent(runId)}/report`;
 
 /** Where the run's latest finished report is downloaded; its id makes the browser fetch a new one. */
-export const reportDocxPath = (runId: string, report: Pick<RunReport, "id">) =>
-  `${reportPath(runId)}/docx?v=${encodeURIComponent(report.id)}`;
+export const reportFilePath = (runId: string, report: Pick<RunReport, "id">, format: "docx" | "pdf") =>
+  `${reportPath(runId)}/${format}?v=${encodeURIComponent(report.id)}`;
 
 function report(result: ApiResult<{ report: RunReport | null }>): ApiResult<RunReport | null> {
   return result.kind === "ok" ? { kind: "ok", value: result.value.report } : result;

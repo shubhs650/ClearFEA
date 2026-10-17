@@ -2342,13 +2342,14 @@ describe("report options (M7.1)", () => {
     expect(settings().getByText("Save the report options first: the figures follow the saved ones.")).toBeTruthy();
   });
 
-  it("makes the Word report of the latest solved run and offers it for download (M7.3)", async () => {
+  it("makes the report of the latest solved run and offers its Word file and PDF for download (M7.3, M7.4)", async () => {
     const report = (status: string, extra: Record<string, unknown> = {}) => ({
       report: {
         id: "rep1",
         status,
         problem: null,
         sizeBytes: null,
+        pdfSizeBytes: null,
         createdAt: "2026-10-17T04:00:00.000Z",
         finishedAt: null,
         ...extra,
@@ -2375,7 +2376,7 @@ describe("report options (M7.1)", () => {
           if (checks === 1) return { status: 200, json: { report: null } };
           return {
             status: 200,
-            json: report("succeeded", { sizeBytes: 245000, finishedAt: "2026-10-17T04:00:03.000Z" }),
+            json: report("succeeded", { sizeBytes: 245000, pdfSizeBytes: 142000, finishedAt: "2026-10-17T04:00:03.000Z" }),
           };
         },
         "POST /api/runs/r1/report": { status: 202, json: report("queued") },
@@ -2383,14 +2384,17 @@ describe("report options (M7.1)", () => {
     );
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Report, complete" }));
-    const make = (await settings().findByRole("button", { name: "Make the Word report" })) as HTMLButtonElement;
+    const make = (await settings().findByRole("button", { name: "Make the report" })) as HTMLButtonElement;
     await waitFor(() => expect(make.disabled).toBe(false));
     fireEvent.click(make);
     expect(await settings().findByText("The report is waiting for the worker…")).toBeTruthy();
     expect(make.disabled).toBe(true);
     const link = (await settings().findByRole("link", { name: "Download the Word report" }, { timeout: 4000 })) as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe("/api/runs/r1/report/docx?v=rep1");
-    expect(settings().getByText(/\(245 kB\), made/)).toBeTruthy();
+    const pdf = settings().getByRole("link", { name: "Download the PDF report" }) as HTMLAnchorElement;
+    expect(pdf.getAttribute("href")).toBe("/api/runs/r1/report/pdf?v=rep1");
+    expect(settings().getByText(/\(245 kB\)/)).toBeTruthy();
+    expect(settings().getByText(/\(142 kB\)/)).toBeTruthy();
     expect(make.disabled).toBe(false);
     expect(fetchMock.mock.calls.filter(([path]) => String(path).includes("/figures/")).length).toBe(0);
   });

@@ -199,6 +199,7 @@ describe("a run's report", () => {
       "download figure-0.png",
       "download figure-1.png",
       "upload report.docx",
+      "upload report.pdf",
     ]);
   });
 
@@ -234,17 +235,20 @@ describe("a run's report", () => {
     expect(job.transfers.map((t) => t.name)).toContain("logo");
   });
 
-  it("is made by the worker and downloaded by its owner only", async () => {
+  it("is made by the worker and downloaded by its owner only, as a Word file and a PDF", async () => {
     await call("POST", `/api/runs/${runId}/report`, { cookie: alice });
     const job = await claimReport();
     const making = await report(await call("GET", `/api/runs/${runId}/report`, { cookie: alice }));
     expect(making?.status).toBe("queued");
     expect((await call("GET", `/api/runs/${runId}/report/docx`, { cookie: alice })).status).toBe(404);
+    expect((await call("GET", `/api/runs/${runId}/report/pdf`, { cookie: alice })).status).toBe(404);
     const put = await call("PUT", transferPath(job, "report.docx", "upload"), { raw: "docx bytes", token: TOKEN });
     expect(put.status).toBe(200);
-    await complete(job.id, { status: "succeeded", result: { sizeBytes: 10, figures: 0 } });
+    const putPdf = await call("PUT", transferPath(job, "report.pdf", "upload"), { raw: "%PDF bytes", token: TOKEN });
+    expect(putPdf.status).toBe(200);
+    await complete(job.id, { status: "succeeded", result: { sizeBytes: 10, pdfSizeBytes: 10, figures: 0 } });
     const made = await report(await call("GET", `/api/runs/${runId}/report`, { cookie: alice }));
-    expect(made).toMatchObject({ id: job.id, status: "succeeded", sizeBytes: 10, problem: null });
+    expect(made).toMatchObject({ id: job.id, status: "succeeded", sizeBytes: 10, pdfSizeBytes: 10, problem: null });
     const download = await call("GET", `/api/runs/${runId}/report/docx`, { cookie: alice });
     expect(download.status).toBe(200);
     expect(download.headers.get("Content-Type")).toBe(
@@ -252,16 +256,39 @@ describe("a run's report", () => {
     );
     expect(download.headers.get("Content-Disposition")).toBe('attachment; filename="Bracket.docx"');
     expect(new TextDecoder().decode(await download.arrayBuffer())).toBe("docx bytes");
+    const pdf = await call("GET", `/api/runs/${runId}/report/pdf`, { cookie: alice });
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get("Content-Type")).toBe("application/pdf");
+    expect(pdf.headers.get("Content-Disposition")).toBe('attachment; filename="Bracket.pdf"');
+    expect(new TextDecoder().decode(await pdf.arrayBuffer())).toBe("%PDF bytes");
     expect((await call("GET", `/api/runs/${runId}/report/docx`, { cookie: bob })).status).toBe(404);
+    expect((await call("GET", `/api/runs/${runId}/report/pdf`, { cookie: bob })).status).toBe(404);
+    expect((await call("GET", `/api/runs/${runId}/report/odt`, { cookie: alice })).status).toBe(404);
     expect((await call("GET", `/api/runs/${runId}/report`, { cookie: bob })).status).toBe(404);
     // Each report is kept under its own job; a new one can be asked for once one has finished.
     expect((await call("POST", `/api/runs/${runId}/report`, { cookie: alice })).status).toBe(202);
   });
 
-  it("says what went wrong when the job did not store its file", async () => {
+  it("says a report made before M7.4 has no PDF and how to get one", async () => {
     await call("POST", `/api/runs/${runId}/report`, { cookie: alice });
     const job = await claimReport();
-    await complete(job.id, { status: "succeeded", result: { sizeBytes: 10, figures: 0 } });
+    await env.DB.prepare("UPDATE jobs SET status = 'succeeded', result = ? WHERE id = ?")
+      .bind(JSON.stringify({ sizeBytes: 10, figures: 0 }), job.id)
+      .run();
+    const made = await report(await call("GET", `/api/runs/${runId}/report`, { cookie: alice }));
+    expect(made).toMatchObject({ status: "succeeded", sizeBytes: 10, pdfSizeBytes: null });
+    const pdf = await call("GET", `/api/runs/${runId}/report/pdf`, { cookie: alice });
+    expect(pdf.status).toBe(404);
+    expect(await pdf.json()).toEqual({
+      error: "This report was made before reports had a PDF. Make the report again to get one.",
+    });
+  });
+
+  it("says what went wrong when the job did not store its files", async () => {
+    await call("POST", `/api/runs/${runId}/report`, { cookie: alice });
+    const job = await claimReport();
+    await call("PUT", transferPath(job, "report.docx", "upload"), { raw: "docx bytes", token: TOKEN });
+    await complete(job.id, { status: "succeeded", result: { sizeBytes: 10, pdfSizeBytes: 10, figures: 0 } });
     const failed = await report(await call("GET", `/api/runs/${runId}/report`, { cookie: alice }));
     expect(failed?.status).toBe("failed");
     expect(failed?.problem).toContain("fault in ClearFEA, not in your run (outputs_missing)");
@@ -285,5 +312,6 @@ describe("the report's file name", () => {
     } as unknown as Record<string, unknown>;
     expect(reportFilename(params, "abcdef123")).toBe("CF-001 Bracket A 1 rev B.docx");
     expect(reportFilename(null, "abcdef123")).toBe("clearfea-report-abcdef12.docx");
+    expect(reportFilename(params, "abcdef123", "pdf")).toBe("CF-001 Bracket A 1 rev B.pdf");
   });
 });
