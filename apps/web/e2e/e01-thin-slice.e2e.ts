@@ -436,16 +436,16 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
   await test.step("set the report options with a logo (M7.1)", async () => {
     await treeRow(page, "Report").click();
     const report = settings.getByRole("region", { name: "Report", exact: true });
-    await expect(report.getByLabel("Report title")).toHaveValue(/.+/);
+    await expect(report.getByLabel("Report title", { exact: true })).toHaveValue(/.+/);
     await report.getByRole("checkbox", { name: "Run warnings" }).uncheck();
     await report.getByRole("checkbox", { name: "σ1 cut at mid-length" }).check();
-    await report.getByLabel("Document number").fill("CF-E01-001");
-    await report.getByLabel("Revision").fill("A");
-    await report.getByLabel("Prepared by").fill("Alice");
-    await report.getByLabel("Company name").fill("Example Engineering");
+    await report.getByLabel("Document number", { exact: true }).fill("CF-E01-001");
+    await report.getByLabel("Revision", { exact: true }).fill("A");
+    await report.getByLabel("Prepared by", { exact: true }).fill("Alice");
+    await report.getByLabel("Company name", { exact: true }).fill("Example Engineering");
     const logo = `${OUT}/e01-logo.png`;
     writeFileSync(logo, logoPng(240, 80));
-    await report.getByLabel("Upload a logo").setInputFiles(logo);
+    await report.getByLabel("Upload a logo", { exact: true }).setInputFiles(logo);
     await expect(report.getByText("PNG, 240 × 80 pixels")).toBeVisible();
     await expect(report.getByRole("img", { name: "Your logo" })).toHaveJSProperty("naturalWidth", 240);
     await report.getByRole("button", { name: "Save report options" }).click();
@@ -454,8 +454,8 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     // Kept by the API: they come back after a reload.
     await page.reload();
     await treeRow(page, "Report").click();
-    await expect(report.getByLabel("Document number")).toHaveValue("CF-E01-001");
-    await expect(report.getByLabel("Company name")).toHaveValue("Example Engineering");
+    await expect(report.getByLabel("Document number", { exact: true })).toHaveValue("CF-E01-001");
+    await expect(report.getByLabel("Company name", { exact: true })).toHaveValue("Example Engineering");
     await expect(report.getByRole("checkbox", { name: "Run warnings" })).not.toBeChecked();
     await expect(report.getByRole("checkbox", { name: "σ1 cut at mid-length" })).toBeChecked();
     await expect(report.getByRole("img", { name: "Your logo" })).toHaveJSProperty("naturalWidth", 240);
