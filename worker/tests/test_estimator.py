@@ -134,7 +134,7 @@ def test_the_mesher_limit_in_the_fit_is_the_mesher_s() -> None:
 def test_every_benchmark_row_is_estimated_within_the_cost_margin() -> None:
     """Gate condition 3 (docs/DECISIONS.md): the cost the estimate predicts is within 30 percent
     of the measured cost, or one billed second, on the benchmark set (benchmarks/solver/check.py,
-    ADR-080)."""
+    ADR-081)."""
     check = load_fit("check")
     estimator = json.loads(ESTIMATOR.read_text())
     rows = check.rows(json.loads((BENCHMARKS / "steps.json").read_text()), estimator)
@@ -150,5 +150,5 @@ def test_the_check_bills_and_estimates_whole_seconds() -> None:
     assert row.error == pytest.approx(-0.3)
     assert row.within
     assert not check.Row("linear_static", "pastix", 2, 1, 1, None, 9.0, 5.9).within
-    # One second off is within the margin, however short the job (ADR-080).
+    # One second off is within the margin, however short the job (ADR-081).
     assert check.Row("modal", "spooles", 2, 1, 1, 1, 2.0, 2.1).within

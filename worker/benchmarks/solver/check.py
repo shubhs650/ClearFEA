@@ -2,7 +2,7 @@
 """Estimator check (M8.9): the cost the estimate predicts before a run against the cost the
 job-step benchmark measured, on every row of steps.json, against the margin in
 docs/DECISIONS.md (cost estimates within 30 percent of measured cost; gate condition 3), or
-within one billed second (ADR-080).
+within one billed second (ADR-081).
 
     cd worker && uv run python benchmarks/solver/check.py [--out FILE]
 
@@ -31,7 +31,7 @@ ESTIMATOR = HERE.parents[2] / "packages" / "spec" / "estimator.json"
 MARGIN = 0.30
 #: A job is billed per started second, so one second alone is more than 30 percent of a job
 #: billed for 3 seconds or less; an estimate this many seconds from the bill is within the
-#: margin too (ADR-080).
+#: margin too (ADR-081).
 SECONDS = 1
 
 
