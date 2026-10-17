@@ -216,8 +216,32 @@ export function shapeOf(
  * hidden body. Without a cut plane but with hidden bodies, there are no section values. */
 export type CutValues = { values: Float32Array; kept: Uint8Array };
 
+/**
+ * What hidden bodies and a cut plane leave of the contour (M3.4, M3.6): the quantity at each
+ * section vertex, from its values at every node, and which surface vertices stay drawn. Null
+ * when nothing is hidden or cut; without a section (none asked for, or not loaded yet) hidden
+ * bodies alone decide.
+ */
+export function cutValuesOf(
+  mesh: DisplayMesh,
+  hiddenFaces: ReadonlySet<number>,
+  cut: { section: Section; plane: Plane; field: ResultField; quantity: Quantity } | null,
+): CutValues | null {
+  const kept = hiddenFaces.size === 0 ? null : shownVertices(mesh, hiddenFaces);
+  if (cut === null) return kept === null ? null : { values: new Float32Array(0), kept };
+  const { section, plane, field, quantity } = cut;
+  const values = sectionValues(section, quantityValues(field, QUANTITIES[quantity].component));
+  const p = mesh.positions;
+  const [nx, ny, nz] = plane.normal;
+  const drawn = kept ?? new Uint8Array(p.length / 3).fill(1);
+  for (let v = 0; v < drawn.length; v++) {
+    if (nx * (p[3 * v] ?? 0) + ny * (p[3 * v + 1] ?? 0) + nz * (p[3 * v + 2] ?? 0) > plane.offset) drawn[v] = 0;
+  }
+  return { values, kept: drawn };
+}
+
 /** What the result view draws: band coordinates and the legend's figures. */
-type Contour = {
+export type Contour = {
   mesh: DisplayMesh;
   coordinates: Float32Array;
   /** The quantity's value at each vertex, in SI. */
@@ -398,35 +422,50 @@ function Probes({
   );
 }
 
+/** What a contour's legend says: its title, one row per band from the largest value down, and
+ * notes on the safety factor's cap and the shape drawn. The viewer and report figures (M7.2)
+ * both draw it. */
+export type LegendContent = { title: string; rows: { colour: string; text: string }[]; notes: string[] };
+
+export function legendOf(contour: Contour): LegendContent {
+  const rows = Array.from({ length: BANDS }, (_, k) => BANDS - 1 - k).map((k) => ({
+    colour: BAND_COLOURS[contour.smallestRed ? BANDS - 1 - k : k] ?? "",
+    text: `${shortNumber(contour.edges[k] ?? 0)} to ${shortNumber(contour.edges[k + 1] ?? 0)}`,
+  }));
+  const notes: string[] = [];
+  if (contour.cap !== null) notes.push(`Factors of ${contour.cap} and more are shown as ${contour.cap}`);
+  if (contour.deformable) {
+    notes.push(
+      contour.scale === null
+        ? "Undeformed shape"
+        : contour.modeShape
+          ? `Mode shape, largest displacement drawn at ${100 * MODE_SHAPE_SHARE} % of the model's size`
+          : contour.scale === 1
+            ? "Deformed shape, true scale"
+            : `Deformed shape, scale ×${contour.scale.toLocaleString("en-US")}`,
+    );
+  }
+  return { title: contour.unit === "1" ? contour.label : `${contour.label} (${contour.unit})`, rows, notes };
+}
+
 function Legend({ contour }: { contour: Contour }) {
-  const rows = Array.from({ length: BANDS }, (_, k) => BANDS - 1 - k);
+  const { title, rows, notes } = legendOf(contour);
   return (
     <section className="viewer-legend" aria-label="Legend">
-      <div className="viewer-legend-title">
-        {contour.unit === "1" ? contour.label : `${contour.label} (${contour.unit})`}
-      </div>
+      <div className="viewer-legend-title">{title}</div>
       <ol>
-        {rows.map((k) => (
-          <li key={k}>
-            <span className="viewer-legend-swatch" style={{ background: BAND_COLOURS[contour.smallestRed ? BANDS - 1 - k : k] }} />
-            {shortNumber(contour.edges[k] ?? 0)} to {shortNumber(contour.edges[k + 1] ?? 0)}
+        {rows.map((row) => (
+          <li key={row.colour}>
+            <span className="viewer-legend-swatch" style={{ background: row.colour }} />
+            {row.text}
           </li>
         ))}
       </ol>
-      {contour.cap !== null && (
-        <div className="viewer-legend-note">{`Factors of ${contour.cap} and more are shown as ${contour.cap}`}</div>
-      )}
-      {contour.deformable && (
-        <div className="viewer-legend-note">
-          {contour.scale === null
-            ? "Undeformed shape"
-            : contour.modeShape
-              ? `Mode shape, largest displacement drawn at ${100 * MODE_SHAPE_SHARE} % of the model's size`
-              : contour.scale === 1
-              ? "Deformed shape, true scale"
-              : `Deformed shape, scale ×${contour.scale.toLocaleString("en-US")}`}
+      {notes.map((note) => (
+        <div key={note} className="viewer-legend-note">
+          {note}
         </div>
-      )}
+      ))}
     </section>
   );
 }
@@ -517,7 +556,7 @@ function useVolume(runId: string | null, wanted: readonly string[] | null, onSig
 }
 
 /** The box around a volume mesh's nodes. */
-function boxOf(mesh: VolumeMesh): { lo: number[]; hi: number[] } {
+export function boxOf(mesh: VolumeMesh): { lo: number[]; hi: number[] } {
   const lo = [Infinity, Infinity, Infinity];
   const hi = [-Infinity, -Infinity, -Infinity];
   for (let n = 0; n < mesh.nodeCount; n++) {
@@ -893,20 +932,9 @@ export function Viewer({
   const nodeField = volume?.fields.get(quantityField);
   const cutValues = useMemo<CutValues | null>(() => {
     if (!model) return null;
-    const kept = hiddenFaces.size === 0 ? null : shownVertices(model.mesh, hiddenFaces);
     // Until the section is ready (or when it cannot be made), hidden bodies alone decide.
-    if (cutSetting === null || section === null || plane === null || nodeField === undefined) {
-      return kept === null ? null : { values: new Float32Array(0), kept };
-    }
-    const { component } = QUANTITIES[quantity];
-    const values = sectionValues(section, quantityValues(nodeField, component));
-    const p = model.mesh.positions;
-    const [nx, ny, nz] = plane.normal;
-    const drawn = kept ?? new Uint8Array(p.length / 3).fill(1);
-    for (let v = 0; v < drawn.length; v++) {
-      if (nx * (p[3 * v] ?? 0) + ny * (p[3 * v + 1] ?? 0) + nz * (p[3 * v + 2] ?? 0) > plane.offset) drawn[v] = 0;
-    }
-    return { values, kept: drawn };
+    const ready = cutSetting !== null && section !== null && plane !== null && nodeField !== undefined;
+    return cutValuesOf(model.mesh, hiddenFaces, ready ? { section, plane, field: nodeField, quantity } : null);
   }, [section, plane, nodeField, model, quantity, hiddenFaces, cutSetting]);
   const contour = useMemo(() => {
     if (!model?.results || !units || shape === null || drawn === null) return null;

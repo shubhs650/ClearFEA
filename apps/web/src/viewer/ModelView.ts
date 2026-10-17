@@ -13,10 +13,13 @@
 // picked or probed, and the camera can be read and set to restore a saved view. Given a swing
 // per vertex (M6.2, a mode shape drawn deformed), it animates the model, its outlines and the
 // section between the undeformed shape and the shape drawn, through the opposite one, in the
-// vertex shader, so a frame moves nothing on the CPU.
+// vertex shader, so a frame moves nothing on the CPU. For report figures (M7.2, ADR-011) it can
+// draw arrows (a load's direction), frame the model from a chosen direction and hand over the
+// picture with where its markers and axes fall, to be finished on a 2D canvas.
 
 import {
   AmbientLight,
+  ArrowHelper,
   Box3,
   BufferAttribute,
   BufferGeometry,
@@ -45,6 +48,20 @@ import { type EdgePolyline, type EdgeSegments, edgeSegments, nearestEdge } from 
 import { BAND_COLOURS, nearestCorner } from "./resultFields";
 import type { Plane } from "./section";
 
+/** An arrow drawn over the model (M7.2): from `origin` along `direction`, `length` long, in metres. */
+export type Arrow = { origin: [number, number, number]; direction: [number, number, number]; length: number };
+
+/** What the scene looks like now, for a report figure (M7.2): the picture, where each marker
+ * falls on it, and which way the global x, y and z axes point on screen (y down). */
+export type Snapshot = {
+  image: HTMLCanvasElement;
+  markers: { marker: Marker; x: number; y: number }[];
+  axes: [number, number][];
+};
+
+/** Options for a ModelView that draws report figures rather than the interactive viewer. */
+export type ModelViewOptions = { pixelRatio?: number; background?: string };
+
 /** Where the camera is and what it looks at, in metres (a saved view's camera, M3.6). */
 export type CameraView = { position: [number, number, number]; target: [number, number, number] };
 
@@ -57,6 +74,7 @@ const COLOURS = {
   outline: new Color("#495057"),
   elementEdge: new Color("#343a40"),
   edge: new Color("#212529"),
+  arrow: new Color("#c92a2a"),
 };
 
 /** Lines drawn over the faces: the face outlines of a geometry, or every element edge of a mesh. */
@@ -76,6 +94,9 @@ function bandTexture(): DataTexture {
   texture.needsUpdate = true;
   return texture;
 }
+
+/** The direction the camera looks from by default. */
+export const ISOMETRIC: readonly [number, number, number] = [1, 0.8, 1.2];
 
 /** A press that moves less than this many pixels before release is a click, not an orbit. */
 const CLICK_SLOP_PX = 4;
@@ -178,15 +199,17 @@ export class ModelView {
    * model swings, or null (M6.2). */
   private swing: Float32Array | null = null;
   private swingFrame = 0;
+  private arrows: ArrowHelper[] = [];
 
   /** Throws if the browser cannot create a WebGL context. */
   constructor(
     private readonly container: HTMLElement,
     private readonly events: ModelViewEvents,
+    options: ModelViewOptions = {},
   ) {
     this.renderer = new WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setClearColor(COLOURS.background);
+    this.renderer.setPixelRatio(options.pixelRatio ?? window.devicePixelRatio);
+    this.renderer.setClearColor(options.background === undefined ? COLOURS.background : new Color(options.background));
     container.appendChild(this.renderer.domElement);
     this.markerLayer = document.createElement("div");
     this.markerLayer.className = "viewer-markers";
@@ -270,14 +293,17 @@ export class ModelView {
     else this.resetView();
   }
 
-  /** Points the camera at the whole model, or the faces left shown, from an isometric direction. */
-  resetView(): void {
+  /** Points the camera at the whole model, or the faces left shown, from an isometric direction
+   * or, for a report figure (M7.2), from the direction given. */
+  resetView(from: readonly [number, number, number] = ISOMETRIC): void {
     const sphere = this.shownSphere();
     if (!sphere) return;
     const radius = Math.max(sphere.radius, 1e-6);
     const fov = (this.camera.fov * Math.PI) / 180;
     const distance = (radius / Math.sin(fov / 2)) * 1.15;
-    const direction = new Vector3(1, 0.8, 1.2).normalize();
+    const direction = new Vector3(...from).normalize();
+    // Looking straight down y, the camera's up (y) would be undefined: lean it a little.
+    if (Math.abs(direction.y) > 0.999) direction.set(0.02, Math.sign(direction.y), 0.02).normalize();
     this.camera.position.copy(sphere.center).addScaledVector(direction, distance);
     this.camera.near = distance / 100;
     this.camera.far = distance * 100;
@@ -459,6 +485,57 @@ export class ModelView {
     this.swingFrame = requestAnimationFrame(tick);
   }
 
+  /** Draws arrows over the model, always in front of it, replacing any drawn before (M7.2).
+   * setMesh clears them, so call this after it. */
+  setArrows(arrows: readonly Arrow[]): void {
+    this.clearArrows();
+    this.arrows = arrows.map(({ origin, direction, length }) => {
+      const arrow = new ArrowHelper(
+        new Vector3(...direction).normalize(),
+        new Vector3(...origin),
+        length,
+        COLOURS.arrow,
+        length * 0.25,
+        length * 0.12,
+      );
+      arrow.renderOrder = 10;
+      arrow.traverse((part) => {
+        const material = (part as Mesh).material as Material | undefined;
+        if (material) {
+          material.depthTest = false;
+          material.transparent = true;
+        }
+      });
+      this.scene.add(arrow);
+      return arrow;
+    });
+    this.requestRender();
+  }
+
+  /**
+   * Draws the scene now and returns a copy of it with where the markers fall and which way the
+   * axes point on screen (M7.2): what a report figure is finished from. Taken in the same task as
+   * the drawing, so the WebGL buffer still holds the picture.
+   */
+  snapshot(): Snapshot {
+    this.renderer.render(this.scene, this.camera);
+    const source = this.renderer.domElement;
+    const image = document.createElement("canvas");
+    image.width = source.width;
+    image.height = source.height;
+    image.getContext("2d")?.drawImage(source, 0, 0);
+    const ratio = this.renderer.getPixelRatio();
+    const markers = this.markers.flatMap(({ marker }) => {
+      const at = this.markerAt(marker);
+      return at === null ? [] : [{ marker, x: at.x * ratio, y: at.y * ratio }];
+    });
+    const axes = [new Vector3(1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, 0, 1)].map((axis): [number, number] => {
+      const seen = axis.transformDirection(this.camera.matrixWorldInverse);
+      return [seen.x, -seen.y];
+    });
+    return { image, markers, axes };
+  }
+
   dispose(): void {
     this.stopSwing();
     cancelAnimationFrame(this.frame);
@@ -612,7 +689,16 @@ export class ModelView {
     this.section = null;
   }
 
+  private clearArrows(): void {
+    for (const arrow of this.arrows) {
+      this.scene.remove(arrow);
+      arrow.dispose();
+    }
+    this.arrows = [];
+  }
+
   private clearModel(): void {
+    this.clearArrows();
     this.clearEdges();
     this.clearSection();
     this.plane = null;
@@ -653,30 +739,30 @@ export class ModelView {
 
   /** Moves each marker's element over its vertex as drawn now; hides it behind the camera. */
   private placeMarkers(): void {
-    const positions = this.surface?.geometry.getAttribute("position");
-    const onSection = this.section?.geometry.getAttribute("position");
-    if (!positions || this.markers.length === 0) return;
-    const width = this.container.clientWidth;
-    const height = this.container.clientHeight;
-    const point = new Vector3();
-    const r = this.reference;
     for (const { marker, element } of this.markers) {
-      const from = marker.onSection ? onSection : positions;
-      // A marker on a part the cut plane or a hidden body hides is hidden with it.
-      const away =
-        !marker.onSection &&
-        ((r !== null &&
-          this.cutAway(r[marker.vertex * 3] ?? 0, r[marker.vertex * 3 + 1] ?? 0, r[marker.vertex * 3 + 2] ?? 0)) ||
-          this.vertexHidden(marker.vertex));
-      if (!from || marker.vertex >= from.count || away) {
-        element.hidden = true;
-        continue;
-      }
-      point.fromBufferAttribute(from, marker.vertex).project(this.camera);
-      element.hidden = point.z > 1;
-      element.style.left = `${((point.x + 1) / 2) * width}px`;
-      element.style.top = `${((1 - point.y) / 2) * height}px`;
+      const at = this.markerAt(marker);
+      element.hidden = at === null;
+      if (at === null) continue;
+      element.style.left = `${at.x}px`;
+      element.style.top = `${at.y}px`;
     }
+  }
+
+  /** Where a marker's vertex is drawn now, in CSS pixels from the top left, or null when it is
+   * cut away, on a hidden body or behind the camera. */
+  private markerAt(marker: Marker): { x: number; y: number } | null {
+    const from = (marker.onSection ? this.section : this.surface)?.geometry.getAttribute("position");
+    const r = this.reference;
+    // A marker on a part the cut plane or a hidden body hides is hidden with it.
+    const away =
+      !marker.onSection &&
+      ((r !== null &&
+        this.cutAway(r[marker.vertex * 3] ?? 0, r[marker.vertex * 3 + 1] ?? 0, r[marker.vertex * 3 + 2] ?? 0)) ||
+        this.vertexHidden(marker.vertex));
+    if (!from || marker.vertex >= from.count || away) return null;
+    const point = new Vector3().fromBufferAttribute(from, marker.vertex).project(this.camera);
+    if (point.z > 1) return null;
+    return { x: ((point.x + 1) / 2) * this.container.clientWidth, y: ((1 - point.y) / 2) * this.container.clientHeight };
   }
 
   private colourOf(tag: number): Color {

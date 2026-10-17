@@ -348,7 +348,17 @@ export function App() {
       );
     }
     if (selected === "report" && setup.kind === "open") {
-      return <ReportPanel key={setup.id} simulationId={setup.id} status={status} onSignedOut={signedOut} />;
+      return (
+        <ReportPanel
+          key={setup.id}
+          simulationId={setup.id}
+          status={status}
+          run={run}
+          geometryId={geometry?.id ?? null}
+          units={resultUnits}
+          onSignedOut={signedOut}
+        />
+      );
     }
     if (selected === "bonds" && setup.kind === "open") {
       return (

@@ -3,7 +3,8 @@
 // the contour and switch to other result quantities (M3.1), read reactions (M3.2), and read the
 // min/max markers and probe a node (M3.3), cut it with a plane (M3.4), show the safety factor against
 // yield (M3.5), save a view and bring it back (M3.6), show the result in other units (M3.7) and
-// export it as CSV and VTK files (M3.8), and set the report options with a logo (M7.1), all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its
+// export it as CSV and VTK files (M3.8), set the report options with a logo (M7.1) and draw the
+// report's figures (M7.2), all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its
 // x = 40 mm end and pressed on its top face, z = 10 mm. Both faces look towards the viewer's
 // starting camera, so they can be clicked without turning the model.
 import { readFileSync, writeFileSync } from "node:fs";
@@ -463,5 +464,30 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await page.screenshot({ path: `${OUT}/e01-report-options.png`, fullPage: true });
     await report.getByRole("group", { name: "Company" }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${OUT}/e01-report-company.png` });
+  });
+
+  await test.step("draw the report's figures (M7.2)", async () => {
+    const report = settings.getByRole("region", { name: "Report", exact: true });
+    const figuresGroup = report.getByRole("group", { name: "Figures" });
+    await figuresGroup.getByRole("button", { name: "Draw the figures" }).click();
+    // One for the support, one for the pressure, one for the view picked.
+    await expect(figuresGroup.getByText("Drew 3 figures.")).toBeVisible({ timeout: 60_000 });
+    const list = figuresGroup.getByRole("list", { name: "Figures" });
+    const captions = ["Fixed support 1", "Pressure 1", 'Maximum principal stress σ1, view "σ1 cut at mid-length"'];
+    for (const caption of captions) {
+      await expect(list.getByRole("img", { name: caption })).toHaveJSProperty("naturalWidth", 1600);
+    }
+    // Stored on the run: a reload lists them again, in the report's order.
+    await page.reload();
+    await treeRow(page, "Report").click();
+    await expect(list.getByRole("listitem")).toHaveText(captions);
+    const sources = await list.getByRole("img").evaluateAll((images) => images.map((i) => (i as HTMLImageElement).src));
+    for (const [k, source] of sources.entries()) {
+      const image = await page.request.get(source);
+      expect(image.headers()["content-type"]).toBe("image/png");
+      writeFileSync(`${OUT}/e01-figure-${k + 1}.png`, await image.body());
+    }
+    await figuresGroup.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${OUT}/e01-report-figures.png` });
   });
 });
