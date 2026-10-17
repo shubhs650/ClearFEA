@@ -23,6 +23,8 @@
 // from M6.2 (ADR-071) they form a table whose rows pick the mode shape drawn, exaggerated or
 // undeformed, and swinging when asked. From M6.3 a modal setup's solver list and estimate use
 // the modal fit: limits for the most modes, the solvers that may solve it, the modes asked for.
+// From M8.7 (ADR-083) the owner can make a read-only link to a succeeded run, and revoke it; the
+// shared run's page shows the same results through RunResults.
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import {
@@ -76,6 +78,7 @@ import {
 } from "../viewer/resultFields";
 import { Notes } from "./ItemPanels";
 import { RunExport } from "./RunExport";
+import { ShareLink } from "./ShareLink";
 import { type ItemStatus, sameSpec } from "./spec";
 import type { EstimateState } from "./useEstimate";
 
@@ -234,7 +237,7 @@ function SolverChoice({
 }
 
 /** The solver a run used: its frozen spec's, or SPOOLES for runs made before ADR-063. */
-function runSolver(run: RunView): Solver {
+function runSolver(run: Pick<RunView, "spec">): Solver {
   return frozenRunSolver(run.spec);
 }
 
@@ -599,7 +602,7 @@ function ThermalFigures({
 }
 
 /** An API timestamp as a fixed, unambiguous UTC time. */
-function utc(timestamp: string): string {
+export function utc(timestamp: string): string {
   return `${timestamp.slice(0, 19).replace("T", " ")} UTC`;
 }
 
@@ -607,7 +610,7 @@ function version(value: string | number | null): string {
   return value === null ? "not recorded" : String(value);
 }
 
-const ORDERS = { 1: "linear tetrahedra (4 nodes)", 2: "quadratic tetrahedra (10 nodes)" } as const;
+export const ORDERS = { 1: "linear tetrahedra (4 nodes)", 2: "quadratic tetrahedra (10 nodes)" } as const;
 
 /** What the run cost, or why there is no cost to show. */
 function costText(run: RunView): string {
@@ -789,102 +792,38 @@ function RunRecord({ run, currentSpec }: { run: RunView; currentSpec: Simulation
   );
 }
 
-export function RunPanel({
-  status,
+const ignoreSignedOut = () => {};
+
+/**
+ * A succeeded run's results: what to show on the model, the display units and the figures, with
+ * the notes the report prints. The Run panel and a shared run's page (M8.7) both show them.
+ */
+export function RunResults({
   run,
-  currentSpec,
-  log,
-  blockers,
-  onOpen,
+  result,
   units,
   unitChoice,
   onUnitChange,
   onUnitReset,
-  estimate,
-  solver,
-  meshOrder,
-  onSolverChange,
-  requesting,
-  requestProblem,
-  onRun,
-  onCancel,
   choice,
   onChoiceChange,
 }: {
-  status: ItemStatus | undefined;
-  run: RunView | null;
-  /** The simulation's setup as saved now, to tell whether the run's frozen setup differs. */
-  currentSpec: SimulationSpec;
-  log: string;
-  /** What stops the simulation from being run now; empty when it can be run. */
-  blockers: readonly RunBlocker[];
-  /** Opens a tree item, from a line of the blocker list. */
-  onOpen: (item: string) => void;
-  /** The units figures are shown in. */
+  run: Pick<RunView, "spec" | "result">;
+  result: SolveResult;
   units: ResultUnits;
-  /** The units picked for the result view; a kind left out follows the unit system. */
   unitChoice: DisplayUnitChoice;
   onUnitChange: (kind: DisplayKind, unit: string | null) => void;
   onUnitReset: () => void;
-  /** The estimate for the current mesh, shown before a run. */
-  estimate: EstimateState;
-  /** The equation solver the setup asks for (ADR-063). */
-  solver: Solver;
-  /** The element order the limits are shown for: the mesh's, or the mesh settings'. */
-  meshOrder: ElementOrder;
-  onSolverChange: (solver: Solver) => void;
-  requesting: boolean;
-  requestProblem?: string;
-  /** Starts a run on the machine size chosen. */
-  onRun: (machineSize: string | undefined) => void;
-  /** Cancels the solving run (M8.2). */
-  onCancel: () => void;
   choice: ResultChoice;
   onChoiceChange: (next: ResultChoice) => void;
 }) {
-  const solving = run?.status === "solving";
-  const result = run?.status === "succeeded" ? run.result : null;
-  // A steady-state thermal run (M5.1) has temperatures only; a thermal stress run (M5.4) has
-  // the structural results and the temperatures and heat flows of its thermal step.
-  const thermal = run !== null && isThermalRun(run);
-  const thermalStress = run !== null && isThermalStressRun(run);
-  // A modal run (M6.1) has its natural frequencies and, since M6.2, its mode shapes.
-  const modal = run !== null && isModalRun(run);
-  const quantities = run === null ? [] : runQuantities(run);
-  // The size to run on: the recommended one (the largest when none fits) until the user picks
-  // another for this estimate.
-  const [picked, setPicked] = useState<{ estimate: RunEstimate; size: string } | null>(null);
-  const loaded = estimate.kind === "loaded" ? estimate.estimate : null;
-  const size =
-    loaded === null
-      ? null
-      : picked?.estimate === loaded
-        ? picked.size
-        : (loaded.recommended ?? [...loaded.sizes].sort((a, b) => b.memoryBytes - a.memoryBytes)[0]?.size ?? null);
-  const setSize = (chosen: string) => {
-    if (loaded !== null) setPicked({ estimate: loaded, size: chosen });
-  };
+  const thermal = isThermalRun(run);
+  const thermalStress = isThermalStressRun(run);
+  const modal = isModalRun(run);
+  const quantities = runQuantities(run);
   return (
-    <section className="setup-panel" aria-label="Run">
-      <h2 className="pane-title">Run</h2>
-      <Notes status={status} />
-      {!solving && <SolverChoice solver={solver} order={meshOrder} kind={specRunKind(currentSpec)} onChange={onSolverChange} />}
-      {!solving && <Estimate state={estimate} size={size} onSizeChange={setSize} />}
-      <button
-        type="button"
-        onClick={() => onRun(size ?? undefined)}
-        disabled={blockers.length > 0 || requesting || solving}
-      >
-        {run === null ? "Run" : "Run again"}
-      </button>
-      {blockers.length > 0 && !solving && <Blockers blockers={blockers} onOpen={onOpen} />}
-      {requestProblem && (
-        <p className="form-problem" role="alert">
-          {requestProblem}
-        </p>
-      )}
-      {solving && <RunningJob run={run} requesting={requesting} onCancel={onCancel} />}
-      {result && !modal && (
+    <>
+      {!modal && (
         <fieldset className="result-choice">
           <legend>Show on the model</legend>
           <label>
@@ -924,22 +863,20 @@ export function RunPanel({
           )}
         </fieldset>
       )}
-      {result && (
-        <DisplayUnits
-          kinds={modal ? MODAL_KINDS : thermal ? THERMAL_KINDS : thermalStress ? THERMAL_STRESS_KINDS : STATIC_KINDS}
-          choice={unitChoice}
-          onChange={onUnitChange}
-          onReset={onUnitReset}
-        />
-      )}
-      {result && run !== null && isIterative(runSolver(run)) && (
+      <DisplayUnits
+        kinds={modal ? MODAL_KINDS : thermal ? THERMAL_KINDS : thermalStress ? THERMAL_STRESS_KINDS : STATIC_KINDS}
+        choice={unitChoice}
+        onChange={onUnitChange}
+        onReset={onUnitReset}
+      />
+      {isIterative(runSolver(run)) && (
         <p className="field-hint" role="note">
           Solved with {SOLVER_LABELS[runSolver(run)]}. {ITERATIVE_ACCURACY_NOTE}
         </p>
       )}
-      {result && thermal && run !== null && <ThermalFigures result={result} spec={run.spec} units={units} />}
-      {result && modal && <ModalFigures result={result} units={units} choice={choice} onChoiceChange={onChoiceChange} />}
-      {result && !thermal && !modal && (
+      {thermal && <ThermalFigures result={result} spec={run.spec} units={units} />}
+      {modal && <ModalFigures result={result} units={units} choice={choice} onChoiceChange={onChoiceChange} />}
+      {!thermal && !modal && (
         <dl className="geometry-facts" aria-label="Run results">
           {result.displacement && (
             <>
@@ -972,20 +909,132 @@ export function RunPanel({
               "None: it needs a yield strength for every material. Enter them under Materials and run again."
             )}
           </dd>
-          {run !== null && <Reactions result={result} spec={run.spec} units={units} />}
+          <Reactions result={result} spec={run.spec} units={units} />
         </dl>
       )}
-      {result && thermalStress && run !== null && (
+      {thermalStress && (
         <ThermalFigures result={result} spec={run.spec} units={units} label="Thermal results" />
       )}
-      {run !== null &&
-        result &&
-        runReportNotes(run.spec).map((note) => (
+      {runReportNotes(run.spec).map((note) => (
           <p key={note.id} className="field-hint" role="note" aria-label={note.title}>
             <strong>{note.title}.</strong> {note.text}
           </p>
         ))}
+    </>
+  );
+}
+
+export function RunPanel({
+  status,
+  run,
+  currentSpec,
+  log,
+  blockers,
+  onOpen,
+  units,
+  unitChoice,
+  onUnitChange,
+  onUnitReset,
+  estimate,
+  solver,
+  meshOrder,
+  onSolverChange,
+  requesting,
+  requestProblem,
+  onRun,
+  onCancel,
+  choice,
+  onChoiceChange,
+  onSignedOut = ignoreSignedOut,
+}: {
+  status: ItemStatus | undefined;
+  run: RunView | null;
+  /** The simulation's setup as saved now, to tell whether the run's frozen setup differs. */
+  currentSpec: SimulationSpec;
+  log: string;
+  /** What stops the simulation from being run now; empty when it can be run. */
+  blockers: readonly RunBlocker[];
+  /** Opens a tree item, from a line of the blocker list. */
+  onOpen: (item: string) => void;
+  /** The units figures are shown in. */
+  units: ResultUnits;
+  /** The units picked for the result view; a kind left out follows the unit system. */
+  unitChoice: DisplayUnitChoice;
+  onUnitChange: (kind: DisplayKind, unit: string | null) => void;
+  onUnitReset: () => void;
+  /** The estimate for the current mesh, shown before a run. */
+  estimate: EstimateState;
+  /** The equation solver the setup asks for (ADR-063). */
+  solver: Solver;
+  /** The element order the limits are shown for: the mesh's, or the mesh settings'. */
+  meshOrder: ElementOrder;
+  onSolverChange: (solver: Solver) => void;
+  requesting: boolean;
+  requestProblem?: string;
+  /** Starts a run on the machine size chosen. */
+  onRun: (machineSize: string | undefined) => void;
+  /** Cancels the solving run (M8.2). */
+  onCancel: () => void;
+  choice: ResultChoice;
+  onChoiceChange: (next: ResultChoice) => void;
+  /** Called when the API says the user is signed out, from the share link's calls. */
+  onSignedOut?: (problem: string) => void;
+}) {
+  const solving = run?.status === "solving";
+  const result = run?.status === "succeeded" ? run.result : null;
+  // A steady-state thermal run (M5.1) has temperatures only; a thermal stress run (M5.4) has
+  // the structural results and the temperatures and heat flows of its thermal step.
+  const thermal = run !== null && isThermalRun(run);
+  const thermalStress = run !== null && isThermalStressRun(run);
+  // A modal run (M6.1) has its natural frequencies and, since M6.2, its mode shapes.
+  const modal = run !== null && isModalRun(run);
+  // The size to run on: the recommended one (the largest when none fits) until the user picks
+  // another for this estimate.
+  const [picked, setPicked] = useState<{ estimate: RunEstimate; size: string } | null>(null);
+  const loaded = estimate.kind === "loaded" ? estimate.estimate : null;
+  const size =
+    loaded === null
+      ? null
+      : picked?.estimate === loaded
+        ? picked.size
+        : (loaded.recommended ?? [...loaded.sizes].sort((a, b) => b.memoryBytes - a.memoryBytes)[0]?.size ?? null);
+  const setSize = (chosen: string) => {
+    if (loaded !== null) setPicked({ estimate: loaded, size: chosen });
+  };
+  return (
+    <section className="setup-panel" aria-label="Run">
+      <h2 className="pane-title">Run</h2>
+      <Notes status={status} />
+      {!solving && <SolverChoice solver={solver} order={meshOrder} kind={specRunKind(currentSpec)} onChange={onSolverChange} />}
+      {!solving && <Estimate state={estimate} size={size} onSizeChange={setSize} />}
+      <button
+        type="button"
+        onClick={() => onRun(size ?? undefined)}
+        disabled={blockers.length > 0 || requesting || solving}
+      >
+        {run === null ? "Run" : "Run again"}
+      </button>
+      {blockers.length > 0 && !solving && <Blockers blockers={blockers} onOpen={onOpen} />}
+      {requestProblem && (
+        <p className="form-problem" role="alert">
+          {requestProblem}
+        </p>
+      )}
+      {solving && <RunningJob run={run} requesting={requesting} onCancel={onCancel} />}
+      {result && run !== null && (
+        <RunResults
+          run={run}
+          result={result}
+          units={units}
+          unitChoice={unitChoice}
+          onUnitChange={onUnitChange}
+          onUnitReset={onUnitReset}
+          choice={choice}
+          onChoiceChange={onChoiceChange}
+        />
+      )}
       {run !== null && result && !modal && <RunExport run={run} result={result} units={units} thermal={thermal} thermalStress={thermalStress} />}
+      {run !== null && result && <ShareLink key={run.id} runId={run.id} onSignedOut={onSignedOut} />}
       {run !== null && <RunRecord run={run} currentSpec={currentSpec} />}
       {run !== null && (
         <details className="run-log" open={solving}>

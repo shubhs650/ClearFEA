@@ -38,7 +38,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [ ] M8.4 Failure classification end to end, with category and reason shown on the run
 - [x] M8.5 Simulated machine sizes on localhost (cores, memory limit); out-of-memory path tested, with who pays decided by the API (ADR-082)
 - [ ] M8.6 Storage accounting per user, free quota, retention of raw output, pin, regenerate by rerun
-- [ ] M8.7 Read-only share link per run, revocable
+- [x] M8.7 Read-only share link per run, revocable; E-07 (ADR-083)
 - [ ] M8.8 Data isolation tests across every route and file key
 - [x] M8.9 Estimator check: predicted against measured on the benchmark set; job time fitted per element order (ADR-081)
 - [ ] M8.10 Self-hosting mode flag: wallet informational
@@ -153,6 +153,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M8.7 (2026-10-17): the read-only share link (ADR-083, accepted under Shubham's M8 autodrive, pending his review). No physics-critical module touched; no ledger or job-table change. Migration 0017 `share_links` (one row per run, the token's SHA-256 only). Owner routes `GET`/`POST`/`DELETE /api/runs/:id/share` (`apps/api/src/routes/shareLinks.ts`, shapes `ShareLinkResponse`/`CreatedShareLinkResponse` in `simulation.schema.json`); public routes `/api/shared/:token` (`SharedRunResponse`) and `/topology`, `/surface`, `/fields`, `/mesh`, `/nodes`, which reuse `resultFiles` from `routes/runs.ts`. `resolveShareLink` in `db/shareLinks.ts` is the one lookup without a user id; M8.8's isolation sweep should include the `/api/shared` routes (a revoked token answers like an unknown one, 404). Web: a Share section in the Run panel (`setup/ShareLink.tsx`); `/share/<token>` is routed in `main.tsx` to `share/SharedRunPage.tsx`, which reuses the viewer through a `ViewerSource` and the results through `RunResults` (extracted from `RunPanel`). E-07 is in (`e07-share-link.e2e.ts`) and also covers the "second user cannot open first user's project" half with API reads; `make e2e` now runs E-01 to E-05 and E-07. `make e2e e07` does not pass `e07` to Playwright (make takes it as a target); run `infra/e2e.sh e07` instead (CLAUDE.md updated). Screenshots in the project's `m8.7/` folder.
 
 > M8.5 (2026-10-17): simulated machine sizes and the out-of-memory path (ADR-082, accepted under Shubham's M8 autodrive, pending his review). Billing module touched: `apps/api/src/billing/estimate.ts` gains two pure functions, `simulatedMachine` (the size's cores and 0.85 of its memory as the limit) and `outOfMemoryFault` (who pays); `cost.ts` and the charge statement are unchanged. `SolveParams.machine` (`SimulatedMachine`) is frozen into each solve job; jobs from before have none and run unlimited. The worker (`solver.py`) holds ccx to the size's cores with `sched_setaffinity`, reads its resident memory from `/proc` every 0.1 s and SIGKILLs it past the limit; a SIGKILL it did not send (the real kernel's) is also out of memory. The job fails with cause `out_of_memory`, keeping deck and log, and the API (`internal.ts`, `withMemoryFault`) sets the category and the run's message: the user pays only on a size that is not the platform's pick and that the estimate says does not fit. The solver stays on one thread on every size (ADR-048/063). Hand check with the host's ccx (SPOOLES, a 91,125-node C3D8 block): under an 8 GiB limit it solved in 245 s with a 3.6 GiB peak; under 300 MiB it was stopped as out of memory after 2.9 s. To see the path in `make dev`, shrink a size: `UPDATE machine_sizes SET memory_bytes = … WHERE name = 'small'` with `wrangler d1 execute DB --local` (new runs only). For M8.4: the out-of-memory category is already decided in the API, so failure classification can keep it. For M8.9: no estimator change. Mesh jobs are not limited.
 
@@ -333,6 +335,8 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
+
+- M8.7 read-only share link (ADR-083): the owner makes, copies once and revokes one link per succeeded run from the Run panel; `/share/<token>` shows the run's results read-only without signing in; only the token's hash is stored. New browser test E-07. Learned: `make e2e <test>` does not reach Playwright; `infra/e2e.sh <test>` does.
 
 - M8.5 simulated machine sizes (ADR-082): each solve job carries its size's cores and memory limit; the worker holds CalculiX to those cores and stops it past the limit as out of memory; the API charges the user only when they chose a size the estimate said was too small, and the run says so with what to do.
 - M8.9 estimator check (ADR-081): `benchmarks/solver/check.py` compares estimated with measured cost on all 69 benchmark rows (30 percent, or one billed second) and runs in `make test`; job time is now fitted per element order (estimator version 5), and all rows pass. Learned: the worker container runs SPOOLES 20 to 25 percent faster than the host the benchmark was measured on.

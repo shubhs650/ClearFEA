@@ -349,6 +349,7 @@ export function App() {
           onCancel={() => void runs.cancel()}
           choice={shownChoice}
           onChoiceChange={setResultChoice}
+          onSignedOut={signedOut}
         />
       );
     }

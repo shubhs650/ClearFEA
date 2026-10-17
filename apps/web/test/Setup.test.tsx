@@ -1129,6 +1129,7 @@ function finishedRun(beforeM32 = false, spec: SimulationSpec = supported): Recor
     "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
     "GET /api/runs/r1/surface": { status: 200, bytes: display },
     "GET /api/runs/r1/fields": { status: 200, bytes: twoFacesFields({ safety: !beforeM32 }) },
+    "GET /api/runs/r1/share": { status: 200, json: { share: null } },
   };
 }
 
@@ -1692,6 +1693,67 @@ describe("unit system", () => {
     fireEvent.change(unitSystem(), { target: { value: "us-in" } });
     expect(await tree().findByText("The unit system was not changed: 'us-in' is not a unit system.")).toBeTruthy();
     expect(unitSystem().value).toBe("metric-mm");
+  });
+});
+
+describe("share link (M8.7)", () => {
+  const TOKEN = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ";
+
+  it("makes a read-only link to a succeeded run, shows it once to copy, and revokes it", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const fetchMock = serve(
+      routes([simulation(supported)], {
+        ...finishedRun(),
+        "POST /api/runs/r1/share": { status: 201, json: { share: { createdAt: "2026-10-17T06:30:00.000Z" }, token: TOKEN } },
+        "DELETE /api/runs/r1/share": { status: 200, json: { share: null } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const share = within(await settings().findByRole("region", { name: "Share" }));
+    fireEvent.click(await share.findByRole("button", { name: "Make a read-only link" }));
+    const link = (await share.findByLabelText("Read-only link")) as HTMLInputElement;
+    expect(link.value).toBe(`${window.location.origin}/share/${TOKEN}`);
+    expect(share.getByText(/it is shown only once/)).toBeTruthy();
+    fireEvent.click(share.getByRole("button", { name: "Copy the link" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(link.value));
+    expect(await share.findByRole("button", { name: "Copied" })).toBeTruthy();
+
+    fireEvent.click(share.getByRole("button", { name: "Revoke the link" }));
+    expect(await share.findByRole("button", { name: "Make a read-only link" })).toBeTruthy();
+    expect(share.queryByLabelText("Read-only link")).toBeNull();
+    expect(fetchMock.mock.calls.some(([path, init]) => path === "/api/runs/r1/share" && init?.method === "DELETE")).toBe(true);
+  });
+
+  it("says when a link made earlier is active, without showing it, and offers a new one", async () => {
+    serve(
+      routes([simulation(supported)], {
+        ...finishedRun(),
+        "GET /api/runs/r1/share": { status: 200, json: { share: { createdAt: "2026-10-17T06:30:00.000Z" } } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const share = within(await settings().findByRole("region", { name: "Share" }));
+    expect(await share.findByText(/A read-only link made 2026-10-17 06:30:00 UTC is active/)).toBeTruthy();
+    expect(share.queryByLabelText("Read-only link")).toBeNull();
+    expect(share.getByRole("button", { name: "Make a new link" })).toBeTruthy();
+    expect(share.getByRole("button", { name: "Revoke the link" })).toBeTruthy();
+  });
+
+  it("is not offered while a run solves", async () => {
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": { status: 200, json: { runs: [run()] } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
+    expect(settings().queryByRole("region", { name: "Share" })).toBeNull();
   });
 });
 

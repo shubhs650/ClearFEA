@@ -110,19 +110,114 @@ async function succeededRun(c: Context<SessionEnv>): Promise<Run | Response> {
   return run;
 }
 
-const missing = (c: Context<SessionEnv>, file: string) =>
-  c.json({ error: `The result file ${file} of this run is missing from storage. Run the simulation again.` }, 500);
+const missing = (file: string) =>
+  Response.json(
+    { error: `The result file ${file} of this run is missing from storage. Run the simulation again.` },
+    { status: 500 },
+  );
 
-const binary = (c: Context<SessionEnv>, body: ReadableStream, size: number) =>
-  c.body(body, 200, { "Content-Type": "application/octet-stream", "Content-Length": String(size) });
+const binary = (body: ReadableStream, size: number) =>
+  new Response(body, {
+    headers: { "Content-Type": "application/octet-stream", "Content-Length": String(size) },
+  });
+
+const RESULT_HEADER = 16;
+const RESULT_FIELD = 36;
+
+/**
+ * The viewer's files of a succeeded run, read from its owner's storage. The owner's routes below
+ * and the share link's (routes/shareLinks.ts, M8.7) serve the same files through these.
+ */
+export const resultFiles = {
+  /** One of the run's viewer files: surface.bin or fields.bin. */
+  async file(files: R2Bucket, run: Run, file: RunFile): Promise<Response> {
+    const object = await files.get(runKey(run.ownerId, run.id, file));
+    if (object === null) return missing(file);
+    return binary(object.body, object.size);
+  },
+
+  /**
+   * The run's volume mesh (packages/spec/volume-mesh.md): the mesh it was solved on, which runs
+   * share and never change (ADR-047), for cut planes (M3.4, ADR-053).
+   */
+  async mesh(files: R2Bucket, run: Run): Promise<Response> {
+    const object = await files.get(meshKey(run.ownerId, run.meshId, "mesh.bin"));
+    if (object === null) return missing("mesh.bin");
+    return binary(object.body, object.size);
+  },
+
+  /**
+   * Result values at every node of the run's mesh (packages/spec/result-fields.md, vertex v is
+   * node v of mesh.bin), for cut planes (M3.4, ADR-053). With a field name the reply is a
+   * result-fields file holding that one field, read from storage by range, so the viewer fetches
+   * only what it draws: on the largest models the whole file is hundreds of megabytes.
+   */
+  async nodes(files: R2Bucket, run: Run, name: string | undefined): Promise<Response> {
+    if (!run.files.includes("nodes.bin")) {
+      return Response.json(
+        {
+          error:
+            "This run was solved before ClearFEA kept results inside the body, so it cannot be cut. Run the simulation again to use a cut plane.",
+        },
+        { status: 404 },
+      );
+    }
+    const key = runKey(run.ownerId, run.id, "nodes.bin");
+    if (name === undefined) {
+      const object = await files.get(key);
+      if (object === null) return missing("nodes.bin");
+      return binary(object.body, object.size);
+    }
+    const head = await files.get(key, { range: { offset: 0, length: RESULT_HEADER } });
+    if (head === null) return missing("nodes.bin");
+    const header = new DataView(await head.arrayBuffer());
+    const nodes = header.getUint32(8, true);
+    const count = header.getUint32(12, true);
+    const tableBytes = count * RESULT_FIELD;
+    const table = await files.get(key, { range: { offset: RESULT_HEADER, length: tableBytes } });
+    if (table === null) return missing("nodes.bin");
+    const rows = new Uint8Array(await table.arrayBuffer());
+    let offset = RESULT_HEADER + tableBytes;
+    for (let k = 0; k < count; k++) {
+      const row = rows.subarray(k * RESULT_FIELD, (k + 1) * RESULT_FIELD);
+      const components = new DataView(row.buffer, row.byteOffset + 32, 4).getUint32(0, true);
+      const length = nodes * components * 4;
+      const rowName = new TextDecoder().decode(row.subarray(0, 16)).replace(/\0+$/, "");
+      if (rowName !== name) {
+        offset += length;
+        continue;
+      }
+      const values = await files.get(key, { range: { offset, length } });
+      if (values === null) return missing("nodes.bin");
+      // The same layout with a one-row table: header, this field's row, its values.
+      const prefix = new Uint8Array(RESULT_HEADER + RESULT_FIELD);
+      prefix.set(new Uint8Array(header.buffer));
+      new DataView(prefix.buffer).setUint32(12, 1, true);
+      prefix.set(row, RESULT_HEADER);
+      const reader = values.body.getReader();
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(prefix);
+        },
+        async pull(controller) {
+          const chunk = await reader.read();
+          if (chunk.done) controller.close();
+          else controller.enqueue(chunk.value);
+        },
+        cancel(reason) {
+          return reader.cancel(reason);
+        },
+      });
+      return binary(body, prefix.length + length);
+    }
+    return Response.json({ error: `This run has no result field named ${name}.` }, { status: 404 });
+  },
+};
 
 /** Serves one of a finished run's viewer files; a run that has not succeeded has none. */
 async function viewerFile(c: Context<SessionEnv>, file: RunFile): Promise<Response> {
   const run = await succeededRun(c);
-  if (run instanceof Response) return run;
-  const object = await c.env.FILES.get(runKey(c.var.userId, run.id, file));
-  if (object === null) return missing(c, file);
-  return binary(c, object.body, object.size);
+  return run instanceof Response ? run : resultFiles.file(c.env.FILES, run, file);
 }
 
 /** The mesh's outer surface, in the display mesh format (packages/spec/display-mesh.md). */
@@ -131,89 +226,16 @@ runs.get("/:id/surface", (c) => viewerFile(c, "surface.bin"));
 /** Result values at each surface vertex (packages/spec/result-fields.md). */
 runs.get("/:id/fields", (c) => viewerFile(c, "fields.bin"));
 
-/**
- * The run's volume mesh (packages/spec/volume-mesh.md): the mesh it was solved on, which runs
- * share and never change (ADR-047), for cut planes (M3.4, ADR-053).
- */
+/** The volume mesh the run was solved on, for cut planes (M3.4, ADR-053). */
 runs.get("/:id/mesh", async (c) => {
   const run = await succeededRun(c);
-  if (run instanceof Response) return run;
-  const object = await c.env.FILES.get(meshKey(c.var.userId, run.meshId, "mesh.bin"));
-  if (object === null) return missing(c, "mesh.bin");
-  return binary(c, object.body, object.size);
+  return run instanceof Response ? run : resultFiles.mesh(c.env.FILES, run);
 });
 
-const RESULT_HEADER = 16;
-const RESULT_FIELD = 36;
-
-/**
- * Result values at every node of the run's mesh (packages/spec/result-fields.md, vertex v is
- * node v of mesh.bin), for cut planes (M3.4, ADR-053). With ?field=<name> the reply is a
- * result-fields file holding that one field, read from storage by range, so the viewer fetches
- * only what it draws: on the largest models the whole file is hundreds of megabytes.
- */
+/** Result values at every node of the run's mesh, whole or with ?field=<name> one field. */
 runs.get("/:id/nodes", async (c) => {
   const run = await succeededRun(c);
-  if (run instanceof Response) return run;
-  if (!run.files.includes("nodes.bin")) {
-    return c.json(
-      {
-        error:
-          "This run was solved before ClearFEA kept results inside the body, so it cannot be cut. Run the simulation again to use a cut plane.",
-      },
-      404,
-    );
-  }
-  const key = runKey(c.var.userId, run.id, "nodes.bin");
-  const name = c.req.query("field");
-  if (name === undefined) {
-    const object = await c.env.FILES.get(key);
-    if (object === null) return missing(c, "nodes.bin");
-    return binary(c, object.body, object.size);
-  }
-  const head = await c.env.FILES.get(key, { range: { offset: 0, length: RESULT_HEADER } });
-  if (head === null) return missing(c, "nodes.bin");
-  const header = new DataView(await head.arrayBuffer());
-  const nodes = header.getUint32(8, true);
-  const count = header.getUint32(12, true);
-  const tableBytes = count * RESULT_FIELD;
-  const table = await c.env.FILES.get(key, { range: { offset: RESULT_HEADER, length: tableBytes } });
-  if (table === null) return missing(c, "nodes.bin");
-  const rows = new Uint8Array(await table.arrayBuffer());
-  let offset = RESULT_HEADER + tableBytes;
-  for (let k = 0; k < count; k++) {
-    const row = rows.subarray(k * RESULT_FIELD, (k + 1) * RESULT_FIELD);
-    const components = new DataView(row.buffer, row.byteOffset + 32, 4).getUint32(0, true);
-    const length = nodes * components * 4;
-    const rowName = new TextDecoder().decode(row.subarray(0, 16)).replace(/\0+$/, "");
-    if (rowName !== name) {
-      offset += length;
-      continue;
-    }
-    const values = await c.env.FILES.get(key, { range: { offset, length } });
-    if (values === null) return missing(c, "nodes.bin");
-    // The same layout with a one-row table: header, this field's row, its values.
-    const prefix = new Uint8Array(RESULT_HEADER + RESULT_FIELD);
-    prefix.set(new Uint8Array(header.buffer));
-    new DataView(prefix.buffer).setUint32(12, 1, true);
-    prefix.set(row, RESULT_HEADER);
-    const reader = values.body.getReader();
-    const body = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(prefix);
-      },
-      async pull(controller) {
-        const chunk = await reader.read();
-        if (chunk.done) controller.close();
-        else controller.enqueue(chunk.value);
-      },
-      cancel(reason) {
-        return reader.cancel(reason);
-      },
-    });
-    return binary(c, body, prefix.length + length);
-  }
-  return c.json({ error: `This run has no result field named ${name}.` }, 404);
+  return run instanceof Response ? run : resultFiles.nodes(c.env.FILES, run, c.req.query("field"));
 });
 
 /** The run's files the owner may read as text. */
