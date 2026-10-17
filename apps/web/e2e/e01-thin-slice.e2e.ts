@@ -3,11 +3,12 @@
 // the contour and switch to other result quantities (M3.1), read reactions (M3.2), and read the
 // min/max markers and probe a node (M3.3), cut it with a plane (M3.4), show the safety factor against
 // yield (M3.5), save a view and bring it back (M3.6), show the result in other units (M3.7) and
-// export it as CSV and VTK files (M3.8), all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its
+// export it as CSV and VTK files (M3.8), and set the report options with a logo (M7.1), all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its
 // x = 40 mm end and pressed on its top face, z = 10 mm. Both faces look towards the viewer's
 // starting camera, so they can be clicked without turning the model.
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
+import { deflateSync } from "node:zlib";
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
 const MODEL = process.env.CLEARFEA_E2E_MODEL ?? "";
@@ -60,6 +61,47 @@ async function clickFace(page: Page, tag: number): Promise<void> {
 /** Opens a row of the simulation tree by its label. */
 function treeRow(page: Page, label: string): Locator {
   return page.getByRole("navigation", { name: "Simulation tree" }).getByRole("button", { name: new RegExp(`^${label},`) });
+}
+
+/** A small PNG logo made here (no image is kept in the repository): a dark bar on white. */
+function logoPng(width: number, height: number): Buffer {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (bytes: Buffer) => {
+    let c = 0xffffffff;
+    for (const b of bytes) c = (crcTable[(c ^ b) & 0xff] as number) ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Buffer) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+    const sum = Buffer.alloc(4);
+    sum.writeUInt32BE(crc(body));
+    return Buffer.concat([length, body, sum]);
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  const rows = Buffer.alloc((width * 3 + 1) * height, 0xff);
+  for (let y = 0; y < height; y++) {
+    rows[y * (width * 3 + 1)] = 0;
+    for (let x = 0; x < width; x++) {
+      if (y > height / 3 && y < (2 * height) / 3 && x > width / 10 && x < (9 * width) / 10) {
+        rows.set([0x1f, 0x4e, 0x79], y * (width * 3 + 1) + 1 + x * 3);
+      }
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(rows)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
 }
 
 async function saved(page: Page): Promise<void> {
@@ -389,5 +431,37 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     expect(head).toContain('Name="vonMises (Pa)"');
     await exports.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${OUT}/e01-export.png` });
+  });
+
+  await test.step("set the report options with a logo (M7.1)", async () => {
+    await treeRow(page, "Report").click();
+    const report = settings.getByRole("region", { name: "Report", exact: true });
+    await expect(report.getByLabel("Report title")).toHaveValue(/.+/);
+    await report.getByRole("checkbox", { name: "Run warnings" }).uncheck();
+    await report.getByRole("checkbox", { name: "σ1 cut at mid-length" }).check();
+    await report.getByLabel("Document number").fill("CF-E01-001");
+    await report.getByLabel("Revision").fill("A");
+    await report.getByLabel("Prepared by").fill("Alice");
+    await report.getByLabel("Company name").fill("Example Engineering");
+    const logo = `${OUT}/e01-logo.png`;
+    writeFileSync(logo, logoPng(240, 80));
+    await report.getByLabel("Upload a logo").setInputFiles(logo);
+    await expect(report.getByText("PNG, 240 × 80 pixels")).toBeVisible();
+    await expect(report.getByRole("img", { name: "Your logo" })).toHaveJSProperty("naturalWidth", 240);
+    await report.getByRole("button", { name: "Save report options" }).click();
+    await expect(report.getByText("Report options saved.")).toBeVisible();
+
+    // Kept by the API: they come back after a reload.
+    await page.reload();
+    await treeRow(page, "Report").click();
+    await expect(report.getByLabel("Document number")).toHaveValue("CF-E01-001");
+    await expect(report.getByLabel("Company name")).toHaveValue("Example Engineering");
+    await expect(report.getByRole("checkbox", { name: "Run warnings" })).not.toBeChecked();
+    await expect(report.getByRole("checkbox", { name: "σ1 cut at mid-length" })).toBeChecked();
+    await expect(report.getByRole("img", { name: "Your logo" })).toHaveJSProperty("naturalWidth", 240);
+    await expect(page.locator("body")).not.toContainText(/\b(PASS|FAIL)\b|compliant/i);
+    await page.screenshot({ path: `${OUT}/e01-report-options.png`, fullPage: true });
+    await report.getByRole("group", { name: "Company" }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${OUT}/e01-report-company.png` });
   });
 });
