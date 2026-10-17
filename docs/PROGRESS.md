@@ -41,7 +41,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M8.7 Read-only share link per run, revocable; E-07 (ADR-083)
 - [ ] M8.8 Data isolation tests across every route and file key
 - [x] M8.9 Estimator check: predicted against measured on the benchmark set; job time fitted per element order (ADR-081)
-- [ ] M8.10 Self-hosting mode flag: wallet informational
+- [x] M8.10 Self-hosting mode flag: wallet informational (`SELF_HOSTED=true` in `apps/api/.dev.vars`, ADR-084)
 
 ### M7 Report
 
@@ -153,6 +153,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M8.10 (2026-10-17): the self-hosting flag (ADR-084, accepted under Shubham's M8 autodrive, pending his review). `SELF_HOSTED=true` (or `1`) in `apps/api/.dev.vars` turns it on (`apps/api/src/selfHosting.ts`); unset is the hosted mode, so `make dev`, `make verify` and `make e2e` are unchanged. The mesh and run routes skip `meshFundsProblem` and `runFundsProblem` when it is on; jobs are still metered and charged to the ledger, so the balance can go below zero, and the seed's grant is unchanged. `GET /api/wallet` answers `selfHosted`, and the wallet page then says it is information only instead of the refusal sentence. No billing module file changed and no migration. For M8.3: decide whether the stop limit applies when self-hosted (it bounds a run's time as well as its cost, so keeping it seems right). For M9.3: the self-hosting instructions should name the flag. Screenshots in the project's `m8.10/` folder.
 
 > M8.7 (2026-10-17): the read-only share link (ADR-083, accepted under Shubham's M8 autodrive, pending his review). No physics-critical module touched; no ledger or job-table change. Migration 0017 `share_links` (one row per run, the token's SHA-256 only). Owner routes `GET`/`POST`/`DELETE /api/runs/:id/share` (`apps/api/src/routes/shareLinks.ts`, shapes `ShareLinkResponse`/`CreatedShareLinkResponse` in `simulation.schema.json`); public routes `/api/shared/:token` (`SharedRunResponse`) and `/topology`, `/surface`, `/fields`, `/mesh`, `/nodes`, which reuse `resultFiles` from `routes/runs.ts`. `resolveShareLink` in `db/shareLinks.ts` is the one lookup without a user id; M8.8's isolation sweep should include the `/api/shared` routes (a revoked token answers like an unknown one, 404). Web: a Share section in the Run panel (`setup/ShareLink.tsx`); `/share/<token>` is routed in `main.tsx` to `share/SharedRunPage.tsx`, which reuses the viewer through a `ViewerSource` and the results through `RunResults` (extracted from `RunPanel`). E-07 is in (`e07-share-link.e2e.ts`) and also covers the "second user cannot open first user's project" half with API reads; `make e2e` now runs E-01 to E-05 and E-07. `make e2e e07` does not pass `e07` to Playwright (make takes it as a target); run `infra/e2e.sh e07` instead (CLAUDE.md updated). Screenshots in the project's `m8.7/` folder.
 
@@ -336,6 +338,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M8.10 self-hosting flag (ADR-084): `SELF_HOSTED=true` in `apps/api/.dev.vars` makes the wallet informational. Jobs are still charged to the ledger, but no run or mesh is refused for its balance, and the wallet page says so. Learned: Hono's `app.request(path, init, env)` lets an API test run the app with one binding changed.
 - M8.7 read-only share link (ADR-083): the owner makes, copies once and revokes one link per succeeded run from the Run panel; `/share/<token>` shows the run's results read-only without signing in; only the token's hash is stored. New browser test E-07. Learned: `make e2e <test>` does not reach Playwright; `infra/e2e.sh <test>` does.
 
 - M8.5 simulated machine sizes (ADR-082): each solve job carries its size's cores and memory limit; the worker holds CalculiX to those cores and stops it past the limit as out of memory; the API charges the user only when they chose a size the estimate said was too small, and the run says so with what to do.
