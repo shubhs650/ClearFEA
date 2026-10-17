@@ -43,6 +43,7 @@ from .cases import (
     unexpected_warnings,
 )
 from .client import ApiError, Client
+from .ledger import reconcile
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / "verification" / "cases"
@@ -82,15 +83,38 @@ def _shown(value: float, check: Check) -> str:
     return f"{from_si(value, check.unit, QUANTITIES[check.quantity]):.5g} {check.unit}"
 
 
-def d1_count(persist_to: Path, sql: str) -> int:
-    """One number from the API's local D1 database. Read-only; the harness's own state."""
+def d1_rows(persist_to: Path, sql: str) -> list[dict[str, Any]]:
+    """Rows from the API's local D1 database. Read-only; the harness's own state."""
     command = [
         "pnpm", "--silent", "--filter", "@clearfea/api", "exec", "wrangler", "d1", "execute",
         "DB", "--local", "--persist-to", str(persist_to), "--json", "--command", sql,
     ]  # fmt: skip
     out = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=True)
-    rows = json.loads(out.stdout)[0]["results"]
-    return int(next(iter(rows[0].values())))
+    return list(json.loads(out.stdout)[0]["results"])
+
+
+def d1_count(persist_to: Path, sql: str) -> int:
+    """One number from the API's local D1 database."""
+    return int(next(iter(d1_rows(persist_to, sql)[0].values())))
+
+
+def ledger_outcome(api: Client, persist_to: Path) -> Outcome:
+    """The M8 exit check over the whole suite (docs/PLAN.md): the harness user's ledger, the
+    costs its jobs recorded and its wallet agree to the micro-credit."""
+    case = Case("Ledger", "Wallet ledger over the suite", CASES, "m", {}, {}, [], [], {})
+    outcome = Outcome(case)
+    owner = f"(SELECT id FROM users WHERE login = '{LOGIN}')"
+    entries = d1_rows(
+        persist_to,
+        "SELECT seq, amount, balance, reason, job_id FROM ledger_entries "
+        f"WHERE owner_id = {owner} ORDER BY seq",
+    )
+    jobs = d1_rows(
+        persist_to, f"SELECT id, cost FROM jobs WHERE owner_id = {owner} AND cost IS NOT NULL"
+    )
+    for r in reconcile(entries, jobs, api.json("GET", "/api/wallet")["wallet"]):
+        outcome.rows.append(Row(r.check, r.expected, r.found, "", "exact", r.ok))
+    return outcome
 
 
 def balance_rows(
@@ -401,6 +425,12 @@ def main() -> int:
             outcome = Outcome(case, problem=str(error).replace("\n", " "))
         outcomes.append(outcome)
         print(f"[verify] {case.id}: {'pass' if outcome.ok else 'FAILED'}", flush=True)
+    if outcomes:
+        try:
+            outcomes.append(ledger_outcome(api, args.persist_to))
+        except (ApiError, subprocess.CalledProcessError) as error:
+            ledger = Case("Ledger", "Wallet ledger over the suite", CASES, "m", {}, {}, [], [], {})
+            outcomes.append(Outcome(ledger, problem=str(error).replace("\n", " ")))
 
     text = table(outcomes, args.tier)
     print("\n" + text)

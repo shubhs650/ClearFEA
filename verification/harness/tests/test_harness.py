@@ -909,3 +909,50 @@ def test_a_frequency_check_names_its_mode(tmp_path: Path, check: str, message: s
     )
     with pytest.raises(CaseError, match=message):
         load_case(folder)
+
+
+# --- The suite's ledger reconciliation (M8 exit) ---
+
+
+def _ledger() -> tuple[list[dict], list[dict], dict]:  # type: ignore[type-arg]
+    entries = [
+        {"seq": 1, "amount": 10**8, "balance": 10**8, "reason": "grant", "job_id": None},
+        {"seq": 2, "amount": -278, "balance": 99_999_722, "reason": "mesh", "job_id": "m1"},
+        {"seq": 3, "amount": -1_389, "balance": 99_998_333, "reason": "solve", "job_id": "s1"},
+    ]
+    jobs = [{"id": "m1", "cost": 278}, {"id": "s1", "cost": 1_389}, {"id": "s2", "cost": 0}]
+    wallet = {"balance": 99_998_333, "granted": 100_000_000, "charged": -1_667}
+    return entries, jobs, wallet
+
+
+def test_a_consistent_ledger_reconciles() -> None:
+    from harness.ledger import reconcile
+
+    assert all(r.ok for r in reconcile(*_ledger()))
+
+
+def test_reconciliation_finds_each_kind_of_mismatch() -> None:
+    from harness.ledger import reconcile
+
+    entries, jobs, wallet = _ledger()
+    entries[2]["balance"] -= 1  # a broken running balance
+    assert [r.ok for r in reconcile(entries, jobs, wallet)] == [False, True, True, True]
+
+    entries, jobs, wallet = _ledger()
+    wallet["balance"] += 1  # the wallet disagrees with the sum
+    assert [r.ok for r in reconcile(entries, jobs, wallet)] == [True, False, True, True]
+
+    entries, jobs, wallet = _ledger()
+    jobs[1]["cost"] = 1_390  # charged a different amount than the job's cost
+    assert [r.ok for r in reconcile(entries, jobs, wallet)] == [True, True, False, True]
+
+    entries, jobs, wallet = _ledger()
+    jobs.append({"id": "s3", "cost": 5})  # a charged job with no entry
+    assert [r.ok for r in reconcile(entries, jobs, wallet)] == [True, True, False, True]
+
+    entries, jobs, wallet = _ledger()
+    entries.append(
+        {"seq": 4, "amount": -5, "balance": 99_998_328, "reason": "storage", "job_id": None}
+    )
+    wallet = {"balance": 99_998_328, "granted": 100_000_000, "charged": -1_672}
+    assert [r.ok for r in reconcile(entries, jobs, wallet)] == [True, True, True, False]
