@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Report",
-  "description": "Report options (M7.1, ADR-074): what a simulation's report prints (its sections, the saved views drawn as result plots, the title block) and the user's own company name and logo, which every report of theirs carries. The report job (M7.3) reads them. Text is printed as typed. Each message is a definition under $defs.",
+  "description": "Report options (M7.1, ADR-074): what a simulation's report prints (its sections, the saved views drawn as result plots, the title block) and the user's own company name and logo, which every report of theirs carries. The report job (M7.3) reads them, with the figures captured in the browser for a run (M7.2, ADR-011). Text is printed as typed. Each message is a definition under $defs.",
   "$defs": {
     "ReportSection": {
       "description": "A section the report can print, from DECISIONS.md's Report row: project and revision, geometry and units, materials, mesh statistics, each load and support with a picture, solver settings and versions, result plots, the reaction (or heat) balance check, minimum and maximum tables, run warnings. The standing statements (M7.5) are always printed and are not a section.",
@@ -85,6 +85,40 @@
       "additionalProperties": false,
       "required": ["branding"],
       "properties": { "branding": { "$ref": "#/$defs/ReportBranding" } }
+    },
+    "ReportFigureKind": {
+      "description": "What a report figure shows (M7.2): one support or one load of the run's setup, drawn on the geometry with its faces picked out, or one saved view of the simulation drawn as saved (a result plot, or the geometry for a view saved without results).",
+      "enum": ["support", "load", "view"]
+    },
+    "ReportFigure": {
+      "description": "A figure captured in the browser for a run's report (M7.2, ADR-011): a PNG drawn by the same viewer the user sees. kind and item name what it shows: a support or load by its id in the run's frozen setup, or a saved view by its id. The image is GET /api/runs/:id/figures/:kind/:item.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "item", "caption", "position", "width", "height", "sizeBytes", "createdAt"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/ReportFigureKind" },
+        "item": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+        "caption": { "description": "The caption printed under the figure, as captured.", "$ref": "#/$defs/ReportText" },
+        "position": { "description": "Where the figure comes among the run's figures, from 0.", "type": "integer", "minimum": 0, "maximum": 999 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "sizeBytes": { "type": "integer", "minimum": 1 },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "ReportFigureResponse": {
+      "description": "Answer to PUT /api/runs/:id/figures/:kind/:item, which takes the PNG as the body and the caption and position in the query.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["figure"],
+      "properties": { "figure": { "$ref": "#/$defs/ReportFigure" } }
+    },
+    "ReportFigureListResponse": {
+      "description": "Answer to GET and DELETE /api/runs/:id/figures: the run's figures in order of position (none after a DELETE).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["figures"],
+      "properties": { "figures": { "type": "array", "items": { "$ref": "#/$defs/ReportFigure" } } }
     }
   }
 }

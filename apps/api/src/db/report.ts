@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Report options per simulation and the company name and logo per user (M7.1, ADR-074). Every
-// function takes the acting user's id and filters on owner_id. Options are checked by the caller.
+// Report options per simulation and the company name and logo per user (M7.1, ADR-074), and the
+// figures captured in the browser for a run's report (M7.2, ADR-011). Every function takes the
+// acting user's id and filters on owner_id. Options and figures are checked by the caller.
 
-import type { ReportBranding, ReportLogo, ReportOptions } from "@clearfea/spec";
+import type { ReportBranding, ReportFigure, ReportFigureKind, ReportLogo, ReportOptions } from "@clearfea/spec";
 
 export function logoKey(ownerId: string): string {
   return `owners/${ownerId}/report/logo`;
@@ -110,4 +111,84 @@ export async function saveLogo(
     .bind(userId, logo?.contentType ?? null, logo?.sizeBytes ?? null, logo?.width ?? null, logo?.height ?? null)
     .run();
   return getBranding(db, userId);
+}
+
+/** Where a run's figure is stored (M7.2). */
+export function figureKey(ownerId: string, runId: string, kind: ReportFigureKind, item: string): string {
+  return `owners/${ownerId}/runs/${runId}/figures/${kind}-${item}.png`;
+}
+
+interface FigureRow {
+  kind: ReportFigureKind;
+  item: string;
+  caption: string;
+  position: number;
+  width: number;
+  height: number;
+  size_bytes: number;
+  created_at: string;
+}
+
+function toFigure(row: FigureRow): ReportFigure {
+  return {
+    kind: row.kind,
+    item: row.item,
+    caption: row.caption,
+    position: row.position,
+    width: row.width,
+    height: row.height,
+    sizeBytes: row.size_bytes,
+    createdAt: row.created_at,
+  };
+}
+
+/** The figures of one of the user's runs, in order of position. */
+export async function listFigures(db: D1Database, userId: string, runId: string): Promise<ReportFigure[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT kind, item, caption, position, width, height, size_bytes, created_at FROM report_figures
+        WHERE run_id = ? AND owner_id = ? ORDER BY position, kind, item`,
+    )
+    .bind(runId, userId)
+    .all<FigureRow>();
+  return results.map(toFigure);
+}
+
+/**
+ * Records a figure stored under figureKey for one of the user's runs, replacing one of the same
+ * kind and item. Returns null when the run is not the user's; the insert checks that itself.
+ */
+export async function saveFigure(
+  db: D1Database,
+  userId: string,
+  runId: string,
+  figure: Omit<ReportFigure, "createdAt">,
+): Promise<ReportFigure | null> {
+  const row = await db
+    .prepare(
+      `INSERT INTO report_figures (run_id, owner_id, kind, item, caption, position, width, height, size_bytes)
+        SELECT id, owner_id, ?, ?, ?, ?, ?, ?, ? FROM runs WHERE id = ? AND owner_id = ?
+        ON CONFLICT (run_id, kind, item) DO UPDATE
+          SET caption = excluded.caption, position = excluded.position, width = excluded.width,
+              height = excluded.height, size_bytes = excluded.size_bytes, created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        RETURNING kind, item, caption, position, width, height, size_bytes, created_at`,
+    )
+    .bind(
+      figure.kind,
+      figure.item,
+      figure.caption,
+      figure.position,
+      figure.width,
+      figure.height,
+      figure.sizeBytes,
+      runId,
+      userId,
+    )
+    .first<FigureRow>();
+  return row === null ? null : toFigure(row);
+}
+
+/** Forgets every figure of one of the user's runs; the caller removes the images. */
+export async function deleteFigures(db: D1Database, userId: string, runId: string): Promise<void> {
+  await db.prepare("DELETE FROM report_figures WHERE run_id = ? AND owner_id = ?").bind(runId, userId).run();
 }

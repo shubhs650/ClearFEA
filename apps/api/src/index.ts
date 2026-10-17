@@ -10,6 +10,7 @@ import { materials } from "./routes/materials";
 import { meshes } from "./routes/meshes";
 import { projects } from "./routes/projects";
 import { reportBranding } from "./routes/reportBranding";
+import { reportFigures } from "./routes/reportFigures";
 import { runs } from "./routes/runs";
 import { session } from "./routes/session";
 import { simulations } from "./routes/simulations";
@@ -40,6 +41,7 @@ app.route("/api/simulations", simulations);
 app.route("/api/materials", materials);
 app.route("/api/meshes", meshes);
 app.route("/api/runs", runs);
+app.route("/api/runs", reportFigures);
 app.route("/api/report-branding", reportBranding);
 app.route("/internal", internal);
 

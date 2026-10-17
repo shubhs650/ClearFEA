@@ -29,9 +29,16 @@ export type ReportSection =
  * via the `definition` "ReportText".
  */
 export type ReportText = string;
+/**
+ * What a report figure shows (M7.2): one support or one load of the run's setup, drawn on the geometry with its faces picked out, or one saved view of the simulation drawn as saved (a result plot, or the geometry for a view saved without results).
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "ReportFigureKind".
+ */
+export type ReportFigureKind = "support" | "load" | "view";
 
 /**
- * Report options (M7.1, ADR-074): what a simulation's report prints (its sections, the saved views drawn as result plots, the title block) and the user's own company name and logo, which every report of theirs carries. The report job (M7.3) reads them. Text is printed as typed. Each message is a definition under $defs.
+ * Report options (M7.1, ADR-074): what a simulation's report prints (its sections, the saved views drawn as result plots, the title block) and the user's own company name and logo, which every report of theirs carries. The report job (M7.3) reads them, with the figures captured in the browser for a run (M7.2, ADR-011). Text is printed as typed. Each message is a definition under $defs.
  */
 export interface Report {
   [k: string]: unknown;
@@ -113,6 +120,46 @@ export interface SaveReportBrandingRequest {
 export interface ReportBrandingResponse {
   branding: ReportBranding;
 }
+/**
+ * A figure captured in the browser for a run's report (M7.2, ADR-011): a PNG drawn by the same viewer the user sees. kind and item name what it shows: a support or load by its id in the run's frozen setup, or a saved view by its id. The image is GET /api/runs/:id/figures/:kind/:item.
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "ReportFigure".
+ */
+export interface ReportFigure {
+  kind: ReportFigureKind;
+  item: string;
+  /**
+   * One line of the title block or the company name, printed as typed; may be empty.
+   */
+  caption: string;
+  /**
+   * Where the figure comes among the run's figures, from 0.
+   */
+  position: number;
+  width: number;
+  height: number;
+  sizeBytes: number;
+  createdAt: string;
+}
+/**
+ * Answer to PUT /api/runs/:id/figures/:kind/:item, which takes the PNG as the body and the caption and position in the query.
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "ReportFigureResponse".
+ */
+export interface ReportFigureResponse {
+  figure: ReportFigure;
+}
+/**
+ * Answer to GET and DELETE /api/runs/:id/figures: the run's figures in order of position (none after a DELETE).
+ *
+ * This interface was referenced by `Report`'s JSON-Schema
+ * via the `definition` "ReportFigureListResponse".
+ */
+export interface ReportFigureListResponse {
+  figures: ReportFigure[];
+}
 
 export const ReportSectionValues = ["project", "geometry", "materials", "mesh", "loadsSupports", "solver", "results", "reactions", "extremes", "warnings"] as const satisfies readonly ReportSection[];
 export const validateReportSection = validator<ReportSection>(schema, "ReportSection");
@@ -124,3 +171,8 @@ export const validateReportLogo = validator<ReportLogo>(schema, "ReportLogo");
 export const validateReportBranding = validator<ReportBranding>(schema, "ReportBranding");
 export const validateSaveReportBrandingRequest = validator<SaveReportBrandingRequest>(schema, "SaveReportBrandingRequest");
 export const validateReportBrandingResponse = validator<ReportBrandingResponse>(schema, "ReportBrandingResponse");
+export const ReportFigureKindValues = ["support", "load", "view"] as const satisfies readonly ReportFigureKind[];
+export const validateReportFigureKind = validator<ReportFigureKind>(schema, "ReportFigureKind");
+export const validateReportFigure = validator<ReportFigure>(schema, "ReportFigure");
+export const validateReportFigureResponse = validator<ReportFigureResponse>(schema, "ReportFigureResponse");
+export const validateReportFigureListResponse = validator<ReportFigureListResponse>(schema, "ReportFigureListResponse");
