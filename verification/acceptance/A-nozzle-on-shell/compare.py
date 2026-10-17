@@ -70,16 +70,12 @@ def _points() -> list[Point]:
                 for surface, r in (("outside", out), ("inside", 300.0)):
                     name = f"{edge} +{offset:g}, {side}, {surface}"
                     pts.append(_shell(name, x, r * math.sin(theta), r))
-    for phi in (0, 90, 180, 270):
-        a = math.radians(phi)
-        pts.append(
-            Point(
-                f"Nozzle wall, z = 340, {phi}°, outside",
-                (83 * math.cos(a), 83 * math.sin(a), 340.0),
-                "z",
-                83.0,
-            )
-        )
+    # The nozzle's wall 20 mm and 120 mm above the pad, around from +x towards +y.
+    for z in (340.0, 440.0):
+        for phi in (0, 90, 180, 270):
+            a = math.radians(phi)
+            at = (83 * math.cos(a), 83 * math.sin(a), z)
+            pts.append(Point(f"Nozzle wall, z = {z:g}, {phi}°, outside", at, "z", 83.0))
     return pts
 
 
@@ -169,6 +165,17 @@ def sample(res: Result, p: Point) -> dict[str, float]:
     return out
 
 
+def subtract(res: Result, other: Result) -> None:
+    """Takes another result on the same mesh from ``res``: superposition, so one linear run
+    minus another is the run of the loads that differ (ClearFEA's full run minus its
+    piping-load-only run is the pressure and thrusts alone)."""
+    if other.nodes != res.nodes:
+        raise ValueError("the results to subtract are not on the same mesh")
+    for n in res.nodes:
+        res.stress[n] = tuple(a - b for a, b in zip(res.stress[n], other.stress[n], strict=True))
+        res.disp[n] = tuple(a - b for a, b in zip(res.disp[n], other.disp[n], strict=True))  # type: ignore[assignment]
+
+
 def nozzle_end_displacement(res: Result) -> Vec:
     """Mean displacement of the nodes on the nozzle's end face, z = 560 mm."""
     on = [n for n, q in res.nodes.items() if abs(q[2] - 560.0) < ON_SURFACE]
@@ -178,15 +185,30 @@ def nozzle_end_displacement(res: Result) -> Vec:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("files", nargs="+", help="label=path:units (units si or mm)")
+    parser.add_argument(
+        "--subtract",
+        action="append",
+        default=[],
+        help="label=path:units: a result on the same mesh to subtract from that label's file",
+    )
     parser.add_argument("--json", help="write the sampled values here")
     args = parser.parse_args()
-    labels, results = [], []
-    for spec in args.files:
+
+    def parse(spec: str) -> tuple[str, Result]:
         label, _, rest = spec.partition("=")
         path, _, units = rest.rpartition(":")
+        result = read(Path(path), units)
+        print(f"{label}: {len(result.nodes)} nodes from {path}", file=sys.stderr)
+        return label, result
+
+    labels, results = [], []
+    for spec in args.files:
+        label, result = parse(spec)
         labels.append(label)
-        results.append(read(Path(path), units))
-        print(f"{label}: {len(results[-1].nodes)} nodes from {path}", file=sys.stderr)
+        results.append(result)
+    for spec in args.subtract:
+        label, other = parse(spec)
+        subtract(results[labels.index(label)], other)
     table: dict[str, dict[str, dict[str, float]]] = {}
     for p in POINTS:
         table[p.name] = {label: sample(r, p) for label, r in zip(labels, results, strict=True)}

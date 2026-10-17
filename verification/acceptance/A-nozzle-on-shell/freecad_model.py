@@ -105,6 +105,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--local-size", type=float, default=0.0, help="size on nozzle and pad faces, mm (off)"
     )
+    parser.add_argument(
+        "--piping",
+        choices=("rigid", "none"),
+        default="rigid",
+        help="the piping load on a rigid end face, or none (pressure and thrusts only)",
+    )
     parser.add_argument("--ccx", default=str(here / "ccx"), help="ccx (the AppImage's)")
     parser.add_argument("--gmsh", default=str(here / "gmsh"), help="gmsh (the AppImage's)")
     return parser.parse_args(argv)
@@ -238,6 +244,19 @@ def force_on(doc, analysis, frag, name, faces, newtons, axis: FreeCAD.Vector):
     return force
 
 
+def add_piping_load(doc, analysis, frag, picked) -> None:
+    """The piping load as a rigid body constraint on the nozzle's end face."""
+    piping = ObjectsFem.makeConstraintRigidBody(doc, "PipingLoad")
+    piping.References = [(frag, tuple(picked["nozzle-end"]))]
+    piping.ReferenceNode = FreeCAD.Vector(*PIPING_POINT_MM)
+    for axis, f, m in zip("XYZ", PIPING_FORCE_N, PIPING_MOMENT_NMM, strict=True):
+        setattr(piping, f"TranslationalMode{axis}", "Load")
+        setattr(piping, f"RotationalMode{axis}", "Load")
+        setattr(piping, f"Force{axis}", quantity(f, "N"))
+        setattr(piping, f"Moment{axis}", quantity(m, "N*mm"))
+    analysis.addObject(piping)
+
+
 def build(doc, frag, picked, args) -> tuple[object, object, object]:
     analysis = ObjectsFem.makeAnalysis(doc, "Analysis")
 
@@ -273,15 +292,8 @@ def build(doc, frag, picked, args) -> tuple[object, object, object]:
     force_on(doc, analysis, frag, "ShellThrust", picked["free-end"], SHELL_THRUST_N, x_axis)
     force_on(doc, analysis, frag, "NozzleThrust", picked["nozzle-end"], NOZZLE_THRUST_N, z_axis)
 
-    piping = ObjectsFem.makeConstraintRigidBody(doc, "PipingLoad")
-    piping.References = [(frag, tuple(picked["nozzle-end"]))]
-    piping.ReferenceNode = FreeCAD.Vector(*PIPING_POINT_MM)
-    for axis, f, m in zip("XYZ", PIPING_FORCE_N, PIPING_MOMENT_NMM, strict=True):
-        setattr(piping, f"TranslationalMode{axis}", "Load")
-        setattr(piping, f"RotationalMode{axis}", "Load")
-        setattr(piping, f"Force{axis}", quantity(f, "N"))
-        setattr(piping, f"Moment{axis}", quantity(m, "N*mm"))
-    analysis.addObject(piping)
+    if args.piping == "rigid":
+        add_piping_load(doc, analysis, frag, picked)
 
     # Section forces and moments on the held face, about its centroid, from the stresses: a
     # second, cruder reading of the reaction (one element through the wall at 12 mm).
@@ -453,7 +465,7 @@ def cross(a, b) -> list[float]:
     return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 
 
-def expected_reaction() -> tuple[list[float], list[float]]:
+def expected_reaction(piping: bool) -> tuple[list[float], list[float]]:
     """The reaction force (N) and its moment about the held face's centroid (N mm) that
     balance the applied loads, from statics.
 
@@ -469,10 +481,11 @@ def expected_reaction() -> tuple[list[float], list[float]]:
         ([SHELL_THRUST_N, 0, 0], [X_FREE - X_HELD, 0, 0]),
         ([0, 0, NOZZLE_THRUST_N], nozzle_point),
         ([0, 0, -p_cap], nozzle_point),  # walls' net pressure, see above
-        (list(PIPING_FORCE_N), nozzle_point),
     ]
+    if piping:
+        loads.append((list(PIPING_FORCE_N), nozzle_point))
     force = [sum(f[i] for f, _ in loads) for i in range(3)]
-    moment = list(PIPING_MOMENT_NMM)
+    moment = list(PIPING_MOMENT_NMM) if piping else [0.0, 0.0, 0.0]
     for f, r in loads:
         moment = [a + b for a, b in zip(moment, cross(r, f), strict=True)]
     return [-v for v in force], [-v for v in moment]
@@ -521,11 +534,12 @@ def main() -> None:
     doc.saveAs(str(out / "case_a.FCStd"))
 
     found = read_dat(inp.with_suffix(".dat"), femmesh)
-    force, moment = expected_reaction()
+    force, moment = expected_reaction(args.piping != "none")
     summary = {
         "freecad": ".".join(FreeCAD.Version()[:3]),
         "size_mm": args.size,
         "local_size_mm": args.local_size or None,
+        "piping": args.piping,
         "elements": femmesh.VolumeCount,
         "nodes": femmesh.NodeCount,
         "mesh_seconds": round(mesh_seconds, 1),
