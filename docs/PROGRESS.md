@@ -5,8 +5,8 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M8 Platform, not started (M7 closed 2026-10-17; M8 waits for the maintainer's go)
-- **Next task:** M8.1, once the maintainer says go
+- **Current milestone:** M8 Platform, in progress (under the maintainer's M8 autodrive, 2026-10-17)
+- **Next task:** M8.1
 - **Blocked on:** nothing
 
 ## Milestones
@@ -141,7 +141,7 @@ Things only the maintainer can do.
 
 Written by the last session for the next one. Replace, do not append.
 
-> M7 close (2026-10-17): M7 closed on a green manual phase-end run on main (see the Milestones table). Every M7 task is in, and E-05, the one browser test listed for M7, runs in it; no verification case is listed for M7 (the report adds no physics). PLAN.md's M7.3 box was left unticked by PR #82 and is ticked here. The exit (a report the maintainer would hand to a reviewer) is his call: a V-02 report in US units, Word and PDF, was made through the UI from main e5a312c and is in the project's `m7-close/` folder. Open question for him: sums that are really zero print as rounding noise (V-02's reaction table shows Fx -0.00003084 lbf, wrapping in the narrow cell; ADR-077 kept stored values as they are). ADR-073 to ADR-078 await his review. Next is M8 in PLAN.md order, which waits for his go.
+> M7 close (2026-10-17): M7 closed on a green manual phase-end run on main (see the Milestones table). Every M7 task is in, and E-05, the one browser test listed for M7, runs in it; no verification case is listed for M7 (the report adds no physics). PLAN.md's M7.3 box was left unticked by PR #82 and is ticked here. The exit (a report the maintainer would hand to a reviewer) is his call: a V-02 report in US units, Word and PDF, was made through the UI from main e5a312c and is in the project's `m7-close/` folder. He judged it fine for the prototype, to refine later; he accepted ADR-073 to ADR-078 and chose to print the balance tables' rounding noise as 0, done after the close as ADR-079 (components below one millionth of the run's balance scales; V-02 again in `m7-close/` as `v02-report-rounded.*`). M8 runs under his M8 autodrive.
 
 > M7.4 (2026-10-17): the PDF report (ADR-078, accepted under Shubham's M7 autodrive, pending his review). No physics-critical module touched. The report job prints its `report.docx` to `report.pdf` with headless LibreOffice Writer (`worker/clearfea_worker/report/pdf.py`; own profile per job, 300 s limit, lossless pictures), so the PDF has the DOCX's pages; the worker image gains `libreoffice-writer-nogui`, `fonts-liberation` (Arial's widths) and `fonts-dejavu-core`. Stored as `reports/<job>.pdf`, downloaded from `GET /api/runs/:id/report/pdf`; `pdfSizeBytes` on `ReportJobResult` and `RunReport` (null for reports made before M7.4, whose PDF link says to make the report again). The Report panel's group is now "Word and PDF report" with "Make the report" and two downloads. E-05 downloads the PDF and checks pages, title and the twelve section bookmarks. The real-conversion worker test runs only where `soffice` is installed (the sandbox, the worker image); the fast tier's stand-in tests cover the rest. PLAN.md's M7.3 box is still unticked (PR #82 left it); for the M7 close. Page images beside the DOCX's in the project's `m7.4/` folder. Next: M7 close.
 
@@ -314,6 +314,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- Report rounding (ADR-079, the maintainer's choice at the M7 close): force and moment components below one millionth of the run's balance scales print as 0 in the report's reaction and balance tables. ADR-073 to ADR-078 recorded as accepted by him.
 - M7 closed: phase-end workflow run by hand on main e5a312c ([run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) green, `make verify` full tier 302 of 302 checks in all 26 cases and `make e2e` E-01 to E-05. Next: M8, waiting on the maintainer's go.
 - M7.4: the PDF report, the Word report printed by LibreOffice in the worker, offered beside it (ADR-078); E-05 downloads it. Learned: LibreOffice writes Word headings as PDF bookmarks, which gives a browser test the section list without a PDF text reader.
 - M7.3: the Word report, made by a report job from parameters the API freezes, with every section of DECISIONS' Report row, the standing statements and notes, values in the report's unit system (ADR-077); new browser test E-05. Learned: python-docx's Footer style has its own centre tab stop, so a right-aligned page number needs it cleared.
