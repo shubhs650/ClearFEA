@@ -84,3 +84,4 @@ export { defaultReportOptions, orderedReportOptions, reportSectionLabels } from 
 export { checkUnitsTable, isUnitSystem, systemUnit, unitsTable } from "./units";
 export { type Validation, validator } from "./validate";
 export { checkMaterialLibrary, materialLibrary } from "./library";
+export { credits, MICRO_CREDITS } from "./credits";

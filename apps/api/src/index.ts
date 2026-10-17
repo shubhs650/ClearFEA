@@ -15,6 +15,7 @@ import { reports } from "./routes/reports";
 import { runs } from "./routes/runs";
 import { session } from "./routes/session";
 import { simulations } from "./routes/simulations";
+import { wallet } from "./routes/wallet";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -45,6 +46,7 @@ app.route("/api/runs", runs);
 app.route("/api/runs", reportFigures);
 app.route("/api/runs", reports);
 app.route("/api/report-branding", reportBranding);
+app.route("/api/wallet", wallet);
 app.route("/internal", internal);
 
 export default app;

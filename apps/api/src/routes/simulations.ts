@@ -50,6 +50,8 @@ import {
 } from "@clearfea/spec";
 import { Hono } from "hono";
 import { estimateRun, runSize } from "../billing/estimate";
+import { balanceOf } from "../billing/ledger";
+import { meshFundsProblem, runFundsProblem } from "../billing/wallet";
 import { readBody } from "../body";
 import { type Geometry, geometryKey, getGeometry } from "../db/geometries";
 import {
@@ -249,6 +251,9 @@ simulations.post("/:id/mesh", async (c) => {
   if (reuse) {
     return c.json({ mesh: meshView(existing), reused: true } satisfies MeshResponse, 200);
   }
+  // A new mesh is metered; a reused one is free, so only a new one needs funds (ADR-080).
+  const noFunds = meshFundsProblem(await balanceOf(c.env.DB, c.var.userId));
+  if (noFunds !== null) return c.json({ error: noFunds }, 409);
   const { mesh } = await createMesh(c.env.DB, c.var.userId, { ...request, simulationId: simulation.id, hash });
   return c.json({ mesh: meshView(mesh), reused: false } satisfies MeshResponse, 201);
 });
@@ -337,7 +342,8 @@ simulations.get("/:id/estimate", async (c) => {
  * The run's copy lists every bond of the geometry, so a spec saved before M4.2 is tied the way
  * the setup shows it (every candidate detected, ADR-059); the deck ties what the list says (M4.3).
  * A mesh with more elements than the spec's solver may solve on a 16 GB machine is refused
- * before any machine is used (ADR-063).
+ * before any machine is used (ADR-063), and so is a run whose estimated cost on its size is more
+ * than the wallet holds (M8.1, ADR-080).
  */
 simulations.post("/:id/runs", async (c) => {
   let request: CreateRunRequest = {};
@@ -379,6 +385,8 @@ simulations.post("/:id/runs", async (c) => {
   if (latest?.status === "solving") {
     return c.json({ error: "The simulation is already being solved. Wait for that run to finish." }, 409);
   }
+  const noFunds = runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size);
+  if (noFunds !== null) return c.json({ error: noFunds }, 409);
   const created = await createRun(c.env.DB, c.var.userId, {
     simulationId: simulation.id,
     meshId: mesh.id,

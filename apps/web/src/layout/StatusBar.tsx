@@ -10,7 +10,11 @@ const labels: Record<HealthState["kind"], string> = {
   unreachable: "API not reachable",
 };
 
-export function StatusBar({ user, onSignOut }: { user?: SessionUser; onSignOut?: () => void }) {
+export function StatusBar({
+  user,
+  onSignOut,
+  onWallet,
+}: { user?: SessionUser; onSignOut?: () => void; onWallet?: () => void }) {
   const [health, setHealth] = useState<HealthState>({ kind: "checking" });
 
   useEffect(() => {
@@ -33,6 +37,11 @@ export function StatusBar({ user, onSignOut }: { user?: SessionUser; onSignOut?:
         ))}
       {user && (
         <span className="status-user">
+          {onWallet && (
+            <button type="button" className="link-button" onClick={onWallet}>
+              Wallet
+            </button>
+          )}
           Signed in as {user.name}
           {onSignOut && (
             <button type="button" className="link-button" onClick={onSignOut}>
