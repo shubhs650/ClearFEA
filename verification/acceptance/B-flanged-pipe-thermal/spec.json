@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "analysis": "thermal_stress",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Carbon steel (case tables)",
+      "model": "isotropic_elastic",
+      "youngsModulus": null,
+      "poissonsRatio": 0.3,
+      "youngsModulusTable": {
+        "temperatureUnit": "°C",
+        "unit": "GPa",
+        "rows": [
+          { "temperature": 20, "value": 200 },
+          { "temperature": 300, "value": 182 }
+        ]
+      },
+      "thermalExpansionTable": {
+        "temperatureUnit": "°C",
+        "unit": "µm/(m·K)",
+        "referenceTemperature": { "value": 20, "unit": "°C" },
+        "rows": [
+          { "temperature": 20, "value": 11.5 },
+          { "temperature": 300, "value": 12.9 }
+        ]
+      },
+      "thermalConductivityTable": {
+        "temperatureUnit": "°C",
+        "unit": "W/(m·K)",
+        "rows": [
+          { "temperature": 20, "value": 50 },
+          { "temperature": 300, "value": 44 }
+        ]
+      }
+    }
+  ],
+  "supports": [
+    { "id": "mid-plane", "type": "frictionless", "name": "Mid-length plane", "faces": ["mid-plane"] },
+    { "id": "cut-x", "type": "frictionless", "name": "Symmetry plane x = 0", "faces": ["cut-x"] },
+    { "id": "cut-y", "type": "frictionless", "name": "Symmetry plane y = 0", "faces": ["cut-y"] }
+  ],
+  "loads": [
+    {
+      "id": "hot-fluid",
+      "type": "convection",
+      "name": "Hot fluid in the bore",
+      "faces": ["bore"],
+      "coefficient": { "value": 2000, "unit": "W/(m²·K)" },
+      "ambientTemperature": { "value": 280, "unit": "°C" }
+    },
+    {
+      "id": "cooling",
+      "type": "convection",
+      "name": "Cooling on the outside",
+      "faces": ["pipe-outside", "flange-back", "flange-rim", "flange-face"],
+      "coefficient": { "value": 500, "unit": "W/(m²·K)" },
+      "ambientTemperature": { "value": 30, "unit": "°C" }
+    }
+  ],
+  "stressFreeTemperature": { "value": 20, "unit": "°C" },
+  "mesh": { "size": { "value": 10, "unit": "mm" } }
+}

@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [
+    { "tag": 1, "material": "steel" },
+    { "tag": 2, "material": "steel" },
+    { "tag": 3, "material": "steel" }
+  ],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Carbon steel (case values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 200, "unit": "GPa" },
+      "poissonsRatio": 0.3
+    }
+  ],
+  "supports": [{ "id": "held-end", "type": "fixed", "name": "Held end", "faces": ["held-end"] }],
+  "loads": [
+    {
+      "id": "pressure",
+      "type": "pressure",
+      "name": "Internal pressure",
+      "faces": ["shell-inside", "nozzle-bore", "nozzle-foot-a", "nozzle-foot-b"],
+      "magnitude": { "value": 2, "unit": "MPa" }
+    },
+    {
+      "id": "shell-thrust",
+      "type": "force",
+      "name": "End thrust on the shell",
+      "faces": ["free-end"],
+      "x": { "value": 565.487, "unit": "kN" },
+      "y": { "value": 0, "unit": "kN" },
+      "z": { "value": 0, "unit": "kN" }
+    },
+    {
+      "id": "nozzle-thrust",
+      "type": "force",
+      "name": "End thrust on the nozzle",
+      "faces": ["nozzle-end"],
+      "x": { "value": 0, "unit": "kN" },
+      "y": { "value": 0, "unit": "kN" },
+      "z": { "value": 35.343, "unit": "kN" }
+    },
+    {
+      "id": "piping-load",
+      "type": "remote",
+      "name": "Piping load on the nozzle",
+      "faces": ["nozzle-end"],
+      "point": {
+        "x": { "value": 0, "unit": "mm" },
+        "y": { "value": 0, "unit": "mm" },
+        "z": { "value": 560, "unit": "mm" }
+      },
+      "force": {
+        "x": { "value": 4, "unit": "kN" },
+        "y": { "value": -3, "unit": "kN" },
+        "z": { "value": -6, "unit": "kN" }
+      },
+      "moment": {
+        "x": { "value": 2, "unit": "kN·m" },
+        "y": { "value": 3, "unit": "kN·m" },
+        "z": { "value": 1.5, "unit": "kN·m" }
+      }
+    }
+  ],
+  "mesh": { "size": { "value": 15, "unit": "mm" } }
+}

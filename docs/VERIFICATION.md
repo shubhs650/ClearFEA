@@ -178,6 +178,8 @@ Checks for each:
 
 Both models must be original geometry created for this project, so they can be published in the repository.
 
+The models are in `verification/acceptance/` (M9.4), each a case folder with its geometry script, setup and a `model.md` giving the design and what the hand checks can use: `A-nozzle-on-shell` (a shell of 600 mm inside diameter and 10 mm wall with a nozzle of 166 mm outside diameter and a 330 mm pad, 2 MPa with end thrusts, a piping load on the nozzle, one end held) and `B-flanged-pipe-thermal` (a quarter of a flanged spool with a 50 mm wall, 280 °C fluid inside and cooling outside, temperature-dependent properties, on symmetry planes). `CASES="A B" make verify` runs them; the default suite does not.
+
 ## Benchmarks
 
 Separate from correctness. A fixed set of meshes of one block, each solver up to the memory a 16 GB machine allows (ADR-063), records the solve job's step times and the solver's peak memory per solver option and element order (`worker/benchmarks/solver/steps.py`). The estimator is fitted to these numbers, and gate condition 3 (estimate accuracy) is measured on them: `worker/benchmarks/solver/check.py` (M8.9, ADR-081) prices every row as the platform prices a run and requires the estimated cost within 30 percent of the measured cost, or within one billed second, and `make test` runs it. On estimator version 5 all 69 rows pass: linear static PaStiX −14 to +15 percent, SPOOLES −9 to +11, iterative Cholesky −9 to +9, iterative scaling −13 to +24, and modal SPOOLES −14 to +50 percent, the +50 being one second on a 2-second run. `make verify` lists each case's estimated and billed solve seconds beside its result, as information only: CI machines are not the benchmark machine.
