@@ -869,6 +869,8 @@ function RunRecord({ run, currentSpec }: { run: RunView; currentSpec: Simulation
                     Download
                   </a>
                 </>
+              ) : finished && run.failure?.cause === "worker_lost" ? (
+                <span className="field-hint">None: the machine stopped responding before it stored the file.</span>
               ) : finished ? (
                 <span className="field-hint">None: the run stopped before the solver started.</span>
               ) : (
