@@ -37,11 +37,13 @@ checks:
     tolerance: { coarse: 0.03, full: 0.03 }
   # The same place, each component: σθ (here σyy) and σx at the outside, σθ at the inside,
   # Lamé with closed ends (hand_checks.md, check 3). 3 percent for the one element through
-  # the wall, as above; the inside hoop stress reads within 0.5 percent at both tiers.
+  # the wall, as above. The hoop checks read a narrower band, |y| ≤ 25 mm, because σyy is the
+  # hoop stress only under the axis: at y = ±100 mm the hoop direction is 19° from y, and the
+  # mean over the von Mises check's box reads σyy about 4 percent below σθ.
   - name: Membrane hoop stress at the shell outside, under the shell, 450 mm past the nozzle
     quantity: stress.yy
     face: shell-outside
-    box: { min: [440, -100, -311], max: [460, 100, -290] }
+    box: { min: [420, -25, -311], max: [480, 25, -290] }
     reference: { value: 59.016, unit: MPa }
     tolerance: { coarse: 0.03, full: 0.03 }
   - name: Membrane axial stress at the shell outside, under the shell, 450 mm past the nozzle
@@ -53,7 +55,7 @@ checks:
   - name: Membrane hoop stress at the shell inside, under the shell, 450 mm past the nozzle
     quantity: stress.yy
     face: shell-inside
-    box: { min: [440, -100, -301], max: [460, 100, -290] }
+    box: { min: [420, -25, -301], max: [480, 25, -290] }
     reference: { value: 61.016, unit: MPa }
     tolerance: { coarse: 0.03, full: 0.03 }
   # Statics: the held end carries the end thrust and the piping load, and the piping load's

@@ -107,7 +107,12 @@ at x = 450 the cos 2θ term is 0.00. So the held side is not the far field `mode
 and the membrane check is made on the free side.
 
 `case.yaml` now checks the free side's hoop and axial stress at the outside and the hoop
-stress at the inside, as well as the von Mises stress already there.
+stress at the inside, as well as the von Mises stress already there. The hoop checks read a
+band |y| ≤ 25 mm under the axis, since σyy is the hoop stress only there; over the von Mises
+check's ±100 mm box the hoop direction turns up to 19° and σyy averages about 4 percent low.
+`CASES=A make verify` reads, at 15 mm and 12 mm: outside hoop −1.45 and −1.48 percent, outside
+axial −0.42 and −0.41, inside hoop +0.65 and +0.64, von Mises −1.80 and −1.78, reactions and
+moments exact; 20 of 20 checks at both tiers.
 
 ## 4. Local stresses: WRC-style calculation
 
