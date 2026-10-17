@@ -1023,7 +1023,7 @@ M7.4 makes the PDF "matching the DOCX" (PLAN M7.4; DECISIONS product table, Repo
 5. **Verification.** No physics-critical module is touched. Worker tests run the conversion against a stand-in LibreOffice (arguments, failure, timeout, a missing program) in the fast tier, and print a real report and check its pages, bookmarks and embedded font where LibreOffice is installed (the worker image, the sandbox; the fast tier's runner may not have it). E-05 downloads the PDF through the UI at every phase end and checks its name, pages, title and that its bookmarks are the DOCX's twelve section headings in order.
 
 ### ADR-079: Rounding noise in the report's reaction and balance tables prints as 0
-2026-10-17 · Accepted (Shubham's decision at the M7 close: "Round those values to 0").
+2026-10-17 · Accepted (Shubham's decision at the M7 close: "Round those values to 0"; reviewed and accepted by Shubham on 2026-10-17).
 
 The report printed stored sums that are zero as the solver's rounding noise, for example an applied force component of -1.791e-15 N or a V-02 reaction of Fx = -0.00003084 lbf against a 500 lbf load, which also wrapped in its narrow table cell. Choices it needed:
 
@@ -1033,7 +1033,7 @@ The report printed stored sums that are zero as the solver's rounding noise, for
 4. **Verification.** No physics-critical module is touched: printing only. A worker test checks that noise prints as 0, a small real value still prints, and no exponent is left in the section.
 
 ### ADR-080: The wallet page lists the ledger with what each charge paid for; seeded users get a 100-credit grant, and a run its balance cannot cover is refused
-2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review; the grant and refusal went to him on a decision card and were built on its recommended option).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; reviewed and accepted by Shubham on 2026-10-17; the grant and refusal went to him on a decision card and were built on its recommended option).
 
 M8.1 adds the wallet page (PLAN M8.1: balance, ledger, per-run cost; DECISIONS "Phase 0 wallet"). ADR-033 item 7 and ADR-049 item 7 left credit grants and refusing runs on a low balance for the wallet. Choices it needed:
 
@@ -1045,7 +1045,7 @@ M8.1 adds the wallet page (PLAN M8.1: balance, ledger, per-run cost; DECISIONS "
 6. **Verification.** The billing arithmetic (`cost.ts`) and the charge statement are unchanged; the ledger module gains reads only. API tests check the wallet's entries and totals, the owner scoping, the seed's single grant, and both refusals; a web test opens and closes the page. `make verify` and `make e2e` run as the seeded users, whose grant covers them.
 
 ### ADR-081: The estimator check prices every benchmark row as a run is priced; job time is fitted per element order; one billed second counts as within the margin
-2026-10-17 · Accepted (under Shubham's M8 autodrive; the refit and the one-second allowance were his choice on a decision card).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; the refit and the one-second allowance were his choice on a decision card; reviewed and accepted by Shubham on 2026-10-17).
 
 M8.9 checks the estimate against measured cost on the benchmark set (PLAN M8.9; DECISIONS gate condition 3 and its working tolerance of 30 percent). Choices it needed:
 
@@ -1057,7 +1057,7 @@ M8.9 checks the estimate against measured cost on the benchmark set (PLAN M8.9; 
 6. **The verification suite.** `make verify` now lists each case's estimated and billed solve seconds next to its mesh line and in `results.json`, as information only and not as a check. CI machines are not the benchmark machine, and the estimate stays high for slender parts (ADR-049 item 3; no shape term is added). On the coarse tier here (302 of 302 checks) 21 of the 23 static and thermal cases were estimated within one second of their bill (V-01 was 7 s against 5 s, V-04 20 s against 15 s), and the three modal beams 21 to 30 s against 5 to 8 s: their modal model was fitted on the stocky block at 1 and 100 modes.
 
 ### ADR-082: A machine size is simulated by holding the solver to its cores and stopping it past its usable memory; the API decides who pays for running out of memory
-2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M8.5 simulates the machine sizes on one physical machine (PLAN M8.5; ARCHITECTURE "Metering": "it sets the solver thread count and a memory limit on the solver process") and builds the out-of-memory path that DECISIONS "Failed runs" asks for. ADR-049 item 5 and item 7 left both for this task. Choices it needed:
 
@@ -1070,7 +1070,7 @@ M8.5 simulates the machine sizes on one physical machine (PLAN M8.5; ARCHITECTUR
 7. **Verification.** No deck, load or result code is touched; the billing module gains two pure functions and the charge rule itself (`isCharged`) is unchanged. Worker tests stop a stand-in solver past its limit and hold one to its cores; API tests check the job's machine and who pays on the recommended, a larger, a fitting and a too-small size. A real CalculiX solve stopped by the limit and the same deck solved under a larger one were checked by hand (PR description).
 
 ### ADR-083: A run has at most one read-only share link; only its token's hash is stored, and the link opens the run's results alone
-2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M8.7 adds the read-only share link per run (PLAN M8.7; DECISIONS "Privacy": read-only share link per run, revocable; ARCHITECTURE section 10: share links carry a random token, only its hash is stored). Choices it needed:
 
@@ -1081,7 +1081,7 @@ M8.7 adds the read-only share link per run (PLAN M8.7; DECISIONS "Privacy": read
 5. **Tests.** API tests cover making, replacing and revoking a link, the stored hash, what the link serves and refuses, and that only the owner can manage it. E-07 (`e07-share-link.e2e.ts`) opens a link in a browser that is not signed in, checks that bob reaches none of alice's geometry, simulation or run, revokes the link and finds it no longer works. The full isolation sweep across every route and file key is M8.8's.
 
 ### ADR-084: Self-hosting mode is one API variable; it keeps metering and charging, and turns off the refusals
-2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M8.10 adds the self-hosting flag (PLAN M8.10: wallet informational; DECISIONS "Self-hosting": wallet and metering off or informational). ADR-080 item 4 left turning the refusals off to this task. Choices it needed:
 
@@ -1092,7 +1092,7 @@ M8.10 adds the self-hosting flag (PLAN M8.10: wallet informational; DECISIONS "S
 5. **Tests.** API tests run the app with `SELF_HOSTED` set (`app.request` with the test bindings plus the variable) and check that the wallet says so, that a run the balance cannot cover is queued and charged below zero, and that a mesh is made at a zero balance; the hosted refusal tests are unchanged. A web test shows the self-hosted note.
 
 ### ADR-085: A run is cancelled by asking its worker at the next heartbeat; the worker reports the time it used and the owner pays it, and a run cancelled before the worker takes it ends at once and costs nothing
-2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M8.2 adds the running-job view and cancel (PLAN M8.2; DECISIONS "Running jobs" and "Failed runs": the user pays for time used on a cancellation; ARCHITECTURE section 6). Choices it needed:
 
@@ -1106,7 +1106,7 @@ M8.2 adds the running-job view and cancel (PLAN M8.2; DECISIONS "Running jobs" a
 8. **Not done here.** Meshing cannot be cancelled (no route asks; the mesh handler does not check). A worker that dies leaves its job running and a pending cancel unanswered, as any stalled job is today (no heartbeat timeout yet).
 
 ### ADR-086: Storage is measured from the stored files; a daily sweep removes unpinned raw output after 30 days and charges storage above a 5 GiB allowance once a day; a rerun of the run's own setup regenerates removed output
-2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M8.6 adds storage accounting, the free quota, retention of raw output, pinning and regenerating by rerun (PLAN M8.6; DECISIONS "Storage"; ARCHITECTURE section 4). The quota, retention period and rate are configuration values DECISIONS leaves open. Choices it needed:
 
@@ -1121,7 +1121,7 @@ M8.6 adds storage accounting, the free quota, retention of raw output, pinning a
 9. **Verification.** No deck, solver, result or unit code changes. The billing module gains `storage.ts` (pure, unit-tested for rounding, the allowance and sizes past 2^53) and the wallet query a join; job charging is unchanged. API tests cover measurement by kind, owner scoping, pins, the sweep (expired, pinned, recent; files kept; 410 after removal; idempotent), daily charging once per day with the ledger adding up exactly, the scheduled handler and the rerun (frozen spec, same mesh, size, refusals). Web tests cover the Run panel section and the wallet's storage section. No E-test is listed for storage (VERIFICATION lists E-06 and E-07 for M8).
 
 ### ADR-087: A run is stopped once its solve job has had the machine for three times the estimated time, or the multiple its owner sets, and never under 30 s; the owner pays for the time used
-2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M8.3 adds the stop limit (PLAN M8.3; DECISIONS "Running jobs": an automatic stop limit per run, a multiple of the estimate, user adjustable; "Failed runs": the user pays for time used when the limit is reached). ADR-033 and ADR-049 call this task M8.2, from before PLAN's numbering settled. Choices it needed:
 
@@ -1133,7 +1133,7 @@ M8.3 adds the stop limit (PLAN M8.3; DECISIONS "Running jobs": an automatic stop
 6. **What it does not close.** The limit needs a live worker: it stops a solver that runs on too long while its worker still checks in, which covers a CalculiX run that hangs. A worker that dies sends no heartbeats, so its job stays running and is never stopped; that gap (no heartbeat timeout, ARCHITECTURE section 6) is still open. Meshing and report jobs have no limit.
 
 ### ADR-088: The worker container has no memory limit of its own; the simulated machine size is the only memory limit on a solve
-2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 A fix inside M8, before its close. The full verification tier failed V-04 and V-11 in the Claude Code sandbox, both reported as out of memory on the small size (8 GiB, limit 6.8 GiB), the size the estimate recommended. What was found:
 
@@ -1143,7 +1143,7 @@ A fix inside M8, before its close. The full verification tier failed V-04 and V-
 4. **Not changed.** The estimator, the 85 percent usable fraction, the 1.25 margin, the machine sizes, the element limits per solver (ADR-063) and every verification case and tolerance. The full tier of V-20 and V-21 still meshes at 3 mm (ADR-070 item 7 chose it for this 4 GB limit); moving them back to 2 mm would be a case change for a later task.
 
 ### ADR-089: A job whose worker stops checking in for 120 s, or whose worker asks for another job, fails as a fault in ClearFEA; a singular matrix from SPOOLES is the user's; a failed run shows its category and cause
-2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M8.4 makes the failure classification work end to end (PLAN M8.4; DECISIONS "Failed runs": the user pays when the cause is their setup or choice, the platform absorbs its own faults including a lost machine, and each failed run shows its category and reason; ARCHITECTURE section 6). Before it, the categories existed but a run that died with its worker stayed solving forever (ADR-030, ADR-085 item 8, ADR-087 item 6), a singular matrix read as ClearFEA's fault, and the run showed only a sentence. Choices it needed:
 
@@ -1155,14 +1155,33 @@ M8.4 makes the failure classification work end to end (PLAN M8.4; DECISIONS "Fai
 6. **Not done here.** Gmsh still runs inside the worker, so a malformed STEP file that crashes it takes the worker down; that job now ends as `worker_lost`, ClearFEA's fault, rather than hanging, though the file may be the cause. Running Gmsh in a child process remains open (ADR-024). In the cloud a cron trigger every minute would sweep when no worker polls (Phase 1); locally the worker always polls.
 
 ### ADR-090: The verification harness checks the ledger over the whole run, and reads it only through the API
-2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
+2026-10-17 · Accepted (under Shubham's M8 autodrive; reviewed and accepted by Shubham on 2026-10-17).
 
 M8's exit asks for the ledger to reconcile exactly over the full verification suite (PLAN M8). Each case already checked that its run left one ledger entry, but nothing checked the ledger as a whole. Choices:
 
 1. **What reconciles means.** After the last case the harness reads the wallet and checks, to the micro-credit: every running balance is the previous one plus its entry; the balance is the sum of the ledger, and granted plus charged equals it; every job charge is its billed seconds at its rate, priced as `costOf` does (halves up); every charged run the suite made has one entry for exactly the cost its record shows, and an uncharged run has none; no entry other than the seeded grant lacks a job (the storage sweep never runs in `make verify`, ADR-086). The rows show in the result table as case "Ledger" and fail the run like any other check (`verification/harness/ledger.py`).
 2. **Only through the API.** The harness used to count ledger entries with `wrangler d1 execute` on the API's local database. That second process locks the SQLite file while the API is serving the worker's polls, so either side fails with `SQLITE_BUSY`: the read failed V-22 in a phase-end run, an earlier local run lost V-16 the same way (M8.5), and a stress test made the API answer 500 mid-case. The harness now reads the wallet (`GET /api/wallet`) instead and no longer takes `--persist-to`. The ledger rows are the API's own, so this checks the stored ledger and the wallet against each other and against the platform's pricing, not against a second reading of the database.
 
-### ADR-091: A model at each solver's element limit runs on the development environment; job files are streamed, up to 5 GiB, and a dropped transfer is tried again
+### ADR-091: With no applied load, the verification harness measures force balance against the run's nodal force scale
+2026-10-17 · Accepted (Shubham's decision on the M9.4 thread's card, 2026-10-17).
+
+Acceptance case B (M9.4) is a body heated on symmetry planes with no structural load, so each support's total reaction is rounding (about 0.01 N). The harness's "Reactions balance the applied load" row measured the miss against the sum of the reactions' sizes when there is no applied load (M2.2, for prescribed displacements), so it read B as 70 percent out of balance while the run's own check closed at 2.5e-7 percent. Choices:
+
+1. **The run's scale.** With no applied load, the row measures the miss against the larger of the sum of the reactions' sizes and the run's balance check's `forceScale`, the sum of the sizes of the supports' nodal forces (ADR-067 item 6, the platform's own no-load scale). The miss itself is still the harness's own sum of the reported reactions; only the yardstick is taken from the run. With a load nothing changes.
+2. **Tolerance unchanged.** The row's 0.1 percent stands. On the four no-load V cases (V-08, V-18, V-19, V-24, coarse tier) every verdict and miss is unchanged and each still reads 0.0000 percent; the scale grows for V-18 (467 kN to 558 kN) and V-19 (1.61 MN to 1.64 MN) and is the same for V-08 and V-24. B now passes at 0.0000 percent of 4.70 MN.
+
+### ADR-092: The verification results page is a Markdown page in the repository, written from the phase-end run's result table
+2026-10-17 · Accepted (under Shubham's M9 autodrive; pending his review at M9 close).
+
+M9.7 publishes the verification results page that `docs/VERIFICATION.md` promised and every report links to (DECISIONS Positioning, ADR-073 item 5). VERIFICATION.md said "the nightly run" writes it, but ADR-037 replaced the nightly run with a phase-end run per milestone, whose result table lives only in its log and summary page. Choices:
+
+1. **Where it is published.** `docs/VERIFICATION_RESULTS.md` on `main`, which GitHub renders, like the rest of the documentation. No GitHub Pages site, artifact upload or other CI or repository-setting change. The report's `verificationUrl` (`packages/spec/report-notes.json`) now points at it, and the Verification statement says the computed values are listed there too.
+2. **What produces it.** The verification cases come from the phase-end run that closed the latest milestone: its log already prints the harness's result table, so `python -m harness.page --from-log` cuts it out into `verification/results/suite.md`. The acceptance cases A and B are not in the default suite (M9.4), so their table comes from a local full-tier `CASES="A B" make verify` (`results/acceptance.md`). `results/sources.json` names each run. The first page uses M8's run 39023659289; the M9 close replaces it with M9's.
+3. **Generated, and checked.** `python -m harness.page` writes the page from those tables; a harness test fails `make test` when the committed page is not what they give, so it is never edited by hand.
+4. **Numbers, no verdict.** Each check shows reference, computed value, error and tolerance, and whether the value is within the tolerance ("yes", or "**no**" in bold). The harness's "pass"/"FAILED" column is not copied, and the page says the cases show how closely the software reproduces known answers, not how closely a model represents its part, with no comparison against a code or standard.
+5. **What it would take to automate.** Having the phase-end run upload `results.json` (or commit the page) would remove the hand step of downloading the log; that is a CI change, left to the maintainer.
+
+### ADR-093: A model at each solver's element limit runs on the development environment; job files are streamed, up to 5 GiB, and a dropped transfer is tried again
 2026-10-17 · Accepted (under Shubham's M9 autodrive, pending his review).
 
 M9.1 runs a model at each solver's element limit (ADR-063, ADR-072) on `make dev` and fixes what breaks. Choices and findings:

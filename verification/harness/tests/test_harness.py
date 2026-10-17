@@ -39,6 +39,7 @@ from harness.cases import (
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "packages" / "spec" / "fixtures"
 CASES = ROOT / "verification" / "cases"
+ACCEPTANCE = ROOT / "verification" / "acceptance"
 
 
 def surface():  # type: ignore[no-untyped-def]
@@ -243,6 +244,16 @@ def test_balance_without_a_load_is_measured_against_the_reactions() -> None:
     assert (miss, size) == pytest.approx((1e-3, 6.001))
 
 
+def test_balance_without_a_load_on_free_supports_is_measured_against_their_nodal_forces() -> None:
+    # A body heated on symmetry planes: each support's total is rounding, its nodes are not.
+    reactions = [[1e-3, 0.0, 0.0], [0.0, -2e-3, 0.0]]
+    assert balance([0.0, 0.0, 0.0], 0.0, reactions, 5e5) == pytest.approx(
+        (math.hypot(1e-3, 2e-3), 5e5)
+    )
+    # With a load the run's nodal scale plays no part.
+    assert balance([0.0, 0.0, -10.0], 10.0, [[0.0, 0.0, 9.0]], 5e5)[1] == 10.0
+
+
 def test_a_reaction_check_must_name_a_support_of_the_spec(tmp_path: Path) -> None:
     folder = tmp_path / "V-99-x"
     folder.mkdir()
@@ -445,6 +456,18 @@ def test_distance_integral_about_an_axis_through_a_square_section() -> None:
 @pytest.mark.parametrize("folder", sorted(p for p in CASES.iterdir() if p.is_dir()))
 def test_every_case_folder_is_complete(folder: Path) -> None:
     for name in ("case.yaml", "spec.json", "geometry.py", "reference.md"):
+        assert (folder / name).is_file(), f"{folder.name} has no {name}"
+    case = load_case(folder)
+    assert folder.name.startswith(case.id + "-")
+    items = case.spec["supports"] + case.spec["loads"]
+    faces = {f for item in items for f in item.get("faces", [])}
+    assert faces <= set(case.faces)
+
+
+@pytest.mark.parametrize("folder", sorted(p for p in ACCEPTANCE.iterdir() if p.is_dir()))
+def test_every_acceptance_model_is_complete(folder: Path) -> None:
+    # model.md takes the place of reference.md: M9.5 and M9.6 own the acceptance checks.
+    for name in ("case.yaml", "spec.json", "geometry.py", "model.md"):
         assert (folder / name).is_file(), f"{folder.name} has no {name}"
     case = load_case(folder)
     assert folder.name.startswith(case.id + "-")

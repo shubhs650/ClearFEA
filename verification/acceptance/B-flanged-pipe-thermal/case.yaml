@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Acceptance case B (M9.4): a quarter of a thick-walled flanged pipe with hot fluid inside and
+# cooling outside, solved as a thermal stress analysis (a steady heat transfer step, then a
+# static step on its temperatures) with temperature-dependent properties. The design and the
+# basis of each value: model.md. Layout: verification/README.md.
+# Not part of the default `make verify` suite; run it with CASES=B (verification/acceptance).
+id: B
+title: Thermal stress in a thick-walled flanged pipe
+analysis: thermal_stress
+features:
+  [thermal stress analysis, convection, temperature-dependent conductivity, temperature-dependent elasticity, temperature-dependent expansion, frictionless support, stress-free temperature]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  mid-plane: { min: [0, 0, 0], max: [150, 150, 0] }
+  cut-x: { min: [0, 100, 0], max: [0, 230, 400] }
+  cut-y: { min: [100, 0, 0], max: [230, 0, 400] }
+  bore: { min: [0, 0, 0], max: [100, 100, 400] }
+  pipe-outside: { min: [0, 0, 0], max: [150, 150, 340] }
+  flange-back: { min: [0, 0, 340], max: [230, 230, 340] }
+  flange-rim: { min: [0, 0, 340], max: [230, 230, 400] }
+  flange-face: { min: [0, 0, 400], max: [230, 230, 400] }
+mesh:
+  coarse: { value: 10, unit: mm }
+  full: { value: 6, unit: mm }
+# The first two show the heat step reaches the temperatures model.md works out: with
+# conductivity linear in temperature the series-resistance solution at the mean wall
+# temperature is exact. The rest are M9.6's acceptance checks (hand_checks.md).
+checks:
+  - name: Bore temperature away from the flange
+    quantity: temperature
+    face: bore
+    box: { min: [0, 0, 0], max: [100, 100, 50] }
+    reference: { value: 233.864, unit: °C }
+    tolerance: { coarse: 0.002, full: 0.002 }
+  - name: Outside temperature away from the flange
+    quantity: temperature
+    face: pipe-outside
+    box: { min: [0, 0, 0], max: [150, 150, 50] }
+    reference: { value: 153.029, unit: °C }
+    tolerance: { coarse: 0.002, full: 0.002 }
+  # M9.6 acceptance check 3: the through-wall stresses away from the flange (30 ≤ z ≤ 90 mm),
+  # against through_wall.py's solution with E varying through the wall (hand_checks.md). At
+  # the bore and the outside σr = 0, so σθ and σz are the stress state. Hoop stress is read as
+  # σxx in a 3 mm band beside the x = 0 cut, where the hoop direction is within 2° of x.
+  - name: Bore hoop stress away from the flange
+    quantity: stress.xx
+    face: bore
+    box: { min: [0, 0, 30], max: [3, 100, 90] }
+    reference: { value: -164.51, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  - name: Bore axial stress away from the flange
+    quantity: stress.zz
+    face: bore
+    box: { min: [0, 0, 30], max: [100, 100, 90] }
+    reference: { value: -164.36, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  - name: Bore von Mises stress away from the flange
+    quantity: vonMises
+    face: bore
+    box: { min: [0, 0, 30], max: [100, 100, 90] }
+    reference: { value: 164.43, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  - name: Outside hoop stress away from the flange
+    quantity: stress.xx
+    face: pipe-outside
+    box: { min: [0, 0, 30], max: [4.5, 150, 90] }
+    reference: { value: 123.87, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  - name: Outside axial stress away from the flange
+    quantity: stress.zz
+    face: pipe-outside
+    box: { min: [0, 0, 30], max: [150, 150, 90] }
+    reference: { value: 123.76, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  - name: Outside von Mises stress away from the flange
+    quantity: vonMises
+    face: pipe-outside
+    box: { min: [0, 0, 30], max: [150, 150, 90] }
+    reference: { value: 123.82, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }

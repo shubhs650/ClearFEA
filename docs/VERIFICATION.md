@@ -143,7 +143,14 @@ Once over the whole run (M8 exit): the harness user's ledger reconciles exactly.
 
 ## Published results
 
-From M9, the nightly run writes a results page (case, quantity, reference, computed, percentage error, mesh size, software versions) that is published with the documentation and linked from every report.
+[VERIFICATION_RESULTS.md](VERIFICATION_RESULTS.md) lists, for every case and check, the reference, the computed value, the percentage error, the tolerance, the mesh size and the software versions (M9.7, ADR-092). Every report links to it. It is published with the documentation in the repository and states numbers only, with no verdict wording.
+
+It is written by `python -m harness.page` (run from `verification/`) from result tables kept in `verification/results/`, each named with its run in `sources.json`:
+
+- `suite.md`: the verification cases from the phase-end run that closed the latest milestone (ADR-037). To refresh it, download that run's log from the Actions tab and run `python -m harness.page --from-log LOG --to results/suite.md`.
+- `acceptance.md`: the two acceptance cases, which the phase-end run does not run, from a local `VERIFY_TIER=full CASES="A B" make verify` (its `results.md`).
+
+Then update `sources.json` and run `python -m harness.page`. `make test` fails when the committed page is not what the committed tables give.
 
 ## Browser end-to-end tests
 
@@ -177,6 +184,8 @@ Checks for each:
 6. The report is one the maintainer would hand to a reviewer.
 
 Both models must be original geometry created for this project, so they can be published in the repository.
+
+The models are in `verification/acceptance/` (M9.4), each a case folder with its geometry script, setup and a `model.md` giving the design and what the hand checks can use: `A-nozzle-on-shell` (a shell of 600 mm inside diameter and 10 mm wall with a nozzle of 166 mm outside diameter and a 330 mm pad, 2 MPa with end thrusts, a piping load on the nozzle, one end held) and `B-flanged-pipe-thermal` (a quarter of a flanged spool with a 50 mm wall, 280 °C fluid inside and cooling outside, temperature-dependent properties, on symmetry planes). `CASES="A B" make verify` runs them; the default suite does not. Case A's six checks were done in M9.5 and are written up in `verification/acceptance/A-nozzle-on-shell/hand_checks.md`, with the WRC-style calculation (`wrc_style.py`), the FreeCAD model (`freecad_model.py`) and the script that compares result files (`compare.py`) beside it. Case B's were done in M9.6 and are written up in `verification/acceptance/B-flanged-pipe-thermal/hand_checks.md`, with the through-wall solution (`through_wall.py`), its FreeCAD model and its comparison script beside it.
 
 ## Benchmarks
 

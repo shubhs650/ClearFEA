@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Acceptance case A (M9.4): a nozzle with a reinforcing pad on a cylindrical shell, three bonded
+# bodies under internal pressure with end thrust and a piping load on the nozzle. The design
+# and the basis of each value: model.md. Layout: verification/README.md.
+# Not part of the default `make verify` suite; run it with CASES=A (verification/acceptance).
+id: A
+title: Nozzle with reinforcing pad on a cylindrical shell
+analysis: linear_static
+features: [multi-body, bonded interface, pressure, force, remote force and moment, fixed support]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  held-end: { min: [-600, -310, -310], max: [-600, 310, 310] }
+  free-end: { min: [600, -310, -310], max: [600, 310, 310] }
+  shell-inside: { min: [-600, -300, -300], max: [600, 300, 300] }
+  nozzle-bore: { min: [-75, -75, 290.474], max: [75, 75, 560] }
+  nozzle-foot-a: { min: [-83, -83, 288.29], max: [83, 0, 300] }
+  nozzle-foot-b: { min: [-83, 0, 288.29], max: [83, 83, 300] }
+  nozzle-end: { min: [-83, -83, 560], max: [83, 83, 560] }
+  shell-outside: { min: [-600, -310, -310], max: [600, 310, 310] }
+mesh:
+  coarse: { value: 15, unit: mm }
+  full: { value: 12, unit: mm }
+# The acceptance checks that have a hand value (M9.5, hand_checks.md): the membrane state far
+# from the nozzle, and the held end's reaction from statics. The WRC-style and FreeCAD
+# comparisons are in hand_checks.md; they are not graded here.
+checks:
+  # Lamé, closed ends, at the outside: σθ = 2 p ri² / (ro² − ri²), σx = σθ / 2, σr = 0.
+  # 3 percent because both tiers put one quadratic element through the 10 mm wall, which
+  # reads the outside hoop stress about 2.4 percent low (model.md); M9.5 refines the wall.
+  - name: Membrane von Mises at the shell outside, under the shell, 450 mm past the nozzle
+    quantity: vonMises
+    face: shell-outside
+    box: { min: [440, -100, -311], max: [460, 100, -290] }
+    reference: { value: 51.109, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  # The same place, each component: σθ (here σyy) and σx at the outside, σθ at the inside,
+  # Lamé with closed ends (hand_checks.md, check 3). 3 percent for the one element through
+  # the wall, as above. The hoop checks read a narrower band, |y| ≤ 25 mm, because σyy is the
+  # hoop stress only under the axis: at y = ±100 mm the hoop direction is 19° from y, and the
+  # mean over the von Mises check's box reads σyy about 4 percent below σθ.
+  - name: Membrane hoop stress at the shell outside, under the shell, 450 mm past the nozzle
+    quantity: stress.yy
+    face: shell-outside
+    box: { min: [420, -25, -311], max: [480, 25, -290] }
+    reference: { value: 59.016, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  - name: Membrane axial stress at the shell outside, under the shell, 450 mm past the nozzle
+    quantity: stress.xx
+    face: shell-outside
+    box: { min: [440, -100, -311], max: [460, 100, -290] }
+    reference: { value: 29.508, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  - name: Membrane hoop stress at the shell inside, under the shell, 450 mm past the nozzle
+    quantity: stress.yy
+    face: shell-inside
+    box: { min: [420, -25, -301], max: [480, 25, -290] }
+    reference: { value: 61.016, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  # Statics: the held end carries the end thrust and the piping load, and the piping load's
+  # moment about the held face's centre (−600, 0, 0) mm; the pressure and the nozzle's thrust
+  # cancel (hand_checks.md, check 2). The run sums its nodal reactions exactly.
+  - name: Reaction at the held end, x
+    quantity: reaction.x
+    support: held-end
+    reference: { value: -569.487, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Reaction at the held end, y
+    quantity: reaction.y
+    support: held-end
+    reference: { value: 3, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Reaction at the held end, z
+    quantity: reaction.z
+    support: held-end
+    reference: { value: 6, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Reaction moment at the held end about its centre, x
+    quantity: moment.x
+    support: held-end
+    reference: { value: -3.68, unit: kN·m }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Reaction moment at the held end about its centre, y
+    quantity: moment.y
+    support: held-end
+    reference: { value: -8.84, unit: kN·m }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Reaction moment at the held end about its centre, z
+    quantity: moment.z
+    support: held-end
+    reference: { value: 0.3, unit: kN·m }
+    tolerance: { coarse: 0.001, full: 0.001 }
