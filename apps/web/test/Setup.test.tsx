@@ -1221,7 +1221,7 @@ describe("run", () => {
     expect(estimate.getByText("about 0.000417 credits on small")).toBeTruthy();
     expect(
       estimate.getByText(
-        "The estimate needs more memory than this size has, so the run may stop for lack of memory. The recommended size is medium.",
+        "The estimate needs more memory than this size has, so the run may stop for lack of memory, and the time it used is then charged. The recommended size is medium.",
       ),
     ).toBeTruthy();
     const button = settings().getByRole("button", { name: "Run" });

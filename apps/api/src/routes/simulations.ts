@@ -49,7 +49,7 @@ import {
   validateTopology,
 } from "@clearfea/spec";
 import { Hono } from "hono";
-import { estimateRun, runSize } from "../billing/estimate";
+import { estimateRun, runSize, simulatedMachine } from "../billing/estimate";
 import { balanceOf } from "../billing/ledger";
 import { meshFundsProblem, runFundsProblem } from "../billing/wallet";
 import { readBody } from "../body";
@@ -393,7 +393,7 @@ simulations.post("/:id/runs", async (c) => {
     // The run's frozen spec always names its solver, so a later default cannot change what a
     // run says it was solved with (ADR-063).
     spec: { ...simulation.spec, solver, bonds: specBonds(simulation.spec, read.topology) },
-    machineSize: size.size,
+    machine: simulatedMachine(size),
     estimate,
   });
   if (created === null) {

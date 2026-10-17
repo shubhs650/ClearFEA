@@ -718,6 +718,29 @@ class SimulationMeshResponse(BaseModel):
     mesh: MeshView | None
 
 
+class SimulatedMachine(BaseModel):
+    """
+    How the worker simulates the run's machine size on one physical machine (M8.5, ADR-082): the solver process is held to `cores` processors and is stopped as out of memory when its resident memory passes memoryLimitBytes, the size's usable memory (the estimator's usableMemoryFraction of it). Jobs queued before M8.5 have none and run unlimited.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    size: Annotated[str, Field(min_length=1)]
+    """
+    The machine size's name.
+    """
+    cores: Annotated[int, Field(ge=1)]
+    """
+    Processors the solver process may run on.
+    """
+    memory_limit_bytes: Annotated[int, Field(alias="memoryLimitBytes", ge=1)]
+    """
+    Resident memory past which the solver is stopped as out of memory.
+    """
+
+
 type XYZ = Annotated[list[float], Field(max_length=3, min_length=3)]
 """
 x, y and z components.
@@ -1451,6 +1474,7 @@ class SolveParams(BaseModel):
     The mesh whose mesh.bin the job reads.
     """
     spec: SimulationSpec
+    machine: SimulatedMachine | None = None
 
 
 class RunView(BaseModel):

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { type EstimatorTable, estimatorTable, STATIC_RUN } from "@clearfea/spec";
 import { describe, expect, it } from "vitest";
-import { estimateRun, type MachineSize, runSize } from "../src/billing/estimate";
+import { estimateRun, type MachineSize, outOfMemoryFault, runSize, simulatedMachine } from "../src/billing/estimate";
 
 const GiB = 2 ** 30;
 
@@ -151,6 +151,48 @@ describe("the size a run goes on", () => {
     expect(runSize(fits)?.size).toBe("tiny");
     expect(runSize(estimateRun(7_000_000, 2, SIZES, "pastix", STATIC_RUN, TABLE))?.size).toBe("big");
     expect(runSize(fits, "nope")).toBeUndefined();
+  });
+});
+
+describe("a simulated machine size (M8.5, ADR-082)", () => {
+  it("has the size's cores and its usable memory as the limit", () => {
+    const [big] = estimateRun(500_000, 2, SIZES, "pastix", STATIC_RUN, TABLE).sizes.filter((s) => s.size === "big");
+    if (big === undefined) throw new Error("No big size.");
+    expect(simulatedMachine(big, TABLE)).toEqual({
+      size: "big",
+      cores: 8,
+      memoryLimitBytes: Math.floor(10 * GiB * TABLE.usableMemoryFraction),
+    });
+  });
+});
+
+describe("who pays when a run runs out of memory (M8.5, ADR-082)", () => {
+  // 1,000,000 nodes: 1.25 GB with the margin, too much for tiny's 0.85 GiB, so big is recommended.
+  const tooBigForTiny = estimateRun(1_000_000, 2, SIZES, "pastix", STATIC_RUN, TABLE);
+
+  it("is the user on a size chosen against the estimate", () => {
+    expect(tooBigForTiny.recommended).toBe("big");
+    expect(outOfMemoryFault(tooBigForTiny, "tiny")).toBe("user_fault");
+  });
+
+  it("is the platform on the recommended size, or any size the estimate says fits", () => {
+    expect(outOfMemoryFault(tooBigForTiny, "big")).toBe("platform_fault");
+    const fitsBoth = estimateRun(500_000, 2, SIZES, "pastix", STATIC_RUN, TABLE);
+    expect(outOfMemoryFault(fitsBoth, "big")).toBe("platform_fault");
+    expect(outOfMemoryFault(fitsBoth, "tiny")).toBe("platform_fault");
+  });
+
+  it("is the platform on the size it picks when none fits, and the user on any other", () => {
+    const fitsNone = estimateRun(10_000_000, 2, SIZES, "pastix", STATIC_RUN, TABLE);
+    expect(fitsNone.recommended).toBeNull();
+    expect(outOfMemoryFault(fitsNone, "big")).toBe("platform_fault");
+    expect(outOfMemoryFault(fitsNone, "tiny")).toBe("user_fault");
+  });
+
+  it("is the platform for a run without an estimate or on a size the estimate does not list", () => {
+    expect(outOfMemoryFault(null, "tiny")).toBe("platform_fault");
+    expect(outOfMemoryFault(tooBigForTiny, null)).toBe("platform_fault");
+    expect(outOfMemoryFault(tooBigForTiny, "gone")).toBe("platform_fault");
   });
 });
 

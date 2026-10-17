@@ -857,6 +857,87 @@ describe("metering (ADR-033)", () => {
   });
 });
 
+describe("running out of memory (M8.5, ADR-082)", () => {
+  const SMALL = 8 * 2 ** 30;
+  /** The small size shrunk to 1 MiB, so the test mesh no longer fits it and medium is recommended. */
+  async function withTinySmall(test: () => Promise<void>): Promise<void> {
+    await env.DB.prepare("UPDATE machine_sizes SET memory_bytes = 1048576 WHERE name = 'small'").run();
+    try {
+      await test();
+    } finally {
+      await env.DB.prepare("UPDATE machine_sizes SET memory_bytes = ? WHERE name = 'small'").bind(SMALL).run();
+    }
+  }
+
+  async function outOfMemory(machineSize?: string): Promise<RunView> {
+    const id = await meshed();
+    const run = await runOf(await startRun(id, alice, machineSize === undefined ? {} : { machineSize }));
+    const job = await claim("solve");
+    await upload(job, ["deck.inp", "solver.log"]);
+    await complete(job.id, {
+      status: "failed",
+      failureCategory: "platform_fault",
+      failureCause: "out_of_memory",
+      failureMessage: "CalculiX ran out of memory (limit 13.6 GiB).",
+    });
+    return readRun(run.id);
+  }
+
+  it("queues the solve job with the size's cores and its usable memory as the limit", async () => {
+    const id = await meshed();
+    await startRun(id, alice, { machineSize: "large" });
+    const job = await claim("solve");
+    expect(job.params).toMatchObject({
+      machine: {
+        size: "large",
+        cores: 8,
+        memoryLimitBytes: Math.floor(32 * 2 ** 30 * estimatorTable.usableMemoryFraction),
+      },
+    });
+  });
+
+  it("is the platform's fault on the recommended size: not charged, and says to try a larger one", async () => {
+    await withTinySmall(async () => {
+      const run = await outOfMemory();
+      expect(run.machine?.size).toBe("medium");
+      expect(run.status).toBe("failed");
+      expect(run.cost).toMatchObject({ charged: false, amount: 0 });
+      expect(run.problem).toBe(
+        "The run ran out of memory on the medium machine size (16 GiB), which by ClearFEA's estimate has enough memory, so the estimate was too low and the time is not charged. Run it again on a larger size; if it fails again, report it.",
+      );
+      expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+      // The deck and log are kept, so the run can be inspected.
+      expect(run.files).toEqual(["deck.inp", "solver.log"]);
+    });
+  });
+
+  it("is the platform's fault on a larger size than recommended", async () => {
+    await withTinySmall(async () => {
+      const run = await outOfMemory("xlarge");
+      expect(run.cost).toMatchObject({ charged: false });
+    });
+  });
+
+  it("is the user's fault on a size chosen against the estimate: charged, and names the recommended size", async () => {
+    await withTinySmall(async () => {
+      const run = await outOfMemory("small");
+      expect(run.cost).toMatchObject({ charged: true, billedSeconds: 3 });
+      expect(run.problem).toBe(
+        "The run ran out of memory on the small machine size (1 MiB), which was chosen although the estimate needs more memory than it has, so the time it used is charged. Run it again on the recommended size, medium, or larger.",
+      );
+      const [, solve] = await charges(aliceId);
+      expect(solve?.reason).toBe("solve");
+      const job = await getJob(env.DB, aliceId, solve?.jobId ?? "");
+      expect(job).toMatchObject({ failureCategory: "user_fault", failureCause: "out_of_memory" });
+    });
+  });
+
+  it("is the platform's fault on a size the estimate says fits, even when it is not the recommended one", async () => {
+    const run = await outOfMemory("medium");
+    expect(run.cost).toMatchObject({ charged: false });
+  });
+});
+
 describe("the wallet (M8.1, ADR-080)", () => {
   async function wallet(cookie = alice) {
     const response = await call("GET", "/api/wallet", { cookie });

@@ -7,11 +7,13 @@ import {
   type ElementOrder,
   type EstimatorTable,
   estimateMesh,
+  type FailureCategory,
   estimatorTable,
   memoryFits,
   type RunEstimate,
   type RunKind,
   STATIC_RUN,
+  type SimulatedMachine,
   type SizeEstimate,
   type Solver,
 } from "@clearfea/spec";
@@ -75,4 +77,31 @@ export function runSize(estimate: RunEstimate, requested?: string): SizeEstimate
   const recommended = estimate.sizes.find((size) => size.size === estimate.recommended);
   if (recommended !== undefined) return recommended;
   return [...estimate.sizes].sort((a, b) => b.memoryBytes - a.memoryBytes)[0];
+}
+
+/**
+ * How the worker simulates `size` (M8.5, ADR-082): the solver held to the size's cores and
+ * stopped as out of memory past its usable memory, the share of it the recommendation counts on.
+ */
+export function simulatedMachine(size: SizeEstimate, estimator: EstimatorTable = estimatorTable): SimulatedMachine {
+  return {
+    size: size.size,
+    cores: size.cores,
+    memoryLimitBytes: Math.floor(size.memoryBytes * estimator.usableMemoryFraction),
+  };
+}
+
+/**
+ * Who pays for a run that ran out of memory on the size `sizeName` (DECISIONS "Failed runs",
+ * ADR-082). The user does when they chose that size against the platform: it is not the size
+ * the platform would have put the run on (the recommended one, or the largest when none fits)
+ * and by the estimate its memory does not fit. Otherwise the platform's recommendation or its
+ * estimate was wrong, and it pays. A run without an estimate (before M2.12) is the platform's.
+ */
+export function outOfMemoryFault(estimate: RunEstimate | null, sizeName: string | null): FailureCategory {
+  if (estimate === null || sizeName === null) return "platform_fault";
+  const size = estimate.sizes.find((s) => s.size === sizeName);
+  if (size === undefined) return "platform_fault";
+  const platformPick = runSize(estimate);
+  return size.size !== platformPick?.size && !size.fits ? "user_fault" : "platform_fault";
 }

@@ -17,7 +17,9 @@ import type {
   RunMesh,
   RunSoftware,
   RunStatus,
+  SimulatedMachine,
   SimulationSpec,
+  SolveParams,
   SolveResult,
 } from "@clearfea/spec";
 import { getJob, type Job, newJob } from "./jobs";
@@ -140,10 +142,17 @@ export function runKey(ownerId: string, runId: string, file: RunFile): string {
 export async function createRun(
   db: D1Database,
   userId: string,
-  request: { simulationId: string; meshId: string; spec: SimulationSpec; machineSize: string; estimate: RunEstimate },
+  request: {
+    simulationId: string;
+    meshId: string;
+    spec: SimulationSpec;
+    machine: SimulatedMachine;
+    estimate: RunEstimate;
+  },
 ): Promise<{ run: Run; job: Job } | null> {
   const id = crypto.randomUUID();
-  const job = newJob(db, userId, "solve", id, { meshId: request.meshId, spec: request.spec }, request.machineSize);
+  const params: SolveParams = { meshId: request.meshId, spec: request.spec, machine: request.machine };
+  const job = newJob(db, userId, "solve", id, { ...params }, request.machine.size);
   const [, inserted] = await db.batch([
     job.statement,
     db
