@@ -2229,3 +2229,99 @@ describe("modal analysis (M6.1)", () => {
     window.localStorage.clear();
   });
 });
+
+describe("report options (M7.1)", () => {
+  const defaults = {
+    sections: ["project", "geometry", "materials", "mesh", "loadsSupports", "solver", "results", "reactions", "extremes", "warnings"],
+    views: [],
+    titleBlock: { title: "Static structural", documentNumber: "", revision: "", preparedBy: "", checkedBy: "", approvedBy: "" },
+  };
+  const view = (id: string, name: string, result: unknown) => ({
+    id,
+    name,
+    settings: { camera: { position: [1, 1, 1], target: [0, 0, 0] }, hiddenBodies: [], result },
+    updatedAt: "2026-10-17T00:00:00.000Z",
+  });
+  const views = [
+    view("v1", "Front", null),
+    view("v2", "Iso stress", { quantity: "vonMises", deformation: "auto", extremes: true, cut: null }),
+  ];
+
+  it("sets sections, views, the title block and the company name, and saves them", async () => {
+    const sentOptions: unknown[] = [];
+    const sentBranding: unknown[] = [];
+    serve(
+      routes([simulation()], {
+        "GET /api/simulations/s1/report-options": { status: 200, json: { options: defaults, saved: false, updatedAt: null } },
+        "GET /api/report-branding": { status: 200, json: { branding: { companyName: "", logo: null } } },
+        "GET /api/simulations/s1/views": { status: 200, json: { views } },
+        "PUT /api/simulations/s1/report-options": (init) => {
+          const options = JSON.parse(String(init?.body));
+          sentOptions.push(options);
+          return { status: 200, json: { options, saved: true, updatedAt: "2026-10-17T01:00:00.000Z" } };
+        },
+        "PUT /api/report-branding": (init) => {
+          const body = JSON.parse(String(init?.body)) as { companyName: string };
+          sentBranding.push(body);
+          return { status: 200, json: { branding: { companyName: body.companyName, logo: null } } };
+        },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Report, incomplete" }));
+    expect(((await settings().findByLabelText("Report title")) as HTMLInputElement).value).toBe("Static structural");
+    expect(settings().getByText("A report is made from a solved run. Its options can be set now.")).toBeTruthy();
+    const save = settings().getByRole("button", { name: "Save report options" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+
+    fireEvent.click(settings().getByRole("checkbox", { name: "Run warnings" }));
+    fireEvent.click(await settings().findByRole("checkbox", { name: "Iso stress" }));
+    fireEvent.click(settings().getByRole("checkbox", { name: "Front (geometry)" }));
+    expect(settings().getByText("Drawn in the order picked: Iso stress, Front.")).toBeTruthy();
+    fireEvent.change(settings().getByLabelText("Document number"), { target: { value: "CF-001" } });
+    fireEvent.change(settings().getByLabelText("Company name"), { target: { value: "Acme Engineering" } });
+    expect(settings().getByText("Unsaved changes.")).toBeTruthy();
+    fireEvent.click(save);
+
+    expect(await settings().findByText("Report options saved.")).toBeTruthy();
+    expect(sentOptions).toEqual([
+      {
+        sections: defaults.sections.filter((s) => s !== "warnings"),
+        views: ["v2", "v1"],
+        titleBlock: { ...defaults.titleBlock, documentNumber: "CF-001" },
+      },
+    ]);
+    expect(sentBranding).toEqual([{ companyName: "Acme Engineering" }]);
+    expect(save.disabled).toBe(true);
+    expect(settings().queryByText(/pass|fail|complian/i)).toBeNull();
+  });
+
+  it("uploads a logo, shows it with its size, and removes it", async () => {
+    const logo = { contentType: "image/png", sizeBytes: 900, width: 320, height: 80, updatedAt: "2026-10-17T01:00:00.000Z" };
+    const fetchMock = serve(
+      routes([simulation()], {
+        "GET /api/simulations/s1/report-options": { status: 200, json: { options: defaults, saved: false, updatedAt: null } },
+        "GET /api/report-branding": { status: 200, json: { branding: { companyName: "Acme", logo: null } } },
+        "GET /api/simulations/s1/views": { status: 200, json: { views: [] } },
+        "POST /api/report-branding/logo": { status: 200, json: { branding: { companyName: "Acme", logo } } },
+        "DELETE /api/report-branding/logo": { status: 200, json: { branding: { companyName: "Acme", logo: null } } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Report, incomplete" }));
+    expect(await settings().findByText(/No saved views yet/)).toBeTruthy();
+    expect(settings().getByText("No logo. A PNG or JPEG of at most 1 MB.")).toBeTruthy();
+    const file = new File([new Uint8Array([0x89, 0x50])], "logo.png", { type: "image/png" });
+    fireEvent.change(settings().getByLabelText("Upload a logo"), { target: { files: [file] } });
+    expect(await settings().findByText("Logo uploaded.")).toBeTruthy();
+    expect(settings().getByText("PNG, 320 × 80 pixels")).toBeTruthy();
+    expect((settings().getByRole("img", { name: "Your logo" }) as HTMLImageElement).getAttribute("src")).toBe(
+      "/api/report-branding/logo?v=2026-10-17T01%3A00%3A00.000Z",
+    );
+    const upload = fetchMock.mock.calls.find(([path]) => String(path) === "/api/report-branding/logo");
+    expect(upload?.[1]?.body).toBe(file);
+    fireEvent.click(settings().getByRole("button", { name: "Remove the logo" }));
+    expect(await settings().findByText("Logo removed.")).toBeTruthy();
+    expect(settings().queryByRole("img", { name: "Your logo" })).toBeNull();
+  });
+});

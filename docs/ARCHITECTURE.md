@@ -83,6 +83,8 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | `ledger_entries` | User, amount, reason, job id, running balance. Append-only |
 | `materials` | A user's own materials: owner, name (unique per owner), the material as JSON with its source note. The generic library is the reviewed file `packages/spec/library/materials.json`, not rows here (ADR-046) |
 | `views` | Saved views of a simulation: name (unique per simulation), camera, hidden bodies and the result display as JSON (`view.schema.json`, ADR-055). The report picks its pictures from them |
+| `report_options` | A simulation's report options: sections, saved views for the result plots and the title block as JSON (`report.schema.json`, ADR-074) |
+| `report_branding` | A user's company name and logo (type, bytes, pixel size); the logo itself is in R2 (ADR-074) |
 | `share_links` | Run, token hash, revoked flag |
 | `machine_sizes` | Name, cores, memory, hourly rate. Configuration |
 | `settings` | Free storage quota, retention days, stop-limit multiplier. Configuration |
@@ -98,6 +100,7 @@ Files in R2, keyed by owner and record id:
 | Viewer result files | Permanently |
 | Raw solver output (`.frd`, `.dat`) | Retention period, unless the run is pinned |
 | Report files and figures | Permanently |
+| A user's report logo | Until replaced or removed |
 
 ### SimulationSpec
 

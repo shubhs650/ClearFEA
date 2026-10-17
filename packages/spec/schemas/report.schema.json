@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Report",
+  "description": "Report options (M7.1, ADR-074): what a simulation's report prints (its sections, the saved views drawn as result plots, the title block) and the user's own company name and logo, which every report of theirs carries. The report job (M7.3) reads them. Text is printed as typed. Each message is a definition under $defs.",
+  "$defs": {
+    "ReportSection": {
+      "description": "A section the report can print, from DECISIONS.md's Report row: project and revision, geometry and units, materials, mesh statistics, each load and support with a picture, solver settings and versions, result plots, the reaction (or heat) balance check, minimum and maximum tables, run warnings. The standing statements (M7.5) are always printed and are not a section.",
+      "type": "string",
+      "enum": ["project", "geometry", "materials", "mesh", "loadsSupports", "solver", "results", "reactions", "extremes", "warnings"]
+    },
+    "ReportText": {
+      "description": "One line of the title block or the company name, printed as typed; may be empty.",
+      "type": "string",
+      "maxLength": 200
+    },
+    "TitleBlock": {
+      "description": "The title block printed on the cover and in every page header. Empty fields are left out.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "documentNumber", "revision", "preparedBy", "checkedBy", "approvedBy"],
+      "properties": {
+        "title": { "$ref": "#/$defs/ReportText" },
+        "documentNumber": { "$ref": "#/$defs/ReportText" },
+        "revision": { "$ref": "#/$defs/ReportText" },
+        "preparedBy": { "$ref": "#/$defs/ReportText" },
+        "checkedBy": { "$ref": "#/$defs/ReportText" },
+        "approvedBy": { "$ref": "#/$defs/ReportText" }
+      }
+    },
+    "ReportOptions": {
+      "description": "Body of PUT /api/simulations/:id/report-options. Sections are printed in the order of ReportSection whatever order they are listed in; views (ids of the simulation's saved views, ADR-055) are drawn as result plots in the order listed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sections", "views", "titleBlock"],
+      "properties": {
+        "sections": { "type": "array", "items": { "$ref": "#/$defs/ReportSection" }, "uniqueItems": true },
+        "views": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "titleBlock": { "$ref": "#/$defs/TitleBlock" }
+      }
+    },
+    "ReportOptionsResponse": {
+      "description": "Answer to GET and PUT /api/simulations/:id/report-options. Until options are saved the answer holds the defaults (every section, no views, the simulation's name as the title) with saved false. Views deleted since are left out.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["options", "saved", "updatedAt"],
+      "properties": {
+        "options": { "$ref": "#/$defs/ReportOptions" },
+        "saved": { "type": "boolean" },
+        "updatedAt": { "type": ["string", "null"] }
+      }
+    },
+    "ReportLogo": {
+      "description": "The user's logo: a PNG or JPEG image, its size in bytes and in pixels. The image itself is GET /api/report-branding/logo.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contentType", "sizeBytes", "width", "height", "updatedAt"],
+      "properties": {
+        "contentType": { "type": "string", "enum": ["image/png", "image/jpeg"] },
+        "sizeBytes": { "type": "integer", "minimum": 1 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "ReportBranding": {
+      "description": "The company name and logo every report of the user carries, set once per user.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["companyName", "logo"],
+      "properties": {
+        "companyName": { "$ref": "#/$defs/ReportText" },
+        "logo": { "oneOf": [{ "$ref": "#/$defs/ReportLogo" }, { "type": "null" }] }
+      }
+    },
+    "SaveReportBrandingRequest": {
+      "description": "Body of PUT /api/report-branding. The logo is sent on its own to POST /api/report-branding/logo.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["companyName"],
+      "properties": { "companyName": { "$ref": "#/$defs/ReportText" } }
+    },
+    "ReportBrandingResponse": {
+      "description": "Answer to the /api/report-branding routes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branding"],
+      "properties": { "branding": { "$ref": "#/$defs/ReportBranding" } }
+    }
+  }
+}

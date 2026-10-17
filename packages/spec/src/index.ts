@@ -80,6 +80,7 @@ export {
   type StatementField,
   type StatementRun,
 } from "./report";
+export { defaultReportOptions, orderedReportOptions, reportSectionLabels } from "./reportOptions";
 export { checkUnitsTable, isUnitSystem, systemUnit, unitsTable } from "./units";
 export { type Validation, validator } from "./validate";
 export { checkMaterialLibrary, materialLibrary } from "./library";

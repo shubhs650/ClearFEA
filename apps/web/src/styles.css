@@ -1042,3 +1042,14 @@ fieldset.field {
 .frequency-table td:nth-child(2) {
   font-variant-numeric: tabular-nums;
 }
+
+/* Report panel (M7.1): the user's logo as uploaded, kept small. */
+.report-logo {
+  display: block;
+  max-width: 200px;
+  max-height: 80px;
+  object-fit: contain;
+  margin: 4px 0;
+  border: 1px solid var(--border);
+  background: #fff;
+}
