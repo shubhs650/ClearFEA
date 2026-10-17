@@ -140,7 +140,7 @@ queued -> claimed -> running -> succeeded
 - A worker calls `POST /internal/jobs/claim` with its worker token and capabilities. The API marks one job claimed, atomically, and returns the job payload (type, target, parameters) plus transfer URLs, one per named input or output file (ADR-024).
 - The worker sends a heartbeat every few seconds with stage, progress and new log text. The response tells it whether to cancel or stop.
 - Since M8.2 (ADR-085) the owner cancels a run with `POST /api/runs/{id}/cancel`. A queued job ends at once, uncharged. A claimed or running job is marked (`jobs.stop_requested`); its next heartbeat answers `cancel`, the worker stops the solver, keeps the deck and log, and completes with `status: "stopped"` and its metering, and the API ends the job as `cancelled` and charges the time used. Since M8.3 (ADR-087) a run's solve job also carries a stop limit, by default three times the estimated time and never under 30 s; the first heartbeat after the job has had the machine that long sets `stop_requested` to `stopped_at_limit` and answers `stop`, and the job ends the same way as a cancel, as `stopped_at_limit`, charged for its time. While a run solves, its view carries its progress: when the worker took it, the elapsed time and what that time costs so far.
-- A job whose heartbeat goes silent past a timeout is marked failed as a platform fault and may be retried. (Not built yet: neither cancel nor the stop limit reaches a job whose worker has died, ADR-087 item 6.)
+- A job whose heartbeat goes silent past a timeout is marked failed as a platform fault (`worker_lost`), not charged. Since M8.4 (ADR-089) the timeout is the `heartbeat_timeout_seconds` setting (120 s, a placeholder); a worker that asks for a job while it still holds one has restarted, so that job is failed at once. Every claim sweeps for such jobs first, and so does the scheduled handler. The job is not retried; its owner runs it again.
 - On completion the worker uploads outputs and posts a result summary with metering figures.
 
 ### Job types
@@ -170,12 +170,15 @@ The worker returns a cause code; the API maps it to who pays.
 | Cause | Category |
 | --- | --- |
 | Pre-run validation failed (caught in the API, no job created) | No charge |
-| Solver reports singular matrix or rigid-body motion | User fault |
+| Solver reports singular matrix or rigid-body motion (the deck generator's rigid-body check, `setup_invalid`; SPOOLES's singular matrix, `singular_matrix`) | User fault |
 | Mesher fails on the geometry | User fault |
 | Out of memory on a size smaller than recommended | User fault |
 | Cancelled by user, or stop limit reached | User pays for time used |
 | Out of memory on the recommended size or larger | Platform fault |
 | Worker lost, internal error, transfer failure, topology mismatch | Platform fault |
+| Any other solver error (the deck is generated, so CalculiX refusing it is ClearFEA's fault) | Platform fault |
+
+As built in M8.4 (ADR-089): the worker sends the category for what it can see; the API decides it for out of memory (ADR-082), a lost worker and a success whose outputs are missing or invalid. A failed run carries `RunView.failure` (category and cause) and the Run panel's run record shows it with what it means for the cost; a cancelled or stopped run has no category, since its status says why it ended and its time is charged. PaStiX and the iterative solvers return a solution for a singular matrix without a word, so only the rigid-body check catches such a setup on them.
 
 ### Estimator
 

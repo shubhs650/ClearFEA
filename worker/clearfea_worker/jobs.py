@@ -257,6 +257,15 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
             "out_of_memory",
             "CalculiX ran out of memory" + (f" (limit {limit / 2**30:.1f} GiB)." if limit else "."),
         )
+    if run.singular():
+        # The user's setup, so the time is charged (docs/ARCHITECTURE.md, failure classification).
+        raise JobFailure(
+            "user_fault",
+            "singular_matrix",
+            "The solver found the model free to move: its stiffness matrix is singular, so part of "
+            "it is held by no support and no bond. Check that every body is held or bonded to a "
+            "held body, and that each bond is large enough to stop it turning, then run again.",
+        )
     errors = run.errors()
     if run.returncode != 0 or errors:
         detail = errors[0] if errors else f"exit status {run.returncode}"

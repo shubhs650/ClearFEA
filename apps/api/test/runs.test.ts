@@ -25,6 +25,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { listLedger } from "../src/billing/ledger";
 import { app } from "../src/index";
 import { getJob } from "../src/db/jobs";
+import { sweepLostJobs } from "../src/jobs/outcome";
 
 const TOKEN = "test-worker-token";
 
@@ -759,6 +760,7 @@ describe("a finished solve job", () => {
     expect(await readRun(run.id)).toMatchObject({
       status: "failed",
       problem: "Body 1 has no material. Assign a material to it.",
+      failure: { category: "user_fault", cause: "setup_invalid" },
       result: null,
     });
   });
@@ -780,6 +782,95 @@ describe("a finished solve job", () => {
     await upload(job, RUN_FILES);
     await complete(job.id, { status: "succeeded", result: { ...SOLVED, nodes: "many" } });
     expect((await readRun(run.id)).problem).toContain("invalid_result");
+  });
+});
+
+describe("a worker that stops checking in (M8.4)", () => {
+  /** Moves the solve job's last heartbeat back by this many seconds, and its claim 30 s before that. */
+  async function silentFor(jobId: string, seconds: number): Promise<void> {
+    const at = (s: number) => new Date(Date.now() - s * 1000).toISOString();
+    await env.DB.prepare("UPDATE jobs SET claimed_at = ?, heartbeat_at = ? WHERE id = ?")
+      .bind(at(seconds + 30), at(seconds), jobId)
+      .run();
+  }
+
+  /** Another worker asking for work, which sweeps for lost jobs first. */
+  async function otherWorkerClaims(): Promise<void> {
+    const response = await call("POST", "/internal/jobs/claim", {
+      json: { workerId: "w2", jobTypes: ["noop"] },
+      token: TOKEN,
+    });
+    expect(response.status).toBe(204);
+  }
+
+  async function solving(): Promise<{ run: RunView; job: ClaimResponse["job"] }> {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await heartbeat(job.id);
+    return { run, job };
+  }
+
+  it("fails the run as a fault in ClearFEA after the timeout, without a charge", async () => {
+    const { run, job } = await solving();
+    await silentFor(job.id, 121);
+    await otherWorkerClaims();
+    const failed = await readRun(run.id);
+    expect(failed).toMatchObject({
+      status: "failed",
+      failure: { category: "platform_fault", cause: "worker_lost" },
+      // 30 s from the claim to the last heartbeat is recorded; nothing is charged.
+      cost: { billedSeconds: 30, amount: 0, charged: false },
+      progress: null,
+    });
+    expect(failed.problem).toBe(
+      "The run stopped because the machine working on it stopped responding (no check-in for 120 s). " +
+        "This is a fault in ClearFEA, not in your setup, so nothing is charged. Run it again; if it fails again, report it.",
+    );
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+  });
+
+  it("leaves a run whose worker checked in within the timeout", async () => {
+    const { run, job } = await solving();
+    await silentFor(job.id, 100);
+    await otherWorkerClaims();
+    expect((await readRun(run.id)).status).toBe("solving");
+  });
+
+  it("fails a job at once when its own worker asks for another, as after a restart", async () => {
+    const { run } = await solving();
+    const response = await call("POST", "/internal/jobs/claim", { json: { workerId: "w1", jobTypes: ["noop"] }, token: TOKEN });
+    expect(response.status).toBe(204);
+    expect((await readRun(run.id)).failure).toEqual({ category: "platform_fault", cause: "worker_lost" });
+  });
+
+  it("tells a worker that comes back to give up, and refuses its late result", async () => {
+    const { run, job } = await solving();
+    await silentFor(job.id, 121);
+    await sweepLostJobs(env);
+    const beat = await call("POST", `/internal/jobs/${job.id}/heartbeat`, { json: { workerId: "w1" }, token: TOKEN });
+    expect(await beat.json()).toEqual({ action: "cancel" });
+    const late = await call("POST", `/internal/jobs/${job.id}/complete`, {
+      json: { workerId: "w1", metering: { billableMs: 200_000 }, status: "succeeded", result: SOLVED },
+      token: TOKEN,
+    });
+    expect(late.status).toBe(409);
+    expect(await readRun(run.id)).toMatchObject({ status: "failed", result: null, cost: { charged: false } });
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+  });
+
+  it("fails a lost mesh job and says so on the mesh", async () => {
+    const id = await simulation();
+    await requestMesh(id);
+    const job = await claim("mesh");
+    await silentFor(job.id, 121);
+    expect(await sweepLostJobs(env)).toBe(1);
+    const mesh = await env.DB.prepare("SELECT status, problem FROM meshes WHERE job_id = ?")
+      .bind(job.id)
+      .first<{ status: string; problem: string }>();
+    expect(mesh?.status).toBe("failed");
+    expect(mesh?.problem).toContain("Meshing stopped because the machine working on it stopped responding");
+    expect(await charges(aliceId)).toEqual([]);
   });
 });
 
@@ -974,6 +1065,7 @@ describe("metering (ADR-033)", () => {
   it("does not charge a run that failed through a fault in ClearFEA, but records its time", async () => {
     const run = await finish({ status: "failed", failureCategory: "platform_fault", failureCause: "solver_error" });
     expect(run.cost).toEqual({ billedSeconds: 3, amount: 0, charged: false });
+    expect(run.failure).toEqual({ category: "platform_fault", cause: "solver_error" });
     expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
   });
 

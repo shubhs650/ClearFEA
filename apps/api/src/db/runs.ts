@@ -9,9 +9,11 @@
 
 import type {
   ElementOrder,
+  FailureCategory,
   JobStatus,
   RunCost,
   RunEstimate,
+  RunFailure,
   RunMachine,
   Quantity,
   RunFileName,
@@ -46,6 +48,8 @@ export interface Run {
   cost: RunCost | null;
   status: RunStatus;
   problem: string | null;
+  /** Who is at fault for a failed run and the cause, from its solve job (M8.4); null unless failed. */
+  failure: RunFailure | null;
   result: SolveResult | null;
   jobId: string;
   /** The solve job's status and stage, for the stage line the owner sees. */
@@ -105,6 +109,8 @@ interface RunRow {
   job_id: string;
   job_status: JobStatus;
   job_stage: string | null;
+  job_failure_category: FailureCategory | null;
+  job_failure_cause: string | null;
   job_claimed_at: string | null;
   job_elapsed_ms: number | null;
   job_stop_requested: string | null;
@@ -159,6 +165,10 @@ function toRun(row: RunRow): Run {
     // whether its owner cancelled it (M8.2, ADR-085) or its stop limit stopped it (M8.3).
     status: row.status === "failed" ? (JOB_RUN_STATUS[row.job_status] ?? "failed") : row.status,
     problem: row.problem,
+    failure:
+      row.status === "failed" && row.job_status === "failed" && row.job_failure_category !== null
+        ? { category: row.job_failure_category, cause: row.job_failure_cause ?? "unknown" }
+        : null,
     result: row.result === null ? null : JSON.parse(row.result),
     jobId: row.job_id,
     jobStatus: row.job_status,
@@ -186,6 +196,7 @@ const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 const JOB_RUN_STATUS: Partial<Record<JobStatus, RunStatus>> = { cancelled: "cancelled", stopped_at_limit: "stopped" };
 
 const SELECT = `SELECT runs.*, jobs.status AS job_status, jobs.stage AS job_stage,
+                       jobs.failure_category AS job_failure_category, jobs.failure_cause AS job_failure_cause,
                        jobs.claimed_at AS job_claimed_at, jobs.stop_requested AS job_stop_requested,
                        jobs.stop_multiplier AS job_stop_multiplier, jobs.stop_after_seconds AS job_stop_after_seconds,
                        CASE WHEN jobs.claimed_at IS NULL THEN NULL
