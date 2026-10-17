@@ -13,6 +13,10 @@ VERIFY_TIER=full CASES="V-01" make verify             # full tier, one case
 
 `acceptance/` holds the two acceptance models of `docs/VERIFICATION.md` (M9.4): `A-nozzle-on-shell` and `B-flanged-pipe-thermal`. Each is a case folder like those below, with `model.md` (the design, the setup and what the hand checks can use) in place of `reference.md`. They are not part of the default suite; name them to run them: `CASES="A B" make verify`. M9.5 and M9.6 add their acceptance checks to the same `case.yaml` files.
 
+## Results page
+
+`docs/VERIFICATION_RESULTS.md`, the published results page every report links to, is written by `python -m harness.page` from the result tables in `results/` (the phase-end run's for the V cases, a local full-tier run's for A and B; `sources.json` names each run). How to refresh it: `docs/VERIFICATION.md`, Published results.
+
 ## A case
 
 ```

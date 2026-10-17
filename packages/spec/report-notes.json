@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "verificationUrl": "https://github.com/shubhs650/ClearFEA/blob/main/docs/VERIFICATION.md",
+  "verificationUrl": "https://github.com/shubhs650/ClearFEA/blob/main/docs/VERIFICATION_RESULTS.md",
   "statements": [
     {
       "id": "toolPositioning",
@@ -17,8 +17,8 @@
     {
       "id": "verificationLink",
       "title": "Verification",
-      "text": "ClearFEA is checked against verification cases with analytical or published reference values, each with a stated tolerance; the cases, their references and tolerances are listed at {verificationUrl}. Those cases are simplified models: they show how closely the software reproduces known answers, not how closely this model represents its part.",
-      "source": "DECISIONS.md Positioning (reports carry a link to verification results); docs/VERIFICATION.md (from M9 a published results page, linked from every report)"
+      "text": "ClearFEA is checked against verification cases with analytical or published reference values, each with a stated tolerance; the cases, their references, tolerances and the values ClearFEA computed are listed at {verificationUrl}. Those cases are simplified models: they show how closely the software reproduces known answers, not how closely this model represents its part.",
+      "source": "DECISIONS.md Positioning (reports carry a link to verification results); docs/VERIFICATION_RESULTS.md, the published results page (M9.7)"
     }
   ],
   "notes": [
