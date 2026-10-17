@@ -243,7 +243,7 @@ class ReportGeometry(BaseModel):
 
 class ReportJobParams(BaseModel):
     """
-    Parameters of a report job (M7.3, ADR-077), built by the API when the report is asked for from the run's frozen record, the simulation's saved report options and the user's company name and logo. The job downloads the figures, the logo, the geometry's topology.json and the run's solver.log, and uploads report.docx. run and meshQuality are a RunView and a MeshQuality of simulation.schema.json, which the job checks against that schema.
+    Parameters of a report job (M7.3, ADR-077), built by the API when the report is asked for from the run's frozen record, the simulation's saved report options and the user's company name and logo. The job downloads the figures, the logo, the geometry's topology.json and the run's solver.log, and uploads report.docx and report.pdf (M7.4). run and meshQuality are a RunView and a MeshQuality of simulation.schema.json, which the job checks against that schema.
     """
 
     model_config = ConfigDict(
@@ -296,7 +296,7 @@ class ReportJobParams(BaseModel):
 
 class ReportJobResult(BaseModel):
     """
-    Result of a succeeded report job (M7.3): the size of report.docx and how many figures it placed.
+    Result of a succeeded report job (M7.3): the size of report.docx, the size of report.pdf printed from it (M7.4; absent from reports made before) and how many figures it placed.
     """
 
     model_config = ConfigDict(
@@ -304,6 +304,7 @@ class ReportJobResult(BaseModel):
         populate_by_name=True,
     )
     size_bytes: Annotated[int, Field(alias="sizeBytes", ge=1)]
+    pdf_size_bytes: Annotated[int | None, Field(alias="pdfSizeBytes", ge=1)] = None
     figures: Annotated[int, Field(ge=0)]
 
 
@@ -315,7 +316,7 @@ Where a run's report is: queued for the worker, being made, made (it can be down
 
 class RunReport(BaseModel):
     """
-    The latest report asked for of a run (M7.3). Its DOCX is GET /api/runs/:id/report/docx once it has succeeded.
+    The latest report asked for of a run (M7.3). Once it has succeeded its DOCX is GET /api/runs/:id/report/docx and its PDF (M7.4) GET /api/runs/:id/report/pdf.
     """
 
     model_config = ConfigDict(
@@ -329,6 +330,10 @@ class RunReport(BaseModel):
     Why it failed, in plain language.
     """
     size_bytes: Annotated[int | None, Field(alias="sizeBytes")]
+    pdf_size_bytes: Annotated[int | None, Field(alias="pdfSizeBytes")]
+    """
+    Size of its PDF; null until it has succeeded, and for a report made before M7.4, which has none.
+    """
     created_at: Annotated[str, Field(alias="createdAt")]
     finished_at: Annotated[str | None, Field(alias="finishedAt")]
 

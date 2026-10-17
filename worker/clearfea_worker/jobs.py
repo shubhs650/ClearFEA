@@ -255,9 +255,11 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
 
 def run_report(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     """Makes a run's Word report (M7.3) from the parameters the API built, the run's figures,
-    the user's logo, the geometry's topology.json and the run's solver log: report.docx."""
+    the user's logo, the geometry's topology.json and the run's solver log: report.docx, and
+    its PDF printed from it (M7.4): report.pdf."""
     from .report.content import build_report
     from .report.docx import write_docx
+    from .report.pdf import PdfError, write_pdf
     from .spec.geometry_schema import Topology
     from .spec.report_schema import ReportJobParams, ReportJobResult
     from .units import UnitError
@@ -291,9 +293,18 @@ def run_report(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
         ) from None
     path = files.workdir / "report.docx"
     placed = write_docx(document, files.workdir, path, params.generated_at)
+    context.set_stage("printing the PDF")
+    pdf = files.workdir / "report.pdf"
+    try:
+        write_pdf(path, pdf)
+    except PdfError as error:
+        raise JobFailure("platform_fault", "pdf_failed", f"The PDF: {error}") from None
     context.set_stage("uploading")
     files.upload("report.docx", path)
-    result = ReportJobResult(size_bytes=path.stat().st_size, figures=placed)
+    files.upload("report.pdf", pdf)
+    result = ReportJobResult(
+        size_bytes=path.stat().st_size, pdf_size_bytes=pdf.stat().st_size, figures=placed
+    )
     return result.model_dump(mode="json", by_alias=True)
 
 

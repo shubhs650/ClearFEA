@@ -159,7 +159,7 @@
       "properties": { "name": { "type": "string" }, "unit": { "type": ["string", "null"] } }
     },
     "ReportJobParams": {
-      "description": "Parameters of a report job (M7.3, ADR-077), built by the API when the report is asked for from the run's frozen record, the simulation's saved report options and the user's company name and logo. The job downloads the figures, the logo, the geometry's topology.json and the run's solver.log, and uploads report.docx. run and meshQuality are a RunView and a MeshQuality of simulation.schema.json, which the job checks against that schema.",
+      "description": "Parameters of a report job (M7.3, ADR-077), built by the API when the report is asked for from the run's frozen record, the simulation's saved report options and the user's company name and logo. The job downloads the figures, the logo, the geometry's topology.json and the run's solver.log, and uploads report.docx and report.pdf (M7.4). run and meshQuality are a RunView and a MeshQuality of simulation.schema.json, which the job checks against that schema.",
       "type": "object",
       "additionalProperties": false,
       "required": ["runId", "generatedAt", "unitSystem", "sections", "titleBlock", "companyName", "logo", "projectName", "simulationName", "geometry", "run", "meshQuality", "figures", "statements", "notes"],
@@ -182,26 +182,31 @@
       }
     },
     "ReportJobResult": {
-      "description": "Result of a succeeded report job (M7.3): the size of report.docx and how many figures it placed.",
+      "description": "Result of a succeeded report job (M7.3): the size of report.docx, the size of report.pdf printed from it (M7.4; absent from reports made before) and how many figures it placed.",
       "type": "object",
       "additionalProperties": false,
       "required": ["sizeBytes", "figures"],
-      "properties": { "sizeBytes": { "type": "integer", "minimum": 1 }, "figures": { "type": "integer", "minimum": 0 } }
+      "properties": {
+        "sizeBytes": { "type": "integer", "minimum": 1 },
+        "pdfSizeBytes": { "type": "integer", "minimum": 1 },
+        "figures": { "type": "integer", "minimum": 0 }
+      }
     },
     "ReportStatus": {
       "description": "Where a run's report is: queued for the worker, being made, made (it can be downloaded) or failed.",
       "enum": ["queued", "making", "succeeded", "failed"]
     },
     "RunReport": {
-      "description": "The latest report asked for of a run (M7.3). Its DOCX is GET /api/runs/:id/report/docx once it has succeeded.",
+      "description": "The latest report asked for of a run (M7.3). Once it has succeeded its DOCX is GET /api/runs/:id/report/docx and its PDF (M7.4) GET /api/runs/:id/report/pdf.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "status", "problem", "sizeBytes", "createdAt", "finishedAt"],
+      "required": ["id", "status", "problem", "sizeBytes", "pdfSizeBytes", "createdAt", "finishedAt"],
       "properties": {
         "id": { "type": "string" },
         "status": { "$ref": "#/$defs/ReportStatus" },
         "problem": { "description": "Why it failed, in plain language.", "type": ["string", "null"] },
         "sizeBytes": { "type": ["integer", "null"] },
+        "pdfSizeBytes": { "description": "Size of its PDF; null until it has succeeded, and for a report made before M7.4, which has none.", "type": ["integer", "null"] },
         "createdAt": { "type": "string" },
         "finishedAt": { "type": ["string", "null"] }
       }

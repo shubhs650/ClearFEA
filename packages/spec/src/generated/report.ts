@@ -210,7 +210,7 @@ export interface ReportGeometry {
   unit: string | null;
 }
 /**
- * Parameters of a report job (M7.3, ADR-077), built by the API when the report is asked for from the run's frozen record, the simulation's saved report options and the user's company name and logo. The job downloads the figures, the logo, the geometry's topology.json and the run's solver.log, and uploads report.docx. run and meshQuality are a RunView and a MeshQuality of simulation.schema.json, which the job checks against that schema.
+ * Parameters of a report job (M7.3, ADR-077), built by the API when the report is asked for from the run's frozen record, the simulation's saved report options and the user's company name and logo. The job downloads the figures, the logo, the geometry's topology.json and the run's solver.log, and uploads report.docx and report.pdf (M7.4). run and meshQuality are a RunView and a MeshQuality of simulation.schema.json, which the job checks against that schema.
  *
  * This interface was referenced by `Report`'s JSON-Schema
  * via the `definition` "ReportJobParams".
@@ -262,17 +262,18 @@ export interface ReportJobParams {
   notes: ReportJobText[];
 }
 /**
- * Result of a succeeded report job (M7.3): the size of report.docx and how many figures it placed.
+ * Result of a succeeded report job (M7.3): the size of report.docx, the size of report.pdf printed from it (M7.4; absent from reports made before) and how many figures it placed.
  *
  * This interface was referenced by `Report`'s JSON-Schema
  * via the `definition` "ReportJobResult".
  */
 export interface ReportJobResult {
   sizeBytes: number;
+  pdfSizeBytes?: number;
   figures: number;
 }
 /**
- * The latest report asked for of a run (M7.3). Its DOCX is GET /api/runs/:id/report/docx once it has succeeded.
+ * The latest report asked for of a run (M7.3). Once it has succeeded its DOCX is GET /api/runs/:id/report/docx and its PDF (M7.4) GET /api/runs/:id/report/pdf.
  *
  * This interface was referenced by `Report`'s JSON-Schema
  * via the `definition` "RunReport".
@@ -285,6 +286,10 @@ export interface RunReport {
    */
   problem: string | null;
   sizeBytes: number | null;
+  /**
+   * Size of its PDF; null until it has succeeded, and for a report made before M7.4, which has none.
+   */
+  pdfSizeBytes: number | null;
   createdAt: string;
   finishedAt: string | null;
 }

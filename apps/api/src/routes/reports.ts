@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// A run's Word report (M7.3, ADR-077). Asking for one freezes everything it prints into a report
+// A run's report as a Word file (M7.3, ADR-077) and a PDF printed from it (M7.4, ADR-078). Asking for one freezes everything it prints into a report
 // job: the run's record, the simulation's saved report options, the user's company name and logo,
 // the run's figures (drawn in the browser first, ADR-011) and the standing statements and notes
-// filled from the run (ADR-073). The worker lays them out and stores report.docx under the job.
+// filled from the run (ADR-073). The worker lays them out and stores report.docx and report.pdf
+// under the job.
 // Shapes: packages/spec/schemas/report.schema.json.
 
 import {
@@ -18,7 +19,7 @@ import { getGeometry } from "../db/geometries";
 import { getMesh } from "../db/meshes";
 import { userProject } from "../db/projects";
 import { getBranding, getReportOptions, listFigures } from "../db/report";
-import { latestReportJob, queueReport, reportKey, reportView } from "../db/reports";
+import { latestReportJob, queueReport, type ReportFormat, reportKey, reportView } from "../db/reports";
 import type { Run } from "../db/runs";
 import { getRun } from "../db/runs";
 import { getSimulation } from "../db/simulations";
@@ -106,26 +107,39 @@ reports.post("/:id/report", async (c) => {
   return c.json({ report: reportView(job) } satisfies RunReportResponse, 202);
 });
 
-/** The latest report's DOCX once it has been made. */
-reports.get("/:id/report/docx", async (c) => {
+const CONTENT_TYPES: Record<ReportFormat, string> = {
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pdf: "application/pdf",
+};
+
+/** The latest report's DOCX or PDF once it has been made. */
+reports.get("/:id/report/:format{docx|pdf}", async (c) => {
+  const format = c.req.param("format") as ReportFormat;
   const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
   if (run === null) return c.json({ error: NOT_FOUND }, 404);
   const job = await latestReportJob(c.env.DB, c.var.userId, run.id);
   if (job === null || job.status !== "succeeded") {
     return c.json({ error: "This run has no finished report. Make the report under Report first." }, 404);
   }
-  const object = await c.env.FILES.get(reportKey(c.var.userId, run.id, job.id));
+  if (format === "pdf" && reportView(job).pdfSizeBytes === null) {
+    return c.json({ error: "This report was made before reports had a PDF. Make the report again to get one." }, 404);
+  }
+  const object = await c.env.FILES.get(reportKey(c.var.userId, run.id, job.id, format));
   if (object === null) return c.json({ error: "The report is missing from storage. Make it again." }, 500);
   return c.body(object.body, 200, {
-    "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "Content-Disposition": `attachment; filename="${reportFilename(job.params, run.id)}"`,
+    "Content-Type": CONTENT_TYPES[format],
+    "Content-Disposition": `attachment; filename="${reportFilename(job.params, run.id, format)}"`,
     "Content-Length": String(object.size),
     "X-Content-Type-Options": "nosniff",
   });
 });
 
 /** "CF-001 Block under pressure rev A.docx", from the title block, with only safe characters. */
-export function reportFilename(params: Record<string, unknown> | null, runId: string): string {
+export function reportFilename(
+  params: Record<string, unknown> | null,
+  runId: string,
+  format: ReportFormat = "docx",
+): string {
   const block = (params as Partial<ReportJobParams> | null)?.titleBlock;
   const parts = [block?.documentNumber, block?.title, block?.revision ? `rev ${block.revision}` : ""];
   const name = parts
@@ -135,5 +149,5 @@ export function reportFilename(params: Record<string, unknown> | null, runId: st
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 120);
-  return `${name || `clearfea-report-${runId.slice(0, 8)}`}.docx`;
+  return `${name || `clearfea-report-${runId.slice(0, 8)}`}.${format}`;
 }
