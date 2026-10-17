@@ -33,7 +33,7 @@ export interface Job {
   cost: number | null;
   /** How the owner (or M8.3's stop limit) asked a running job to end, until the worker has stopped (M8.2). */
   stopRequested: StopReason | null;
-  /** A run's stop limit (M8.3, ADR-086): the multiplier of its estimate and the seconds it gives; null without one. */
+  /** A run's stop limit (M8.3, ADR-087): the multiplier of its estimate and the seconds it gives; null without one. */
   stopMultiplier: number | null;
   stopAfterSeconds: number | null;
   createdAt: string;
@@ -218,7 +218,7 @@ export type HeartbeatOutcome = { found: false } | { found: true; action: Heartbe
 /**
  * Records that the worker is alive and at the given stage. The first heartbeat
  * moves a claimed job to running. A job that has had the machine for its stop limit since it
- * was claimed is asked to stop there (M8.3, ADR-086), unless its owner has already cancelled it.
+ * was claimed is asked to stop there (M8.3, ADR-087), unless its owner has already cancelled it.
  * When the job has been asked to stop (M8.2), or has left the active statuses, tells the worker
  * to give up: `cancel` for its owner's cancel, `stop` at its stop limit.
  */

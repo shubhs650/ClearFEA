@@ -81,6 +81,7 @@ import {
   SAFETY_FACTOR_CAP,
 } from "../viewer/resultFields";
 import { Notes } from "./ItemPanels";
+import { RawOutput } from "./RawOutput";
 import { RunExport } from "./RunExport";
 import { ShareLink } from "./ShareLink";
 import { type ItemStatus, sameSpec } from "./spec";
@@ -318,7 +319,7 @@ function Estimate({
           type="number"
           min={MIN_STOP_MULTIPLIER}
           max={MAX_STOP_MULTIPLIER}
-          step={0.5}
+          step={0.25}
           value={multiplier}
           onChange={(event) => onMultiplierChange(event.target.value)}
         />
@@ -999,6 +1000,8 @@ export function RunPanel({
   requestProblem,
   onRun,
   onCancel,
+  onRerun,
+  onRunChanged,
   choice,
   onChoiceChange,
   onSignedOut = ignoreSignedOut,
@@ -1031,6 +1034,10 @@ export function RunPanel({
   onRun: (machineSize: string | undefined, stopMultiplier: number) => void;
   /** Cancels the solving run (M8.2). */
   onCancel: () => void;
+  /** Solves a finished run's own setup again, to regenerate its raw output (M8.6). */
+  onRerun: (runId: string) => void;
+  /** Shows a newer copy of the run, such as after its pin changed (M8.6). */
+  onRunChanged: (run: RunView) => void;
   choice: ResultChoice;
   onChoiceChange: (next: ResultChoice) => void;
   /** Called when the API says the user is signed out, from the share link's calls. */
@@ -1102,6 +1109,16 @@ export function RunPanel({
       )}
       {run !== null && result && !modal && <RunExport run={run} result={result} units={units} thermal={thermal} thermalStress={thermalStress} />}
       {run !== null && result && <ShareLink key={run.id} runId={run.id} onSignedOut={onSignedOut} />}
+      {run !== null && (
+        <RawOutput
+          key={run.id}
+          run={run}
+          requesting={requesting}
+          onRunChanged={onRunChanged}
+          onRerun={onRerun}
+          onSignedOut={onSignedOut}
+        />
+      )}
       {run !== null && <RunRecord run={run} currentSpec={currentSpec} />}
       {run !== null && (
         <details className="run-log" open={solving}>

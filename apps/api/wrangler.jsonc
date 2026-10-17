@@ -18,6 +18,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  // The daily storage sweep (M8.6, ADR-085): raw output past retention, storage charges.
+  "triggers": {
+    "crons": ["0 3 * * *"]
+  },
   "r2_buckets": [
     {
       "binding": "FILES",

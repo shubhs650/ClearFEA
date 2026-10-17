@@ -11,6 +11,7 @@ export * from "./report-notes";
 export * from "./report";
 export * from "./session";
 export * from "./simulation";
+export * from "./storage";
 export * from "./units";
 export * from "./view";
 export * from "./wallet";

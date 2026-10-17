@@ -1,17 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The wallet page (M8.1, ADR-080): the balance, what was granted and charged, and every ledger
 // entry with the run or mesh it paid for. Drawn over the workbench, which stays as it was. In
-// self-hosting mode (M8.10, ADR-084) it says that the wallet is information only.
+// self-hosting mode (M8.10, ADR-084) it says that the wallet is information only. Since M8.6
+// (ADR-086) it shows storage too, with the daily storage charges in the ledger.
 
 import type { WalletEntry, WalletResponse, WalletView } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
 import { fetchWallet } from "../api/wallet";
+import { bytes } from "./bytes";
 import { credits } from "./credits";
+import { StorageSection } from "./StorageSection";
 
 type WalletState = { kind: "loading" } | { kind: "loaded"; wallet: WalletResponse } | { kind: "problem"; problem: string };
 
 export function WalletPage({ onClose, onSignedOut }: { onClose: () => void; onSignedOut: (notice?: string) => void }) {
   const [state, setState] = useState<WalletState>({ kind: "loading" });
+  const [refreshed, setRefreshed] = useState(0);
 
   const load = useCallback(async () => {
     setState((was) => (was.kind === "loaded" ? was : { kind: "loading" }));
@@ -29,7 +33,13 @@ export function WalletPage({ onClose, onSignedOut }: { onClose: () => void; onSi
     <section className="pane wallet-page" aria-label="Wallet">
       <header className="wallet-header">
         <h2 className="wallet-title">Wallet</h2>
-        <button type="button" onClick={() => void load()}>
+        <button
+          type="button"
+          onClick={() => {
+            setRefreshed((n) => n + 1);
+            void load();
+          }}
+        >
           Refresh
         </button>
         <button type="button" onClick={onClose}>
@@ -43,6 +53,7 @@ export function WalletPage({ onClose, onSignedOut }: { onClose: () => void; onSi
         </p>
       )}
       {state.kind === "loaded" && <WalletContent wallet={state.wallet.wallet} selfHosted={state.wallet.selfHosted} />}
+      <StorageSection refresh={refreshed} onSignedOut={onSignedOut} />
     </section>
   );
 }
@@ -126,6 +137,10 @@ const RUN_STATUS = {
 /** What an entry paid for, in a few words. */
 function what(entry: WalletEntry): string {
   if (entry.reason === "grant") return "Credit grant";
+  if (entry.storage !== null) {
+    const above = Math.max(0, entry.storage.usedBytes - entry.storage.freeBytes);
+    return `Storage on ${entry.storage.day}: ${bytes(above)} above the ${bytes(entry.storage.freeBytes)} free allowance (${bytes(entry.storage.usedBytes)} stored)`;
+  }
   if (entry.run !== null) {
     return `Run of “${entry.run.simulationName}”, started ${utc(entry.run.startedAt)} UTC (${RUN_STATUS[entry.run.status]})`;
   }
@@ -133,7 +148,7 @@ function what(entry: WalletEntry): string {
     const elements = entry.mesh.elements === null ? "failed" : `${entry.mesh.elements.toLocaleString("en-US")} elements`;
     return `Mesh of ${entry.mesh.geometryName} (${elements})`;
   }
-  return entry.reason === "solve" ? "Run" : "Mesh";
+  return entry.reason === "solve" ? "Run" : entry.reason === "storage" ? "Storage" : "Mesh";
 }
 
 /** An API timestamp as a fixed, unambiguous UTC time, as the run record writes it. */

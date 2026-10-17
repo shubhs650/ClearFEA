@@ -2,6 +2,7 @@
 import type { HealthResponse } from "@clearfea/spec";
 import { Hono } from "hono";
 import { probeDatabase, probeStorage } from "./db/health";
+import { sweepStorage } from "./db/storage";
 import type { Env } from "./env";
 import { internal } from "./internal";
 import { geometries } from "./routes/geometries";
@@ -16,9 +17,10 @@ import { runs } from "./routes/runs";
 import { session } from "./routes/session";
 import { shared, shareLinks } from "./routes/shareLinks";
 import { simulations } from "./routes/simulations";
+import { storage } from "./routes/storage";
 import { wallet } from "./routes/wallet";
 
-const app = new Hono<{ Bindings: Env }>();
+export const app = new Hono<{ Bindings: Env }>();
 
 app.get("/api/health", async (c) => {
   const [database, storage] = await Promise.all([
@@ -50,6 +52,18 @@ app.route("/api/runs", shareLinks);
 app.route("/api/shared", shared);
 app.route("/api/report-branding", reportBranding);
 app.route("/api/wallet", wallet);
+app.route("/api/storage", storage);
 app.route("/internal", internal);
 
-export default app;
+/**
+ * The daily storage sweep (M8.6, ADR-086), run by the cron trigger in wrangler.jsonc: removes
+ * raw solver output past its retention period and charges storage above the free allowance.
+ */
+async function scheduled(controller: ScheduledController, env: Env): Promise<void> {
+  const summary = await sweepStorage(env.DB, env.FILES, new Date(controller.scheduledTime));
+  console.log(
+    `Storage sweep for ${summary.day}: removed the raw output of ${summary.removed} runs, charged ${summary.charged} users.`,
+  );
+}
+
+export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Env>;

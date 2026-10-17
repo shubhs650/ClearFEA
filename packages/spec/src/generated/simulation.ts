@@ -136,7 +136,7 @@ export type XYZ2 = [number, number, number];
  */
 export type RunStatus = "solving" | "succeeded" | "failed" | "cancelled" | "stopped";
 /**
- * A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}.
+ * A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}; results.frd and results.dat, the raw solver output, can be downloaded there while they are kept (M8.6, ADR-086).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "RunFileName".
@@ -1113,7 +1113,7 @@ export interface SolveSoftware {
   calculix: string;
 }
 /**
- * When a run is stopped (M8.3, ADR-086): once its solve job has had the machine for seconds, which is the estimated time times multiplier, rounded up, and never less than 30 s.
+ * When a run is stopped (M8.3, ADR-087): once its solve job has had the machine for seconds, which is the estimated time times multiplier, rounded up, and never less than 30 s.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "StopLimit".
@@ -1274,6 +1274,39 @@ export interface CreateRunRequest {
   stopMultiplier?: number;
 }
 /**
+ * What happens to a run's raw solver output, results.frd and results.dat (M8.6, ADR-086). It is removed by the daily storage sweep once the retention period after the run ended has passed, unless the run is pinned; running the same setup again regenerates it. Everything else a run keeps is kept permanently.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunRawOutput".
+ */
+export interface RunRawOutput {
+  /**
+   * True when the owner pinned the run, so its raw output is kept.
+   */
+  pinned: boolean;
+  /**
+   * When the retention period ends: the run's end time plus the retention days. Null while the run solves, when it is pinned, when its job stored no raw output, or after the raw output was removed. The sweep after this time removes the output.
+   */
+  keptUntil: string | null;
+  /**
+   * When the sweep removed the raw output; null while it is kept.
+   */
+  removedAt: string | null;
+  /**
+   * The run whose frozen setup and mesh this run solved again (POST /api/runs/{id}/rerun), or null.
+   */
+  rerunOf: string | null;
+}
+/**
+ * Body of PUT /api/runs/{id}/pin: pin the run so its raw solver output is kept, or unpin it so the retention period applies again.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "PinRunRequest".
+ */
+export interface PinRunRequest {
+  pinned: boolean;
+}
+/**
  * A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032, ADR-033).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -1322,6 +1355,7 @@ export interface RunView {
   result: SolveResult | null;
   createdAt: string;
   finishedAt: string | null;
+  rawOutput: RunRawOutput;
 }
 /**
  * Version 1: one linear static analysis of the bodies of one geometry, isotropic materials, fixed supports, prescribed displacements and frictionless supports (M2.2), elastic supports (M2.6), pressures, forces, gravity and a centrifugal load (M2.3), a uniform temperature change (M2.7), or one steady-state thermal analysis with thermal conductivities and fixed temperatures (M5.1), heat fluxes, convection, radiation and heat generation (M5.2), or one thermal stress analysis with its stress-free temperature (M5.4), or one modal analysis with its number of modes (M6.1), material properties against temperature (M5.5), and the mesh settings: a global size, the element order and local sizes (M2.8), the review of the bonds between touching bodies (M4.2), and the equation solver (ADR-063). Item types joining an array do not change version (ADR-026 item 1); version changes whenever the meaning or shape of existing data does; older stored specs are upgraded by code, never reinterpreted.
@@ -1356,7 +1390,7 @@ export interface SimulationSpec1 {
   bonds?: Bond[];
 }
 /**
- * Answer to POST /api/simulations/{id}/runs (HTTP 201) and GET /api/runs/{id}.
+ * Answer to POST /api/simulations/{id}/runs and POST /api/runs/{id}/rerun (HTTP 201), and to GET /api/runs/{id} and PUT /api/runs/{id}/pin.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "RunResponse".
@@ -1530,6 +1564,8 @@ export const validateSizeEstimate = validator<SizeEstimate>(schema, "SizeEstimat
 export const validateRunEstimate = validator<RunEstimate>(schema, "RunEstimate");
 export const validateEstimateResponse = validator<EstimateResponse>(schema, "EstimateResponse");
 export const validateCreateRunRequest = validator<CreateRunRequest>(schema, "CreateRunRequest");
+export const validateRunRawOutput = validator<RunRawOutput>(schema, "RunRawOutput");
+export const validatePinRunRequest = validator<PinRunRequest>(schema, "PinRunRequest");
 export const validateRunView = validator<RunView>(schema, "RunView");
 export const validateRunResponse = validator<RunResponse>(schema, "RunResponse");
 export const validateRunListResponse = validator<RunListResponse>(schema, "RunListResponse");

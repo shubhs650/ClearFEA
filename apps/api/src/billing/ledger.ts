@@ -2,9 +2,10 @@
 // The ledger (docs/ARCHITECTURE.md sections 4 and 6, ADR-033): append-only entries with the
 // owner's running balance. Nothing here updates or deletes an entry. Reads are owner-scoped;
 // a charge is written for a job the worker holds, in the same batch that completes the job.
-// Play-money grants (M8.1, ADR-080) are written by the seed, never by a route.
+// Play-money grants (M8.1, ADR-080) are written by the seed, never by a route; storage charges
+// (M8.6, ADR-086) by the daily storage sweep (db/storage.ts).
 
-import type { LedgerReason, LedgerRun, WalletEntry, WalletView } from "@clearfea/spec";
+import type { LedgerReason, LedgerRun, LedgerStorage, WalletEntry, WalletView } from "@clearfea/spec";
 
 export interface LedgerEntry {
   seq: number;
@@ -88,6 +89,10 @@ interface WalletRow extends LedgerRow {
   mesh_elements: number | null;
   mesh_nodes: number | null;
   geometry_name: string | null;
+  storage_day: string | null;
+  storage_used_bytes: number | null;
+  storage_free_bytes: number | null;
+  storage_rate_per_gib_day: number | null;
 }
 
 /**
@@ -100,19 +105,22 @@ export async function walletOf(db: D1Database, userId: string): Promise<WalletVi
       `SELECT l.seq, l.amount, l.balance, l.reason, l.job_id, l.created_at,
               j.machine_size, j.rate_per_hour, j.billed_seconds,
               r.id AS run_id,
-              -- A cancelled or stopped run is 'failed' in its table; its job says which (ADR-085, ADR-086).
+              -- A cancelled or stopped run is 'failed' in its table; its job says which (ADR-085, ADR-087).
               CASE WHEN r.status = 'failed' AND j.status = 'cancelled' THEN 'cancelled'
                    WHEN r.status = 'failed' AND j.status = 'stopped_at_limit' THEN 'stopped'
                    ELSE r.status END AS run_status, r.created_at AS run_created_at,
               s.id AS simulation_id, s.name AS simulation_name,
               m.id AS mesh_id, m.element_count AS mesh_elements, m.node_count AS mesh_nodes,
-              g.name AS geometry_name
+              g.name AS geometry_name,
+              sc.day AS storage_day, sc.used_bytes AS storage_used_bytes, sc.free_bytes AS storage_free_bytes,
+              sc.rate_per_gib_day AS storage_rate_per_gib_day
          FROM ledger_entries l
          LEFT JOIN jobs j ON j.id = l.job_id AND j.owner_id = l.owner_id
          LEFT JOIN runs r ON j.type = 'solve' AND r.job_id = j.id AND r.owner_id = l.owner_id
          LEFT JOIN simulations s ON s.id = r.simulation_id AND s.owner_id = l.owner_id
          LEFT JOIN meshes m ON j.type = 'mesh' AND m.id = j.target_id AND m.owner_id = l.owner_id
          LEFT JOIN geometries g ON g.id = m.geometry_id AND g.owner_id = l.owner_id
+         LEFT JOIN storage_charges sc ON sc.ledger_seq = l.seq AND sc.owner_id = l.owner_id
         WHERE l.owner_id = ?
         ORDER BY l.seq DESC`,
     )
@@ -154,5 +162,16 @@ function walletEntry(row: WalletRow): WalletEntry {
       row.mesh_id === null
         ? null
         : { id: row.mesh_id, geometryName: row.geometry_name ?? "", elements: row.mesh_elements, nodes: row.mesh_nodes },
+    storage: storageOf(row),
+  };
+}
+
+function storageOf(row: WalletRow): LedgerStorage | null {
+  if (row.storage_day === null) return null;
+  return {
+    day: row.storage_day,
+    usedBytes: row.storage_used_bytes ?? 0,
+    freeBytes: row.storage_free_bytes ?? 0,
+    ratePerGibDay: row.storage_rate_per_gib_day ?? 0,
   };
 }

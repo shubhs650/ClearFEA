@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
+import { bytes } from "../src/billing/bytes";
 import { credits } from "../src/billing/credits";
 import { duration, memory } from "../src/billing/estimate";
 
@@ -34,5 +35,17 @@ describe("estimate figures", () => {
     expect(duration(574)).toBe("9.6 min");
     expect(duration(1273)).toBe("21 min");
     expect(duration(3 * 3600 + 600)).toBe("3.2 h");
+  });
+});
+
+describe("stored sizes (M8.6)", () => {
+  it("write bytes below a KiB and binary units to three significant figures above", () => {
+    expect(bytes(0)).toBe("0 bytes");
+    expect(bytes(1)).toBe("1 byte");
+    expect(bytes(1023)).toBe("1,023 bytes");
+    expect(bytes(2048)).toBe("2 KiB");
+    expect(bytes(1_500_000)).toBe("1.43 MiB");
+    expect(bytes(5 * 2 ** 30)).toBe("5 GiB");
+    expect(bytes(3 * 2 ** 40)).toBe("3 TiB");
   });
 });

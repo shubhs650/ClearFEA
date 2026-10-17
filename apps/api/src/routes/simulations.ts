@@ -348,7 +348,7 @@ simulations.get("/:id/estimate", async (c) => {
  * A mesh with more elements than the spec's solver may solve on a 16 GB machine is refused
  * before any machine is used (ADR-063), and so is a run whose estimated cost on its size is more
  * than the wallet holds (M8.1, ADR-080). The run is stopped if it is still solving at its stop
- * limit, a multiple of the estimated time that the body may set (M8.3, ADR-086).
+ * limit, a multiple of the estimated time that the body may set (M8.3, ADR-087).
  */
 simulations.post("/:id/runs", async (c) => {
   let request: CreateRunRequest = {};

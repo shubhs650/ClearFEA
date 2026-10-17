@@ -14,9 +14,9 @@ Wire shapes of the wallet route (M8.1, ADR-080; docs/ARCHITECTURE.md sections 4 
 """
 
 
-type LedgerReason = Literal["grant", "mesh", "solve"]
+type LedgerReason = Literal["grant", "mesh", "solve", "storage"]
 """
-What a ledger entry is for: a play-money credit grant, or the charge for a mesh or solve job (ADR-033).
+What a ledger entry is for: a play-money credit grant, the charge for a mesh or solve job (ADR-033), or a day's charge for storage above the free allowance (M8.6, ADR-086).
 """
 
 
@@ -69,9 +69,30 @@ class LedgerMesh(BaseModel):
     nodes: Annotated[int | None, Field(ge=0)]
 
 
+class LedgerStorage(BaseModel):
+    """
+    What a storage charge was for (M8.6, ADR-086): the UTC day, the bytes the user stored when the daily sweep measured them, the free allowance then, and the rate per GiB per day above it.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    day: str
+    """
+    YYYY-MM-DD, UTC.
+    """
+    used_bytes: Annotated[int, Field(alias="usedBytes", ge=0)]
+    free_bytes: Annotated[int, Field(alias="freeBytes", ge=0)]
+    rate_per_gib_day: Annotated[int, Field(alias="ratePerGibDay", ge=0)]
+    """
+    Micro-credits per GiB per day stored above the allowance.
+    """
+
+
 class WalletEntry(BaseModel):
     """
-    One ledger entry, as the append-only ledger holds it, with what it paid for. amount is negative for a charge; balance is the balance after the entry. job, run and mesh are null where they do not apply.
+    One ledger entry, as the append-only ledger holds it, with what it paid for. amount is negative for a charge; balance is the balance after the entry. job, run, mesh and storage are null where they do not apply.
     """
 
     model_config = ConfigDict(
@@ -86,6 +107,7 @@ class WalletEntry(BaseModel):
     job: LedgerJob | None
     run: LedgerRun | None
     mesh: LedgerMesh | None
+    storage: LedgerStorage | None
 
 
 class WalletView(BaseModel):

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Storage",
+  "description": "Wire shapes of the storage route (M8.6, ADR-086; docs/ARCHITECTURE.md section 4). Sizes are in bytes; money is in whole micro-credits (1,000,000 is one credit). Each message is a definition under $defs.",
+  "$defs": {
+    "StorageKind": {
+      "description": "What stored files are: geometry (the STEP file, topology and display mesh), mesh (volume and display meshes), results (a run's solver input, log and viewer files, kept permanently), rawOutput (a run's results.frd and results.dat, kept for the retention period unless the run is pinned), report (reports, report figures and the report logo).",
+      "type": "string",
+      "enum": ["geometry", "mesh", "results", "rawOutput", "report"]
+    },
+    "StoragePart": {
+      "description": "The bytes and number of files of one kind.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "bytes", "files"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/StorageKind" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "files": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "StorageRun": {
+      "description": "A run that holds raw solver output, with its size and what happens to it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "simulationId", "simulationName", "startedAt", "bytes", "pinned", "keptUntil"],
+      "properties": {
+        "id": { "type": "string" },
+        "simulationId": { "type": "string" },
+        "simulationName": { "type": "string" },
+        "startedAt": { "type": "string" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "pinned": { "type": "boolean" },
+        "keptUntil": { "description": "When the retention period ends; null when the run is pinned.", "type": ["string", "null"] }
+      }
+    },
+    "StorageView": {
+      "description": "The signed-in user's storage: every file kept for them, by kind, against the free allowance, and the runs that hold raw solver output, newest first. The daily sweep removes raw output past its retention period and charges the bytes above the allowance at the rate per GiB per day.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["usedBytes", "freeBytes", "ratePerGibDay", "retentionDays", "parts", "runs"],
+      "properties": {
+        "usedBytes": { "type": "integer", "minimum": 0 },
+        "freeBytes": { "description": "The free allowance.", "type": "integer", "minimum": 0 },
+        "ratePerGibDay": { "description": "Micro-credits per GiB per day stored above the allowance.", "type": "integer", "minimum": 0 },
+        "retentionDays": { "description": "Days raw solver output is kept after a run ends unless the run is pinned.", "type": "integer", "minimum": 0 },
+        "parts": { "description": "One entry per kind, in the order of StorageKind.", "type": "array", "items": { "$ref": "#/$defs/StoragePart" } },
+        "runs": { "type": "array", "items": { "$ref": "#/$defs/StorageRun" } }
+      }
+    },
+    "StorageResponse": {
+      "description": "Answer to GET /api/storage.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["storage"],
+      "properties": { "storage": { "$ref": "#/$defs/StorageView" } }
+    }
+  }
+}

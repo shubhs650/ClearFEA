@@ -4,9 +4,9 @@
   "description": "Wire shapes of the wallet route (M8.1, ADR-080; docs/ARCHITECTURE.md sections 4 and 6). Money is in whole micro-credits: 1,000,000 is one credit. Each message is a definition under $defs.",
   "$defs": {
     "LedgerReason": {
-      "description": "What a ledger entry is for: a play-money credit grant, or the charge for a mesh or solve job (ADR-033).",
+      "description": "What a ledger entry is for: a play-money credit grant, the charge for a mesh or solve job (ADR-033), or a day's charge for storage above the free allowance (M8.6, ADR-086).",
       "type": "string",
-      "enum": ["grant", "mesh", "solve"]
+      "enum": ["grant", "mesh", "solve", "storage"]
     },
     "LedgerJob": {
       "description": "The job a charge is for: the machine size and rate it was queued with and the seconds billed (ADR-033).",
@@ -45,11 +45,23 @@
         "nodes": { "type": ["integer", "null"], "minimum": 0 }
       }
     },
-    "WalletEntry": {
-      "description": "One ledger entry, as the append-only ledger holds it, with what it paid for. amount is negative for a charge; balance is the balance after the entry. job, run and mesh are null where they do not apply.",
+    "LedgerStorage": {
+      "description": "What a storage charge was for (M8.6, ADR-086): the UTC day, the bytes the user stored when the daily sweep measured them, the free allowance then, and the rate per GiB per day above it.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["seq", "createdAt", "reason", "amount", "balance", "job", "run", "mesh"],
+      "required": ["day", "usedBytes", "freeBytes", "ratePerGibDay"],
+      "properties": {
+        "day": { "description": "YYYY-MM-DD, UTC.", "type": "string" },
+        "usedBytes": { "type": "integer", "minimum": 0 },
+        "freeBytes": { "type": "integer", "minimum": 0 },
+        "ratePerGibDay": { "description": "Micro-credits per GiB per day stored above the allowance.", "type": "integer", "minimum": 0 }
+      }
+    },
+    "WalletEntry": {
+      "description": "One ledger entry, as the append-only ledger holds it, with what it paid for. amount is negative for a charge; balance is the balance after the entry. job, run, mesh and storage are null where they do not apply.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "createdAt", "reason", "amount", "balance", "job", "run", "mesh", "storage"],
       "properties": {
         "seq": { "type": "integer", "minimum": 1 },
         "createdAt": { "type": "string" },
@@ -58,7 +70,8 @@
         "balance": { "type": "integer" },
         "job": { "oneOf": [{ "$ref": "#/$defs/LedgerJob" }, { "type": "null" }] },
         "run": { "oneOf": [{ "$ref": "#/$defs/LedgerRun" }, { "type": "null" }] },
-        "mesh": { "oneOf": [{ "$ref": "#/$defs/LedgerMesh" }, { "type": "null" }] }
+        "mesh": { "oneOf": [{ "$ref": "#/$defs/LedgerMesh" }, { "type": "null" }] },
+        "storage": { "oneOf": [{ "$ref": "#/$defs/LedgerStorage" }, { "type": "null" }] }
       }
     },
     "WalletView": {

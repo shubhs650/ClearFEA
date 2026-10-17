@@ -1,15 +1,44 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The signed-in user's runs, their solver logs (M1.8, ADR-030), the viewer's result files
-// (M1.9, ADR-031) and the solver input and log to view or download (M1.10, ADR-032). Runs are
-// started through POST /api/simulations/:id/runs; a solving run's progress is in its view and
+// (M1.9, ADR-031), the solver input and log to view or download (M1.10, ADR-032), and the raw
+// solver output with its pin and a rerun that regenerates it (M8.6, ADR-086). Runs are started
+// through POST /api/simulations/:id/runs; a solving run's progress is in its view and
 // POST /api/runs/:id/cancel cancels it (M8.2, ADR-085). Shapes: simulation.schema.json.
 
-import type { RunLogResponse, RunProgress, RunResponse, RunView } from "@clearfea/spec";
+import {
+  DEFAULT_STOP_MULTIPLIER,
+  elementLimitProblem,
+  type RunLogResponse,
+  type RunProgress,
+  type RunResponse,
+  type RunView,
+  runSolverProblem,
+  specRunKind,
+  specSolver,
+  stopLimitSeconds,
+  validatePinRunRequest,
+} from "@clearfea/spec";
 import { type Context, Hono } from "hono";
 import { billedSeconds, costOf } from "../billing/cost";
+import { estimateRun, runSize, simulatedMachine } from "../billing/estimate";
+import { balanceOf } from "../billing/ledger";
+import { runFundsProblem } from "../billing/wallet";
+import { readBody } from "../body";
 import { readJobLog } from "../db/jobs";
-import { meshKey } from "../db/meshes";
-import { cancelRun, getRun, type Run, type RunFile, runKey } from "../db/runs";
+import { listMachineSizes } from "../db/machines";
+import { getMesh, meshKey } from "../db/meshes";
+import {
+  cancelRun,
+  createRun,
+  getRun,
+  listRuns,
+  RAW_OUTPUT,
+  type Run,
+  type RunFile,
+  runKey,
+  setRunPinned,
+} from "../db/runs";
+import { selfHosted } from "../selfHosting";
 import { requireUser, type SessionEnv } from "../session";
 
 export const runs = new Hono<SessionEnv>();
@@ -55,6 +84,7 @@ export function runView(run: Run): RunView {
     result: run.result,
     createdAt: run.createdAt,
     finishedAt: run.finishedAt,
+    rawOutput: { pinned: run.pinned, keptUntil: run.keptUntil, removedAt: run.rawRemovedAt, rerunOf: run.rerunOf },
   };
 }
 
@@ -244,12 +274,17 @@ const TEXT_FILES: readonly string[] = ["deck.inp", "solver.log"] satisfies RunFi
 
 /**
  * The run's solver input or solver log as plain text, shown in the browser, or with ?download=1
- * saved as a file. Both exist for a failed run too once the solver has started.
+ * saved as a file. Both exist for a failed run too once the solver has started. The raw solver
+ * output, results.frd and results.dat, is only downloaded, and only while it is kept (M8.6).
  */
 runs.get("/:id/files/:name", async (c) => {
   const name = c.req.param("name") as RunFile;
-  if (!TEXT_FILES.includes(name)) {
-    return c.json({ error: "Only deck.inp and solver.log of a run can be viewed or downloaded." }, 404);
+  const raw = RAW_OUTPUT.includes(name);
+  if (!TEXT_FILES.includes(name) && !raw) {
+    return c.json(
+      { error: "Only deck.inp, solver.log, results.frd and results.dat of a run can be viewed or downloaded." },
+      404,
+    );
   }
   const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
   if (run === null) return c.json({ error: NOT_FOUND }, 404);
@@ -262,11 +297,22 @@ runs.get("/:id/files/:name", async (c) => {
       404,
     );
   }
+  if (raw && run.rawRemovedAt !== null) {
+    return c.json({ error: RAW_REMOVED(run) }, 410);
+  }
   const object = await c.env.FILES.get(runKey(c.var.userId, run.id, name));
   if (object === null) {
     return c.json({ error: `The file ${name} of this run is missing from storage. Run the simulation again.` }, 500);
   }
   const filename = `clearfea-run-${run.id.slice(0, 8)}-${name}`;
+  if (raw) {
+    return c.body(object.body, 200, {
+      "Content-Type": "application/octet-stream",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": String(object.size),
+    });
+  }
   const disposition = c.req.query("download") === "1" ? "attachment" : "inline";
   return c.body(object.body, 200, {
     // Plain text that is never sniffed as HTML: the deck carries names the user typed.
@@ -276,4 +322,75 @@ runs.get("/:id/files/:name", async (c) => {
     "Content-Disposition": `${disposition}; filename="${filename}"`,
     "Content-Length": String(object.size),
   });
+});
+
+const RAW_REMOVED = (run: Run) =>
+  `The raw solver output of this run was removed on ${run.rawRemovedAt?.slice(0, 10)}, ` +
+  "after the retention period, because the run was not pinned. Run it again to regenerate it.";
+
+/**
+ * Pins the run, so its raw solver output is kept past the retention period, or unpins it
+ * (M8.6, ADR-086). A run whose raw output was already removed cannot be pinned.
+ */
+runs.put("/:id/pin", async (c) => {
+  const body = await readBody(c.req.raw, validatePinRunRequest, "PinRunRequest", "simulation.schema.json");
+  if ("error" in body) return c.json({ error: body.error }, 400);
+  const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
+  if (run === null) return c.json({ error: NOT_FOUND }, 404);
+  if (body.value.pinned && !(await setRunPinned(c.env.DB, c.var.userId, run.id, true))) {
+    return c.json({ error: RAW_REMOVED(run) }, 409);
+  }
+  if (!body.value.pinned) await setRunPinned(c.env.DB, c.var.userId, run.id, false);
+  const updated = await getRun(c.env.DB, c.var.userId, run.id);
+  if (updated === null) return c.json({ error: NOT_FOUND }, 404);
+  return c.json({ run: runView(updated) } satisfies RunResponse);
+});
+
+/**
+ * Solves a finished run's frozen spec again on the same mesh, as a new run of the same
+ * simulation, to regenerate raw solver output the sweep removed (M8.6, ADR-086). The setup is
+ * the run's, not the simulation's current one, so the new raw output belongs to the same
+ * results. The new run is estimated and charged like any other, on the run's machine size while
+ * that size exists, else the recommended one, and refused when the wallet cannot cover it. It
+ * keeps the run's stop-limit multiplier, or takes the default for a run from before M8.3.
+ */
+runs.post("/:id/rerun", async (c) => {
+  const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
+  if (run === null) return c.json({ error: NOT_FOUND }, 404);
+  if (run.status === "solving") {
+    return c.json({ error: "The run is still solving. Run it again when it has finished." }, 409);
+  }
+  const [latest] = await listRuns(c.env.DB, c.var.userId, run.simulationId, 1);
+  if (latest?.status === "solving") {
+    return c.json({ error: "The simulation is already being solved. Wait for that run to finish." }, 409);
+  }
+  const mesh = await getMesh(c.env.DB, c.var.userId, run.meshId);
+  if (mesh === null || mesh.status !== "ready" || mesh.nodeCount === null || mesh.elementCount === null) {
+    return c.json({ error: "The mesh this run was solved on is no longer available, so it cannot be run again." }, 409);
+  }
+  const solver = specSolver(run.spec);
+  const kind = specRunKind(run.spec);
+  const cannot = runSolverProblem(solver, kind) ?? elementLimitProblem(solver, mesh.order, mesh.elementCount, kind);
+  if (cannot !== null) return c.json({ error: cannot }, 409);
+  const estimate = estimateRun(mesh.nodeCount, mesh.order, await listMachineSizes(c.env.DB), solver, kind);
+  const size = (run.machine === null ? undefined : runSize(estimate, run.machine.size)) ?? runSize(estimate);
+  if (size === undefined) throw new Error("No machine sizes are configured.");
+  const noFunds = selfHosted(c.env)
+    ? null
+    : runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size);
+  if (noFunds !== null) return c.json({ error: noFunds }, 409);
+  const multiplier = run.stopLimit?.multiplier ?? DEFAULT_STOP_MULTIPLIER;
+  const created = await createRun(c.env.DB, c.var.userId, {
+    simulationId: run.simulationId,
+    meshId: mesh.id,
+    spec: run.spec,
+    machine: simulatedMachine(size),
+    estimate,
+    stopLimit: { multiplier, seconds: stopLimitSeconds(estimate.seconds, multiplier) },
+    rerunOf: run.id,
+  });
+  if (created === null) {
+    return c.json({ error: "The mesh or the machine sizes changed meanwhile. Try running it again." }, 409);
+  }
+  return c.json({ run: runView(created.run) } satisfies RunResponse, 201);
 });

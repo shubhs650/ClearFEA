@@ -77,10 +77,11 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | `geometries` | Project, original file key, length unit as read and as confirmed, import status, counts of bodies and faces |
 | `simulations` | Project, geometry, analysis type, current `SimulationSpec` JSON, spec schema version |
 | `meshes` | Geometry, mesh-settings hash, element and node counts, quality summary, file keys |
-| `runs` | Simulation, frozen spec JSON, mesh id, machine size, status, estimate, final cost, failure category, software versions, pinned flag |
+| `runs` | Simulation, frozen spec JSON, mesh id, machine size, status, estimate, final cost, failure category, software versions, pinned flag, when the raw output was removed, the run it reran (ADR-086) |
 | `jobs` | Type (`import`, `mesh`, `solve`, `report`), target record, status, stage, claimed-by, heartbeat, start and end times, metering figures |
 | `job_logs` | Job, sequence number, text chunk |
 | `ledger_entries` | User, amount, reason, job id, running balance. Append-only |
+| `storage_charges` | User, UTC day, bytes stored, allowance, rate and amount of a day's storage charge, and its ledger entry (ADR-086) |
 | `materials` | A user's own materials: owner, name (unique per owner), the material as JSON with its source note. The generic library is the reviewed file `packages/spec/library/materials.json`, not rows here (ADR-046) |
 | `views` | Saved views of a simulation: name (unique per simulation), camera, hidden bodies and the result display as JSON (`view.schema.json`, ADR-055). The report picks its pictures from them |
 | `report_options` | A simulation's report options: sections, saved views for the result plots and the title block as JSON (`report.schema.json`, ADR-074) |
@@ -88,7 +89,7 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | `report_figures` | A run's report figures, drawn in the browser: kind (support, load or view), item id, caption, order, pixel size; the PNGs are in R2 under the run (ADR-011, ADR-075) |
 | `share_links` | Run, token hash, revoked flag |
 | `machine_sizes` | Name, cores, memory, hourly rate. Configuration |
-| `settings` | Free storage quota, retention days, stop-limit multiplier. Configuration |
+| `settings` | Free storage quota, retention days, storage rate (M8.6, ADR-086), stop-limit multiplier. Configuration |
 
 Files in R2, keyed by owner and record id:
 
@@ -100,6 +101,8 @@ Files in R2, keyed by owner and record id:
 | Solver input (`.inp`), solver log | Permanently |
 | Viewer result files | Permanently |
 | Raw solver output (`.frd`, `.dat`) | Retention period, unless the run is pinned |
+
+Since M8.6 (ADR-086) a user's storage is measured by listing these files under `owners/<id>/` (`GET /api/storage`), and a daily sweep (the Worker's cron trigger; `make dev` calls it every hour) removes unpinned raw output past the retention period and charges what is above the free allowance once a day, as a ledger entry with reason `storage`. `POST /api/runs/:id/rerun` solves a run's frozen spec on its mesh again as a new run, which regenerates removed raw output.
 | Report files and figures | Permanently |
 | A user's report logo | Until replaced or removed |
 
@@ -136,8 +139,8 @@ queued -> claimed -> running -> succeeded
 - The API creates a job row and, for metered jobs, checks the wallet balance against the estimate (not in self-hosting mode, where the wallet is informational, ADR-084).
 - A worker calls `POST /internal/jobs/claim` with its worker token and capabilities. The API marks one job claimed, atomically, and returns the job payload (type, target, parameters) plus transfer URLs, one per named input or output file (ADR-024).
 - The worker sends a heartbeat every few seconds with stage, progress and new log text. The response tells it whether to cancel or stop.
-- Since M8.2 (ADR-085) the owner cancels a run with `POST /api/runs/{id}/cancel`. A queued job ends at once, uncharged. A claimed or running job is marked (`jobs.stop_requested`); its next heartbeat answers `cancel`, the worker stops the solver, keeps the deck and log, and completes with `status: "stopped"` and its metering, and the API ends the job as `cancelled` and charges the time used. M8.3's stop limit uses the same path with `stopped_at_limit` and `stop`. While a run solves, its view carries its progress: when the worker took it, the elapsed time and what that time costs so far.
-- A job whose heartbeat goes silent past a timeout is marked failed as a platform fault and may be retried.
+- Since M8.2 (ADR-085) the owner cancels a run with `POST /api/runs/{id}/cancel`. A queued job ends at once, uncharged. A claimed or running job is marked (`jobs.stop_requested`); its next heartbeat answers `cancel`, the worker stops the solver, keeps the deck and log, and completes with `status: "stopped"` and its metering, and the API ends the job as `cancelled` and charges the time used. Since M8.3 (ADR-087) a run's solve job also carries a stop limit, by default three times the estimated time and never under 30 s; the first heartbeat after the job has had the machine that long sets `stop_requested` to `stopped_at_limit` and answers `stop`, and the job ends the same way as a cancel, as `stopped_at_limit`, charged for its time. While a run solves, its view carries its progress: when the worker took it, the elapsed time and what that time costs so far.
+- A job whose heartbeat goes silent past a timeout is marked failed as a platform fault and may be retried. (Not built yet: neither cancel nor the stop limit reaches a job whose worker has died, ADR-087 item 6.)
 - On completion the worker uploads outputs and posts a result summary with metering figures.
 
 ### Job types

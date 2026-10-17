@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The stop limit of a run (M8.3, ADR-086): a run is stopped once its solve job has had the
+// The stop limit of a run (M8.3, ADR-087): a run is stopped once its solve job has had the
 // machine for a multiple of the estimated time. Shared by the API, which enforces it, and the
 // web app, which shows the limit a multiplier gives before the run starts.
 
@@ -7,7 +7,7 @@
 export const DEFAULT_STOP_MULTIPLIER = 3;
 
 /** The multipliers an owner may choose, inclusive. */
-export const MIN_STOP_MULTIPLIER = 0.5;
+export const MIN_STOP_MULTIPLIER = 0.25;
 export const MAX_STOP_MULTIPLIER = 20;
 
 /**

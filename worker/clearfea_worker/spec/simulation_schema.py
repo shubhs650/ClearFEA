@@ -991,14 +991,14 @@ solving while the solve job is queued or running; succeeded, failed, cancelled (
 
 class StopLimit(BaseModel):
     """
-    When a run is stopped (M8.3, ADR-086): once its solve job has had the machine for seconds, which is the estimated time times multiplier, rounded up, and never less than 30 s.
+    When a run is stopped (M8.3, ADR-087): once its solve job has had the machine for seconds, which is the estimated time times multiplier, rounded up, and never less than 30 s.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         populate_by_name=True,
     )
-    multiplier: Annotated[float, Field(ge=0.5, le=20.0)]
+    multiplier: Annotated[float, Field(ge=0.25, le=20.0)]
     seconds: Annotated[int, Field(ge=1)]
 
 
@@ -1055,7 +1055,7 @@ type RunFileName = Literal[
     "deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin", "nodes.bin"
 ]
 """
-A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}.
+A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}; results.frd and results.dat, the raw solver output, can be downloaded there while they are kept (M8.6, ADR-086).
 """
 
 
@@ -1185,7 +1185,46 @@ class CreateRunRequest(BaseModel):
         populate_by_name=True,
     )
     machine_size: Annotated[str | None, Field(alias="machineSize", min_length=1)] = None
-    stop_multiplier: Annotated[float | None, Field(alias="stopMultiplier", ge=0.5, le=20.0)] = None
+    stop_multiplier: Annotated[float | None, Field(alias="stopMultiplier", ge=0.25, le=20.0)] = None
+
+
+class RunRawOutput(BaseModel):
+    """
+    What happens to a run's raw solver output, results.frd and results.dat (M8.6, ADR-086). It is removed by the daily storage sweep once the retention period after the run ended has passed, unless the run is pinned; running the same setup again regenerates it. Everything else a run keeps is kept permanently.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    pinned: bool
+    """
+    True when the owner pinned the run, so its raw output is kept.
+    """
+    kept_until: Annotated[str | None, Field(alias="keptUntil")]
+    """
+    When the retention period ends: the run's end time plus the retention days. Null while the run solves, when it is pinned, when its job stored no raw output, or after the raw output was removed. The sweep after this time removes the output.
+    """
+    removed_at: Annotated[str | None, Field(alias="removedAt")]
+    """
+    When the sweep removed the raw output; null while it is kept.
+    """
+    rerun_of: Annotated[str | None, Field(alias="rerunOf")]
+    """
+    The run whose frozen setup and mesh this run solved again (POST /api/runs/{id}/rerun), or null.
+    """
+
+
+class PinRunRequest(BaseModel):
+    """
+    Body of PUT /api/runs/{id}/pin: pin the run so its raw solver output is kept, or unpin it so the retention period applies again.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    pinned: bool
 
 
 class ShareLinkView(BaseModel):
@@ -1563,11 +1602,12 @@ class RunView(BaseModel):
     result: SolveResult | None
     created_at: Annotated[str, Field(alias="createdAt")]
     finished_at: Annotated[str | None, Field(alias="finishedAt")]
+    raw_output: Annotated[RunRawOutput, Field(alias="rawOutput")]
 
 
 class RunResponse(BaseModel):
     """
-    Answer to POST /api/simulations/{id}/runs (HTTP 201) and GET /api/runs/{id}.
+    Answer to POST /api/simulations/{id}/runs and POST /api/runs/{id}/rerun (HTTP 201), and to GET /api/runs/{id} and PUT /api/runs/{id}/pin.
     """
 
     model_config = ConfigDict(

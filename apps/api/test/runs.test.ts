@@ -23,7 +23,7 @@ import fixture from "@clearfea/spec/fixtures/simulation-v1.json";
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { listLedger } from "../src/billing/ledger";
-import app from "../src/index";
+import { app } from "../src/index";
 import { getJob } from "../src/db/jobs";
 
 const TOKEN = "test-worker-token";
@@ -566,7 +566,7 @@ describe("the stop limit (M8.3)", () => {
     const job = await claim("solve");
     await upload(job, RUN_FILES);
     await complete(job.id, { status: "succeeded", result: SOLVED });
-    for (const stopMultiplier of [0.25, 21, "3"]) {
+    for (const stopMultiplier of [0.2, 21, "3"]) {
       expect((await startRun(id, alice, { stopMultiplier })).status).toBe(400);
     }
   });
@@ -882,7 +882,7 @@ describe("a run's solver input and log", () => {
     const job = await claim("solve");
     await upload(job, RUN_FILES);
     await complete(job.id, { status: "succeeded", result: SOLVED });
-    for (const name of ["results.frd", "fields.bin", "..%2Fspec.json"]) {
+    for (const name of ["surface.bin", "fields.bin", "..%2Fspec.json"]) {
       expect((await file(run.id, name)).status).toBe(404);
     }
   });
