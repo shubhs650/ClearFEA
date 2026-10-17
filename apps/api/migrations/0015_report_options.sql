@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
--- Report options (M7.1, ADR-073). What a simulation's report prints belongs to the simulation,
+-- Report options (M7.1, ADR-074). What a simulation's report prints belongs to the simulation,
 -- like its saved views, so it still applies after the simulation is run again. The company name
 -- and logo belong to the user, so every report of theirs carries them without setting them again.
 

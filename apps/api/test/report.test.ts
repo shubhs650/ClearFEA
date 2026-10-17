@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Report options per simulation and company name and logo per user (M7.1, ADR-073).
+// Report options per simulation and company name and logo per user (M7.1, ADR-074).
 import {
   defaultReportOptions,
   type ReportOptions,

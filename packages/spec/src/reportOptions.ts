@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Report options (M7.1, ADR-073): the sections a report can print, in the order it prints them,
+// Report options (M7.1, ADR-074): the sections a report can print, in the order it prints them,
 // with their names, and the options a simulation starts with. Pure: the API, the web app and,
 // through the same schema, the report job share them.
 

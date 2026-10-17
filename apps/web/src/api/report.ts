@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Client for a simulation's report options and the user's company name and logo (M7.1, ADR-073).
+// Client for a simulation's report options and the user's company name and logo (M7.1, ADR-074).
 // Shapes: packages/spec/schemas/report.schema.json.
 
 import {

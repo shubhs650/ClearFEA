@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Reads the type and pixel size of an uploaded logo from its first bytes (M7.1, ADR-073). Only PNG
+// Reads the type and pixel size of an uploaded logo from its first bytes (M7.1, ADR-074). Only PNG
 // and JPEG are taken: both go into a Word file and a PDF as they are, and neither can carry script.
 
 export interface ImageInfo {

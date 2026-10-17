@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The Report panel (M7.1, ADR-073): which sections the report prints, the saved views it draws as
+// The Report panel (M7.1, ADR-074): which sections the report prints, the saved views it draws as
 // result plots, the title block, and the user's company name and logo. Options are saved per
 // simulation, the company name and logo once per user. Generating the report comes with M7.3.
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The signed-in user's company name and logo, printed on every report of theirs (M7.1, ADR-073).
+// The signed-in user's company name and logo, printed on every report of theirs (M7.1, ADR-074).
 // Shapes: packages/spec/schemas/report.schema.json.
 
 import { type ReportBrandingResponse, validateSaveReportBrandingRequest } from "@clearfea/spec";

@@ -27,6 +27,7 @@
 
 import {
   type ElementOrder,
+  frozenRunSolver,
   ITERATIVE_ACCURACY_NOTE,
   isIterative,
   limitMemoryText,
@@ -234,7 +235,7 @@ function SolverChoice({
 
 /** The solver a run used: its frozen spec's, or SPOOLES for runs made before ADR-063. */
 function runSolver(run: RunView): Solver {
-  return run.spec.solver ?? "spooles";
+  return frozenRunSolver(run.spec);
 }
 
 /** One machine size as an option: its cores and memory, and whether it is the recommended one. */

@@ -425,7 +425,7 @@ simulations.delete("/:id/views/:viewId", async (c) => {
   return c.body(null, 204);
 });
 
-// Report options (M7.1, ADR-073). Views must be saved views of the simulation; a view deleted
+// Report options (M7.1, ADR-074). Views must be saved views of the simulation; a view deleted
 // later is left out of the answer, and the report draws only the views still there.
 async function reportOptionsView(
   db: D1Database,

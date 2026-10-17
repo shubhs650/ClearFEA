@@ -83,8 +83,8 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | `ledger_entries` | User, amount, reason, job id, running balance. Append-only |
 | `materials` | A user's own materials: owner, name (unique per owner), the material as JSON with its source note. The generic library is the reviewed file `packages/spec/library/materials.json`, not rows here (ADR-046) |
 | `views` | Saved views of a simulation: name (unique per simulation), camera, hidden bodies and the result display as JSON (`view.schema.json`, ADR-055). The report picks its pictures from them |
-| `report_options` | A simulation's report options: sections, saved views for the result plots and the title block as JSON (`report.schema.json`, ADR-073) |
-| `report_branding` | A user's company name and logo (type, bytes, pixel size); the logo itself is in R2 (ADR-073) |
+| `report_options` | A simulation's report options: sections, saved views for the result plots and the title block as JSON (`report.schema.json`, ADR-074) |
+| `report_branding` | A user's company name and logo (type, bytes, pixel size); the logo itself is in R2 (ADR-074) |
 | `share_links` | Run, token hash, revoked flag |
 | `machine_sizes` | Name, cores, memory, hourly rate. Configuration |
 | `settings` | Free storage quota, retention days, stop-limit multiplier. Configuration |
@@ -189,7 +189,7 @@ Python package `clearfea_worker`:
 | `deck` | Pure function: spec + mesh → CalculiX input text. Physics-critical |
 | `deck.loads` | Translation of each load and support type. Physics-critical |
 | `results` | Parse `.frd` and `.dat`, derive fields, reaction sums, write viewer files. Physics-critical |
-| `report` | Assemble DOCX and PDF from run records and figures, with the standing notes of `packages/spec/report-notes.json` that the run's frozen spec calls for (ADR-062) |
+| `report` | Assemble DOCX and PDF from run records and figures, with the standing statements of `packages/spec/report-notes.json` filled from the run record and the notes its frozen spec calls for (ADR-062, ADR-073) |
 | `units` | Load `units.json`, convert to SI |
 
 ### Load and support translation

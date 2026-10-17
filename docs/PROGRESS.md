@@ -30,6 +30,11 @@ Status values: Not started, In progress, Verifying, Done.
 
 Copy the task list for the current milestone from `PLAN.md` here when the milestone starts, and tick tasks as they merge.
 
+### M7 Report
+
+- [x] M7.1 Report options: sections, saved views, title block, company name, logo (ADR-074)
+- [x] M7.5 Standing statements: analysis-tool positioning, versions, verification link, tied-interface note (ADR-073)
+
 ### M0 Bootstrap
 
 - [x] M0.1 Confirm Docker works in the Claude Code cloud environment
@@ -98,15 +103,6 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M6.2 Frequency table; mode shape display and animation (with V-20's mode shape checks)
 - [x] M6.3 Estimator terms for modal runs (modal setups on SPOOLES alone, ADR-072)
 
-### M7 Report
-
-- [x] M7.1 Report options: sections, saved views, title block, company name, logo
-- [ ] M7.2 Figure capture in the browser: one per load and support, plus selected result views
-- [ ] M7.3 DOCX assembly with all sections in `DECISIONS.md`
-- [ ] M7.4 PDF output matching the DOCX
-- [ ] M7.5 Standing statements: analysis-tool positioning, versions, verification link, tied-interface note. No verdict wording anywhere
-- [ ] M7.6 Values printed in the report's chosen unit system
-
 ### M5 Thermal
 
 - [x] M5.1 Steady-state thermal analysis type; thermal material properties
@@ -141,9 +137,11 @@ Things only the maintainer can do.
 
 Written by the last session for the next one. Replace, do not append.
 
-> M7.1 (2026-10-17): report options (ADR-073, accepted under Shubham's M7 autodrive, pending his review). Sections, the saved views drawn as result plots and the title block are stored per simulation (migration 0015 `report_options`, `GET`/`PUT /api/simulations/:id/report-options`); the company name and logo once per user (`report_branding`, `/api/report-branding`, logo `POST`/`GET`/`DELETE /api/report-branding/logo`, PNG or JPEG up to 1 MB, its pixel size read by `apps/api/src/logo.ts`, kept in R2 under `owners/<id>/report/logo`). Shapes in `packages/spec/schemas/report.schema.json` (Pydantic `report_schema.py` generated for the report job); `defaultReportOptions`, `orderedReportOptions` and `reportSectionLabels` in `packages/spec/src/reportOptions.ts`. Web: a Report row after Run opens `ReportPanel` (save button; logo uploads at once). E-01 now sets the options with a PNG logo it generates and reloads. No physics-critical module touched. For M7.2/M7.3: read the options with the run; a view id in the stored options can name a deleted view (the API answer leaves it out, so read through it or filter the same way); sections print in `ReportSectionValues` order; standing statements are not a section. Screenshots in the project's `m7.1/` folder.
+> M7.1 (2026-10-17): report options (ADR-074, accepted under Shubham's M7 autodrive, pending his review). Sections, the saved views drawn as result plots and the title block are stored per simulation (migration 0015 `report_options`, `GET`/`PUT /api/simulations/:id/report-options`); the company name and logo once per user (`report_branding`, `/api/report-branding`, logo `POST`/`GET`/`DELETE /api/report-branding/logo`, PNG or JPEG up to 1 MB, its pixel size read by `apps/api/src/logo.ts`, kept in R2 under `owners/<id>/report/logo`). Shapes in `packages/spec/schemas/report.schema.json` (Pydantic `report_schema.py` generated for the report job); `defaultReportOptions`, `orderedReportOptions` and `reportSectionLabels` in `packages/spec/src/reportOptions.ts`. Web: a Report row after Run opens `ReportPanel` (save button; logo uploads at once). E-01 now sets the options with a PNG logo it generates and reloads. No physics-critical module touched. For M7.2/M7.3: read the options with the run; a view id in the stored options can name a deleted view (the API answer leaves it out, so read through it or filter the same way); sections print in `ReportSectionValues` order; standing statements are not a section. Screenshots in the project's `m7.1/` folder.
 
-> M6 close (2026-10-17): M6 closed on a green manual phase-end run on main (see the Milestones table). Every M6 task and verification case listed for M6 (V-20, V-21, V-22) is in; no browser test is listed for M6, so a modal run has no E-test (E-01 to E-04 cover static, thermal and mixed units). The exit (first frequencies match references within tolerance) is V-20 to V-22 at full tier. PLAN.md's M6.2 box was left unticked by PR #74 and is ticked here. ADR-070 to ADR-072 await the maintainer's review; ADR-072's SPOOLES-only card in the M6.3 thread is still open. Next is M7 in PLAN.md order, which waits for the maintainer's go.
+> M7.5 (2026-10-17): the report's standing statements (ADR-073, accepted under Shubham's M7 autodrive, pending his review). No physics-critical module touched. `packages/spec/report-notes.json` (version 2) now holds `statements` ("About this report", "Software versions", "Verification") beside the tied-interface note, and `verificationUrl` (docs/VERIFICATION.md on main until M9's results page). `runReportStatements({ spec, software })` in `packages/spec/src/report.ts` fills `{clearfea}`, `{gmsh}`, `{occt}`, `{deckFormat}`, `{calculix}`, `{solver}` and `{verificationUrl}` from a run record ("(not recorded)" where a version is null) and appends the iterative accuracy note after the solver when one was used. For M7.3: print `runReportStatements(run)` and `runReportNotes(run.spec)`; the simplest route is for the API to pass them filled to the report job. Nothing in the app shows the statements.
+
+> M6 close (2026-10-17): M6 closed on a green manual phase-end run on main (see the Milestones table). Every M6 task and verification case listed for M6 (V-20, V-21, V-22) is in; no browser test is listed for M6, so a modal run has no E-test (E-01 to E-04 cover static, thermal and mixed units). The exit (first frequencies match references within tolerance) is V-20 to V-22 at full tier. PLAN.md's M6.2 box was left unticked by PR #74 and is ticked here. The maintainer reviewed and accepted ADR-070 to ADR-072 (M6) after the close, so every ADR to date is accepted by him. Next is M7 in PLAN.md order, which waits for the maintainer's go.
 
 > M6.3 (2026-10-17): estimator terms for modal runs (ADR-072, accepted under Shubham's M6 autodrive, pending his review; the SPOOLES-only choice went to him on a decision card and was built on its recommended option). Physics-critical modules touched: the deck generator (`generator.py`: a modal deck refuses PaStiX as well as the iterative solvers, and the free-body PaStiX branch is gone; snapshot `modal-held-c3d4` changes only `*FREQUENCY, SOLVER=PASTIX` to `SPOOLES`, because its spec now names SPOOLES, the one solver a modal deck takes) and the cost estimate (`estimator.json` version 4 gains `analyses.modal.spooles`; `apps/api/src/billing/estimate.ts` takes a `RunKind`). Pre-run validation asks every modal setup on PaStiX for SPOOLES; V-20 and V-21 name SPOOLES. `steps.py` gained `--analysis modal --modes N`; 26 SPOOLES modal rows in `steps.json` (about 7 hours; the 145,471-element mesh at 100 modes alone 2.4 hours). `fit.py` `fit_modal`: per mesh, the line through 1 and 100 modes; memory within 5 % and time within 18 % of every row. Limits for 100 modes: 136,000 ten-node, 461,000 four-node. API: `?analysis=`, `?modes=`; `RunEstimate.analysis`, `.modes`. Web: the solver list marks PaStiX and the iterative solvers "not for modal analysis", the estimate says how many modes it is for. Found: PaStiX modal aborts (glibc malloc assertion) in 3 of 9 clean tries at 37,725 nodes; valgrind shows a use-after-free write in `pastix_factor_main_generic` (parked). V-20/V-21's full tier still meshes at 3 mm; on SPOOLES 2 mm might now fit the 4 GB verification worker, not tried. Benchmark ran in the worker image (`docker run ... steps.py`), since the sandbox's ccx has no PaStiX and the image's build is what runs.
 
@@ -303,7 +301,9 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
-- M7.1: report options (ADR-073): sections, saved views and title block per simulation; company name and logo per user. Learned: a logo's type and pixel size can be read from its first bytes, so no image library is needed in the API.
+- M7.1: report options (ADR-074): sections, saved views and title block per simulation; company name and logo per user. Learned: a logo's type and pixel size can be read from its first bytes, so no image library is needed in the API.
+- M7.5: the report's standing statements (tool positioning, versions, verification link) stored beside the tied-interface note in `packages/spec/report-notes.json` and filled from a run record (ADR-073).
+- ADR-070 to ADR-072 (M6) reviewed and accepted by the maintainer; their status lines in DECISIONS.md updated.
 - M6 closed: phase-end workflow run by hand on main becaad2 ([run 38991537033](https://github.com/shubhs650/ClearFEA/actions/runs/38991537033)) green, `make verify` full tier 302 of 302 checks in all 26 cases and `make e2e` E-01 to E-04. Next: M7, waiting on the maintainer's go.
 - M6.3: estimator terms for modal runs (ADR-072): a part per mesh plus a part per mode, fitted on SPOOLES; modal limits for 100 modes (136,000 ten-node elements). Learned: CalculiX's PaStiX interface corrupts memory on a frequency step and aborted about one held modal run in three, so modal setups now ask for SPOOLES.
 

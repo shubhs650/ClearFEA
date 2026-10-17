@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Report options per simulation and the company name and logo per user (M7.1, ADR-073). Every
+// Report options per simulation and the company name and logo per user (M7.1, ADR-074). Every
 // function takes the acting user's id and filters on owner_id. Options are checked by the caller.
 
 import type { ReportBranding, ReportLogo, ReportOptions } from "@clearfea/spec";

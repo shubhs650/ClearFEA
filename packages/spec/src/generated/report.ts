@@ -31,7 +31,7 @@ export type ReportSection =
 export type ReportText = string;
 
 /**
- * Report options (M7.1, ADR-073): what a simulation's report prints (its sections, the saved views drawn as result plots, the title block) and the user's own company name and logo, which every report of theirs carries. The report job (M7.3) reads them. Text is printed as typed. Each message is a definition under $defs.
+ * Report options (M7.1, ADR-074): what a simulation's report prints (its sections, the saved views drawn as result plots, the title block) and the user's own company name and logo, which every report of theirs carries. The report job (M7.3) reads them. Text is printed as typed. Each message is a definition under $defs.
  */
 export interface Report {
   [k: string]: unknown;

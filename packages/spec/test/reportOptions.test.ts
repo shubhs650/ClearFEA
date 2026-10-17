@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Report options (M7.1, ADR-073): defaults, printing order and the schema's limits.
+// Report options (M7.1, ADR-074): defaults, printing order and the schema's limits.
 import { describe, expect, it } from "vitest";
 import { ReportSectionValues, validateReportBranding, validateReportOptions } from "../src/generated/report";
 import { defaultReportOptions, orderedReportOptions, reportSectionLabels } from "../src/reportOptions";
