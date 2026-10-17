@@ -402,13 +402,19 @@ def applied_heat(spec: dict[str, Any], surface: Surface) -> dict[str, float]:
     return out
 
 
-def balance(load: list[float], gross: float, reactions: list[list[float]]) -> tuple[float, float]:
+def balance(
+    load: list[float], gross: float, reactions: list[list[float]], nodal: float = 0.0
+) -> tuple[float, float]:
     """How far the reactions are from balancing the applied load, and the size it is measured
     against: the sum of the applied loads' sizes, or with no load (a prescribed displacement,
-    M2.2) the sum of the reactions' sizes, which must then balance each other."""
+    M2.2, or a body heated on its supports, M5.4) the larger of the sum of the reactions' sizes,
+    which must then balance each other, and ``nodal``, the run's own sum of the sizes of the
+    supports' nodal forces (its balance check's forceScale, ADR-067 item 6). A body free to
+    grow on symmetry planes has supports that push back at every node while each support's
+    total is rounding, which measured against itself would read as wholly out of balance."""
     total = [sum(r[i] for r in reactions) for i in range(3)]
     if gross == 0.0:
-        gross = sum(math.sqrt(sum(c * c for c in r)) for r in reactions)
+        gross = max(sum(math.sqrt(sum(c * c for c in r)) for r in reactions), nodal)
     return math.dist(total, [-c for c in load]), gross
 
 
