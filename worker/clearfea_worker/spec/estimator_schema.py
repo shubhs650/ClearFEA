@@ -98,6 +98,34 @@ class ModalModel(BaseModel):
     """
 
 
+class JobSecondsByOrder(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    order1: PowerLaw
+    """
+    Four-node tetrahedra.
+    """
+    order2: PowerLaw
+    """
+    Ten-node tetrahedra.
+    """
+
+
+class ModalSolverModels(BaseModel):
+    """
+    One model per equation solver a modal run may use (M6.3). A solver without one cannot solve a modal run: CalculiX refuses the iterative solvers on a frequency step (ADR-070), and PaStiX is not measured (ADR-072).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    pastix: ModalModel | None = None
+    spooles: ModalModel | None = None
+
+
 class AnalysisModel(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -109,11 +137,11 @@ class AnalysisModel(BaseModel):
     """
     peak_memory_bytes: Annotated[PowerLaw, Field(alias="peakMemoryBytes")]
     """
-    Peak resident memory of the solver process.
+    Peak resident memory of the solver process, for both element orders.
     """
-    job_seconds: Annotated[PowerLaw, Field(alias="jobSeconds")]
+    job_seconds_by_order: Annotated[JobSecondsByOrder, Field(alias="jobSecondsByOrder")]
     """
-    Wall time of the solve job's billable phase: writing the deck, the solver, reading results and writing the viewer's files.
+    Wall time of the solve job's billable phase (writing the deck, the solver, reading results and writing the viewer's files), fitted per element order: per node a ten-node mesh takes longer to solve than a four-node one, most of all with the iterative solvers (M8.9).
     """
     fitted_nodes: Annotated[
         list[FittedNode], Field(alias="fittedNodes", max_length=2, min_length=2)
@@ -137,19 +165,6 @@ class SolverModels(BaseModel):
     spooles: AnalysisModel
     iterative_cholesky: AnalysisModel
     iterative_scaling: AnalysisModel
-
-
-class ModalSolverModels(BaseModel):
-    """
-    One model per equation solver a modal run may use (M6.3). A solver without one cannot solve a modal run: CalculiX refuses the iterative solvers on a frequency step (ADR-070), and PaStiX is not measured (ADR-072).
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    pastix: ModalModel | None = None
-    spooles: ModalModel | None = None
 
 
 class Analyses(BaseModel):

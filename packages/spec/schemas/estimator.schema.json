@@ -107,16 +107,16 @@
     "AnalysisModel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["solver", "peakMemoryBytes", "jobSeconds", "fittedNodes", "maxElements"],
+      "required": ["solver", "peakMemoryBytes", "jobSecondsByOrder", "fittedNodes", "maxElements"],
       "properties": {
         "solver": { "description": "The solver and threads the fit was measured with.", "type": "string" },
         "peakMemoryBytes": {
-          "description": "Peak resident memory of the solver process.",
+          "description": "Peak resident memory of the solver process, for both element orders.",
           "$ref": "#/$defs/PowerLaw"
         },
-        "jobSeconds": {
-          "description": "Wall time of the solve job's billable phase: writing the deck, the solver, reading results and writing the viewer's files.",
-          "$ref": "#/$defs/PowerLaw"
+        "jobSecondsByOrder": {
+          "description": "Wall time of the solve job's billable phase (writing the deck, the solver, reading results and writing the viewer's files), fitted per element order: per node a ten-node mesh takes longer to solve than a four-node one, most of all with the iterative solvers (M8.9).",
+          "$ref": "#/$defs/JobSecondsByOrder"
         },
         "fittedNodes": {
           "description": "Smallest and largest node count among the measurements; outside this range the estimate is an extrapolation.",
@@ -126,6 +126,15 @@
           "maxItems": 2
         },
         "maxElements": { "$ref": "#/$defs/MaxElements" }
+      }
+    },
+    "JobSecondsByOrder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order1", "order2"],
+      "properties": {
+        "order1": { "description": "Four-node tetrahedra.", "$ref": "#/$defs/PowerLaw" },
+        "order2": { "description": "Ten-node tetrahedra.", "$ref": "#/$defs/PowerLaw" }
       }
     },
     "MaxElements": {

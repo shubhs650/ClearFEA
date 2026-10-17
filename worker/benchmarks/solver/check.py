@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Estimator check (M8.9): the cost the estimate predicts before a run against the cost the
 job-step benchmark measured, on every row of steps.json, against the margin in
-docs/DECISIONS.md (cost estimates within 30 percent of measured cost; gate condition 3).
+docs/DECISIONS.md (cost estimates within 30 percent of measured cost; gate condition 3), or
+within one billed second (ADR-080).
 
     cd worker && uv run python benchmarks/solver/check.py [--out FILE]
 
@@ -28,6 +29,10 @@ ESTIMATOR = HERE.parents[2] / "packages" / "spec" / "estimator.json"
 
 #: Cost estimates within 30 percent of measured cost (docs/DECISIONS.md, working tolerances).
 MARGIN = 0.30
+#: A job is billed per started second, so one second alone is more than 30 percent of a job
+#: billed for 3 seconds or less; an estimate this many seconds from the bill is within the
+#: margin too (ADR-080).
+SECONDS = 1
 
 
 @dataclass(frozen=True)
@@ -58,7 +63,8 @@ class Row:
 
     @property
     def within(self) -> bool:
-        return abs(self.error) <= MARGIN
+        off = abs(self.estimated - self.billed)
+        return off <= MARGIN * self.billed or off <= SECONDS
 
 
 def law(term: dict[str, float], nodes: float) -> float:
@@ -71,9 +77,11 @@ def rows(steps: dict, estimator: dict) -> list[Row]:
     for run in steps["runs"]:
         analysis = run.get("analysis", "linear_static")
         model = estimator["analyses"][analysis][run["solver"]]
-        seconds = law(model["jobSeconds"], run["nodes"])
         if analysis == "modal":
+            seconds = law(model["jobSeconds"], run["nodes"])
             seconds += run["modes"] * law(model["jobSecondsPerMode"], run["nodes"])
+        else:
+            seconds = law(model["jobSecondsByOrder"][f"order{run['order']}"], run["nodes"])
         out.append(
             Row(
                 analysis=analysis,
@@ -92,7 +100,7 @@ def rows(steps: dict, estimator: dict) -> list[Row]:
 def report(checked: list[Row], version: int) -> str:
     lines = [
         f"Estimator version {version} against {len(checked)} benchmark rows; margin "
-        f"{100 * MARGIN:g} percent of measured cost.",
+        f"{100 * MARGIN:g} percent of measured cost, or {SECONDS} billed second.",
         "",
         "| Analysis | Solver | Rows | Within margin | Lowest error | Highest error |",
         "| --- | --- | --- | --- | --- | --- |",
