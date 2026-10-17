@@ -22,8 +22,9 @@ faces:
 mesh:
   coarse: { value: 15, unit: mm }
   full: { value: 12, unit: mm }
-# M9.5 owns the acceptance checks (hand checks, WRC-style local stresses, FreeCAD). This one
-# only shows the model reaches the closed-end membrane state where model.md says it should.
+# The acceptance checks that have a hand value (M9.5, hand_checks.md): the membrane state far
+# from the nozzle, and the held end's reaction from statics. The WRC-style and FreeCAD
+# comparisons are in hand_checks.md; they are not graded here.
 checks:
   # Lamé, closed ends, at the outside: σθ = 2 p ri² / (ro² − ri²), σx = σθ / 2, σr = 0.
   # 3 percent because both tiers put one quadratic element through the 10 mm wall, which
@@ -34,3 +35,57 @@ checks:
     box: { min: [440, -100, -311], max: [460, 100, -290] }
     reference: { value: 51.109, unit: MPa }
     tolerance: { coarse: 0.03, full: 0.03 }
+  # The same place, each component: σθ (here σyy) and σx at the outside, σθ at the inside,
+  # Lamé with closed ends (hand_checks.md, check 3). 3 percent for the one element through
+  # the wall, as above; the inside hoop stress reads within 0.5 percent at both tiers.
+  - name: Membrane hoop stress at the shell outside, under the shell, 450 mm past the nozzle
+    quantity: stress.yy
+    face: shell-outside
+    box: { min: [440, -100, -311], max: [460, 100, -290] }
+    reference: { value: 59.016, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  - name: Membrane axial stress at the shell outside, under the shell, 450 mm past the nozzle
+    quantity: stress.xx
+    face: shell-outside
+    box: { min: [440, -100, -311], max: [460, 100, -290] }
+    reference: { value: 29.508, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  - name: Membrane hoop stress at the shell inside, under the shell, 450 mm past the nozzle
+    quantity: stress.yy
+    face: shell-inside
+    box: { min: [440, -100, -301], max: [460, 100, -290] }
+    reference: { value: 61.016, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }
+  # Statics: the held end carries the end thrust and the piping load, and the piping load's
+  # moment about the held face's centre (−600, 0, 0) mm; the pressure and the nozzle's thrust
+  # cancel (hand_checks.md, check 2). The run sums its nodal reactions exactly.
+  - name: Reaction at the held end, x
+    quantity: reaction.x
+    support: held-end
+    reference: { value: -569.487, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Reaction at the held end, y
+    quantity: reaction.y
+    support: held-end
+    reference: { value: 3, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Reaction at the held end, z
+    quantity: reaction.z
+    support: held-end
+    reference: { value: 6, unit: kN }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Reaction moment at the held end about its centre, x
+    quantity: moment.x
+    support: held-end
+    reference: { value: -3.68, unit: kN·m }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Reaction moment at the held end about its centre, y
+    quantity: moment.y
+    support: held-end
+    reference: { value: -8.84, unit: kN·m }
+    tolerance: { coarse: 0.001, full: 0.001 }
+  - name: Reaction moment at the held end about its centre, z
+    quantity: moment.z
+    support: held-end
+    reference: { value: 0.3, unit: kN·m }
+    tolerance: { coarse: 0.001, full: 0.001 }
