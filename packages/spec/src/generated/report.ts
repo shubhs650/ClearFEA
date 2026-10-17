@@ -60,9 +60,13 @@ export interface ReportOptions {
   sections: ReportSection[];
   views: string[];
   titleBlock: TitleBlock;
+  /**
+   * Id of the unit system in packages/spec/units.json that every value of the report prints in (M7.6, ADR-075), whatever the browser's result view shows. Starts as the project's unit system; an id the table no longer lists is answered as the project's.
+   */
+  unitSystem: string;
 }
 /**
- * Answer to GET and PUT /api/simulations/:id/report-options. Until options are saved the answer holds the defaults (every section, no views, the simulation's name as the title) with saved false. Views deleted since are left out.
+ * Answer to GET and PUT /api/simulations/:id/report-options. Until options are saved the answer holds the defaults (every section, no views, the simulation's name as the title, the project's unit system) with saved false. Views deleted since are left out.
  *
  * This interface was referenced by `Report`'s JSON-Schema
  * via the `definition` "ReportOptionsResponse".

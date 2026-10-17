@@ -19,8 +19,11 @@ export const reportSectionLabels: Record<ReportSection, string> = {
   warnings: "Run warnings",
 };
 
-/** Every section, no views, and the simulation's name as the title. */
-export function defaultReportOptions(simulationName: string): ReportOptions {
+/**
+ * Every section, no views, the simulation's name as the title, and the project's unit system,
+ * which the report prints every value in (M7.6, ADR-075).
+ */
+export function defaultReportOptions(simulationName: string, unitSystem: string): ReportOptions {
   return {
     sections: [...ReportSectionValues],
     views: [],
@@ -32,6 +35,7 @@ export function defaultReportOptions(simulationName: string): ReportOptions {
       checkedBy: "",
       approvedBy: "",
     },
+    unitSystem,
   };
 }
 

@@ -3,7 +3,7 @@
 // the contour and switch to other result quantities (M3.1), read reactions (M3.2), and read the
 // min/max markers and probe a node (M3.3), cut it with a plane (M3.4), show the safety factor against
 // yield (M3.5), save a view and bring it back (M3.6), show the result in other units (M3.7) and
-// export it as CSV and VTK files (M3.8), and set the report options with a logo (M7.1), all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its
+// export it as CSV and VTK files (M3.8), and set the report options with a logo (M7.1) and unit system (M7.6), all through the UI. The model is a 40 × 20 × 10 mm block (e2e/block.py), fixed at its
 // x = 40 mm end and pressed on its top face, z = 10 mm. Both faces look towards the viewer's
 // starting camera, so they can be clicked without turning the model.
 import { readFileSync, writeFileSync } from "node:fs";
@@ -433,7 +433,7 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await page.screenshot({ path: `${OUT}/e01-export.png` });
   });
 
-  await test.step("set the report options with a logo (M7.1)", async () => {
+  await test.step("set the report options with a logo (M7.1) and the report's unit system (M7.6)", async () => {
     await treeRow(page, "Report").click();
     const report = settings.getByRole("region", { name: "Report", exact: true });
     await expect(report.getByLabel("Report title", { exact: true })).toHaveValue(/.+/);
@@ -442,6 +442,10 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await report.getByLabel("Document number", { exact: true }).fill("CF-E01-001");
     await report.getByLabel("Revision", { exact: true }).fill("A");
     await report.getByLabel("Prepared by", { exact: true }).fill("Alice");
+    // The report prints in its own system, starting as the project's, whatever the results show.
+    const reportUnits = report.getByLabel("Report unit system", { exact: true });
+    await expect(reportUnits).toHaveValue("metric-mm");
+    await reportUnits.selectOption("us-in");
     await report.getByLabel("Company name", { exact: true }).fill("Example Engineering");
     const logo = `${OUT}/e01-logo.png`;
     writeFileSync(logo, logoPng(240, 80));
@@ -456,11 +460,15 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await treeRow(page, "Report").click();
     await expect(report.getByLabel("Document number", { exact: true })).toHaveValue("CF-E01-001");
     await expect(report.getByLabel("Company name", { exact: true })).toHaveValue("Example Engineering");
+    await expect(report.getByLabel("Report unit system", { exact: true })).toHaveValue("us-in");
+    await expect(page.getByLabel("Unit system", { exact: true })).toHaveValue("metric-mm");
     await expect(report.getByRole("checkbox", { name: "Run warnings" })).not.toBeChecked();
     await expect(report.getByRole("checkbox", { name: "σ1 cut at mid-length" })).toBeChecked();
     await expect(report.getByRole("img", { name: "Your logo" })).toHaveJSProperty("naturalWidth", 240);
     await expect(page.locator("body")).not.toContainText(/\b(PASS|FAIL)\b|compliant/i);
     await page.screenshot({ path: `${OUT}/e01-report-options.png`, fullPage: true });
+    await report.getByRole("group", { name: "Units" }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `${OUT}/e01-report-units.png` });
     await report.getByRole("group", { name: "Company" }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${OUT}/e01-report-company.png` });
   });

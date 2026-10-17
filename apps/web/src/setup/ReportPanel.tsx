@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Report panel (M7.1, ADR-074): which sections the report prints, the saved views it draws as
-// result plots, the title block, and the user's company name and logo. Options are saved per
-// simulation, the company name and logo once per user. Generating the report comes with M7.3.
+// result plots, the title block, the unit system it prints in (M7.6, ADR-075), and the user's
+// company name and logo. Options are saved per simulation, the company name and logo once per user.
+// Generating the report comes with M7.3.
 
 import {
   type ReportBranding,
@@ -23,6 +24,7 @@ import {
   uploadLogo,
 } from "../api/report";
 import type { ApiResult } from "../api/request";
+import { UNIT_SYSTEMS } from "../units/system";
 import { Notes } from "./ItemPanels";
 import type { ItemStatus } from "./spec";
 import { useViews } from "./useViews";
@@ -47,6 +49,30 @@ function PlainField({ label, value, onChange }: { label: string; value: string; 
       <label htmlFor={id}>{label}</label>
       <input id={id} value={value} maxLength={200} onChange={(event) => onChange(event.target.value)} />
     </div>
+  );
+}
+
+/** The unit system the report prints every value in (M7.6, ADR-075). */
+function ReportUnitsField({ value, onChange }: { value: string; onChange: (unitSystem: string) => void }) {
+  const id = useId();
+  return (
+    <fieldset className="setup-bodies">
+      <legend>Units</legend>
+      <div className="field">
+        <label htmlFor={id}>Report unit system</label>
+        <select id={id} value={value} onChange={(event) => onChange(event.target.value)}>
+          {UNIT_SYSTEMS.map((system) => (
+            <option key={system.id} value={system.id}>
+              {system.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <span className="field-hint">
+        Every value in the report prints in this system, whatever units the results are shown in here. Setup values typed in
+        another unit also print as entered.
+      </span>
+    </fieldset>
   );
 }
 
@@ -232,6 +258,7 @@ export function ReportPanel({
           />
         ))}
       </fieldset>
+      <ReportUnitsField value={options.unitSystem} onChange={(unitSystem) => edit({ ...options, unitSystem })} />
       <fieldset className="setup-bodies">
         <legend>Company</legend>
         <PlainField

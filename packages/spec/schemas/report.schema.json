@@ -31,15 +31,21 @@
       "description": "Body of PUT /api/simulations/:id/report-options. Sections are printed in the order of ReportSection whatever order they are listed in; views (ids of the simulation's saved views, ADR-055) are drawn as result plots in the order listed.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["sections", "views", "titleBlock"],
+      "required": ["sections", "views", "titleBlock", "unitSystem"],
       "properties": {
         "sections": { "type": "array", "items": { "$ref": "#/$defs/ReportSection" }, "uniqueItems": true },
         "views": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-        "titleBlock": { "$ref": "#/$defs/TitleBlock" }
+        "titleBlock": { "$ref": "#/$defs/TitleBlock" },
+        "unitSystem": {
+          "description": "Id of the unit system in packages/spec/units.json that every value of the report prints in (M7.6, ADR-075), whatever the browser's result view shows. Starts as the project's unit system; an id the table no longer lists is answered as the project's.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50
+        }
       }
     },
     "ReportOptionsResponse": {
-      "description": "Answer to GET and PUT /api/simulations/:id/report-options. Until options are saved the answer holds the defaults (every section, no views, the simulation's name as the title) with saved false. Views deleted since are left out.",
+      "description": "Answer to GET and PUT /api/simulations/:id/report-options. Until options are saved the answer holds the defaults (every section, no views, the simulation's name as the title, the project's unit system) with saved false. Views deleted since are left out.",
       "type": "object",
       "additionalProperties": false,
       "required": ["options", "saved", "updatedAt"],
