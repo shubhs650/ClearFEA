@@ -4,7 +4,8 @@
 // touches only that job's own run. A run's spec and mesh are written once, at creation; its
 // versions and file list are completed once, when its job ends (ADR-032). Its machine size and
 // cost are its solve job's, fixed when the job is queued and when it ends (ADR-033); its
-// estimate is written once, at creation (ADR-049).
+// estimate is written once, at creation (ADR-049). Its pin and the removal of its raw solver
+// output are about storage, not its inputs, and change later (M8.6, ADR-085).
 
 import type {
   ElementOrder,
@@ -23,6 +24,7 @@ import type {
   SolveResult,
 } from "@clearfea/spec";
 import { getJob, type Job, newJob } from "./jobs";
+import { RETENTION_DAYS_SQL } from "./settings";
 
 export interface Run {
   id: string;
@@ -48,7 +50,37 @@ export interface Run {
   jobStage: string | null;
   createdAt: string;
   finishedAt: string | null;
+  /** True when the owner pinned the run, so its raw solver output is kept (M8.6). */
+  pinned: boolean;
+  /** When the storage sweep removed the run's raw solver output; null while it is kept. */
+  rawRemovedAt: string | null;
+  /** When the retention period of the run's raw output ends, or null (see rawOutputKeptUntil). */
+  keptUntil: string | null;
+  /** The run this one solved again to regenerate its raw output. */
+  rerunOf: string | null;
 }
+
+/** The run's raw solver output: what the sweep removes after the retention period (ADR-085). */
+export const RAW_OUTPUT: readonly RunFileName[] = ["results.frd", "results.dat"];
+
+/** True when the run's job stored raw output and it has not been removed. */
+export function hasRawOutput(run: Pick<Run, "files" | "rawRemovedAt">): boolean {
+  return run.rawRemovedAt === null && run.files.some((f) => RAW_OUTPUT.includes(f));
+}
+
+/**
+ * When the run's raw output stops being kept: the run's end plus the retention days. Null while
+ * the run solves, when it is pinned, or when it has no raw output to remove.
+ */
+export function rawOutputKeptUntil(
+  run: Pick<Run, "files" | "rawRemovedAt" | "pinned" | "finishedAt">,
+  retentionDays: number,
+): string | null {
+  if (run.pinned || run.finishedAt === null || !hasRawOutput(run)) return null;
+  return new Date(Date.parse(run.finishedAt) + retentionDays * DAY_MS).toISOString();
+}
+
+const DAY_MS = 86_400_000;
 
 interface RunRow {
   id: string;
@@ -76,6 +108,10 @@ interface RunRow {
   mesh_elements: number | null;
   created_at: string;
   finished_at: string | null;
+  pinned: number;
+  raw_removed_at: string | null;
+  rerun_of: string | null;
+  retention_days: number;
 }
 
 function toRun(row: RunRow): Run {
@@ -110,7 +146,16 @@ function toRun(row: RunRow): Run {
     jobStage: row.job_stage,
     createdAt: row.created_at,
     finishedAt: row.finished_at,
+    pinned: row.pinned === 1,
+    rawRemovedAt: row.raw_removed_at,
+    keptUntil: null,
+    rerunOf: row.rerun_of,
   };
+}
+
+function toRunWithRetention(row: RunRow): Run {
+  const run = toRun(row);
+  return { ...run, keptUntil: rawOutputKeptUntil(run, row.retention_days) };
 }
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
@@ -120,7 +165,8 @@ const SELECT = `SELECT runs.*, jobs.status AS job_status, jobs.stage AS job_stag
                        jobs.billed_seconds AS job_billed_seconds, jobs.cost AS job_cost,
                        EXISTS (SELECT 1 FROM ledger_entries l WHERE l.job_id = jobs.id) AS job_charged,
                        meshes.size AS mesh_size, meshes.element_order AS mesh_order,
-                       meshes.node_count AS mesh_nodes, meshes.element_count AS mesh_elements
+                       meshes.node_count AS mesh_nodes, meshes.element_count AS mesh_elements,
+                       ${RETENTION_DAYS_SQL} AS retention_days
                   FROM runs JOIN jobs ON jobs.id = runs.job_id JOIN meshes ON meshes.id = runs.mesh_id`;
 
 /** Versions not known: runs from before M1.10, or before the solving worker has reported. */
@@ -148,6 +194,8 @@ export async function createRun(
     spec: SimulationSpec;
     machine: SimulatedMachine;
     estimate: RunEstimate;
+    /** The run whose frozen spec and mesh this one solves again (M8.6). */
+    rerunOf?: string;
   },
 ): Promise<{ run: Run; job: Job } | null> {
   const id = crypto.randomUUID();
@@ -158,8 +206,8 @@ export async function createRun(
     db
       .prepare(
         // The mesh's versions come from its own job's MeshResult.
-        `INSERT INTO runs (id, owner_id, simulation_id, mesh_id, spec, job_id, estimate, software)
-         SELECT ?, ?, ?, meshes.id, ?, ?, ?,
+        `INSERT INTO runs (id, owner_id, simulation_id, mesh_id, spec, job_id, estimate, rerun_of, software)
+         SELECT ?, ?, ?, meshes.id, ?, ?, ?, ?,
                 json_object('gmsh', json_extract(jobs.result, '$.software.gmsh'),
                             'occt', json_extract(jobs.result, '$.software.occt'))
            FROM meshes LEFT JOIN jobs ON jobs.id = meshes.job_id
@@ -173,6 +221,7 @@ export async function createRun(
         JSON.stringify(request.spec),
         job.id,
         JSON.stringify(request.estimate),
+        request.rerunOf ?? null,
         request.meshId,
         userId,
         job.id,
@@ -195,7 +244,7 @@ export async function getRun(db: D1Database, userId: string, runId: string): Pro
     .prepare(`${SELECT} WHERE runs.id = ? AND runs.owner_id = ?`)
     .bind(runId, userId)
     .first<RunRow>();
-  return row === null ? null : toRun(row);
+  return row === null ? null : toRunWithRetention(row);
 }
 
 /** The simulation's runs, newest first. */
@@ -207,7 +256,7 @@ export async function listRuns(db: D1Database, userId: string, simulationId: str
     )
     .bind(simulationId, userId, limit)
     .all<RunRow>();
-  return results.map(toRun);
+  return results.map(toRunWithRetention);
 }
 
 export type RunOutcome = { status: "succeeded"; result: SolveResult } | { status: "failed"; problem: string };
@@ -245,4 +294,18 @@ export async function recordRunOutcome(
       job.id,
     )
     .run();
+}
+
+/**
+ * Pins or unpins the user's run (M8.6, ADR-085). A pin is refused (false) once the raw output
+ * is gone, since there is nothing left to keep; unpinning always works.
+ */
+export async function setRunPinned(db: D1Database, userId: string, runId: string, pinned: boolean): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE runs SET pinned = ? WHERE id = ? AND owner_id = ? AND (? = 0 OR raw_removed_at IS NULL)`,
+    )
+    .bind(pinned ? 1 : 0, runId, userId, pinned ? 1 : 0)
+    .run();
+  return result.meta.changes === 1;
 }

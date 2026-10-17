@@ -6,12 +6,12 @@ import schema from "../../schemas/wallet.schema.json";
 import { validator } from "../validate";
 
 /**
- * What a ledger entry is for: a play-money credit grant, or the charge for a mesh or solve job (ADR-033).
+ * What a ledger entry is for: a play-money credit grant, the charge for a mesh or solve job (ADR-033), or a day's charge for storage above the free allowance (M8.6, ADR-085).
  *
  * This interface was referenced by `Wallet`'s JSON-Schema
  * via the `definition` "LedgerReason".
  */
-export type LedgerReason = "grant" | "mesh" | "solve";
+export type LedgerReason = "grant" | "mesh" | "solve" | "storage";
 
 /**
  * Wire shapes of the wallet route (M8.1, ADR-080; docs/ARCHITECTURE.md sections 4 and 6). Money is in whole micro-credits: 1,000,000 is one credit. Each message is a definition under $defs.
@@ -60,7 +60,25 @@ export interface LedgerMesh {
   nodes: number | null;
 }
 /**
- * One ledger entry, as the append-only ledger holds it, with what it paid for. amount is negative for a charge; balance is the balance after the entry. job, run and mesh are null where they do not apply.
+ * What a storage charge was for (M8.6, ADR-085): the UTC day, the bytes the user stored when the daily sweep measured them, the free allowance then, and the rate per GiB per day above it.
+ *
+ * This interface was referenced by `Wallet`'s JSON-Schema
+ * via the `definition` "LedgerStorage".
+ */
+export interface LedgerStorage {
+  /**
+   * YYYY-MM-DD, UTC.
+   */
+  day: string;
+  usedBytes: number;
+  freeBytes: number;
+  /**
+   * Micro-credits per GiB per day stored above the allowance.
+   */
+  ratePerGibDay: number;
+}
+/**
+ * One ledger entry, as the append-only ledger holds it, with what it paid for. amount is negative for a charge; balance is the balance after the entry. job, run, mesh and storage are null where they do not apply.
  *
  * This interface was referenced by `Wallet`'s JSON-Schema
  * via the `definition` "WalletEntry".
@@ -74,6 +92,7 @@ export interface WalletEntry {
   job: LedgerJob | null;
   run: LedgerRun | null;
   mesh: LedgerMesh | null;
+  storage: LedgerStorage | null;
 }
 /**
  * The signed-in user's wallet: the balance (the last entry's balance, 0 with no entries), what was granted and charged in all, and every ledger entry, newest first. granted + charged equals balance.
@@ -104,11 +123,12 @@ export interface WalletResponse {
   selfHosted: boolean;
 }
 
-export const LedgerReasonValues = ["grant", "mesh", "solve"] as const satisfies readonly LedgerReason[];
+export const LedgerReasonValues = ["grant", "mesh", "solve", "storage"] as const satisfies readonly LedgerReason[];
 export const validateLedgerReason = validator<LedgerReason>(schema, "LedgerReason");
 export const validateLedgerJob = validator<LedgerJob>(schema, "LedgerJob");
 export const validateLedgerRun = validator<LedgerRun>(schema, "LedgerRun");
 export const validateLedgerMesh = validator<LedgerMesh>(schema, "LedgerMesh");
+export const validateLedgerStorage = validator<LedgerStorage>(schema, "LedgerStorage");
 export const validateWalletEntry = validator<WalletEntry>(schema, "WalletEntry");
 export const validateWalletView = validator<WalletView>(schema, "WalletView");
 export const validateWalletResponse = validator<WalletResponse>(schema, "WalletResponse");

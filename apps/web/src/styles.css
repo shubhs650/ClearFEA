@@ -1153,6 +1153,16 @@ fieldset.field {
   font-variant-numeric: tabular-nums;
 }
 
+/* Storage on the wallet page (M8.6). */
+.wallet-storage {
+  margin-top: 24px;
+}
+
+.wallet-subtitle {
+  font-size: 14px;
+  margin: 16px 0 8px;
+}
+
 /* A run's read-only share link (M8.7). */
 .share-link {
   display: flex;

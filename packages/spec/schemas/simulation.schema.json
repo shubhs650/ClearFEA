@@ -916,7 +916,7 @@
       }
     },
     "RunFileName": {
-      "description": "A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}.",
+      "description": "A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}; results.frd and results.dat, the raw solver output, can be downloaded there while they are kept (M8.6, ADR-085).",
       "enum": ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin", "nodes.bin"]
     },
     "RunMachine": {
@@ -1001,13 +1001,38 @@
       "additionalProperties": false,
       "properties": { "machineSize": { "type": "string", "minLength": 1 } }
     },
+    "RunRawOutput": {
+      "description": "What happens to a run's raw solver output, results.frd and results.dat (M8.6, ADR-085). It is removed by the daily storage sweep once the retention period after the run ended has passed, unless the run is pinned; running the same setup again regenerates it. Everything else a run keeps is kept permanently.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pinned", "keptUntil", "removedAt", "rerunOf"],
+      "properties": {
+        "pinned": { "description": "True when the owner pinned the run, so its raw output is kept.", "type": "boolean" },
+        "keptUntil": {
+          "description": "When the retention period ends: the run's end time plus the retention days. Null while the run solves, when it is pinned, when its job stored no raw output, or after the raw output was removed. The sweep after this time removes the output.",
+          "type": ["string", "null"]
+        },
+        "removedAt": { "description": "When the sweep removed the raw output; null while it is kept.", "type": ["string", "null"] },
+        "rerunOf": {
+          "description": "The run whose frozen setup and mesh this run solved again (POST /api/runs/{id}/rerun), or null.",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "PinRunRequest": {
+      "description": "Body of PUT /api/runs/{id}/pin: pin the run so its raw solver output is kept, or unpin it so the retention period applies again.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pinned"],
+      "properties": { "pinned": { "type": "boolean" } }
+    },
     "RunView": {
       "description": "A run as its owner sees it, with the record frozen when it started (ADR-030, ADR-032, ADR-033).",
       "type": "object",
       "additionalProperties": false,
       "required": [
         "id", "simulationId", "meshId", "spec", "mesh", "software", "files", "machine", "estimate", "cost", "status", "stage",
-        "problem", "result", "createdAt", "finishedAt"
+        "problem", "result", "createdAt", "finishedAt", "rawOutput"
       ],
       "properties": {
         "id": { "type": "string" },
@@ -1038,11 +1063,12 @@
         "problem": { "description": "Why the run failed, in plain language.", "type": ["string", "null"] },
         "result": { "oneOf": [{ "$ref": "#/$defs/SolveResult" }, { "type": "null" }] },
         "createdAt": { "type": "string" },
-        "finishedAt": { "type": ["string", "null"] }
+        "finishedAt": { "type": ["string", "null"] },
+        "rawOutput": { "$ref": "#/$defs/RunRawOutput" }
       }
     },
     "RunResponse": {
-      "description": "Answer to POST /api/simulations/{id}/runs (HTTP 201) and GET /api/runs/{id}.",
+      "description": "Answer to POST /api/simulations/{id}/runs and POST /api/runs/{id}/rerun (HTTP 201), and to GET /api/runs/{id} and PUT /api/runs/{id}/pin.",
       "type": "object",
       "additionalProperties": false,
       "required": ["run"],

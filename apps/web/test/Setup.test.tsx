@@ -1056,6 +1056,7 @@ function run(overrides: Partial<RunView> = {}): RunView {
     result: null,
     createdAt: "2026-10-15T12:00:00.000Z",
     finishedAt: null,
+    rawOutput: { pinned: false, keptUntil: null, removedAt: null, rerunOf: null },
     ...overrides,
   };
 }
@@ -1687,6 +1688,88 @@ describe("share link (M8.7)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
     expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
     expect(settings().queryByRole("region", { name: "Share" })).toBeNull();
+  });
+});
+
+describe("raw solver output (M8.6)", () => {
+  /** The finished run of finishedRun() with raw output stored and the given state of it. */
+  function rawRun(rawOutput: Partial<RunView["rawOutput"]>): RunView {
+    const routes_ = finishedRun();
+    const listed = routes_["GET /api/simulations/s1/runs"] as { status: number; json: { runs: RunView[] } };
+    const [first] = listed.json.runs;
+    if (first === undefined) throw new Error("finishedRun() has no run.");
+    return {
+      ...first,
+      files: ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin", "nodes.bin"],
+      rawOutput: { ...first.rawOutput, keptUntil: "2026-11-14T12:01:00.000Z", ...rawOutput },
+    };
+  }
+
+  it("offers the files to download, says how long they are kept, and pins the run", async () => {
+    const kept = rawRun({});
+    const fetchMock = serve(
+      routes([simulation(supported)], {
+        ...finishedRun(),
+        "GET /api/simulations/s1/runs": { status: 200, json: { runs: [kept] } },
+        "PUT /api/runs/r1/pin": (init) => {
+          const pinned = (JSON.parse(String(init?.body)) as { pinned: boolean }).pinned;
+          return {
+            status: 200,
+            json: { run: { ...kept, rawOutput: { ...kept.rawOutput, pinned, keptUntil: pinned ? null : kept.rawOutput.keptUntil } } },
+          };
+        },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const raw = within(await settings().findByRole("region", { name: "Raw solver output" }));
+    expect(raw.getByTestId("raw-output-state").textContent).toContain("Kept until 2026-11-14 UTC");
+    expect(raw.getByRole("link", { name: "Download results.frd" }).getAttribute("href")).toBe(
+      "/api/runs/r1/files/results.frd?download=1",
+    );
+    expect(raw.getByRole("link", { name: "Download results.dat" })).toBeTruthy();
+    fireEvent.click(raw.getByRole("button", { name: "Pin to keep" }));
+    expect(await raw.findByText("Pinned: kept until you unpin the run.")).toBeTruthy();
+    const pinCall = fetchMock.mock.calls.find(([path]) => path === "/api/runs/r1/pin");
+    expect(JSON.parse(String(pinCall?.[1]?.body))).toEqual({ pinned: true });
+    fireEvent.click(raw.getByRole("button", { name: "Unpin" }));
+    expect(await raw.findByText(/Kept until 2026-11-14 UTC/)).toBeTruthy();
+  });
+
+  it("says when the output was removed and runs the run's own setup again", async () => {
+    const removed = rawRun({ keptUntil: null, removedAt: "2026-11-15T03:00:00.000Z" });
+    const again = run({ id: "r2", rawOutput: { pinned: false, keptUntil: null, removedAt: null, rerunOf: "r1" } });
+    const fetchMock = serve(
+      routes([simulation(supported)], {
+        ...finishedRun(),
+        "GET /api/simulations/s1/runs": { status: 200, json: { runs: [removed] } },
+        "POST /api/runs/r1/rerun": { status: 201, json: { run: again } },
+        "GET /api/runs/r2/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
+    const raw = within(await settings().findByRole("region", { name: "Raw solver output" }));
+    expect(raw.getByTestId("raw-output-state").textContent).toContain("Removed on 2026-11-15 UTC");
+    expect(raw.queryByRole("link", { name: /Download results/ })).toBeNull();
+    expect(raw.queryByRole("button", { name: "Pin to keep" })).toBeNull();
+    fireEvent.click(raw.getByRole("button", { name: "Run this setup again" }));
+    expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([path, init]) => path === "/api/runs/r1/rerun" && init?.method === "POST")).toBe(true);
+  });
+
+  it("is not shown while a run solves", async () => {
+    serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/runs": { status: 200, json: { runs: [run()] } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Run, incomplete" }));
+    expect(await settings().findByText("Waiting for the solver…")).toBeTruthy();
+    expect(settings().queryByRole("region", { name: "Raw solver output" })).toBeNull();
   });
 });
 

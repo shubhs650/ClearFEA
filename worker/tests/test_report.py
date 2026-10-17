@@ -203,6 +203,7 @@ def static_params(**changes: Any) -> dict[str, Any]:
             },
             "createdAt": "2026-10-17T04:00:00.000Z",
             "finishedAt": "2026-10-17T04:00:05.000Z",
+            "rawOutput": {"pinned": False, "keptUntil": None, "removedAt": None, "rerunOf": None},
         },
         "meshQuality": {
             "shapeMin": 0.31,

@@ -87,13 +87,19 @@ run api pnpm --filter @clearfea/api dev
 run web pnpm --filter @clearfea/web dev
 run worker "${compose[@]}" up --build worker
 
-# Say once where to look when the API and web app answer.
+# Say once where to look when the API and web app answer. Then run the storage sweep (M8.6,
+# ADR-085) now and every hour: wrangler dev does not fire the daily cron trigger by itself, and
+# the sweep charges each day once, so running it more often changes nothing.
 (
   for _ in $(seq 1 120); do
     if curl -fsS -o /dev/null http://127.0.0.1:8787/api/health 2>/dev/null &&
       curl -fsS -o /dev/null http://127.0.0.1:5173/ 2>/dev/null; then
       say "Ready: open http://localhost:5173 (API on http://localhost:8787)."
-      exit 0
+      while true; do
+        curl -fsS -o /dev/null http://127.0.0.1:8787/__scheduled 2>/dev/null ||
+          say "The storage sweep did not run; check the [api] lines above."
+        sleep 3600
+      done
     fi
     sleep 1
   done
