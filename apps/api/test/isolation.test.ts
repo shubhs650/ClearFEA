@@ -501,6 +501,9 @@ function servedRoutes(): string[] {
   return [...served].sort();
 }
 
+/** For the tests that call every route, about a hundred requests each: more than the 5 s default on a busy runner. */
+const SWEEP_TIMEOUT_MS = 60_000;
+
 const routesIn = (area: Area) => Object.entries(ROUTES).filter(([, route]) => route.area === area);
 
 describe("the isolation sweep", () => {
@@ -521,7 +524,7 @@ describe("the isolation sweep", () => {
       const response = await call(method, request);
       expect(response.status, key).toBe(401);
     }
-  });
+  }, SWEEP_TIMEOUT_MS);
 
   it("refuses every worker route without the worker token, even to a signed-in user", async () => {
     for (const [key] of routesIn("worker")) {
@@ -552,7 +555,7 @@ describe("bob, signed in", () => {
       expect(theirs.headers.get("Content-Type"), key).toBe(nobodys.headers.get("Content-Type"));
       expectNoSecrets(key, text);
     }
-  });
+  }, SWEEP_TIMEOUT_MS);
 
   it("sees nothing of alice's on his own account's routes", async () => {
     for (const [key] of routesIn("account")) {
@@ -564,7 +567,7 @@ describe("bob, signed in", () => {
       expect(response.status, `${key}: ${text}`).toBeLessThan(400);
       expectNoSecrets(key, text);
     }
-  });
+  }, SWEEP_TIMEOUT_MS);
 
   it("cannot reach alice's records through his own", async () => {
     const view = `/api/runs/${bobs.runId}/figures/view`;
@@ -634,7 +637,7 @@ describe("alice, on her own records", () => {
       const response = await call(method, build(aliceIds()), alice);
       expect([400, 401, 404, 415], `${key}: ${await textOf(response.clone())}`).not.toContain(response.status);
     }
-  });
+  }, SWEEP_TIMEOUT_MS);
 });
 
 describe("file keys", () => {
