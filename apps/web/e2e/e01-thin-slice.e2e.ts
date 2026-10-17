@@ -498,4 +498,18 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await figuresGroup.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${OUT}/e01-report-figures.png` });
   });
+
+  await test.step("open the wallet (M8.1)", async () => {
+    await page.getByRole("contentinfo", { name: "Status" }).getByRole("button", { name: "Wallet" }).click();
+    const wallet = page.getByRole("region", { name: "Wallet" });
+    const ledger = wallet.getByRole("table", { name: "Ledger" });
+    // The seed's grant, the mesh and every run E-01 made, each with what it paid for.
+    await expect(ledger.getByRole("row").last()).toContainText("Credit grant");
+    await expect(ledger.getByRole("row", { name: /Mesh of block\.step/ }).first()).toBeVisible();
+    await expect(ledger.getByRole("row", { name: /Run of “/ }).first()).toBeVisible();
+    await expect(wallet.getByTestId("wallet-balance")).toHaveText(/^99\.\d+ credits$/);
+    await page.screenshot({ path: `${OUT}/e01-wallet.png` });
+    await wallet.getByRole("button", { name: "Back to the workbench" }).click();
+    await expect(wallet).toBeHidden();
+  });
 });

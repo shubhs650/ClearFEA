@@ -140,7 +140,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 
 ## M8: Platform
 
-- [ ] M8.1 Wallet page: balance, ledger, per-run cost.
+- [x] M8.1 Wallet page: balance, ledger, per-run cost.
 - [ ] M8.2 Running-job view: stage, elapsed time, cost so far against estimate, live log, cancel.
 - [ ] M8.3 Stop limit per run with a default multiplier and user override.
 - [ ] M8.4 Failure classification end to end, with category and reason shown on the run.

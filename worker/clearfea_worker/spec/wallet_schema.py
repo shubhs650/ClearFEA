@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 type Wallet = Annotated[Any, Field(title="Wallet")]
 """
-Wire shapes of the wallet route (M8.1, ADR-079; docs/ARCHITECTURE.md sections 4 and 6). Money is in whole micro-credits: 1,000,000 is one credit. Each message is a definition under $defs.
+Wire shapes of the wallet route (M8.1, ADR-080; docs/ARCHITECTURE.md sections 4 and 6). Money is in whole micro-credits: 1,000,000 is one credit. Each message is a definition under $defs.
 """
 
 
