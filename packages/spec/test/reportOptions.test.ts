@@ -5,20 +5,21 @@ import { ReportSectionValues, validateReportBranding, validateReportOptions } fr
 import { defaultReportOptions, orderedReportOptions, reportSectionLabels } from "../src/reportOptions";
 
 describe("report options", () => {
-  it("start with every section, no views and the simulation's name as the title", () => {
-    const options = defaultReportOptions("Bracket");
+  it("start with every section, no views, the simulation's name as the title and the given unit system", () => {
+    const options = defaultReportOptions("Bracket", "us-in");
     expect(options.sections).toEqual([...ReportSectionValues]);
     expect(options.views).toEqual([]);
     expect(options.titleBlock.title).toBe("Bracket");
+    expect(options.unitSystem).toBe("us-in");
     expect(validateReportOptions(options).ok).toBe(true);
   });
 
   it("keep a long simulation name within the title's limit", () => {
-    expect(validateReportOptions(defaultReportOptions("x".repeat(300))).ok).toBe(true);
+    expect(validateReportOptions(defaultReportOptions("x".repeat(300), "metric-mm")).ok).toBe(true);
   });
 
   it("put sections in printing order and keep the views' order", () => {
-    const options = { ...defaultReportOptions("A"), sections: ["warnings", "project", "mesh"] as const, views: ["b", "a"] };
+    const options = { ...defaultReportOptions("A", "metric-mm"), sections: ["warnings", "project", "mesh"] as const, views: ["b", "a"] };
     const ordered = orderedReportOptions({ ...options, sections: [...options.sections] });
     expect(ordered.sections).toEqual(["project", "mesh", "warnings"]);
     expect(ordered.views).toEqual(["b", "a"]);
@@ -31,10 +32,12 @@ describe("report options", () => {
     }
   });
 
-  it("refuse an unknown section, a repeated view and an over-long title", () => {
-    const options = defaultReportOptions("A");
+  it("refuse an unknown section, a repeated view, an over-long title and no unit system", () => {
+    const options = defaultReportOptions("A", "metric-mm");
     expect(validateReportOptions({ ...options, sections: ["verdict"] }).ok).toBe(false);
     expect(validateReportOptions({ ...options, views: ["v", "v"] }).ok).toBe(false);
+    const { unitSystem: _, ...noSystem } = options;
+    expect(validateReportOptions(noSystem).ok).toBe(false);
     expect(validateReportOptions({ ...options, titleBlock: { ...options.titleBlock, title: "x".repeat(201) } }).ok).toBe(
       false,
     );

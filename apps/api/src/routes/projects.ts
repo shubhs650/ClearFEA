@@ -18,11 +18,13 @@ export const projects = new Hono<SessionEnv>();
 
 projects.use("*", requireUser);
 
-/** A stored system that units.json no longer lists shows as the table's default. */
+/** The project's unit system; a stored system that units.json no longer lists is the table's default. */
+export function projectUnitSystem(project: Project): string {
+  return project.unitSystem !== null && isUnitSystem(project.unitSystem) ? project.unitSystem : unitsTable.defaultSystem;
+}
+
 function projectView(project: Project): ProjectView {
-  const unitSystem =
-    project.unitSystem !== null && isUnitSystem(project.unitSystem) ? project.unitSystem : unitsTable.defaultSystem;
-  return { id: project.id, name: project.name, unitSystem };
+  return { id: project.id, name: project.name, unitSystem: projectUnitSystem(project) };
 }
 
 projects.get("/", async (c) => {

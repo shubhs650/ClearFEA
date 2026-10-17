@@ -2235,6 +2235,7 @@ describe("report options (M7.1)", () => {
     sections: ["project", "geometry", "materials", "mesh", "loadsSupports", "solver", "results", "reactions", "extremes", "warnings"],
     views: [],
     titleBlock: { title: "Static structural", documentNumber: "", revision: "", preparedBy: "", checkedBy: "", approvedBy: "" },
+    unitSystem: "metric-mm",
   };
   const view = (id: string, name: string, result: unknown) => ({
     id,
@@ -2247,7 +2248,7 @@ describe("report options (M7.1)", () => {
     view("v2", "Iso stress", { quantity: "vonMises", deformation: "auto", extremes: true, cut: null }),
   ];
 
-  it("sets sections, views, the title block and the company name, and saves them", async () => {
+  it("sets sections, views, the title block, the unit system and the company name, and saves them", async () => {
     const sentOptions: unknown[] = [];
     const sentBranding: unknown[] = [];
     serve(
@@ -2279,6 +2280,10 @@ describe("report options (M7.1)", () => {
     fireEvent.click(settings().getByRole("checkbox", { name: "Front (geometry)" }));
     expect(settings().getByText("Drawn in the order picked: Iso stress, Front.")).toBeTruthy();
     fireEvent.change(settings().getByLabelText("Document number"), { target: { value: "CF-001" } });
+    // The report prints in its own system (M7.6), starting as the project's.
+    const reportUnits = settings().getByLabelText("Report unit system") as HTMLSelectElement;
+    expect(reportUnits.value).toBe("metric-mm");
+    fireEvent.change(reportUnits, { target: { value: "us-in" } });
     fireEvent.change(settings().getByLabelText("Company name"), { target: { value: "Acme Engineering" } });
     expect(settings().getByText("Unsaved changes.")).toBeTruthy();
     fireEvent.click(save);
@@ -2289,6 +2294,7 @@ describe("report options (M7.1)", () => {
         sections: defaults.sections.filter((s) => s !== "warnings"),
         views: ["v2", "v1"],
         titleBlock: { ...defaults.titleBlock, documentNumber: "CF-001" },
+        unitSystem: "us-in",
       },
     ]);
     expect(sentBranding).toEqual([{ companyName: "Acme Engineering" }]);
