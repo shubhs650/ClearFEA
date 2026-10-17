@@ -19,6 +19,7 @@ Rules:
 - A red phase-end or local verification run is fixed before new feature work.
 - Before opening a pull request that touches a physics-critical module, run the affected cases locally and paste the result table into the description.
 - Tolerances are never loosened to make a case pass without a written reason in the case file.
+- Data isolation between users (M8.8) is tested in the fast tier by `apps/api/test/isolation.test.ts`. Every route the API serves must have a row in its `ROUTES` table, so a new route fails `make test` until the sweep covers it.
 
 ## Deck snapshot tests
 
