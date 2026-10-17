@@ -2,7 +2,7 @@
 // The signed-in user's runs, their solver logs (M1.8, ADR-030), the viewer's result files
 // (M1.9, ADR-031) and the solver input and log to view or download (M1.10, ADR-032). Runs are
 // started through POST /api/simulations/:id/runs; a solving run's progress is in its view and
-// POST /api/runs/:id/cancel cancels it (M8.2, ADR-083). Shapes: simulation.schema.json.
+// POST /api/runs/:id/cancel cancels it (M8.2, ADR-084). Shapes: simulation.schema.json.
 
 import type { RunLogResponse, RunProgress, RunResponse, RunView } from "@clearfea/spec";
 import { type Context, Hono } from "hono";
@@ -65,7 +65,7 @@ runs.get("/:id", async (c) => {
 });
 
 /**
- * Cancels a solving run (M8.2, ADR-083). One still waiting for the worker ends at once and costs
+ * Cancels a solving run (M8.2, ADR-084). One still waiting for the worker ends at once and costs
  * nothing; one the worker is on is stopped at its next heartbeat, and the time it used is charged
  * when the worker reports it. Answers the run as it is now; cancelling twice changes nothing.
  */

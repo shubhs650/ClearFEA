@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The open simulation's latest run (M1.8): loads it, starts a new one, and while it solves
-// follows its stage and reads on in its solver log every couple of seconds.
+// follows its stage, time and cost and reads on in its solver log every couple of seconds; it
+// can be cancelled (M8.2).
 
 import type { RunView } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
 import type { ApiResult } from "../api/request";
-import { getRun, getRunLog, listRuns, startRun } from "../api/runs";
+import { cancelRun, getRun, getRunLog, listRuns, startRun } from "../api/runs";
 
 /** How often a solving run and its log are checked. */
 export const RUN_POLL_MS = 2000;
@@ -124,5 +125,19 @@ export function useRun(simulationId: string | null, onSignedOut: (problem: strin
     [simulationId, failed],
   );
 
-  return { state, run, log: log.runId === runId ? log.text : "", start, requesting, requestProblem };
+  const cancel = useCallback(async () => {
+    if (runId === null) return;
+    setRequesting(true);
+    const result = await cancelRun(runId);
+    setRequesting(false);
+    const problem = failed(result);
+    if (problem !== null || result.kind !== "ok") {
+      setRequestProblem(problem ?? undefined);
+      return;
+    }
+    setRequestProblem(undefined);
+    setState({ kind: "loaded", run: result.value });
+  }, [runId, failed]);
+
+  return { state, run, log: log.runId === runId ? log.text : "", start, cancel, requesting, requestProblem };
 }

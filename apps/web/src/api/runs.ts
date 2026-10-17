@@ -56,6 +56,15 @@ export async function getRun(runId: string): Promise<ApiResult<RunView>> {
   return result.kind === "ok" ? { kind: "ok", value: result.value.run } : result;
 }
 
+/**
+ * Cancels a solving run (M8.2): one still waiting ends at once; one the solver is on stops
+ * within a few seconds, and the time it used is charged. Answers the run as it is now.
+ */
+export async function cancelRun(runId: string): Promise<ApiResult<RunView>> {
+  const result = await apiRequest("POST", `/api/runs/${encodeURIComponent(runId)}/cancel`, validateRunResponse);
+  return result.kind === "ok" ? { kind: "ok", value: result.value.run } : result;
+}
+
 /** The solver log written after chunk `after`. */
 export function getRunLog(runId: string, after: number): Promise<ApiResult<RunLogResponse>> {
   return apiRequest("GET", `/api/runs/${encodeURIComponent(runId)}/log?after=${after}`, validateRunLogResponse);

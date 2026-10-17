@@ -105,7 +105,7 @@ function WalletContent({ wallet }: { wallet: WalletView }) {
   );
 }
 
-const RUN_STATUS = { solving: "solving", succeeded: "solved", failed: "failed" } as const;
+const RUN_STATUS = { solving: "solving", succeeded: "solved", failed: "failed", cancelled: "cancelled" } as const;
 
 /** What an entry paid for, in a few words. */
 function what(entry: WalletEntry): string {

@@ -45,7 +45,7 @@ export interface LedgerRun {
   simulationId: string;
   simulationName: string;
   startedAt: string;
-  status: "solving" | "succeeded" | "failed";
+  status: "solving" | "succeeded" | "failed" | "cancelled";
 }
 /**
  * The mesh a mesh charge paid for. A mesh belongs to a geometry and may serve several simulations (ADR-047), so it is named by its geometry. Counts are null when meshing failed.
