@@ -741,7 +741,8 @@ class _Builder:
             ),
             Paragraph(
                 f"Nodes are numbered from 1 in the run's mesh of {_count(self.result.nodes)} "
-                "nodes. Stresses are CalculiX's values extrapolated to the nodes and averaged there."
+                "nodes. Stresses are CalculiX's values extrapolated to the nodes and averaged "
+                "there."
             ),
         ]
         if r.safety_factor is not None:

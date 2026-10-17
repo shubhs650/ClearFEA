@@ -2320,6 +2320,7 @@ describe("report options (M7.1)", () => {
         "GET /api/report-branding": { status: 200, json: { branding: { companyName: "", logo: null } } },
         "GET /api/simulations/s1/views": { status: 200, json: { views } },
         "GET /api/runs/r1/figures": { status: 200, json: { figures: [figure] } },
+        "GET /api/runs/r1/report": { status: 200, json: { report: null } },
       }),
     );
     render(<App />);
@@ -2333,6 +2334,59 @@ describe("report options (M7.1)", () => {
     fireEvent.click(settings().getByRole("checkbox", { name: "Run warnings" }));
     expect(draw.disabled).toBe(true);
     expect(settings().getByText("Save the report options first: the figures follow the saved ones.")).toBeTruthy();
+  });
+
+  it("makes the Word report of the latest solved run and offers it for download (M7.3)", async () => {
+    const report = (status: string, extra: Record<string, unknown> = {}) => ({
+      report: {
+        id: "rep1",
+        status,
+        problem: null,
+        sizeBytes: null,
+        createdAt: "2026-10-17T04:00:00.000Z",
+        finishedAt: null,
+        ...extra,
+      },
+    });
+    let checks = 0;
+    const fetchMock = serve(
+      routes([simulation(supported)], {
+        "GET /api/simulations/s1/runs": {
+          status: 200,
+          json: { runs: [run({ status: "succeeded", stage: null, finishedAt: "2026-10-17T01:00:00.000Z" })] },
+        },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        // Sections without figures, so the report is asked for without drawing any.
+        "GET /api/simulations/s1/report-options": {
+          status: 200,
+          json: { options: { ...defaults, sections: ["project", "extremes"] }, saved: true, updatedAt: null },
+        },
+        "GET /api/report-branding": { status: 200, json: { branding: { companyName: "", logo: null } } },
+        "GET /api/simulations/s1/views": { status: 200, json: { views } },
+        "GET /api/runs/r1/figures": { status: 200, json: { figures: [] } },
+        "GET /api/runs/r1/report": () => {
+          checks += 1;
+          if (checks === 1) return { status: 200, json: { report: null } };
+          return {
+            status: 200,
+            json: report("succeeded", { sizeBytes: 245000, finishedAt: "2026-10-17T04:00:03.000Z" }),
+          };
+        },
+        "POST /api/runs/r1/report": { status: 202, json: report("queued") },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Report, complete" }));
+    const make = (await settings().findByRole("button", { name: "Make the Word report" })) as HTMLButtonElement;
+    await waitFor(() => expect(make.disabled).toBe(false));
+    fireEvent.click(make);
+    expect(await settings().findByText("The report is waiting for the worker…")).toBeTruthy();
+    expect(make.disabled).toBe(true);
+    const link = (await settings().findByRole("link", { name: "Download the Word report" }, { timeout: 4000 })) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/api/runs/r1/report/docx?v=rep1");
+    expect(settings().getByText(/\(245 kB\), made/)).toBeTruthy();
+    expect(make.disabled).toBe(false);
+    expect(fetchMock.mock.calls.filter(([path]) => String(path).includes("/figures/")).length).toBe(0);
   });
 
   it("uploads a logo, shows it with its size, and removes it", async () => {
