@@ -17,6 +17,7 @@ import {
   validateRunLogResponse,
   validateRunResponse,
   validateSimulationResponse,
+  validateWalletResponse,
 } from "@clearfea/spec";
 import fixture from "@clearfea/spec/fixtures/simulation-v1.json";
 import { env, exports } from "cloudflare:workers";
@@ -100,7 +101,17 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM ledger_entries"),
     env.DB.prepare("DELETE FROM jobs"),
   ]);
+  // The seed's play-money grants (ADR-080), so runs are not refused for want of funds.
+  await env.DB.batch(env.TEST_SEED.flatMap((file) => file.queries).map((sql) => env.DB.prepare(sql)));
 });
+
+/** The seed's grant to each test user, in micro-credits. */
+const GRANT = 100_000_000;
+
+/** The user's charges, oldest first: the ledger without the seed's grant. */
+async function charges(userId: string) {
+  return (await listLedger(env.DB, userId)).filter((e) => e.reason !== "grant");
+}
 
 /** A ready geometry of alice's, imported at scaling 0.5, with its topology.json stored. */
 async function geometryRow(topology: Topology = TOPOLOGY): Promise<string> {
@@ -732,12 +743,13 @@ describe("metering (ADR-033)", () => {
     const run = await finish({ status: "succeeded", result: SOLVED });
     expect(run.cost).toEqual({ billedSeconds: 3, amount: THREE_SECONDS_SMALL, charged: true });
     const ledger = await listLedger(env.DB, aliceId);
-    // The mesh job and the solve job, each charged once.
+    // The grant, then the mesh job and the solve job, each charged once.
     expect(ledger.map((e) => [e.reason, e.amount, e.balance])).toEqual([
-      ["mesh", -THREE_SECONDS, -THREE_SECONDS],
-      ["solve", -THREE_SECONDS_SMALL, -THREE_SECONDS - THREE_SECONDS_SMALL],
+      ["grant", GRANT, GRANT],
+      ["mesh", -THREE_SECONDS, GRANT - THREE_SECONDS],
+      ["solve", -THREE_SECONDS_SMALL, GRANT - THREE_SECONDS - THREE_SECONDS_SMALL],
     ]);
-    const job = await getJob(env.DB, aliceId, ledger[1]?.jobId ?? "");
+    const job = await getJob(env.DB, aliceId, ledger[2]?.jobId ?? "");
     expect(job).toMatchObject({ type: "solve", billableMs: 2500, billedSeconds: 3, cost: THREE_SECONDS_SMALL });
   });
 
@@ -749,13 +761,13 @@ describe("metering (ADR-033)", () => {
       failureMessage: "Add a support.",
     });
     expect(run.cost).toEqual({ billedSeconds: 3, amount: THREE_SECONDS_SMALL, charged: true });
-    expect((await listLedger(env.DB, aliceId)).map((e) => e.reason)).toEqual(["mesh", "solve"]);
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh", "solve"]);
   });
 
   it("does not charge a run that failed through a fault in ClearFEA, but records its time", async () => {
     const run = await finish({ status: "failed", failureCategory: "platform_fault", failureCause: "solver_error" });
     expect(run.cost).toEqual({ billedSeconds: 3, amount: 0, charged: false });
-    expect((await listLedger(env.DB, aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
   });
 
   it("does not charge a success that turned into a platform fault", async () => {
@@ -765,7 +777,7 @@ describe("metering (ADR-033)", () => {
     await upload(job, ["deck.inp", "solver.log"]);
     await complete(job.id, { status: "succeeded", result: SOLVED });
     expect((await readRun(run.id)).cost).toMatchObject({ charged: false, amount: 0 });
-    expect((await listLedger(env.DB, aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
   });
 
   it("rounds the measured time up to whole seconds", async () => {
@@ -809,7 +821,7 @@ describe("metering (ADR-033)", () => {
       token: TOKEN,
     });
     expect(again.status).toBe(409);
-    expect(await listLedger(env.DB, aliceId)).toHaveLength(2);
+    expect(await charges(aliceId)).toHaveLength(2);
   });
 
   it("refuses a completion without metering", async () => {
@@ -821,7 +833,7 @@ describe("metering (ADR-033)", () => {
       token: TOKEN,
     });
     expect(response.status).toBe(400);
-    expect(await listLedger(env.DB, aliceId)).toHaveLength(1);
+    expect(await charges(aliceId)).toHaveLength(1);
   });
 
   it("keeps a running balance that reconciles with the sum of the entries", async () => {
@@ -834,14 +846,74 @@ describe("metering (ADR-033)", () => {
       await complete(job.id, { status: "succeeded", result: SOLVED, metering: { billableMs } });
     }
     const ledger = await listLedger(env.DB, aliceId);
-    // Mesh 3 s, then 1, 1, 1, 2 and 46 s: 833 + 278 + 278 + 278 + 556 + 12,778.
-    expect(ledger.map((e) => -e.amount)).toEqual([833, 278, 278, 278, 556, 12_778]);
+    // The grant, then mesh 3 s, then 1, 1, 1, 2 and 46 s: 833 + 278 + 278 + 278 + 556 + 12,778.
+    expect(ledger.map((e) => -e.amount)).toEqual([-GRANT, 833, 278, 278, 278, 556, 12_778]);
     let sum = 0;
     for (const entry of ledger) {
       sum += entry.amount;
       expect(entry.balance).toBe(sum);
     }
-    expect(await listLedger(env.DB, (await signedInId("bob")) ?? "")).toEqual([]);
+    expect(await charges((await signedInId("bob")) ?? "")).toEqual([]);
+  });
+});
+
+describe("the wallet (M8.1, ADR-080)", () => {
+  async function wallet(cookie = alice) {
+    const response = await call("GET", "/api/wallet", { cookie });
+    expect(response.status).toBe(200);
+    const body = validateWalletResponse(await response.json());
+    if (!body.ok) throw new Error(body.errors.join(" "));
+    return body.value.wallet;
+  }
+
+  it("is refused without a session", async () => {
+    expect((await call("GET", "/api/wallet")).status).toBe(401);
+  });
+
+  it("starts with the seed's grant, which a second seeding does not repeat", async () => {
+    await env.DB.batch(env.TEST_SEED.flatMap((file) => file.queries).map((sql) => env.DB.prepare(sql)));
+    const { entries, ...totals } = await wallet();
+    expect(totals).toEqual({ balance: GRANT, granted: GRANT, charged: 0 });
+    expect(entries).toMatchObject([{ reason: "grant", amount: GRANT, balance: GRANT, job: null, run: null, mesh: null }]);
+  });
+
+  it("lists every entry newest first with the run or mesh it paid for", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    const { entries, ...totals } = await wallet();
+    const charged = -(833 + 417);
+    expect(totals).toEqual({ balance: GRANT + charged, granted: GRANT, charged });
+    expect(entries.map((e) => e.reason)).toEqual(["solve", "mesh", "grant"]);
+    expect(entries[0]).toMatchObject({
+      amount: -417,
+      balance: GRANT + charged,
+      job: { id: job.id, machineSize: "small", ratePerHour: 500_000, billedSeconds: 3 },
+      run: { id: run.id, simulationId: id, simulationName: "Static structural", status: "succeeded" },
+      mesh: null,
+    });
+    expect(entries[1]).toMatchObject({
+      amount: -833,
+      job: { machineSize: "medium", billedSeconds: 3 },
+      run: null,
+      mesh: { id: run.meshId, geometryName: "bracket.step", elements: 4000, nodes: 7108 },
+    });
+    // Bob's wallet holds his own grant and nothing of Alice's.
+    expect((await wallet(bob)).entries.map((e) => [e.reason, e.amount])).toEqual([["grant", GRANT]]);
+  });
+
+  it("refuses a run whose estimated cost is more than the balance, before queueing it", async () => {
+    const id = await meshed();
+    await env.DB.prepare("DELETE FROM ledger_entries").run();
+    const response = await startRun(id);
+    expect(response.status).toBe(409);
+    const { error } = (await response.json()) as { error: string };
+    expect(error).toContain("estimated to cost");
+    expect(error).toContain("your wallet holds 0 credits");
+    const queued = await env.DB.prepare("SELECT count(*) AS n FROM jobs WHERE type = 'solve'").first<{ n: number }>();
+    expect(queued?.n).toBe(0);
   });
 });
 

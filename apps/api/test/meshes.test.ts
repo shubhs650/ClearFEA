@@ -90,6 +90,8 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM ledger_entries"),
     env.DB.prepare("DELETE FROM jobs"),
   ]);
+  // The seed's play-money grants (ADR-080), so meshing is not refused for want of funds.
+  await env.DB.batch(env.TEST_SEED.flatMap((file) => file.queries).map((sql) => env.DB.prepare(sql)));
 });
 
 /** A ready geometry of alice's, imported at scaling 0.5, with its topology.json stored. */
@@ -164,8 +166,10 @@ async function saveMesh(simulationId: string, mesh: Partial<SimulationSpec["mesh
   expect(put.status).toBe(200);
 }
 
+/** Rows of a table; for the ledger, its charges (the seed's grants left out). */
 async function count(table: "jobs" | "ledger_entries" | "meshes"): Promise<number> {
-  const row = await env.DB.prepare(`SELECT count(*) AS n FROM ${table}`).first<{ n: number }>();
+  const where = table === "ledger_entries" ? " WHERE reason != 'grant'" : "";
+  const row = await env.DB.prepare(`SELECT count(*) AS n FROM ${table}${where}`).first<{ n: number }>();
   return row?.n ?? 0;
 }
 
@@ -370,6 +374,22 @@ describe("a finished mesh job", () => {
     const job = await claim();
     await complete(job.id, { status: "succeeded", result: { elements: "many" } });
     expect((await currentMesh(id))?.problem).toContain("invalid_result");
+  });
+});
+
+describe("meshing and the wallet (M8.1, ADR-080)", () => {
+  it("refuses a new mesh when the balance is not above zero, but still reuses one for free", async () => {
+    const id = await simulation({ value: 4, unit: "mm" });
+    await meshOf(await requestMesh(id));
+    await runMesh();
+    await env.DB.prepare("DELETE FROM ledger_entries").run();
+    const reused = await requestMesh(id);
+    expect(reused.status).toBe(200);
+    await saveMesh(id, { size: { value: 5, unit: "mm" } });
+    const refused = await requestMesh(id);
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: string }).error).toContain("so a mesh cannot be made");
+    expect(await count("jobs")).toBe(1);
   });
 });
 

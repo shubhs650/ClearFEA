@@ -39,7 +39,8 @@ async function signIn(credentials: { login: string; password: string }): Promise
 beforeAll(async () => {
   // The same file `pnpm --filter @clearfea/api db:seed` applies to the local database.
   const statements = env.TEST_SEED.flatMap((file) => file.queries);
-  expect(statements).toHaveLength(2);
+  // Two users and a play-money grant for each (ADR-080).
+  expect(statements).toHaveLength(4);
   await env.DB.batch(statements.map((sql) => env.DB.prepare(sql)));
 });
 

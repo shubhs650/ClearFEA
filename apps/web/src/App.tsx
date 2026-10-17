@@ -17,6 +17,7 @@ import {
 } from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchSession, signOut } from "./api/session";
+import { WalletPage } from "./billing/WalletPage";
 import { GeometryPanel } from "./geometry/GeometryPanel";
 import { TestJobs } from "./jobs/TestJobs";
 import { SettingsPanel } from "./layout/SettingsPanel";
@@ -88,6 +89,8 @@ export function App() {
   // The tree item whose settings are shown: "geometry", a group, or a spec item's id.
   const [selected, setSelected] = useState("geometry");
   const [geometryRefresh, setGeometryRefresh] = useState(0);
+  // The wallet page (M8.1), drawn over the workbench so the workbench keeps its state.
+  const [walletOpen, setWalletOpen] = useState(false);
   const [resultChoice, setResultChoice] = useState<ResultChoice>({
     quantity: "vonMises",
     deformation: "auto",
@@ -120,6 +123,7 @@ export function App() {
   const signedOut = useCallback((notice?: string) => {
     setSession({ kind: "signedOut", notice });
     setGeometry(null);
+    setWalletOpen(false);
   }, []);
 
   const simulation = useSimulation(geometry, signedOut);
@@ -508,7 +512,8 @@ export function App() {
         </div>
         {itemPanel}
       </SettingsPanel>
-      <StatusBar user={session.user} onSignOut={leave} />
+      {walletOpen && <WalletPage onClose={() => setWalletOpen(false)} onSignedOut={signedOut} />}
+      <StatusBar user={session.user} onSignOut={leave} onWallet={() => setWalletOpen(true)} />
     </div>
     </UnitSystemProvider>
   );

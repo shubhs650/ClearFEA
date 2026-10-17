@@ -30,6 +30,19 @@ Status values: Not started, In progress, Verifying, Done.
 
 Copy the task list for the current milestone from `PLAN.md` here when the milestone starts, and tick tasks as they merge.
 
+### M8 Platform
+
+- [x] M8.1 Wallet page: balance, ledger, per-run cost; seeded play-money grant and low-balance refusal (ADR-080)
+- [ ] M8.2 Running-job view: stage, elapsed time, cost so far against estimate, live log, cancel
+- [ ] M8.3 Stop limit per run with a default multiplier and user override
+- [ ] M8.4 Failure classification end to end, with category and reason shown on the run
+- [ ] M8.5 Simulated machine sizes on localhost (thread count, memory limit); out-of-memory path tested
+- [ ] M8.6 Storage accounting per user, free quota, retention of raw output, pin, regenerate by rerun
+- [ ] M8.7 Read-only share link per run, revocable
+- [ ] M8.8 Data isolation tests across every route and file key
+- [ ] M8.9 Estimator check: predicted against measured on the benchmark set
+- [ ] M8.10 Self-hosting mode flag: wallet informational
+
 ### M7 Report
 
 - [x] M7.1 Report options: sections, saved views, title block, company name, logo (ADR-074)
@@ -140,6 +153,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M8.1 (2026-10-17): the wallet page (ADR-080, accepted under Shubham's M8 autodrive, pending his review; the grant and the refusal went to him on a decision card and were built on its recommended option). Billing module touched for reads only: `apps/api/src/billing/ledger.ts` gains `balanceOf` and `walletOf`, `billing/wallet.ts` the two refusal messages; `cost.ts` and the charge statement are unchanged. `GET /api/wallet` (`wallet.schema.json`) answers balance, granted, charged and every entry newest first with its job and the run or mesh it paid for; "Wallet" in the status bar opens `apps/web/src/billing/WalletPage.tsx` over the workbench. The seed now gives alice and bob one 100-credit grant each (idempotent), and API tests that mesh or run re-apply the seed after clearing the ledger. Runs whose estimate is above the balance, and new meshes at a balance of 0 or less, are refused with 409. `credits()` now lives in `packages/spec`. For M8.10: the self-hosting flag should skip `runFundsProblem` and `meshFundsProblem`. For M8.3: a run can still cost more than its estimate, so the balance can go below 0. No E-test opens the wallet page (none is listed).
 
 > M7 close (2026-10-17): M7 closed on a green manual phase-end run on main (see the Milestones table). Every M7 task is in, and E-05, the one browser test listed for M7, runs in it; no verification case is listed for M7 (the report adds no physics). PLAN.md's M7.3 box was left unticked by PR #82 and is ticked here. The exit (a report the maintainer would hand to a reviewer) is his call: a V-02 report in US units, Word and PDF, was made through the UI from main e5a312c and is in the project's `m7-close/` folder. He judged it fine for the prototype, to refine later; he accepted ADR-073 to ADR-078 and chose to print the balance tables' rounding noise as 0, done after the close as ADR-079 (components below one millionth of the run's balance scales; V-02 again in `m7-close/` as `v02-report-rounded.*`). M8 runs under his M8 autodrive.
 
@@ -314,6 +329,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M8.1 wallet page (ADR-080): `GET /api/wallet` and a Wallet page from the status bar with balance, granted, charged and every ledger entry with the run or mesh it paid for; the seed gives each test user a 100-credit play-money grant; runs above the balance and new meshes at 0 or less are refused.
 - Report rounding (ADR-079, the maintainer's choice at the M7 close): force and moment components below one millionth of the run's balance scales print as 0 in the report's reaction and balance tables. ADR-073 to ADR-078 recorded as accepted by him.
 - M7 closed: phase-end workflow run by hand on main e5a312c ([run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) green, `make verify` full tier 302 of 302 checks in all 26 cases and `make e2e` E-01 to E-05. Next: M8, waiting on the maintainer's go.
 - M7.4: the PDF report, the Word report printed by LibreOffice in the worker, offered beside it (ADR-078); E-05 downloads it. Learned: LibreOffice writes Word headings as PDF bookmarks, which gives a browser test the section list without a PDF text reader.

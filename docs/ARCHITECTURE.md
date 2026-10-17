@@ -72,7 +72,7 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 
 | Table | Holds |
 | --- | --- |
-| `users` | Id, name, login, wallet balance (derived from ledger, cached) |
+| `users` | Id, name, login, wallet balance (not stored: the last ledger entry's balance, ADR-080) |
 | `projects` | Name, default unit system, visibility. Phase 0 makes one per user on first use (ADR-038) |
 | `geometries` | Project, original file key, length unit as read and as confirmed, import status, counts of bodies and faces |
 | `simulations` | Project, geometry, analysis type, current `SimulationSpec` JSON, spec schema version |

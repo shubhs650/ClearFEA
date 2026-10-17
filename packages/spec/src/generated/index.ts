@@ -13,3 +13,4 @@ export * from "./session";
 export * from "./simulation";
 export * from "./units";
 export * from "./view";
+export * from "./wallet";
