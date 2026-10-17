@@ -29,9 +29,10 @@ services:
       CLEARFEA_WORKER_ID: ${CLEARFEA_WORKER_ID:-local-worker}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    # Simulated machine size for Phase 0 (docs/ARCHITECTURE.md, Metering).
+    # No memory limit on the container: the worker holds each solve to its machine size's
+    # memory itself (ADR-082), and a container cap below the smallest size (8 GiB) would kill
+    # runs the size has room for (ADR-088). The solver runs on one thread (ADR-048).
     cpus: 2
-    mem_limit: 4g
     read_only: true
     tmpfs:
       - /tmp
