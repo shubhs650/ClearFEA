@@ -357,6 +357,8 @@ describe("POST /api/runs/:id/rerun", () => {
     expect(run.rawOutput.rerunOf).toBe(old);
     // On the size the run was billed on.
     expect(run.machine?.size).toBe("small");
+    // The old run predates the stop limit, so the rerun takes the default (M8.3).
+    expect(run.stopLimit?.multiplier).toBe(3);
     const job = await env.DB.prepare("SELECT type, status, params FROM jobs WHERE target_id = ?")
       .bind(run.id)
       .first<{ type: string; status: string; params: string }>();

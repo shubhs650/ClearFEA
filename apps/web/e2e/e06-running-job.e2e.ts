@@ -2,7 +2,10 @@
 // E-06 (docs/VERIFICATION.md): a running job (M8.2). A run long enough to watch shows its stage,
 // elapsed time and cost so far against the estimate and its live log; cancelling it stops the
 // solver, the run says it was cancelled and what the time it used cost, and the wallet lists the
-// charge. M8.3 adds the stop limit to this file, on the same slow run (`slowRun`).
+// charge. Then (M8.3) the same simulation runs again with its stop limit set to a quarter of the
+// estimate, which gives the 30 s floor: about half the time the run takes in the worker
+// container (CalculiX solves it faster there than the estimate, ADR-081). The run is stopped
+// there, says so, and its time is charged.
 //
 // The model is E-01's 40 × 20 × 10 mm block (e2e/block.py), fixed at its x = 40 mm end and
 // pressed on its top face, meshed at 1 mm with ten-node elements (about 56,000 nodes) and solved
@@ -143,7 +146,9 @@ async function slowRun(page: Page): Promise<Locator> {
   });
 }
 
-test("E-06: a running job shows its progress and can be cancelled", async ({ page }) => {
+test("E-06: a running job shows its progress, can be cancelled, and stops at its limit", async ({ page }) => {
+  // Two slow runs after a fine mesh: longer than the default five minutes.
+  test.setTimeout(12 * 60_000);
   const run = await slowRun(page);
   const job = run.getByRole("region", { name: "Running job", exact: true });
 
@@ -184,5 +189,39 @@ test("E-06: a running job shows its progress and can be cancelled", async ({ pag
     const ledger = page.getByRole("region", { name: "Wallet" }).getByRole("table", { name: "Ledger" });
     await expect(ledger.getByRole("row", { name: /Run of “.*\(cancelled\)/ }).first()).toBeVisible();
     await page.screenshot({ path: `${OUT}/e06-wallet.png` });
+    await page.getByRole("region", { name: "Wallet" }).getByRole("button", { name: "Back to the workbench" }).click();
+  });
+
+  await test.step("run again with the stop limit at a quarter of the estimate", async () => {
+    await treeRow(page, "Run").click();
+    const estimate = run.getByRole("region", { name: "Estimate", exact: true });
+    const limit = estimate.getByRole("spinbutton", { name: "Stop limit (× the estimated time)" });
+    await expect(limit).toHaveValue("3");
+    await limit.fill("0.25");
+    await expect(estimate.getByTestId("stop-limit-hint")).toHaveText(
+      "The run is stopped if it is still solving after 30 s, and the time it used is charged.",
+    );
+    await page.screenshot({ path: `${OUT}/e06-stop-limit.png` });
+    await run.getByRole("button", { name: "Run again" }).click();
+    await expect(job.getByRole("status", { name: "Run stage" })).toHaveText("Solver: solving…", { timeout: 120_000 });
+    await expect(job.getByTestId("run-stop-limit")).toHaveText("30 s (0.25 × the estimate)");
+    await page.screenshot({ path: `${OUT}/e06-running-limit.png` });
+  });
+
+  await test.step("the run is stopped at its limit and charged for its time", async () => {
+    // The worker hears at its next heartbeat, within 5 s of the limit.
+    await expect(job).toBeHidden({ timeout: 180_000 });
+    await expect(treeRow(page, "Run")).toHaveAttribute(
+      "title",
+      /^The run reached its stop limit of 30 s \(0\.25 × the estimated time\) and was stopped after [\d a-z]+\. The time it used is charged\. If it needs longer, raise the stop limit and run it again; a coarser mesh or a faster solver also shortens it\.$/,
+    );
+    const record = run.getByLabel("Run record");
+    await expect(record).toContainText(/Stop limit\s*30 s \(0\.25 × the estimated time\)/);
+    await expect(record).toContainText(/Cost\s*[\d.]+ credits for \d+ s/);
+    await expect(record.getByRole("link", { name: "View solver.log" })).toBeVisible();
+    await page.screenshot({ path: `${OUT}/e06-stopped.png` });
+    await page.getByRole("contentinfo", { name: "Status" }).getByRole("button", { name: "Wallet" }).click();
+    const ledger = page.getByRole("region", { name: "Wallet" }).getByRole("table", { name: "Ledger" });
+    await expect(ledger.getByRole("row", { name: /Run of “.*\(stopped at its limit\)/ }).first()).toBeVisible();
   });
 });

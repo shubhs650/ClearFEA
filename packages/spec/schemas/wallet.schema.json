@@ -30,7 +30,7 @@
         "simulationId": { "type": "string" },
         "simulationName": { "type": "string" },
         "startedAt": { "type": "string" },
-        "status": { "type": "string", "enum": ["solving", "succeeded", "failed", "cancelled"] }
+        "status": { "type": "string", "enum": ["solving", "succeeded", "failed", "cancelled", "stopped"] }
       }
     },
     "LedgerMesh": {

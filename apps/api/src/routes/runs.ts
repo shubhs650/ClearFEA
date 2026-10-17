@@ -6,6 +6,7 @@
 // POST /api/runs/:id/cancel cancels it (M8.2, ADR-085). Shapes: simulation.schema.json.
 
 import {
+  DEFAULT_STOP_MULTIPLIER,
   elementLimitProblem,
   type RunLogResponse,
   type RunProgress,
@@ -14,6 +15,7 @@ import {
   runSolverProblem,
   specRunKind,
   specSolver,
+  stopLimitSeconds,
   validatePinRunRequest,
 } from "@clearfea/spec";
 import { type Context, Hono } from "hono";
@@ -73,6 +75,7 @@ export function runView(run: Run): RunView {
     files: run.files,
     machine: run.machine,
     estimate: run.estimate,
+    stopLimit: run.stopLimit,
     cost: run.cost,
     status: run.status,
     stage: run.status !== "solving" ? null : run.jobStatus === "queued" ? "queued" : run.jobStage,
@@ -348,7 +351,8 @@ runs.put("/:id/pin", async (c) => {
  * simulation, to regenerate raw solver output the sweep removed (M8.6, ADR-086). The setup is
  * the run's, not the simulation's current one, so the new raw output belongs to the same
  * results. The new run is estimated and charged like any other, on the run's machine size while
- * that size exists, else the recommended one, and refused when the wallet cannot cover it.
+ * that size exists, else the recommended one, and refused when the wallet cannot cover it. It
+ * keeps the run's stop-limit multiplier, or takes the default for a run from before M8.3.
  */
 runs.post("/:id/rerun", async (c) => {
   const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
@@ -375,12 +379,14 @@ runs.post("/:id/rerun", async (c) => {
     ? null
     : runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size);
   if (noFunds !== null) return c.json({ error: noFunds }, 409);
+  const multiplier = run.stopLimit?.multiplier ?? DEFAULT_STOP_MULTIPLIER;
   const created = await createRun(c.env.DB, c.var.userId, {
     simulationId: run.simulationId,
     meshId: mesh.id,
     spec: run.spec,
     machine: simulatedMachine(size),
     estimate,
+    stopLimit: { multiplier, seconds: stopLimitSeconds(estimate.seconds, multiplier) },
     rerunOf: run.id,
   });
   if (created === null) {

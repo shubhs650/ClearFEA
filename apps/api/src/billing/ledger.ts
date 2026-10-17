@@ -105,8 +105,10 @@ export async function walletOf(db: D1Database, userId: string): Promise<WalletVi
       `SELECT l.seq, l.amount, l.balance, l.reason, l.job_id, l.created_at,
               j.machine_size, j.rate_per_hour, j.billed_seconds,
               r.id AS run_id,
-              -- A cancelled run is 'failed' in its table; its job says it was cancelled (ADR-085).
-              CASE WHEN r.status = 'failed' AND j.status = 'cancelled' THEN 'cancelled' ELSE r.status END AS run_status, r.created_at AS run_created_at,
+              -- A cancelled or stopped run is 'failed' in its table; its job says which (ADR-085, ADR-087).
+              CASE WHEN r.status = 'failed' AND j.status = 'cancelled' THEN 'cancelled'
+                   WHEN r.status = 'failed' AND j.status = 'stopped_at_limit' THEN 'stopped'
+                   ELSE r.status END AS run_status, r.created_at AS run_created_at,
               s.id AS simulation_id, s.name AS simulation_name,
               m.id AS mesh_id, m.element_count AS mesh_elements, m.node_count AS mesh_nodes,
               g.name AS geometry_name,

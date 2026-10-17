@@ -295,6 +295,7 @@ const succeeded: RunView = {
   files: [],
   machine: { size: "local", ratePerHour: 1_000_000 },
   estimate: null,
+  stopLimit: null,
   cost: null,
   status: "succeeded",
   stage: null,

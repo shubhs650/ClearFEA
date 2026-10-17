@@ -6,6 +6,7 @@ import {
   type CreateRunRequest,
   type CreateSimulationRequest,
   checkSimulationSpec,
+  DEFAULT_STOP_MULTIPLIER,
   elementLimitProblem,
   elementOrder,
   type EstimateResponse,
@@ -31,6 +32,7 @@ import {
   SolverValues,
   specRunKind,
   specSolver,
+  stopLimitSeconds,
   type ViewListResponse,
   defaultReportOptions,
   isUnitSystem,
@@ -345,7 +347,8 @@ simulations.get("/:id/estimate", async (c) => {
  * the setup shows it (every candidate detected, ADR-059); the deck ties what the list says (M4.3).
  * A mesh with more elements than the spec's solver may solve on a 16 GB machine is refused
  * before any machine is used (ADR-063), and so is a run whose estimated cost on its size is more
- * than the wallet holds (M8.1, ADR-080).
+ * than the wallet holds (M8.1, ADR-080). The run is stopped if it is still solving at its stop
+ * limit, a multiple of the estimated time that the body may set (M8.3, ADR-087).
  */
 simulations.post("/:id/runs", async (c) => {
   let request: CreateRunRequest = {};
@@ -391,6 +394,7 @@ simulations.post("/:id/runs", async (c) => {
     ? null
     : runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size);
   if (noFunds !== null) return c.json({ error: noFunds }, 409);
+  const multiplier = request.stopMultiplier ?? DEFAULT_STOP_MULTIPLIER;
   const created = await createRun(c.env.DB, c.var.userId, {
     simulationId: simulation.id,
     meshId: mesh.id,
@@ -399,6 +403,7 @@ simulations.post("/:id/runs", async (c) => {
     spec: { ...simulation.spec, solver, bonds: specBonds(simulation.spec, read.topology) },
     machine: simulatedMachine(size),
     estimate,
+    stopLimit: { multiplier, seconds: stopLimitSeconds(estimate.seconds, multiplier) },
   });
   if (created === null) {
     return c.json({ error: "The mesh or the machine sizes changed meanwhile. Check the mesh, then run again." }, 409);

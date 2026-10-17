@@ -887,8 +887,18 @@
       }
     },
     "RunStatus": {
-      "description": "solving while the solve job is queued or running; succeeded, failed or cancelled (by its owner, M8.2) once it ends.",
-      "enum": ["solving", "succeeded", "failed", "cancelled"]
+      "description": "solving while the solve job is queued or running; succeeded, failed, cancelled (by its owner, M8.2) or stopped (at its stop limit, M8.3) once it ends.",
+      "enum": ["solving", "succeeded", "failed", "cancelled", "stopped"]
+    },
+    "StopLimit": {
+      "description": "When a run is stopped (M8.3, ADR-087): once its solve job has had the machine for seconds, which is the estimated time times multiplier, rounded up, and never less than 30 s.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["multiplier", "seconds"],
+      "properties": {
+        "multiplier": { "type": "number", "minimum": 0.25, "maximum": 20 },
+        "seconds": { "type": "integer", "minimum": 1 }
+      }
     },
     "RunProgress": {
       "description": "A solving run as it goes (M8.2): when the worker took it (null while queued), the time since then when the answer was made, what that time costs so far at the run's rate (elapsed time rounded up to whole seconds, as metering bills it; null while queued and for runs that are not metered), and whether its owner has asked to cancel it and the worker has not stopped yet.",
@@ -1008,10 +1018,13 @@
       "properties": { "estimate": { "$ref": "#/$defs/RunEstimate" } }
     },
     "CreateRunRequest": {
-      "description": "Body of POST /api/simulations/{id}/runs, which may also be sent empty. machineSize names the machine size to run on; without it the run takes the recommended size (the largest when none fits).",
+      "description": "Body of POST /api/simulations/{id}/runs, which may also be sent empty. machineSize names the machine size to run on; without it the run takes the recommended size (the largest when none fits). stopMultiplier sets the run's stop limit as a multiple of its estimated time (M8.3); without it the run is stopped at 3 times the estimate.",
       "type": "object",
       "additionalProperties": false,
-      "properties": { "machineSize": { "type": "string", "minLength": 1 } }
+      "properties": {
+        "machineSize": { "type": "string", "minLength": 1 },
+        "stopMultiplier": { "type": "number", "minimum": 0.25, "maximum": 20 }
+      }
     },
     "RunRawOutput": {
       "description": "What happens to a run's raw solver output, results.frd and results.dat (M8.6, ADR-086). It is removed by the daily storage sweep once the retention period after the run ended has passed, unless the run is pinned; running the same setup again regenerates it. Everything else a run keeps is kept permanently.",
@@ -1043,7 +1056,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "id", "simulationId", "meshId", "spec", "mesh", "software", "files", "machine", "estimate", "cost", "status", "stage",
+        "id", "simulationId", "meshId", "spec", "mesh", "software", "files", "machine", "estimate", "stopLimit", "cost", "status", "stage",
         "progress", "problem", "result", "createdAt", "finishedAt", "rawOutput"
       ],
       "properties": {
@@ -1066,6 +1079,10 @@
           "description": "The estimate made when the run started (ADR-049); null for runs made before M2.12.",
           "oneOf": [{ "$ref": "#/$defs/RunEstimate" }, { "type": "null" }]
         },
+        "stopLimit": {
+          "description": "When the run is stopped if it has not finished (M8.3); null for runs made before it.",
+          "oneOf": [{ "$ref": "#/$defs/StopLimit" }, { "type": "null" }]
+        },
         "cost": {
           "description": "Known once the run has finished; null while it solves and for runs that were not metered.",
           "oneOf": [{ "$ref": "#/$defs/RunCost" }, { "type": "null" }]
@@ -1076,7 +1093,7 @@
           "description": "While the run solves; null once it has ended.",
           "oneOf": [{ "$ref": "#/$defs/RunProgress" }, { "type": "null" }]
         },
-        "problem": { "description": "Why the run failed, or that it was cancelled, in plain language.", "type": ["string", "null"] },
+        "problem": { "description": "Why the run failed, or that it was cancelled or stopped at its limit, in plain language.", "type": ["string", "null"] },
         "result": { "oneOf": [{ "$ref": "#/$defs/SolveResult" }, { "type": "null" }] },
         "createdAt": { "type": "string" },
         "finishedAt": { "type": ["string", "null"] },

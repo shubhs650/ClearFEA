@@ -168,6 +168,7 @@ def static_params(**changes: Any) -> dict[str, Any]:
             "files": ["deck.inp", "solver.log"],
             "machine": {"size": "standard", "ratePerHour": 1000},
             "estimate": None,
+            "stopLimit": None,
             "cost": {"billedSeconds": 3, "amount": 1, "charged": True},
             "status": "succeeded",
             "stage": None,

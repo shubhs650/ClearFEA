@@ -110,10 +110,10 @@ export function useRun(simulationId: string | null, onSignedOut: (problem: strin
   }, [runId, solving, failed]);
 
   const start = useCallback(
-    async (machineSize?: string) => {
+    async (machineSize?: string, stopMultiplier?: number) => {
     if (simulationId === null) return;
     setRequesting(true);
-    const result = await startRun(simulationId, machineSize);
+    const result = await startRun(simulationId, machineSize, stopMultiplier);
     setRequesting(false);
     const problem = failed(result);
     if (problem !== null || result.kind !== "ok") {

@@ -357,6 +357,7 @@ describe("run mark", () => {
     files: [],
     machine: { size: "local", ratePerHour: 1_000_000 },
     estimate: null,
+    stopLimit: null,
     cost: null,
     status: "solving",
     stage: "solving",
@@ -377,6 +378,10 @@ describe("run mark", () => {
       notes: ["Add a support."],
     });
     expect(runStatus(run({ status: "succeeded" }))).toEqual({ mark: "complete", notes: [] });
+    expect(runStatus(run({ status: "stopped", problem: "The run reached its stop limit." }))).toEqual({
+      mark: "incomplete",
+      notes: ["The run reached its stop limit."],
+    });
   });
 });
 
