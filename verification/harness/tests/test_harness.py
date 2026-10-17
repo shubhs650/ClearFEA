@@ -244,16 +244,6 @@ def test_balance_without_a_load_is_measured_against_the_reactions() -> None:
     assert (miss, size) == pytest.approx((1e-3, 6.001))
 
 
-def test_balance_without_a_load_on_free_supports_is_measured_against_their_nodal_forces() -> None:
-    # A body heated on symmetry planes: each support's total is rounding, its nodes are not.
-    reactions = [[1e-3, 0.0, 0.0], [0.0, -2e-3, 0.0]]
-    assert balance([0.0, 0.0, 0.0], 0.0, reactions, 5e5) == pytest.approx(
-        (math.hypot(1e-3, 2e-3), 5e5)
-    )
-    # With a load the run's nodal scale plays no part.
-    assert balance([0.0, 0.0, -10.0], 10.0, [[0.0, 0.0, 9.0]], 5e5)[1] == 10.0
-
-
 def test_a_reaction_check_must_name_a_support_of_the_spec(tmp_path: Path) -> None:
     folder = tmp_path / "V-99-x"
     folder.mkdir()

@@ -53,7 +53,12 @@ wall is in generalised plane strain with no net axial force.
   the mean temperature is the first estimate, and how far the run is from it is part of what
   M9.6 records.
 - **Balances.** The heat in through the bore equals the heat out through the cooled faces, and
-  the frictionless supports carry no net force (no structural load is applied).
+  the frictionless supports carry no net force (no structural load is applied). Each support's
+  total is therefore at rounding size (about 0.01 N), and `make verify`'s "Reactions balance the
+  applied load" row, which with no applied load measures the miss against those totals, reads
+  it as about 70 percent out; the run's own balance check, scaled by the supports' nodal forces
+  (ADR-067 item 6), closes at 2.5e-7 percent. Whether the harness should use that scale is the
+  maintainer's call (M9.4 handoff).
 
 ## Known limits that apply (accepted ADRs)
 

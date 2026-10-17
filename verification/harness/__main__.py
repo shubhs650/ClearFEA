@@ -108,10 +108,7 @@ def balance_rows(
     load, gross = applied_load(spec, surface)
     forces = [r["force"] for r in run["result"]["reactions"]]
     total = [sum(f[i] for f in forces) for i in range(3)]
-    check = run["result"].get("balance")
-    if check is None:
-        raise CaseError("The run's result has no balance check.")
-    miss, size = balance(load, gross, forces, check["forceScale"])
+    miss, size = balance(load, gross, forces)
     imbalance = miss / size
     outcome.rows.append(
         Row(
@@ -125,6 +122,9 @@ def balance_rows(
     )
     # The run's own balance check (M3.2, ADR-051): its applied-load totals against its
     # reactions, forces and moments, both from the worker.
+    check = run["result"].get("balance")
+    if check is None:
+        raise CaseError("The run's result has no balance check.")
     worst = max(check["forceRatio"], check["momentRatio"])
     outcome.rows.append(
         Row(
