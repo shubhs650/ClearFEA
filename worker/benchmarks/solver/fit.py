@@ -7,11 +7,12 @@ from and the limits are read from.
     cd worker && uv run python benchmarks/solver/fit.py [--check]
 
 Both fitted quantities take the form ``constant + coefficient * nodes ** exponent``: the peak
-memory of the solver process and the wall time of the solve job's steps (``steps.py``), for
-both element orders together (per node they cost about the same). The constant is chosen by a
-fine search and the other two by least squares on the logarithms, so every measurement counts
-by its relative error. The version in the file goes up by one whenever a coefficient changes.
-With ``--check`` nothing is written; the script fails if the file is not what the data gives.
+memory of the solver process, for both element orders together (per node they need about the
+same), and the wall time of the solve job's steps (``steps.py``), per element order (M8.9).
+The constant is chosen by a fine search and the other two by least squares on the logarithms,
+so every measurement counts by its relative error. The version in the file goes up by one
+whenever a coefficient changes. With ``--check`` nothing is written; the script fails if the
+file is not what the data gives.
 
 A modal run costs a part for the mesh and a part per mode: each mesh is measured with the fewest
 and the most modes, the line through those two gives the mesh's two parts, and each part is
@@ -206,29 +207,36 @@ def fit_modal(steps: dict) -> dict:
 
 def fit(steps: dict) -> dict:
     """The estimator table's per-solver models, element limits and margins from the job-step
-    rows. Both element orders are fitted together: per node they cost about the same."""
+    rows. Memory is fitted for both element orders together: per node they need about the same.
+    Time is fitted per order: per node a ten-node mesh takes longer, most of all with the
+    iterative solvers, and one law for both missed the 30 percent margin (M8.9)."""
     models = {}
     for solver, label in SOLVER_LABELS.items():
         rows = [row for row in static_rows(steps) if row["solver"] == solver]
-        if len(rows) < 3:
-            raise SystemExit(
-                f"steps.json needs at least three {solver} rows to fit three coefficients."
-            )
+        for order in (1, 2):
+            if sum(row["order"] == order for row in rows) < 3:
+                raise SystemExit(
+                    f"steps.json needs at least three {solver} rows of order {order} to fit "
+                    "three coefficients."
+                )
         nodes = [row["nodes"] for row in rows]
         memory = fit_power_law([(row["nodes"], row["peakMemoryBytes"]) for row in rows])
         limit = node_limit(memory)
         orders = {}
         for order in (1, 2):
             measured = [row for row in rows if row["order"] == order]
-            if not measured:
-                raise SystemExit(f"steps.json has no {solver} rows of order {order}.")
             orders[f"order{order}"] = element_limit(limit, measured)
         models[solver] = {
             "solver": label
             + ", CalculiX "
             + ", ".join(sorted({row["ccxVersion"] for row in rows})),
             "peakMemoryBytes": memory,
-            "jobSeconds": fit_power_law([(row["nodes"], row["jobSeconds"]) for row in rows]),
+            "jobSecondsByOrder": {
+                f"order{order}": fit_power_law(
+                    [(row["nodes"], row["jobSeconds"]) for row in rows if row["order"] == order]
+                )
+                for order in (1, 2)
+            },
             "fittedNodes": [min(nodes), max(nodes)],
             "maxElements": orders,
         }
@@ -269,7 +277,8 @@ def main() -> int:
     ESTIMATOR.write_text(json.dumps(new, indent=2) + "\n")
     for analysis, models in new["analyses"].items():
         for solver, model in models.items():
-            memory, seconds = model["peakMemoryBytes"], model["jobSeconds"]
+            memory = model["peakMemoryBytes"]
+            seconds = model.get("jobSeconds") or model["jobSecondsByOrder"]
             print(f"{analysis} {solver}: memory {memory}, time {seconds}")
             if "peakMemoryBytesPerMode" in model:
                 print(

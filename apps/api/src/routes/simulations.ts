@@ -293,7 +293,7 @@ async function runnableMesh(
  */
 async function meshEstimate(db: D1Database, mesh: Mesh, solver: Solver, kind: RunKind): Promise<RunEstimate> {
   if (mesh.nodeCount === null) throw new Error("A ready mesh has no node count.");
-  return estimateRun(mesh.nodeCount, await listMachineSizes(db), solver, kind);
+  return estimateRun(mesh.nodeCount, mesh.order, await listMachineSizes(db), solver, kind);
 }
 
 /**

@@ -67,6 +67,10 @@ class Outcome:
     software: dict[str, Any] = field(default_factory=dict)
     seconds: float = 0.0
     problem: str | None = None
+    #: The solve's estimated and billed seconds (M8.9). Shown, not checked: the estimator is
+    #: fitted on the benchmark machine and checked there (benchmarks/solver/check.py).
+    estimated_seconds: int | None = None
+    billed_seconds: int | None = None
 
     @property
     def ok(self) -> bool:
@@ -312,6 +316,8 @@ def run_case(
         )
     )
     cost = run["cost"]
+    outcome.estimated_seconds = run["estimate"] and run["estimate"]["seconds"]
+    outcome.billed_seconds = cost and cost["billedSeconds"]
     ledger = d1_count(
         persist_to,
         f"SELECT COUNT(*) AS n FROM ledger_entries WHERE job_id = "
@@ -349,8 +355,12 @@ def table(outcomes: list[Outcome], tier: str) -> str:
     lines.append("")
     for o in outcomes:
         versions = ", ".join(f"{k} {v}" for k, v in o.software.items() if v is not None)
+        solve = ""
+        if o.estimated_seconds is not None and o.billed_seconds is not None:
+            solve = f"; solve estimated {o.estimated_seconds} s, billed {o.billed_seconds} s"
         lines.append(
-            f"- {o.case.id} {o.case.title}: mesh {o.mesh or 'none'}; {o.seconds:.0f} s; {versions}"
+            f"- {o.case.id} {o.case.title}: mesh {o.mesh or 'none'}; {o.seconds:.0f} s{solve}; "
+            f"{versions}"
         )
     checks = [r.ok for o in outcomes for r in o.rows] + [False for o in outcomes if o.problem]
     lines.append("")
@@ -405,6 +415,8 @@ def main() -> int:
                     "problem": o.problem,
                     "mesh": o.mesh,
                     "software": o.software,
+                    "estimatedSeconds": o.estimated_seconds,
+                    "billedSeconds": o.billed_seconds,
                     "rows": [r.__dict__ for r in o.rows],
                 }
                 for o in outcomes

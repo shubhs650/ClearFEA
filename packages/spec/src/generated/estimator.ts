@@ -56,7 +56,7 @@ export interface AnalysisModel {
    */
   solver: string;
   peakMemoryBytes: PowerLaw;
-  jobSeconds: PowerLaw1;
+  jobSecondsByOrder: JobSecondsByOrder;
   /**
    * Smallest and largest node count among the measurements; outside this range the estimate is an extrapolation.
    *
@@ -67,7 +67,7 @@ export interface AnalysisModel {
   maxElements: MaxElements;
 }
 /**
- * Peak resident memory of the solver process.
+ * Peak resident memory of the solver process, for both element orders.
  */
 export interface PowerLaw {
   constant: number;
@@ -79,9 +79,28 @@ export interface PowerLaw {
   largestRatio: number;
 }
 /**
- * Wall time of the solve job's billable phase: writing the deck, the solver, reading results and writing the viewer's files.
+ * Wall time of the solve job's billable phase (writing the deck, the solver, reading results and writing the viewer's files), fitted per element order: per node a ten-node mesh takes longer to solve than a four-node one, most of all with the iterative solvers (M8.9).
+ */
+export interface JobSecondsByOrder {
+  order1: PowerLaw1;
+  order2: PowerLaw2;
+}
+/**
+ * Four-node tetrahedra.
  */
 export interface PowerLaw1 {
+  constant: number;
+  coefficient: number;
+  exponent: number;
+  /**
+   * Largest measured value over the fitted one among the measurements: how far the fit fell short at worst.
+   */
+  largestRatio: number;
+}
+/**
+ * Ten-node tetrahedra.
+ */
+export interface PowerLaw2 {
   constant: number;
   coefficient: number;
   exponent: number;
@@ -127,10 +146,10 @@ export interface ModalModel {
    * The solver and threads the fit was measured with.
    */
   solver: string;
-  peakMemoryBytes: PowerLaw2;
-  peakMemoryBytesPerMode: PowerLaw3;
-  jobSeconds: PowerLaw4;
-  jobSecondsPerMode: PowerLaw5;
+  peakMemoryBytes: PowerLaw3;
+  peakMemoryBytesPerMode: PowerLaw4;
+  jobSeconds: PowerLaw5;
+  jobSecondsPerMode: PowerLaw6;
   /**
    * Smallest and largest node count among the measurements; outside this range the estimate is an extrapolation.
    *
@@ -150,7 +169,7 @@ export interface ModalModel {
 /**
  * Peak resident memory of the solver process, the part that does not grow with the modes.
  */
-export interface PowerLaw2 {
+export interface PowerLaw3 {
   constant: number;
   coefficient: number;
   exponent: number;
@@ -162,7 +181,7 @@ export interface PowerLaw2 {
 /**
  * Peak resident memory added by each mode asked for.
  */
-export interface PowerLaw3 {
+export interface PowerLaw4 {
   constant: number;
   coefficient: number;
   exponent: number;
@@ -174,7 +193,7 @@ export interface PowerLaw3 {
 /**
  * Wall time of the solve job's billable phase, the part that does not grow with the modes.
  */
-export interface PowerLaw4 {
+export interface PowerLaw5 {
   constant: number;
   coefficient: number;
   exponent: number;
@@ -186,7 +205,7 @@ export interface PowerLaw4 {
 /**
  * Wall time added by each mode asked for.
  */
-export interface PowerLaw5 {
+export interface PowerLaw6 {
   constant: number;
   coefficient: number;
   exponent: number;
@@ -221,12 +240,20 @@ export interface SolverModels1 {
   iterative_scaling: AnalysisModel;
 }
 /**
+ * This interface was referenced by `EstimatorTable`'s JSON-Schema
+ * via the `definition` "JobSecondsByOrder".
+ */
+export interface JobSecondsByOrder1 {
+  order1: PowerLaw1;
+  order2: PowerLaw2;
+}
+/**
  * constant + coefficient * nodes ^ exponent, where nodes is the mesh's node count.
  *
  * This interface was referenced by `EstimatorTable`'s JSON-Schema
  * via the `definition` "PowerLaw".
  */
-export interface PowerLaw6 {
+export interface PowerLaw7 {
   constant: number;
   coefficient: number;
   exponent: number;
@@ -241,5 +268,6 @@ export const validateSolverModels = validator<SolverModels>(schema, "SolverModel
 export const validateModalSolverModels = validator<ModalSolverModels>(schema, "ModalSolverModels");
 export const validateModalModel = validator<ModalModel>(schema, "ModalModel");
 export const validateAnalysisModel = validator<AnalysisModel>(schema, "AnalysisModel");
+export const validateJobSecondsByOrder = validator<JobSecondsByOrder>(schema, "JobSecondsByOrder");
 export const validateMaxElements = validator<MaxElements>(schema, "MaxElements");
 export const validatePowerLaw = validator<PowerLaw>(schema, "PowerLaw");

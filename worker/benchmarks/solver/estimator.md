@@ -23,7 +23,15 @@ cd worker && uv run python benchmarks/solver/fit.py [--check]
 
 ## The fit
 
-Both quantities are fitted as `constant + coefficient × nodes^exponent` over all rows, both element orders together. On the committed data the memory law is within 2 percent of every row (and of M2.11's single-threaded SPOOLES rows in `results.json`, measured separately) and the time law within 21 percent. `memoryMargin` (1.25) and `usableMemoryFraction` (0.85) set how much memory a machine size must have before it is recommended.
+Both quantities are fitted as `constant + coefficient × nodes^exponent`: peak memory over all rows of a solver, both element orders together, and job time per element order (since M8.9, estimator version 5: per node a ten-node mesh takes longer to solve, most of all with the iterative solvers). On the committed data the memory law is within 2 percent of every row (and of M2.11's single-threaded SPOOLES rows in `results.json`, measured separately).
+
+## The check (M8.9, ADR-081)
+
+```
+cd worker && uv run python benchmarks/solver/check.py [--out FILE]
+```
+
+`check.py` prices every row of `steps.json` as the platform prices a run: the estimate is the fitted time rounded up to whole seconds, the measured cost the row's job time rounded up to whole seconds (billing is per started second), both at the same rate on every machine size. It prints a table per solver and per row and fails when a row's estimated cost is more than 30 percent from its measured cost (DECISIONS, working tolerances) and more than one billed second from it. `worker/tests/test_estimator.py` runs the same check in `make test`, so a refit that misses the margin fails there. `memoryMargin` (1.25) and `usableMemoryFraction` (0.85) set how much memory a machine size must have before it is recommended.
 
 ## Modal runs (M6.3, ADR-072)
 
