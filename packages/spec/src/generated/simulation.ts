@@ -1176,6 +1176,16 @@ export interface RunMachine {
   ratePerHour: number;
 }
 /**
+ * The failure classification of a failed run (M8.4, docs/ARCHITECTURE.md section 6): user_fault when the cause is the owner's setup or choice, so the time used is charged; platform_fault when it is a fault in ClearFEA, which is not charged. cause is the code the worker or the API gave, for example singular_matrix, out_of_memory or worker_lost. A cancelled or stopped run has no failure: its status says why it ended, and its time is charged.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunFailure".
+ */
+export interface RunFailure {
+  category: "user_fault" | "platform_fault";
+  cause: string;
+}
+/**
  * What a finished run's solve job cost (ADR-033). billedSeconds is the measured time rounded up to whole seconds; amount is billedSeconds times the hourly rate over 3600, in micro-credits rounded to the nearest one. charged is false when the job failed through a fault in ClearFEA, which the user does not pay for; amount is then 0.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -1352,6 +1362,10 @@ export interface RunView {
    * Why the run failed, or that it was cancelled or stopped at its limit, in plain language.
    */
   problem: string | null;
+  /**
+   * Who is at fault for a failed run and the cause (M8.4); null unless status is failed. The API always sends it; it is optional only so that run views frozen into report jobs before M8.4 stay valid.
+   */
+  failure?: RunFailure | null;
   result: SolveResult | null;
   createdAt: string;
   finishedAt: string | null;
@@ -1559,6 +1573,7 @@ export const validateRunMesh = validator<RunMesh>(schema, "RunMesh");
 export const RunFileNameValues = ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin", "nodes.bin"] as const satisfies readonly RunFileName[];
 export const validateRunFileName = validator<RunFileName>(schema, "RunFileName");
 export const validateRunMachine = validator<RunMachine>(schema, "RunMachine");
+export const validateRunFailure = validator<RunFailure>(schema, "RunFailure");
 export const validateRunCost = validator<RunCost>(schema, "RunCost");
 export const validateSizeEstimate = validator<SizeEstimate>(schema, "SizeEstimate");
 export const validateRunEstimate = validator<RunEstimate>(schema, "RunEstimate");

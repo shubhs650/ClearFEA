@@ -8,7 +8,6 @@ import {
   type CompleteRequest,
   type CompleteResponse,
   type HeartbeatResponse,
-  type RunFileName,
   validateClaimRequest,
   validateCompleteRequest,
   validateHeartbeatRequest,
@@ -21,7 +20,6 @@ import { Hono } from "hono";
 import { chargeFor, type JobCharge } from "./billing/cost";
 import { outOfMemoryFault } from "./billing/estimate";
 import { readBody } from "./body";
-import { recordImportOutcome } from "./db/geometries";
 import {
   appendJobLog,
   type Completion,
@@ -30,12 +28,11 @@ import {
   getClaimedJob,
   type Job,
   recordHeartbeat,
-  type StopReason,
 } from "./db/jobs";
-import { recordMeshOutcome } from "./db/meshes";
-import { getRun, recordRunOutcome } from "./db/runs";
+import { getRun } from "./db/runs";
 import type { Env } from "./env";
 import { jobFiles, transfers } from "./jobs/files";
+import { OUT_OF_MEMORY, recordOutcome, sweepLostJobs } from "./jobs/outcome";
 
 export const internal = new Hono<{ Bindings: Env }>();
 
@@ -80,6 +77,9 @@ internal.post("/jobs/claim", async (c) => {
   const body = await readBody(c.req.raw, validateClaimRequest, "ClaimRequest", SCHEMA);
   if ("error" in body) return c.json({ error: body.error }, 400);
   const { workerId } = body.value;
+  // Jobs whose worker is lost, this one's included (it asks only when it holds none), are failed
+  // first, so a restarted or dead worker never leaves a run solving (M8.4).
+  await sweepLostJobs(c.env, workerId);
   const job = await claimJob(c.env.DB, workerId, body.value.jobTypes, body.value.software ?? null);
   if (job === null) return c.body(null, 204);
   const origin = new URL(c.req.url).origin;
@@ -188,9 +188,6 @@ async function checkedCompletion(
   return { status: "succeeded", result };
 }
 
-/** The worker's cause code for a solver stopped past its machine size's memory (M8.5, ADR-082). */
-export const OUT_OF_MEMORY = "out_of_memory";
-
 /** A machine size's memory as the Run panel names it: GiB, or MiB below one GiB. */
 function memory(bytes: number): string {
   return bytes >= 2 ** 30 ? `${Number((bytes / 2 ** 30).toFixed(1))} GiB` : `${Math.round(bytes / 2 ** 20)} MiB`;
@@ -221,73 +218,6 @@ async function withMemoryFault(db: D1Database, job: Job, completion: Completion)
   return { ...completion, failureCategory: category, failureMessage };
 }
 
-function validatedImportResult(result: unknown) {
-  const checked = validateImportResult(result);
-  if (!checked.ok) throw new Error("checkedCompletion lets only valid import results through.");
-  return checked.value;
-}
-
-function validatedMeshResult(result: unknown) {
-  const checked = validateMeshResult(result);
-  if (!checked.ok) throw new Error("checkedCompletion lets only valid mesh results through.");
-  return checked.value;
-}
-
-function validatedSolveResult(result: unknown) {
-  const checked = validateSolveResult(result);
-  if (!checked.ok) throw new Error("checkedCompletion lets only valid solve results through.");
-  return checked.value;
-}
-
-/** The run files a solve job stored, whether it succeeded or not (a failed run may have a deck and log). */
-async function storedFiles(env: Env, job: Job): Promise<RunFileName[]> {
-  const uploads = jobFiles(job).filter((f) => f.direction === "upload");
-  const stored = await Promise.all(uploads.map((f) => env.FILES.head(f.key)));
-  return uploads.filter((_, i) => stored[i] !== null).map((f) => f.name as RunFileName);
-}
-
-/** The time a job used, as its owner reads it: seconds below two minutes, then minutes and seconds. */
-function usedTime(billedSeconds: number): string {
-  if (billedSeconds < 120) return `${billedSeconds} s`;
-  return `${Math.floor(billedSeconds / 60)} min ${billedSeconds % 60} s`;
-}
-
-/**
- * What the owner is told about a failed job: the worker's message when it is their fault, and
- * the API's own when a run ran out of memory, whoever pays.
- */
-function problem(completion: Exclude<Completion, { status: "succeeded" }>, ours: string): string {
-  // Only runs are cancelled (M8.2), but every job type reads the same completion.
-  if (completion.status !== "failed") return stoppedProblem(completion.status, null, null);
-  const explained = completion.failureCategory === "user_fault" || completion.failureCause === OUT_OF_MEMORY;
-  if (explained && completion.failureMessage) {
-    return completion.failureMessage;
-  }
-  return ours.replace("{cause}", completion.failureCause);
-}
-
-const IMPORT_FAULT =
-  "The import stopped because of a fault in ClearFEA, not in your file ({cause}). Upload the file again; if it fails again, report it.";
-const RUN_FAULT =
-  "The run stopped because of a fault in ClearFEA, not in your setup ({cause}). The solver log shows what happened. Run it again; if it fails again, report it.";
-const MESH_FAULT =
-  "Meshing stopped because of a fault in ClearFEA, not in your setup ({cause}). Generate the mesh again; if it fails again, report it.";
-
-/** What the owner is told about a run that stopped because it was asked to (M8.2, M8.3). */
-function stoppedProblem(reason: StopReason, charge: JobCharge | null, job: Job | null): string {
-  const time = charge === null ? "" : ` after ${usedTime(charge.billedSeconds)}`;
-  const charged = charge?.charged ? " The time it used is charged." : "";
-  if (reason === "cancelled") return `You cancelled the run${time}.${charged} Run it again for results.`;
-  const limit =
-    job?.stopAfterSeconds == null || job.stopMultiplier === null
-      ? ""
-      : ` of ${usedTime(job.stopAfterSeconds)} (${job.stopMultiplier} × the estimated time)`;
-  return (
-    `The run reached its stop limit${limit} and was stopped${time}.${charged} ` +
-    "If it needs longer, raise the stop limit and run it again; a coarser mesh or a faster solver also shortens it."
-  );
-}
-
 internal.post("/jobs/:id/heartbeat", async (c) => {
   const body = await readBody(c.req.raw, validateHeartbeatRequest, "HeartbeatRequest", SCHEMA);
   if ("error" in body) return c.json({ error: body.error }, 400);
@@ -316,35 +246,6 @@ internal.post("/jobs/:id/complete", async (c) => {
     held.ratePerHour === null ? null : chargeFor(billableMs, held.ratePerHour, completion);
   const job = await completeJob(c.env.DB, request.workerId, held.id, completion, billableMs, charge);
   if (job === null) return c.json({ error: gone }, 409);
-  if (job.type === "import") {
-    await recordImportOutcome(
-      c.env.DB,
-      job,
-      completion.status === "succeeded"
-        ? { status: "succeeded", result: validatedImportResult(completion.result) }
-        : { status: "failed", problem: problem(completion, IMPORT_FAULT) },
-    );
-  }
-  if (job.type === "mesh") {
-    await recordMeshOutcome(
-      c.env.DB,
-      job,
-      completion.status === "succeeded"
-        ? { status: "succeeded", result: validatedMeshResult(completion.result) }
-        : { status: "failed", problem: problem(completion, MESH_FAULT) },
-    );
-  }
-  if (job.type === "solve") {
-    await recordRunOutcome(
-      c.env.DB,
-      job,
-      completion.status === "succeeded"
-        ? { status: "succeeded", result: validatedSolveResult(completion.result) }
-        : completion.status === "failed"
-          ? { status: "failed", problem: problem(completion, RUN_FAULT) }
-          : { status: completion.status, problem: stoppedProblem(completion.status, charge, job) },
-      await storedFiles(c.env, job),
-    );
-  }
+  await recordOutcome(c.env, job, completion, charge);
   return c.json({ job: { ...payload(job), status: job.status } } satisfies CompleteResponse);
 });

@@ -81,6 +81,7 @@ export function runView(run: Run): RunView {
     stage: run.status !== "solving" ? null : run.jobStatus === "queued" ? "queued" : run.jobStage,
     progress: progressOf(run),
     problem: run.problem,
+    failure: run.failure,
     result: run.result,
     createdAt: run.createdAt,
     finishedAt: run.finishedAt,

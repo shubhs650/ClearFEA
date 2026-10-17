@@ -25,6 +25,8 @@ from .spec.simulation_schema import SimulatedMachine
 POLL_SECONDS = 0.1
 #: How long a cancelled solver may take to stop before it is killed.
 TERMINATE_SECONDS = 5.0
+#: What SPOOLES writes to spooles.out when it meets a zero pivot (ccx 2.21, spooles.c).
+SPOOLES_SINGULAR = "matrix found to be singular"
 
 
 def solver_environment(base: dict[str, str] | None = None) -> dict[str, str]:
@@ -59,6 +61,21 @@ class SolverRun:
     @property
     def cancelled(self) -> bool:
         return self.returncode is None and not self.out_of_memory
+
+    def singular(self) -> bool:
+        """Whether the equation solver found the stiffness matrix singular (M8.4): the supports
+        and bonds leave part of the model free to move, which the deck generator's rigid-body
+        check (ADR-039, ADR-061) does not always catch. Only SPOOLES says so: it writes it to
+        ``spooles.out`` beside the deck and exits with status 255 (spooles.c; checked with ccx
+        2.21 on a body that nothing joins to the held one). PaStiX and the iterative solvers
+        return a solution all the same (checked on the same deck in the worker image), so a
+        singular model on them is not caught here."""
+        if self.returncode in (None, 0):
+            return False
+        spooles = self.log_path.with_name("spooles.out")
+        return spooles.is_file() and SPOOLES_SINGULAR in spooles.read_text(
+            encoding="utf-8", errors="replace"
+        )
 
     def errors(self) -> list[str]:
         """CalculiX's ``*ERROR`` lines, which it prints for every fatal problem."""

@@ -39,6 +39,7 @@ import {
   maxElements,
   MIN_STOP_MULTIPLIER,
   type RunEstimate,
+  type RunFailure,
   type RunKind,
   type RunFileName,
   type RunView,
@@ -661,6 +662,32 @@ function costText(run: RunView): string {
   return `${credits(run.cost.amount)} for ${time}`;
 }
 
+/** The failure causes the worker and the API give, in plain words (M8.4); others show their code. */
+const FAILURE_CAUSES: Record<string, string> = {
+  setup_invalid: "the setup cannot be solved",
+  singular_matrix: "part of the model is free to move",
+  out_of_memory: "the solver ran out of memory",
+  worker_lost: "the machine stopped responding",
+  solver_error: "the solver stopped on its input",
+  solver_missing: "the solver is missing",
+  results_unreadable: "the results could not be read",
+  invalid_result: "the results were incomplete",
+  outputs_missing: "the results were incomplete",
+  transfer_failed: "a file transfer failed",
+  transfer_missing: "a file transfer failed",
+  bad_params: "an internal error",
+  bad_mesh: "an internal error",
+  internal_error: "an internal error",
+};
+
+/** Who is at fault for a failed run and why, with what that means for the cost (M8.4). */
+export function failureText(failure: RunFailure): string {
+  const cause = FAILURE_CAUSES[failure.cause] ?? failure.cause;
+  return failure.category === "user_fault"
+    ? `Your setup or choice: ${cause}. The time it used is charged.`
+    : `A fault in ClearFEA: ${cause}. Nothing is charged.`;
+}
+
 /** Time on a running clock: m:ss, or h:mm:ss from an hour. */
 export function clock(ms: number): string {
   const total = Math.floor(ms / 1000);
@@ -818,6 +845,12 @@ function RunRecord({ run, currentSpec }: { run: RunView; currentSpec: Simulation
               {limitTime(run.stopLimit.seconds)}
               <span className="field-hint"> ({run.stopLimit.multiplier} × the estimated time)</span>
             </dd>
+          </>
+        )}
+        {run.failure != null && (
+          <>
+            <dt>Failure</dt>
+            <dd data-testid="run-failure">{failureText(run.failure)}</dd>
           </>
         )}
         <dt>Cost</dt>

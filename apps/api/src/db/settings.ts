@@ -37,3 +37,15 @@ export async function storageSettings(db: D1Database): Promise<StorageSettings> 
 
 /** SQL for the retention days, for queries that work out when a run's raw output expires. */
 export const RETENTION_DAYS_SQL = `(SELECT value FROM settings WHERE name = '${NAMES.retentionDays}')`;
+
+/**
+ * Seconds without a heartbeat after which a claimed or running job's worker counts as lost
+ * (M8.4): the job is failed as a fault in ClearFEA.
+ */
+export async function heartbeatTimeoutSeconds(db: D1Database): Promise<number> {
+  const row = await db
+    .prepare("SELECT value FROM settings WHERE name = 'heartbeat_timeout_seconds'")
+    .first<{ value: number }>();
+  if (row === null) throw new Error("The setting heartbeat_timeout_seconds is missing; apply the migrations.");
+  return row.value;
+}
