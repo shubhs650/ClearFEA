@@ -902,7 +902,7 @@ M5.6 lets bonds carry heat (PLAN M5.6), so thermal and thermal stress setups wit
 6. **Verification.** V-27, a quarter tube of two bonded layers of different conductivity, the outer meshed finer, against the composite cylinder: temperatures in each layer and on both sides of the bond, radial flux in each layer, heat flow in and out. V-14, the single-layer tube listed for M5 but not written until now, is added beside it. `worker/spikes/heat_check` adds a bar cut into two bonded bodies of different conductivity and stiffness: every node against the series wall (fixed temperatures; convection), the same as thermal stress (stress and displacement at every node), and the heat balance with a fixed temperature next to the bond. E-03 runs its bonded model as a thermal stress analysis whose heat must cross the bond.
 
 ### ADR-070: Modal analysis: a frequency step on the held bodies, frequencies signed in Hz, free bodies allowed with SPOOLES
-2026-10-16 · Accepted (under Shubham's standing M6 autodrive instruction; pending his review). ADR-072 replaced items 3 and 4's PaStiX rule: modal setups take SPOOLES alone).
+2026-10-16 · Accepted (under Shubham's standing M6 autodrive instruction; reviewed and accepted by Shubham on 2026-10-17). ADR-072 replaced items 3 and 4's PaStiX rule: modal setups take SPOOLES alone.
 
 M6.1 adds the modal analysis type (PLAN M6.1: number of modes, supports only). Choices it needed:
 
@@ -916,7 +916,7 @@ M6.1 adds the modal analysis type (PLAN M6.1: number of modes, supports only). C
 8. **Verification.** V-20 (cantilever), V-21 (fixed-fixed beam) and V-22 (free bar, SPOOLES), an 800 × 16 × 8 mm steel bar against Euler-Bernoulli. V-21 is VERIFICATION.md's fixed-fixed beam; PLAN.md's "simply supported plate" was corrected to match. The bar's shear deformation, rotary inertia and clamped Poisson contraction differ from the beam theory by up to 0.16 %, so the tolerances are 0.5 % (coarse) and 0.3 % (full). The harness gains the `frequency` quantity with a `mode`, and `relativeTo` for a zero reference. `worker/spikes/modal_check` solves the three bars with SPOOLES at 4 mm and 2 mm.
 
 ### ADR-071: Mode shapes: one field per mode, scaled to a largest displacement of 1 and signed, drawn at a tenth of the model's size and swung in the shader
-2026-10-16 · Accepted (under Shubham's standing M6 autodrive instruction; pending his review).
+2026-10-16 · Accepted (under Shubham's standing M6 autodrive instruction; reviewed and accepted by Shubham on 2026-10-17).
 
 M6.2 adds the frequency table and the mode shape display and animation (PLAN M6.2). Choices it needed:
 
@@ -929,7 +929,7 @@ M6.2 adds the frequency table and the mode shape display and animation (PLAN M6.
 7. **Verification.** V-20 gains three checks of the cantilever's shape at mid-span against Euler-Bernoulli, φ(L/2)/φ(L): the first bending modes in z and y (0.3395) and the second in z (−0.7137, which also checks the sign). Tolerances are the frequencies' (0.5 % coarse, 0.3 % full); `worker/spikes/modal_check` measured −0.18, −0.13 and +0.02 % at 4 mm and −0.10, −0.05 and +0.01 % at 2 mm (SPOOLES). The harness gains the `modeShape.x`/`.y`/`.z` quantities with a `mode`.
 
 ### ADR-072: Modal runs are solved with SPOOLES alone and estimated with a part per mode; modal element limits are for 100 modes
-2026-10-17 · Accepted (under Shubham's standing M6 autodrive instruction; pending his review). The SPOOLES-only choice was put to him on a decision card in the M6.3 thread and built on its recommended option while it waited.
+2026-10-17 · Accepted (under Shubham's standing M6 autodrive instruction; reviewed and accepted by Shubham on 2026-10-17). The SPOOLES-only choice was put to him on a decision card in the M6.3 thread and built on its recommended option while it waited.
 
 M6.3 adds the estimator terms for modal runs (PLAN M6.3; ADR-070 item 7 left them for it). Choices it needed:
 
