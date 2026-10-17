@@ -11,6 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 type FittedNode = Annotated[int, Field(ge=1)]
 
 
+type FittedMode = Annotated[int, Field(ge=1)]
+
+
 class MaxElements(BaseModel):
     """
     Largest element count a run with this solver may have, per element order, on a machine of limitMemoryBytes: the node count whose fitted peak memory times memoryMargin fits in usableMemoryFraction of it, turned into elements with the nodes per element of the measured mesh nearest it, at most the largest mesh measured, rounded down to a thousand.
@@ -48,6 +51,53 @@ class PowerLaw(BaseModel):
     """
 
 
+class ModalModel(BaseModel):
+    """
+    A modal run's peak memory and job time are a part for the mesh plus a part per mode found: peakMemoryBytes + modes × peakMemoryBytesPerMode, and the same for jobSeconds (M6.3). Each part is a power law in the node count. The largestRatio of peakMemoryBytes and jobSeconds is the worst shortfall of the whole sum among the modal measurements.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    solver: str
+    """
+    The solver and threads the fit was measured with.
+    """
+    peak_memory_bytes: Annotated[PowerLaw, Field(alias="peakMemoryBytes")]
+    """
+    Peak resident memory of the solver process, the part that does not grow with the modes.
+    """
+    peak_memory_bytes_per_mode: Annotated[PowerLaw, Field(alias="peakMemoryBytesPerMode")]
+    """
+    Peak resident memory added by each mode asked for.
+    """
+    job_seconds: Annotated[PowerLaw, Field(alias="jobSeconds")]
+    """
+    Wall time of the solve job's billable phase, the part that does not grow with the modes.
+    """
+    job_seconds_per_mode: Annotated[PowerLaw, Field(alias="jobSecondsPerMode")]
+    """
+    Wall time added by each mode asked for.
+    """
+    fitted_nodes: Annotated[
+        list[FittedNode], Field(alias="fittedNodes", max_length=2, min_length=2)
+    ]
+    """
+    Smallest and largest node count among the measurements; outside this range the estimate is an extrapolation.
+    """
+    fitted_modes: Annotated[
+        list[FittedMode], Field(alias="fittedModes", max_length=2, min_length=2)
+    ]
+    """
+    Fewest and most modes among the measurements.
+    """
+    max_elements: Annotated[MaxElements, Field(alias="maxElements")]
+    """
+    As for a linear static run, for a modal run that asks for the most modes a setup may have (100), so the limit holds for every modal run.
+    """
+
+
 class AnalysisModel(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -72,9 +122,6 @@ class AnalysisModel(BaseModel):
     Smallest and largest node count among the measurements; outside this range the estimate is an extrapolation.
     """
     max_elements: Annotated[MaxElements, Field(alias="maxElements")]
-    """
-    Largest element count a run with this solver may have, per element order, on a machine of limitMemoryBytes: the node count whose fitted peak memory times memoryMargin fits in usableMemoryFraction of it, turned into elements with the nodes per element of the measured mesh nearest it, at most the largest mesh measured, rounded down to a thousand.
-    """
 
 
 class SolverModels(BaseModel):
@@ -92,6 +139,19 @@ class SolverModels(BaseModel):
     iterative_scaling: AnalysisModel
 
 
+class ModalSolverModels(BaseModel):
+    """
+    One model per equation solver a modal run may use (M6.3). A solver without one cannot solve a modal run: CalculiX refuses the iterative solvers on a frequency step (ADR-070), and PaStiX is not measured (ADR-072).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    pastix: ModalModel | None = None
+    spooles: ModalModel | None = None
+
+
 class Analyses(BaseModel):
     """
     One model per analysis type a run can have.
@@ -102,6 +162,10 @@ class Analyses(BaseModel):
         populate_by_name=True,
     )
     linear_static: SolverModels
+    """
+    Linear static runs; steady-state thermal and thermal stress runs are estimated with it too (ADR-064).
+    """
+    modal: ModalSolverModels
 
 
 class EstimatorTable(BaseModel):

@@ -772,24 +772,24 @@ describe("pre-run validation of a modal analysis (M6.1)", () => {
       ...s,
       analysis: "modal",
       modes: 10,
+      solver: "spooles",
       loads: [],
       materials: [{ ...s.materials[0], density: { value: 7850, unit: "kg/m³" } } as SimulationSpec["materials"][0]],
     };
   }
 
-  it("runs a complete modal setup, and one with no support at all on SPOOLES", () => {
+  it("runs a complete modal setup, and one with no support at all", () => {
     expect(preRunProblems(modal(), topology)).toEqual([]);
-    expect(preRunProblems({ ...modal(), supports: [], solver: "spooles" }, topology)).toEqual([]);
+    expect(preRunProblems({ ...modal(), supports: [] }, topology)).toEqual([]);
   });
 
-  it("asks for SPOOLES when no support holds the body, since PaStiX cannot solve it", () => {
-    expect(preRunProblems({ ...modal(), supports: [] }, topology)).toEqual([
-      {
-        item: "run",
-        message:
-          "PaStiX cannot find the natural frequencies of a body no support holds: it gives wrong frequencies or stops. Choose SPOOLES as the equation solver, or add supports that hold every body.",
-      },
-    ]);
+  it("asks for SPOOLES instead of PaStiX, also the default one, held or not (ADR-072)", () => {
+    const message =
+      "PaStiX is not used for modal analysis: in ClearFEA's solver benchmark it stopped with a memory error on about one modal run in three. Choose SPOOLES as the equation solver.";
+    const { solver: _, ...unnamed } = modal();
+    for (const s of [{ ...modal(), solver: "pastix" as const }, unnamed, { ...unnamed, supports: [] }]) {
+      expect(preRunProblems(s, topology)).toEqual([{ item: "run", message }]);
+    }
   });
 
   it("asks for the number of modes, the density and a direct solver", () => {
@@ -803,7 +803,7 @@ describe("pre-run validation of a modal analysis (M6.1)", () => {
       {
         item: "run",
         message:
-          "Iterative scaling cannot find natural frequencies: CalculiX's iterative solvers do not work in a modal analysis. Choose PaStiX or SPOOLES as the equation solver.",
+          "Iterative scaling cannot find natural frequencies: CalculiX's iterative solvers do not work in a modal analysis. Choose SPOOLES as the equation solver.",
       },
       {
         item: "steel",

@@ -21,7 +21,8 @@
 // element limit on a 16 GB machine, warns that the iterative solvers are less exact, and the
 // record says which solver a run used. From M6.1 a modal run lists its natural frequencies, and
 // from M6.2 (ADR-071) they form a table whose rows pick the mode shape drawn, exaggerated or
-// undeformed, and swinging when asked.
+// undeformed, and swinging when asked. From M6.3 a modal setup's solver list and estimate use
+// the modal fit: limits for the most modes, the solvers that may solve it, the modes asked for.
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import {
@@ -29,13 +30,17 @@ import {
   ITERATIVE_ACCURACY_NOTE,
   isIterative,
   limitMemoryText,
+  MAX_MODES,
   maxElements,
   type RunEstimate,
+  type RunKind,
   type RunFileName,
   type RunView,
   SOLVER_LABELS,
   SOLVERS,
   runReportNotes,
+  runSolverProblem,
+  specRunKind,
   type SimulationSpec,
   type Solver,
   type SolveResult,
@@ -187,14 +192,20 @@ const SOLVER_KINDS: Record<Solver, string> = {
 function SolverChoice({
   solver,
   order,
+  kind,
   onChange,
 }: {
   solver: Solver;
   order: ElementOrder;
+  kind: RunKind;
   onChange: (solver: Solver) => void;
 }) {
   const count = (n: number) => n.toLocaleString("en-US");
   const words = order === 1 ? "4-node" : "10-node";
+  const modal = kind.analysis === "modal";
+  /** A solver's limit for this run, or why it has none (M6.3). */
+  const limit = (s: Solver) =>
+    runSolverProblem(s, kind) === null ? `up to ${count(maxElements(s, order, kind))} elements` : "not for modal analysis";
   return (
     <section aria-label="Solver">
       <label className="field">
@@ -202,14 +213,15 @@ function SolverChoice({
         <select value={solver} onChange={(event) => onChange(event.target.value as Solver)}>
           {SOLVERS.map((s) => (
             <option key={s} value={s}>
-              {SOLVER_LABELS[s]} ({SOLVER_KINDS[s]}), up to {count(maxElements(s, order))} elements
+              {SOLVER_LABELS[s]} ({SOLVER_KINDS[s]}), {limit(s)}
             </option>
           ))}
         </select>
       </label>
       <p className="field-hint">
-        Element limits are for {words} elements on a {limitMemoryText()} machine, from the solver benchmark of a stocky
-        block; a larger mesh is refused so the run cannot run out of memory.
+        Element limits are for {words} elements on a {limitMemoryText()} machine
+        {modal && ` in a modal analysis of up to ${MAX_MODES} modes`}, from the solver benchmark of a stocky block; a
+        larger mesh is refused so the run cannot run out of memory.
       </p>
       {isIterative(solver) && (
         <p className="field-hint" role="note">
@@ -280,8 +292,9 @@ function Estimate({
         </select>
       </label>
       <p className="field-hint">
-        Estimated for this mesh's {estimate.nodes.toLocaleString("en-US")} nodes from the solver benchmark of a stocky
-        block; slender parts usually need less memory.
+        Estimated for this mesh's {estimate.nodes.toLocaleString("en-US")} nodes
+        {estimate.analysis === "modal" && estimate.modes !== undefined && ` and ${estimate.modes} modes`} from the
+        solver benchmark of a stocky block; slender parts usually need less memory.
         {estimate.extrapolated && " The mesh is larger than any the estimate was measured on, so it is less certain."}
       </p>
       {estimate.recommended === null && (
@@ -769,7 +782,7 @@ export function RunPanel({
     <section className="setup-panel" aria-label="Run">
       <h2 className="pane-title">Run</h2>
       <Notes status={status} />
-      {!solving && <SolverChoice solver={solver} order={meshOrder} onChange={onSolverChange} />}
+      {!solving && <SolverChoice solver={solver} order={meshOrder} kind={specRunKind(currentSpec)} onChange={onSolverChange} />}
       {!solving && <Estimate state={estimate} size={size} onSizeChange={setSize} />}
       <button
         type="button"

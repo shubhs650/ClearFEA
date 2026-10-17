@@ -10,7 +10,7 @@ cd worker && uv run python benchmarks/solver/steps.py --out DIR --solver pastix 
 uv run python benchmarks/solver/fit.py                  # rewrites packages/spec/estimator.json
 ```
 
-`steps.json` holds the solve job's steps for `pastix`, `spooles`, `iterative_cholesky` and `iterative_scaling`, measured with `worker/ccx/build.sh`'s build on the host (the image's build script, same source and pins), the worker's solver environment (one thread), up to 500,000 elements (PaStiX 4-node to 1.1 million). `fit.py` writes a memory and time law per solver and each solver's `maxElements` per element order on 16 GiB; see ADR-063 item 5 for how the sandbox's 13.4 GiB measurements give 16 GB limits. Run the larger meshes one solver at a time: the largest SPOOLES mesh takes 40 minutes.
+`steps.json` holds the solve job's steps for `pastix`, `spooles`, `iterative_cholesky` and `iterative_scaling`, measured with `worker/ccx/build.sh`'s build on the host (the image's build script, same source and pins), the worker's solver environment (one thread), up to 500,000 elements (PaStiX 4-node to 1.1 million). `fit.py` writes a memory and time law per solver and each solver's `maxElements` per element order on 16 GiB; see ADR-063 item 5 for how the sandbox's 13.4 GiB measurements give 16 GB limits. Run the larger meshes one solver at a time: the largest SPOOLES mesh takes 40 minutes. Since M6.3 it also holds SPOOLES modal rows (`--analysis modal --modes N`), each mesh at 1 and 100 modes, which `fit.py` turns into the modal model and limits (ADR-072; `estimator.md`).
 
 ```
 cd worker && uv run python benchmarks/solver/bench.py --out /tmp/bench [--targets 100000 250000]

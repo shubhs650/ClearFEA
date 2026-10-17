@@ -16,9 +16,13 @@
       "description": "One model per analysis type a run can have.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["linear_static"],
+      "required": ["linear_static", "modal"],
       "properties": {
-        "linear_static": { "$ref": "#/$defs/SolverModels" }
+        "linear_static": {
+          "description": "Linear static runs; steady-state thermal and thermal stress runs are estimated with it too (ADR-064).",
+          "$ref": "#/$defs/SolverModels"
+        },
+        "modal": { "$ref": "#/$defs/ModalSolverModels" }
       }
     },
     "memoryMargin": {
@@ -51,6 +55,55 @@
         "iterative_scaling": { "$ref": "#/$defs/AnalysisModel" }
       }
     },
+    "ModalSolverModels": {
+      "description": "One model per equation solver a modal run may use (M6.3). A solver without one cannot solve a modal run: CalculiX refuses the iterative solvers on a frequency step (ADR-070), and PaStiX is not measured (ADR-072).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pastix": { "$ref": "#/$defs/ModalModel" },
+        "spooles": { "$ref": "#/$defs/ModalModel" }
+      }
+    },
+    "ModalModel": {
+      "description": "A modal run's peak memory and job time are a part for the mesh plus a part per mode found: peakMemoryBytes + modes × peakMemoryBytesPerMode, and the same for jobSeconds (M6.3). Each part is a power law in the node count. The largestRatio of peakMemoryBytes and jobSeconds is the worst shortfall of the whole sum among the modal measurements.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "solver",
+        "peakMemoryBytes",
+        "peakMemoryBytesPerMode",
+        "jobSeconds",
+        "jobSecondsPerMode",
+        "fittedNodes",
+        "fittedModes",
+        "maxElements"
+      ],
+      "properties": {
+        "solver": { "description": "The solver and threads the fit was measured with.", "type": "string" },
+        "peakMemoryBytes": { "description": "Peak resident memory of the solver process, the part that does not grow with the modes.", "$ref": "#/$defs/PowerLaw" },
+        "peakMemoryBytesPerMode": { "description": "Peak resident memory added by each mode asked for.", "$ref": "#/$defs/PowerLaw" },
+        "jobSeconds": { "description": "Wall time of the solve job's billable phase, the part that does not grow with the modes.", "$ref": "#/$defs/PowerLaw" },
+        "jobSecondsPerMode": { "description": "Wall time added by each mode asked for.", "$ref": "#/$defs/PowerLaw" },
+        "fittedNodes": {
+          "description": "Smallest and largest node count among the measurements; outside this range the estimate is an extrapolation.",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "fittedModes": {
+          "description": "Fewest and most modes among the measurements.",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "maxElements": {
+          "description": "As for a linear static run, for a modal run that asks for the most modes a setup may have (100), so the limit holds for every modal run.",
+          "$ref": "#/$defs/MaxElements"
+        }
+      }
+    },
     "AnalysisModel": {
       "type": "object",
       "additionalProperties": false,
@@ -72,16 +125,17 @@
           "minItems": 2,
           "maxItems": 2
         },
-        "maxElements": {
-          "description": "Largest element count a run with this solver may have, per element order, on a machine of limitMemoryBytes: the node count whose fitted peak memory times memoryMargin fits in usableMemoryFraction of it, turned into elements with the nodes per element of the measured mesh nearest it, at most the largest mesh measured, rounded down to a thousand.",
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["order1", "order2"],
-          "properties": {
-            "order1": { "description": "Four-node tetrahedra.", "type": "integer", "minimum": 1 },
-            "order2": { "description": "Ten-node tetrahedra.", "type": "integer", "minimum": 1 }
-          }
-        }
+        "maxElements": { "$ref": "#/$defs/MaxElements" }
+      }
+    },
+    "MaxElements": {
+      "description": "Largest element count a run with this solver may have, per element order, on a machine of limitMemoryBytes: the node count whose fitted peak memory times memoryMargin fits in usableMemoryFraction of it, turned into elements with the nodes per element of the measured mesh nearest it, at most the largest mesh measured, rounded down to a thousand.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order1", "order2"],
+      "properties": {
+        "order1": { "description": "Four-node tetrahedra.", "type": "integer", "minimum": 1 },
+        "order2": { "description": "Ten-node tetrahedra.", "type": "integer", "minimum": 1 }
       }
     },
     "PowerLaw": {

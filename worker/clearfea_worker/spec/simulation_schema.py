@@ -1099,6 +1099,14 @@ class RunEstimate(BaseModel):
     """
     The solver the estimate is for (ADR-063); absent in estimates made before it, which were for spooles.
     """
+    analysis: AnalysisType | None = None
+    """
+    The analysis the estimate is for (M6.3); absent in estimates made before it, which used the linear static model for every analysis.
+    """
+    modes: Annotated[int | None, Field(ge=1)] = None
+    """
+    The modes a modal estimate is for (M6.3); absent for other analyses.
+    """
 
 
 class EstimateResponse(BaseModel):

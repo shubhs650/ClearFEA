@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Fits the run estimator (M2.12, ADR-049) to the job-step benchmark, per equation solver, and
-works out each solver's element limits on a 16 GiB machine (ADR-063); writes them to
-packages/spec/estimator.json, the file the API estimates from and the limits are read from.
+works out each solver's element limits on a 16 GiB machine (ADR-063), for linear static runs and
+for modal runs (M6.3); writes them to packages/spec/estimator.json, the file the API estimates
+from and the limits are read from.
 
     cd worker && uv run python benchmarks/solver/fit.py [--check]
 
@@ -11,6 +12,11 @@ both element orders together (per node they cost about the same). The constant i
 fine search and the other two by least squares on the logarithms, so every measurement counts
 by its relative error. The version in the file goes up by one whenever a coefficient changes.
 With ``--check`` nothing is written; the script fails if the file is not what the data gives.
+
+A modal run costs a part for the mesh and a part per mode: each mesh is measured with the fewest
+and the most modes, the line through those two gives the mesh's two parts, and each part is
+fitted as a power law over the meshes. Modal element limits are for the most modes a setup may
+ask for, so they hold for every modal run.
 """
 
 import argparse
@@ -35,6 +41,9 @@ LIMIT_MEMORY_BYTES = 16 * 2**30
 #: The most elements the mesher makes (ClearFEA's MAX_ELEMENTS, ADR-045 item 5); no limit is
 #: larger.
 MESHER_LIMIT = 2_000_000
+#: The most modes a modal setup may ask for (simulation.schema.json, ``modes``); modal element
+#: limits are worked out for this many.
+MAX_MODES = 100
 #: Constants tried: this many steps between zero and the smallest measurement.
 CONSTANT_STEPS = 400
 
@@ -76,15 +85,37 @@ SOLVER_LABELS = {
 }
 
 
+def law(term: dict[str, float], nodes: float) -> float:
+    return term["constant"] + term["coefficient"] * nodes ** term["exponent"]
+
+
+def room_bytes(ratio: float) -> float:
+    """The fitted peak memory a run may have on a LIMIT_MEMORY_BYTES machine: the usable share,
+    over the margin and over the fit's worst shortfall (largestRatio). The shortfall keeps
+    every measured mesh under the limit within its own rule."""
+    return LIMIT_MEMORY_BYTES * USABLE_MEMORY_FRACTION / MEMORY_MARGIN / ratio
+
+
 def node_limit(memory: dict[str, float]) -> float:
     """The node count whose fitted peak memory, raised by the fit's worst shortfall
     (largestRatio) and times the margin, fills the usable share of a LIMIT_MEMORY_BYTES
-    machine. The shortfall keeps every measured mesh under the limit within its own rule."""
-    room = (
-        LIMIT_MEMORY_BYTES * USABLE_MEMORY_FRACTION / MEMORY_MARGIN / memory["largestRatio"]
-        - memory["constant"]
-    )
+    machine."""
+    room = room_bytes(memory["largestRatio"]) - memory["constant"]
     return (room / memory["coefficient"]) ** (1 / memory["exponent"])
+
+
+def modal_node_limit(memory: dict[str, float], per_mode: dict[str, float]) -> float:
+    """As node_limit, for a modal run with MAX_MODES modes: memory + MAX_MODES × per_mode is
+    increasing in the node count, so the limit is found by bisection."""
+    room = room_bytes(memory["largestRatio"])
+    low, high = 1.0, 1e9
+    for _ in range(200):
+        middle = (low + high) / 2
+        if law(memory, middle) + MAX_MODES * law(per_mode, middle) <= room:
+            low = middle
+        else:
+            high = middle
+    return low
 
 
 def element_limit(nodes: float, rows: list[dict]) -> int:
@@ -98,12 +129,87 @@ def element_limit(nodes: float, rows: list[dict]) -> int:
     return int(elements // 1000 * 1000)
 
 
+def static_rows(steps: dict) -> list[dict]:
+    """The linear static rows; rows measured before M6.3 do not name their analysis."""
+    return [row for row in steps["runs"] if row.get("analysis", "linear_static") == "linear_static"]
+
+
+def fit_modal(steps: dict) -> dict:
+    """The modal models, per solver measured: the part per mesh and the part per mode of the
+    peak memory and the job time, each a power law in the node count, and the element limits
+    for MAX_MODES modes."""
+    models = {}
+    modal = [row for row in steps["runs"] if row.get("analysis") == "modal"]
+    for solver in sorted({row["solver"] for row in modal}):
+        rows = [row for row in modal if row["solver"] == solver]
+        meshes: dict[tuple[int, int], list[dict]] = {}
+        for row in rows:
+            meshes.setdefault((row["order"], row["targetElements"]), []).append(row)
+        parts: dict[str, list[tuple[int, float]]] = {
+            "memory": [],
+            "memoryPerMode": [],
+            "seconds": [],
+            "secondsPerMode": [],
+        }
+        for measured in meshes.values():
+            fewest = min(measured, key=lambda row: row["modes"])
+            most = max(measured, key=lambda row: row["modes"])
+            if fewest["modes"] == most["modes"]:
+                continue
+            span = most["modes"] - fewest["modes"]
+            for name, key in (("memory", "peakMemoryBytes"), ("seconds", "jobSeconds")):
+                # The line through the fewest and the most modes. Both quantities measured
+                # bend upwards between them, so the line is above the measurements there.
+                per_mode = (most[key] - fewest[key]) / span
+                parts[name].append((fewest["nodes"], fewest[key] - fewest["modes"] * per_mode))
+                parts[name + "PerMode"].append((fewest["nodes"], per_mode))
+        if len(parts["memory"]) < 3:
+            raise SystemExit(
+                f"steps.json needs at least three {solver} modal meshes, each with two numbers "
+                "of modes, to fit three coefficients."
+            )
+        laws = {name: fit_power_law(points) for name, points in parts.items()}
+        for name, key in (("memory", "peakMemoryBytes"), ("seconds", "jobSeconds")):
+            # How far the whole sum fell short at worst, over every modal row.
+            ratio = max(
+                row[key]
+                / (
+                    law(laws[name], row["nodes"])
+                    + row["modes"] * law(laws[name + "PerMode"], row["nodes"])
+                )
+                for row in rows
+            )
+            laws[name]["largestRatio"] = float(f"{ratio:.6g}")
+        limit = modal_node_limit(laws["memory"], laws["memoryPerMode"])
+        orders = {}
+        for order in (1, 2):
+            measured = [row for row in rows if row["order"] == order]
+            if not measured:
+                raise SystemExit(f"steps.json has no {solver} modal rows of order {order}.")
+            orders[f"order{order}"] = element_limit(limit, measured)
+        nodes = [row["nodes"] for row in rows]
+        modes = [row["modes"] for row in rows]
+        models[solver] = {
+            "solver": SOLVER_LABELS[solver]
+            + ", CalculiX "
+            + ", ".join(sorted({row["ccxVersion"] for row in rows})),
+            "peakMemoryBytes": laws["memory"],
+            "peakMemoryBytesPerMode": laws["memoryPerMode"],
+            "jobSeconds": laws["seconds"],
+            "jobSecondsPerMode": laws["secondsPerMode"],
+            "fittedNodes": [min(nodes), max(nodes)],
+            "fittedModes": [min(modes), max(modes)],
+            "maxElements": orders,
+        }
+    return models
+
+
 def fit(steps: dict) -> dict:
     """The estimator table's per-solver models, element limits and margins from the job-step
     rows. Both element orders are fitted together: per node they cost about the same."""
     models = {}
     for solver, label in SOLVER_LABELS.items():
-        rows = [row for row in steps["runs"] if row["solver"] == solver]
+        rows = [row for row in static_rows(steps) if row["solver"] == solver]
         if len(rows) < 3:
             raise SystemExit(
                 f"steps.json needs at least three {solver} rows to fit three coefficients."
@@ -127,7 +233,7 @@ def fit(steps: dict) -> dict:
             "maxElements": orders,
         }
     return {
-        "analyses": {"linear_static": models},
+        "analyses": {"linear_static": models, "modal": fit_modal(steps)},
         "memoryMargin": MEMORY_MARGIN,
         "usableMemoryFraction": USABLE_MEMORY_FRACTION,
         "limitMemoryBytes": LIMIT_MEMORY_BYTES,
@@ -161,9 +267,16 @@ def main() -> int:
             return 1
         return 0
     ESTIMATOR.write_text(json.dumps(new, indent=2) + "\n")
-    for solver, law in new["analyses"]["linear_static"].items():
-        print(f"{solver}: memory {law['peakMemoryBytes']}, time {law['jobSeconds']}")
-        print(f"  most elements on 16 GiB: {law['maxElements']}")
+    for analysis, models in new["analyses"].items():
+        for solver, model in models.items():
+            memory, seconds = model["peakMemoryBytes"], model["jobSeconds"]
+            print(f"{analysis} {solver}: memory {memory}, time {seconds}")
+            if "peakMemoryBytesPerMode" in model:
+                print(
+                    f"  per mode: memory {model['peakMemoryBytesPerMode']}, "
+                    f"time {model['jobSecondsPerMode']}"
+                )
+            print(f"  most elements on 16 GiB: {model['maxElements']}")
     print(f"wrote {ESTIMATOR} (version {new['version']})")
     return 0
 

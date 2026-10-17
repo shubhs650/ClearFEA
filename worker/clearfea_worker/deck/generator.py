@@ -341,7 +341,7 @@ _ANALYSIS_NAMES = {
 
 #: The equation solvers a *FREQUENCY step can use: CalculiX refuses its iterative ones there
 #: (frequencys.f), as its Lanczos method needs the factorised stiffness (M6.1, ADR-070).
-FREQUENCY_SOLVERS = ("PASTIX", "SPOOLES")
+FREQUENCY_SOLVERS = ("SPOOLES",)
 
 
 @dataclass
@@ -665,10 +665,18 @@ def generate_deck(spec: SimulationSpec, mesh: VolumeMesh, *, solver: str | None 
         heat = _heat_parts(spec, mesh, bodies, solver, initial=reference)
         return _deck(spec, mesh, bodies, [heat, static])
     if spec.analysis == "modal":
+        # CalculiX refuses its iterative solvers on a frequency step (ADR-070), and its PaStiX
+        # interface corrupts memory there and stops on about one run in three (ADR-072).
+        if solver == "PASTIX":
+            raise DeckError(
+                "PaStiX is not used for modal analysis: in ClearFEA's solver benchmark it stopped "
+                "with a memory error on about one modal run in three. Choose SPOOLES as the "
+                "equation solver."
+            )
         if solver not in FREQUENCY_SOLVERS:
             raise DeckError(
-                "CalculiX's iterative solvers cannot find natural frequencies. Choose PaStiX or "
-                "SPOOLES as the equation solver."
+                "CalculiX's iterative solvers cannot find natural frequencies. Choose SPOOLES as "
+                "the equation solver."
             )
         modal = _static_parts(spec, mesh, solver)
         return _deck(spec, mesh, _materials(spec, mesh), [modal])
@@ -747,19 +755,9 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
     tie_list = ties(spec, mesh, node_frames(held))
     held_springs = [s for _, group in springs for s in group]
     if not modal:
+        # A modal analysis finds the rigid-body modes of what nothing holds instead (ADR-070);
+        # it is solved with SPOOLES, which handles the indefinite K - 1·M of a free body.
         check_held(mesh, held, held_springs, body_groups(mesh, tie_list))
-    elif solver == "PASTIX":
-        # A modal analysis finds the rigid-body modes of what nothing holds instead, but only
-        # SPOOLES can: CalculiX factors K - 1·M, which a free body makes indefinite, and PaStiX
-        # then gives wrong frequencies or stops (ADR-070).
-        try:
-            check_held(mesh, held, held_springs, body_groups(mesh, tie_list))
-        except DeckError:
-            raise DeckError(
-                "PaStiX cannot find the natural frequencies of a body the supports leave free "
-                "to move: it gives wrong frequencies or stops. Choose SPOOLES as the equation "
-                "solver, or add supports that hold every body."
-            ) from None
     fixed_only = only_fixed_supports(spec)
     normals = {} if fixed_only else frictionless_normals(spec, mesh)
 

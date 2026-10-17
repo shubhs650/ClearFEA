@@ -183,7 +183,7 @@ function routes(simulations: SimulationView[], extra: Record<string, Route> = {}
     "GET /api/simulations?geometryId=g1": { status: 200, json: { simulations } },
     "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: null } },
     "GET /api/simulations/s1/runs": { status: 200, json: { runs: [] } },
-    "GET /api/simulations/s1/estimate?solver=pastix": { status: 200, json: { estimate: ESTIMATE } },
+    "GET /api/simulations/s1/estimate?solver=pastix&analysis=linear_static": { status: 200, json: { estimate: ESTIMATE } },
     "GET /api/project": { status: 200, json: { project: { id: "p1", name: "My project", unitSystem: "metric-mm" } } },
     "GET /api/materials": { status: 200, json: { library: materialLibrary.materials, custom: [] } },
     ...extra,
@@ -1205,7 +1205,7 @@ describe("run", () => {
     const fetchMock = serve(
       routes([simulation(supported)], {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
-        "GET /api/simulations/s1/estimate?solver=pastix": { status: 200, json: { estimate: tight } },
+        "GET /api/simulations/s1/estimate?solver=pastix&analysis=linear_static": { status: 200, json: { estimate: tight } },
         "POST /api/simulations/s1/runs": { status: 201, json: { run: run() } },
         "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
       }),
@@ -1237,7 +1237,7 @@ describe("run", () => {
       routes([simulation(supported)], {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
         "PUT /api/simulations/s1/spec": route,
-        "GET /api/simulations/s1/estimate?solver=iterative_cholesky": {
+        "GET /api/simulations/s1/estimate?solver=iterative_cholesky&analysis=linear_static": {
           status: 200,
           json: { estimate: { ...ESTIMATE, solver: "iterative_cholesky" } },
         },
@@ -1256,7 +1256,7 @@ describe("run", () => {
     expect(settings().getByText(ITERATIVE_ACCURACY_NOTE)).toBeTruthy();
     await waitFor(() => expect(sent.at(-1)?.solver).toBe("iterative_cholesky"));
     await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([path]) => path === "/api/simulations/s1/estimate?solver=iterative_cholesky")).toBe(
+      expect(fetchMock.mock.calls.some(([path]) => path === "/api/simulations/s1/estimate?solver=iterative_cholesky&analysis=linear_static")).toBe(
         true,
       ),
     );
@@ -2138,6 +2138,32 @@ describe("modal analysis (M6.1)", () => {
     fireEvent.click(settings().getByRole("button", { name: "Delete pressure" }));
     await waitFor(() => expect(sent.at(-1)?.loads).toEqual([]));
     expect(tree().queryByRole("button", { name: /^Loads,/ })).toBeNull();
+  });
+
+  it("estimates a modal run for its modes with SPOOLES and its modal limit (M6.3)", async () => {
+    const spooles: SimulationSpec = { ...modalSpec, solver: "spooles" };
+    const modal = { analysis: "modal", modes: 4 } as const;
+    const fetchMock = serve(
+      routes([simulation(spooles)], {
+        "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
+        "GET /api/simulations/s1/estimate?solver=spooles&analysis=modal&modes=4": {
+          status: 200,
+          json: { estimate: { ...ESTIMATE, solver: "spooles", ...modal } },
+        },
+      }),
+    );
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /^Run,/ }));
+    const solver = (await settings().findByRole("combobox", { name: "Equation solver" })) as HTMLSelectElement;
+    expect([...solver.options].map((o) => o.text)).toEqual([
+      "PaStiX (direct, fastest), not for modal analysis",
+      `SPOOLES (direct), up to ${maxElements("spooles", 2, modal).toLocaleString("en-US")} elements`,
+      "Iterative Cholesky (iterative, least memory, less exact), not for modal analysis",
+      "Iterative scaling (iterative, least memory, less exact), not for modal analysis",
+    ]);
+    expect(settings().getByText(/in a modal analysis of up to 100 modes/)).toBeTruthy();
+    expect(await settings().findByText(/and 4 modes from the/)).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([path]) => path === "/api/simulations/s1/estimate?solver=spooles&analysis=modal&modes=4")).toBe(true);
   });
 
   it("shows a modal run's natural frequencies in display units and notes its rigid-body modes", async () => {

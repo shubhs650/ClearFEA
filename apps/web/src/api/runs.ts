@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Client for a simulation's runs and /api/runs (M1.8), a run's result files (M1.9) and its
 // solver input and log (M1.10), the estimate before a run (M2.12), and its mesh and values at
-// every node for cut planes (M3.4) and export (M3.8); the estimate is for a solver (ADR-063). Shapes: simulation.schema.json.
+// every node for cut planes (M3.4) and export (M3.8); the estimate is for a solver (ADR-063)
+// and an analysis, with a modal run's modes (M6.3). Shapes: simulation.schema.json.
 
 import {
   type RunEstimate,
   type RunFileName,
+  type RunKind,
+  STATIC_RUN,
   type RunLogResponse,
   type RunView,
   type Solver,
@@ -35,8 +38,15 @@ export async function startRun(simulationId: string, machineSize?: string): Prom
 }
 
 /** Memory, time and cost estimated for solving on the current mesh, per machine size. */
-export async function getEstimate(simulationId: string, solver: Solver): Promise<ApiResult<RunEstimate>> {
-  const path = `/api/simulations/${encodeURIComponent(simulationId)}/estimate?solver=${encodeURIComponent(solver)}`;
+export async function getEstimate(
+  simulationId: string,
+  solver: Solver,
+  kind: RunKind = STATIC_RUN,
+): Promise<ApiResult<RunEstimate>> {
+  const modes = kind.analysis === "modal" && kind.modes != null ? `&modes=${kind.modes}` : "";
+  const path =
+    `/api/simulations/${encodeURIComponent(simulationId)}/estimate?solver=${encodeURIComponent(solver)}` +
+    `&analysis=${encodeURIComponent(kind.analysis)}${modes}`;
   const result = await apiRequest("GET", path, validateEstimateResponse);
   return result.kind === "ok" ? { kind: "ok", value: result.value.estimate } : result;
 }

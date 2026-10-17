@@ -547,9 +547,9 @@ def modal_spec() -> dict:
 
 def modal_held_spec() -> dict:
     """A modal analysis held by a symmetry plane on face 1, an elastic support on face 2 and a
-    prescribed displacement holding face 4 at zero along y; PaStiX by default."""
+    prescribed displacement holding face 4 at zero along y; SPOOLES, the one solver a modal
+    analysis takes (ADR-072)."""
     spec = modal_spec()
-    del spec["solver"]
     spec["supports"] = [
         {"id": "sym", "type": "frictionless", "name": "Symmetry", "faces": [1]},
         {
@@ -1913,6 +1913,8 @@ def modal_broken(change) -> dict:  # type: ignore[no-untyped-def]
         (lambda s: s["materials"][0].update(density=None), "A modal analysis needs it"),
         (lambda s: s.update(solver="iterative_cholesky"), "iterative solvers cannot find"),
         (lambda s: s.update(solver="iterative_scaling"), "iterative solvers cannot find"),
+        (lambda s: s.update(solver="pastix"), "PaStiX is not used for modal analysis"),
+        (lambda s: s.pop("solver"), "PaStiX is not used for modal analysis"),
         (
             lambda s: s.update(supports=supports_spec()["supports"]),
             "moves its faces, which a modal analysis cannot do",
@@ -1946,12 +1948,12 @@ def test_modal_takes_a_body_no_support_holds() -> None:
         deck(spec, two_tets(order=2))
 
 
-def test_modal_refuses_pastix_for_a_body_no_support_holds() -> None:
-    # CalculiX factors K - 1·M; a free body makes it indefinite and PaStiX gives wrong
-    # frequencies or stops (ADR-070). A held body still solves with PaStiX.
+def test_modal_refuses_pastix_for_held_and_free_bodies() -> None:
+    # CalculiX's PaStiX interface corrupts memory on a frequency step and stopped on about one
+    # held-block run in three (ADR-072); a free body also gave wrong frequencies (ADR-070).
     spec = modal_spec()
     spec["solver"] = "pastix"
-    assert "*FREQUENCY, SOLVER=PASTIX" in deck(spec, two_tets(order=2))
-    spec["supports"] = []
-    with pytest.raises(DeckError, match="Choose SPOOLES"):
-        deck(spec, two_tets(order=2))
+    for supports in (modal_spec()["supports"], []):
+        spec["supports"] = supports
+        with pytest.raises(DeckError, match="Choose SPOOLES"):
+            deck(spec, two_tets(order=2))

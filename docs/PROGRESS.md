@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M6 Modal, in progress (maintainer's M6 autodrive, 2026-10-16)
-- **Next task:** M6.3, estimator terms for modal runs
+- **Next task:** M6 close (every M6 task merged; ADR list and a phase-end run on main)
 - **Blocked on:** nothing
 
 ## Milestones
@@ -96,7 +96,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 
 - [x] M6.1 Modal analysis type: number of modes, supports only (with V-20, V-21, V-22)
 - [x] M6.2 Frequency table; mode shape display and animation (with V-20's mode shape checks)
-- [ ] M6.3 Estimator terms for modal runs
+- [x] M6.3 Estimator terms for modal runs (modal setups on SPOOLES alone, ADR-072)
 
 ### M5 Thermal
 
@@ -131,6 +131,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M6.3 (2026-10-17): estimator terms for modal runs (ADR-072, accepted under Shubham's M6 autodrive, pending his review; the SPOOLES-only choice went to him on a decision card and was built on its recommended option). Physics-critical modules touched: the deck generator (`generator.py`: a modal deck refuses PaStiX as well as the iterative solvers, and the free-body PaStiX branch is gone; snapshot `modal-held-c3d4` changes only `*FREQUENCY, SOLVER=PASTIX` to `SPOOLES`, because its spec now names SPOOLES, the one solver a modal deck takes) and the cost estimate (`estimator.json` version 4 gains `analyses.modal.spooles`; `apps/api/src/billing/estimate.ts` takes a `RunKind`). Pre-run validation asks every modal setup on PaStiX for SPOOLES; V-20 and V-21 name SPOOLES. `steps.py` gained `--analysis modal --modes N`; 26 SPOOLES modal rows in `steps.json` (about 7 hours; the 145,471-element mesh at 100 modes alone 2.4 hours). `fit.py` `fit_modal`: per mesh, the line through 1 and 100 modes; memory within 5 % and time within 18 % of every row. Limits for 100 modes: 136,000 ten-node, 461,000 four-node. API: `?analysis=`, `?modes=`; `RunEstimate.analysis`, `.modes`. Web: the solver list marks PaStiX and the iterative solvers "not for modal analysis", the estimate says how many modes it is for. Found: PaStiX modal aborts (glibc malloc assertion) in 3 of 9 clean tries at 37,725 nodes; valgrind shows a use-after-free write in `pastix_factor_main_generic` (parked). V-20/V-21's full tier still meshes at 3 mm; on SPOOLES 2 mm might now fit the 4 GB verification worker, not tried. Benchmark ran in the worker image (`docker run ... steps.py`), since the sandbox's ccx has no PaStiX and the image's build is what runs.
 
 > M6.2 (2026-10-16): frequency table, mode shape display and animation (ADR-071, accepted under Shubham's M6 autodrive, pending his review). Physics-critical module touched: the result reader (`results/frd.py` gains `iter_nodal_blocks`, which `read_nodal_blocks` now uses unchanged; `results/modal.py` `read_mode_shapes`, `normalized_shape`; `ModalFields.shapes`; `surface.py` writes `mode1`…`modeN`, kind `ratio`). Each shape is scaled to a largest displacement of 1 and signed so the largest component where it moves most is positive. Deck generator untouched. New fixtures `worker/tests/fixtures/modal/*.frd` (ccx 2.21, SPOOLES, from the modal snapshots; `.gitignore` exempts them). view.schema.json: `modeShape` quantity and an optional `mode`. Web: `resultFields.ts` `isModalRun`, `modeField`, `modeResults`, `MODE_SHAPE_SHARE` (0.1 of the model's diagonal); the Run panel's `ModalFigures` is a table whose rows pick the mode, with Shape (exaggerated or undeformed) and Animate; `ModelView.setSwing` animates the surface, outlines and section in the vertex shader (`swing` attribute, `swingPhase` uniform); markers hide while it swings. A modal run solved under M6.1 has no shapes and the viewer asks for a rerun. Harness: `modeShape.x/.y/.z` with `mode`; V-20 gains three mid-span shape checks; `worker/spikes/modal_check` checks the same. Still no export for a modal run, and participation factors / effective masses are not read (parked). Next: M6.3, modal estimator terms (memory especially; see M6.1's note below), then M6 close. Screenshots in the project's `m6.2/` folder.
 
@@ -277,6 +279,7 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 - A user-set bond tolerance (ADR-059 item 3): the tolerance is fixed at 1e-4 of the model size; another would need a detection job run on request.
 - Shrink the worker image (about 2.1 GB since ADR-063): Mesa and Open MPI pull in LLVM and GPU libraries the worker does not use, and PaStiX needs the CUDA runtime libraries (no GPU is used).
 - A rigid (kinematic) option for remote loads, which keeps the loaded faces' shape (ADR-041 item 2), and drawing a remote load's reference point in the viewer. Needs the maintainer's decision on the option.
+- Fix CalculiX's PaStiX interface on the frequency step (`pastix.c`, `pastix_factor_main_generic` writes into memory Scotch freed; found in M6.3, ADR-072) with a patch in `worker/ccx/build.sh` and a full verification run, then allow PaStiX for held modal setups again and benchmark it.
 - A 64-bit-integer PaStiX build and per-size limits for machines above 16 GB (ADR-063 item 10), when larger machines are benchmarked.
 - A modal run's export (CSV of frequencies, VTK with every mode shape) and its modal participation factors and effective masses, which the `.dat` file holds after the eigenvalues (ADR-071 item 2).
 - Keep a unit system picked before the project has loaded (`apps/web/src/units/useProject.ts` draws the loaded system over it right after sign-in; found by E-02, which waits for the load).
@@ -284,6 +287,10 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 ## Log
 
 Newest first. One entry per session: date, what was done, what was learned.
+
+### 2026-10-17
+
+- M6.3: estimator terms for modal runs (ADR-072): a part per mesh plus a part per mode, fitted on SPOOLES; modal limits for 100 modes (136,000 ten-node elements). Learned: CalculiX's PaStiX interface corrupts memory on a frequency step and aborted about one held modal run in three, so modal setups now ask for SPOOLES.
 
 ### 2026-10-16
 

@@ -9,6 +9,8 @@ import {
   estimatorTable,
   memoryFits,
   type RunEstimate,
+  type RunKind,
+  STATIC_RUN,
   type SizeEstimate,
   type Solver,
 } from "@clearfea/spec";
@@ -24,18 +26,20 @@ export interface MachineSize {
 }
 
 /**
- * The estimate for solving a mesh of `nodes` nodes with `solver` (ADR-063). The solver runs on
- * one thread on every size (ADR-048 item 3), so the time is the same on each and only the rate
- * differs. The recommended size is the cheapest whose memory fits, conservatively
- * (estimator.json's margin); null when none does.
+ * The estimate for solving a mesh of `nodes` nodes with `solver` (ADR-063), for a run of
+ * `kind` (a modal run has its own model, M6.3). The solver runs on one thread on every size
+ * (ADR-048 item 3), so the time is the same on each and only the rate differs. The
+ * recommended size is the cheapest whose memory fits, conservatively (estimator.json's
+ * margin); null when none does. Throws when `solver` cannot solve a run of `kind`.
  */
 export function estimateRun(
   nodes: number,
   sizes: readonly MachineSize[],
   solver: Solver,
+  kind: RunKind = STATIC_RUN,
   estimator: EstimatorTable = estimatorTable,
 ): RunEstimate {
-  const mesh = estimateMesh(nodes, solver, estimator);
+  const mesh = estimateMesh(nodes, solver, kind, estimator);
   const priced: SizeEstimate[] = [...sizes]
     .sort((a, b) => a.ratePerHour - b.ratePerHour || a.memoryBytes - b.memoryBytes || a.name.localeCompare(b.name))
     .map((size) => ({
@@ -55,6 +59,8 @@ export function estimateRun(
     sizes: priced,
     recommended: priced.find((size) => size.fits)?.size ?? null,
     solver,
+    analysis: kind.analysis,
+    ...(kind.analysis === "modal" && kind.modes != null ? { modes: kind.modes } : {}),
   };
 }
 

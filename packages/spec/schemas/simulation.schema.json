@@ -964,6 +964,15 @@
         "solver": {
           "description": "The solver the estimate is for (ADR-063); absent in estimates made before it, which were for spooles.",
           "$ref": "#/$defs/Solver"
+        },
+        "analysis": {
+          "description": "The analysis the estimate is for (M6.3); absent in estimates made before it, which used the linear static model for every analysis.",
+          "$ref": "#/$defs/AnalysisType"
+        },
+        "modes": {
+          "description": "The modes a modal estimate is for (M6.3); absent for other analyses.",
+          "type": "integer",
+          "minimum": 1
         }
       }
     },

@@ -121,7 +121,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 
 - [x] M6.1 Modal analysis type: number of modes, supports only.
 - [ ] M6.2 Frequency table; mode shape display and animation.
-- [ ] M6.3 Estimator terms for modal runs.
+- [x] M6.3 Estimator terms for modal runs.
 
 **Verification added:** V-20 cantilever beam frequencies, V-21 fixed-fixed beam frequencies (VERIFICATION.md's case; corrected from "simply supported plate" in M6.1), V-22 free-free check (rigid-body modes near zero).
 
