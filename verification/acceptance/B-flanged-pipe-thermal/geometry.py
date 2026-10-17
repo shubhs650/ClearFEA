@@ -2,7 +2,8 @@
 """Acceptance case B geometry: a quarter of a thick-walled flanged pipe section, between the
 half-planes x = 0 and y = 0, written as a STEP file in millimetres.
 
-    uv run --directory worker python ../verification/acceptance/B-flanged-pipe-thermal/geometry.py OUT.step
+    cd worker
+    uv run python ../verification/acceptance/B-flanged-pipe-thermal/geometry.py OUT.step
 
 An original design for this project (M9.4), not taken from a standard, book or drawing:
 
@@ -11,8 +12,9 @@ An original design for this project (M9.4), not taken from a standard, book or d
 - Flange: an integral collar of outside radius 230 mm from z = 340 mm to the end at
   z = 400 mm, with the same bore.
 
-One body, named "Flanged pipe" in place of OpenCASCADE's placeholder product name. Away from the flange (below about z = 140 mm) the wall is a long thick cylinder,
-whose through-wall temperatures and thermal stresses have closed forms.
+One body, named "Flanged pipe" in place of OpenCASCADE's placeholder product name. Away from
+the flange (below about z = 140 mm) the wall is a long thick cylinder, whose through-wall
+temperatures and thermal stresses have closed forms.
 """
 
 import math

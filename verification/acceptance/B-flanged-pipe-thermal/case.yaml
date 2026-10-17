@@ -23,7 +23,20 @@ faces:
   flange-face: { min: [0, 0, 400], max: [230, 230, 400] }
 mesh:
   coarse: { value: 10, unit: mm }
-  full: { value: 5, unit: mm }
-# M9.6 owns the acceptance checks (closed-form through-wall values, FreeCAD). The automatic
-# rows (heat balance, force balance, warnings, billing) show the model solves as set up.
-checks: []
+  full: { value: 6, unit: mm }
+# M9.6 owns the acceptance checks (closed-form through-wall values, FreeCAD). These two only
+# show the heat step reaches the temperatures model.md works out: with conductivity linear in
+# temperature the series-resistance solution at the mean wall temperature is exact.
+checks:
+  - name: Bore temperature away from the flange
+    quantity: temperature
+    face: bore
+    box: { min: [0, 0, 0], max: [100, 100, 50] }
+    reference: { value: 233.864, unit: °C }
+    tolerance: { coarse: 0.002, full: 0.002 }
+  - name: Outside temperature away from the flange
+    quantity: temperature
+    face: pipe-outside
+    box: { min: [0, 0, 0], max: [150, 150, 50] }
+    reference: { value: 153.029, unit: °C }
+    tolerance: { coarse: 0.002, full: 0.002 }

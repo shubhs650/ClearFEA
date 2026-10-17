@@ -31,7 +31,7 @@ the static step on its temperatures in one run. Stress-free temperature 20 °C.
 | Frictionless "Symmetry plane x = 0", "Symmetry plane y = 0" | the two cut faces | quarter symmetry |
 | Convection "Hot fluid in the bore" | bore | 2000 W/(m²·K) to 280 °C |
 | Convection "Cooling on the outside" | pipe outside, flange back, flange rim, flange end face | 500 W/(m²·K) to 30 °C |
-| Mesh | | 10 mm, quadratic (coarse tier); 5 mm (full tier) |
+| Mesh | | 10 mm, quadratic (coarse tier); 6 mm (full tier) |
 
 The flange's end face is free, so the pipe can grow along its axis: away from the flange the
 wall is in generalised plane strain with no net axial force.
@@ -44,6 +44,9 @@ wall is in generalised plane strain with no net axial force.
   + 1 / (2π b hₒ), gives k̄ = 46.28 W/(m·K), a heat flow of 57.98 kW per metre of full pipe,
   T(a) = 233.86 °C at the bore and T(b) = 153.03 °C at the outside (80.8 K across the wall),
   and T(r) between them follows from the same transform (logarithmic in r for constant k).
+  `case.yaml` checks both surface temperatures near z = 0; the coarse run gives 233.86 and
+  153.02 °C. On the cut y = 0 it gives σθ = −164 MPa at the bore and +124 MPa at the outside,
+  with σz close to σθ at both surfaces, as free ends make it.
 - **Through-wall stresses.** The closed-form thick-cylinder thermal stresses (Timoshenko and
   Goodier, long cylinder with free ends) with properties at the wall's temperatures; with E
   and α each varying by about 3 percent over the wall, the constant-property form evaluated at

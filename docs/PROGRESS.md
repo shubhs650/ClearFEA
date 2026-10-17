@@ -30,6 +30,18 @@ Status values: Not started, In progress, Verifying, Done.
 
 Copy the task list for the current milestone from `PLAN.md` here when the milestone starts, and tick tasks as they merge.
 
+### M9 Gate
+
+- [ ] M9.1 Run a model at each solver's element limit (ADR-063) in the development environment; fix what breaks.
+- [ ] M9.2 Set up and run on the laptop; demonstrate the laptop tier; fix viewer performance.
+- [ ] M9.3 User guide for the main flow; self-hosting instructions.
+- [x] M9.4 Build the two acceptance models as original geometry that can be published (`verification/acceptance/`)
+- [ ] M9.5 Acceptance case A: nozzle, shell and pad under pressure and nozzle loads. Hand checks and FreeCAD FEM comparison.
+- [ ] M9.6 Acceptance case B: thermal stress. Hand checks and FreeCAD FEM comparison.
+- [ ] M9.7 Publish the verification results page.
+- [ ] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found.
+- [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome.
+
 ### M8 Platform
 
 - [x] M8.1 Wallet page: balance, ledger, per-run cost; seeded play-money grant and low-balance refusal (ADR-080)
@@ -153,6 +165,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M9.4 (2026-10-17): the two acceptance models, no ADR. `verification/acceptance/A-nozzle-on-shell` and `B-flanged-pipe-thermal` are case folders (geometry script, `spec.json`, `case.yaml`, and `model.md` in place of `reference.md`), original designs with round case values. The harness runs them only when named (`CASES="A B" make verify`), so the phase-end suite is unchanged. A: shell ri 300 / t 10 / 1200 long, set-in nozzle ri 75 / t 8, pad 10 thick to radius 165, STEP part names "Shell", "Nozzle", "Reinforcing pad" (four bonds, the pad's underside is two faces); 2 MPa, end thrusts as face forces (565.487 kN on the free shell end, 35.343 kN on the nozzle end), a remote piping load F (4, −3, −6) kN, M (2, 3, 1.5) kN·m at the nozzle end, the other shell end fixed. B: a quarter of a flanged spool (bore 100, outside 150, flange 230 from z = 340 to 400), thermal stress with convection 2000 W/(m²·K) to 280 °C in the bore and 500 to 30 °C outside, E, α and k tables, ν 0.3, stress-free 20 °C, frictionless on the mid-length plane and both cuts. Both pass coarse and full tier (A 80k and 123k elements; B 26k, and 6 mm at full since 5 mm is 200k, over PaStiX's 142k). Surprises: the harness's no-load balance row measured B against its own rounding-size reaction totals (70 percent "out"); it now takes the run's forceScale, the supports' nodal force sizes (ADR-067 item 6), when there is no load. A's one quadratic element through the 10 mm wall reads the outside hoop stress 2.4 percent low, so M9.5 should set a local size on the shell. For M9.5/M9.6: start from `model.md`, which gives the far-field locations and hand values (A membrane 51.11 MPa von Mises at the outside; B surface temperatures 233.86 and 153.03 °C, which the run matches); add the acceptance checks to the same `case.yaml`. Pictures of both setups and results in the project's `m9.4/` folder.
 
 > Close M8 (2026-10-17): ADR-090. PLAN.md now ticks every M8 task. Nothing listed for M8 was left unbuilt except a check of the exit itself: `make verify` checked one ledger entry per case but never the ledger over the run, so `verification/harness/ledger.py` adds five "Ledger" rows after the last case (balances chain, wallet equals the sum, each job charge priced as `costOf` prices it, each charged run's entry equals its recorded cost, nothing but the grant without a job). The first branch phase-end run (39020876400) had all seven browser tests green and the ledger reconciling over 52 jobs in 26 cases, but V-22 failed: the harness's `wrangler d1 execute` read locked the API's SQLite file (`SQLITE_BUSY`), the same flake M8.5 saw on V-16; a local stress test made the API answer 500 the same way. The harness now reads only through the API and `infra/verify.sh` no longer passes `--persist-to`. Isolation: `apps/api/test/isolation.test.ts` passes in `make test`. The phase-end run on main, [39023659289](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289), passed: full-tier verify 307 of 307 in 26 cases (the five Ledger rows over 53 entries, 52 jobs and 26 runs), `make e2e` 7 of 7 with no rerun. Sample screenshots for the maintainer are in the project's `m8-close/` folder, staged on `make dev` through the API (two solves, a cancel, a stop at 0.25 ×, and an out-of-memory run on the small size shrunk to 64 MiB in that dev database only, then restored; storage charged with the free allowance set to 0 there).
 
@@ -353,6 +367,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M9.4 acceptance models: case A (nozzle, pad and shell, three bonded bodies, pressure with end thrusts and a piping load) and case B (flanged pipe, thermal stress with convection and property tables) in `verification/acceptance/`, run with `CASES="A B" make verify`; both pass coarse and full tier. Learned: an unloaded thermal stress model on symmetry planes has reaction totals at rounding size, so the harness's balance row needs the run's nodal force scale, as the platform's own check has had since M5.4.
 - Shubham reviewed and accepted ADR-079 to ADR-090, with the M8 placeholder values they set (grant, rates, storage allowance and rate, retention, stop limit, dead-worker timeout); recorded in DECISIONS.md.
 - Close M8 (ADR-090): M8 closed on phase-end run 39023659289 on main (verify 307 of 307, E-01 to E-07). `make verify` now checks that the ledger reconciles over the whole run, the M8 exit, and reads it through the API; reading the API's database from a second process had made V-22 fail with a locked database. Learned: `wrangler d1 execute` beside a running `wrangler dev` can fail either side with SQLITE_BUSY.
 - M8.8 isolation tests: `apps/api/test/isolation.test.ts` signs bob in and calls all 72 routes the API serves with alice's ids. Each owned route answers him exactly as for an id nobody owns, and nothing of hers changes in the database or in storage. Every job's file keys stay under the owner's prefix. A route missing from the sweep fails `make test`. No leak was found, so no route changed. Learned: Hono's `app.routes` lists every served route, so a test can tell when a new one goes unchecked.

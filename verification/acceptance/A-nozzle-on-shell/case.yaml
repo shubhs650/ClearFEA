@@ -26,9 +26,11 @@ mesh:
 # only shows the model reaches the closed-end membrane state where model.md says it should.
 checks:
   # Lamé, closed ends, at the outside: σθ = 2 p ri² / (ro² − ri²), σx = σθ / 2, σr = 0.
+  # 3 percent because both tiers put one quadratic element through the 10 mm wall, which
+  # reads the outside hoop stress about 2.4 percent low (model.md); M9.5 refines the wall.
   - name: Membrane von Mises at the shell outside, under the shell, 450 mm past the nozzle
     quantity: vonMises
     face: shell-outside
     box: { min: [440, -100, -311], max: [460, 100, -290] }
     reference: { value: 51.109, unit: MPa }
-    tolerance: { coarse: 0.03, full: 0.02 }
+    tolerance: { coarse: 0.03, full: 0.03 }

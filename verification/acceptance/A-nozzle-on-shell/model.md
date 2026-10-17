@@ -53,6 +53,12 @@ held end, which stands for the rest of the vessel.
   Lamé with closed ends: σθ = 2 p ri² / (ro² − ri²) = 59.016 MPa and σx = 29.508 MPa at the
   outside, von Mises 51.110 MPa (thin-wall p R / t = 61.0 and 30.5 MPa at the mean radius).
   `case.yaml` checks the von Mises value under the shell at x = 450 mm.
+- **Mesh through the wall.** At 15 mm (79,671 elements) and 12 mm (123,317, under PaStiX's
+  142,000 limit) there is one quadratic element through the shell's 10 mm wall. At x = 450 mm
+  that reads the outside hoop stress at 57.6 MPa (2.4 percent low), the radial stress at
+  +0.6 MPa instead of 0 and the axial stress at 29.5 MPa (exact), so von Mises 1.8 percent
+  low. The acceptance checks want a finer local size on the shell near the check locations
+  and at the nozzle, which also keeps the run under the element limit.
 - **Held side.** Between x ≈ −305 and −460 mm the shell adds the beam bending and shear of the
   nozzle loads carried to the held end, which follow from statics.
 - **Local stresses** at the nozzle and pad edges are for the WRC-style comparison (M9.5); the

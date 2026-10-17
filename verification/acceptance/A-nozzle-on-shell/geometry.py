@@ -2,7 +2,8 @@
 """Acceptance case A geometry: a cylindrical shell section with a set-in nozzle and a
 reinforcing pad, three bodies of one assembly, written as a STEP file in millimetres.
 
-    uv run --directory worker python ../verification/acceptance/A-nozzle-on-shell/geometry.py OUT.step
+    cd worker
+    uv run python ../verification/acceptance/A-nozzle-on-shell/geometry.py OUT.step
 
 An original design for this project (M9.4), not taken from a standard, book or drawing:
 
@@ -82,9 +83,7 @@ ASSEMBLY = "Nozzle on shell"
 def name_products(step: Path, names: list[str]) -> None:
     """Replaces OpenCASCADE's placeholder product names with ``names``, in file order."""
     text = step.read_text()
-    found = list(
-        dict.fromkeys(re.findall(r"'Open CASCADE STEP translator [0-9.]+ [0-9.]+'", text))
-    )
+    found = list(dict.fromkeys(re.findall(r"'Open CASCADE STEP translator [0-9.]+ [0-9.]+'", text)))
     if len(found) != len(names):
         raise ValueError(f"expected {len(names)} product names, found {found}")
     for placeholder, name in zip(found, names, strict=True):
