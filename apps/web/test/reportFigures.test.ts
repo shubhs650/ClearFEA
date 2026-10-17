@@ -88,11 +88,14 @@ describe("framing a support or load", () => {
   });
 
   it("looks at faces from their side, leaning towards the isometric direction", () => {
-    const [, , z] = facingDirection([1], normals);
-    expect(z).toBeLessThan(0);
+    // The bottom face is seen from below, 50° off its normal.
+    const below = facingDirection([1], normals);
+    expect(below[2]).toBeCloseTo(-Math.cos((50 * Math.PI) / 180), 6);
+    expect(Math.hypot(...below)).toBeCloseTo(1, 6);
     // Opposite faces cancel: the isometric direction.
     const iso = facingDirection([1, 2], normals);
-    expect(iso.map((v) => Number(v.toFixed(3)))).toEqual([1, 0.8, 1.2]);
+    const n = Math.hypot(1, 0.8, 1.2);
+    expect(near(iso)).toEqual(near([1 / n, 0.8 / n, 1.2 / n]));
   });
 
   it("picks out a support's faces, or a heat generation's bodies, and nothing for gravity", () => {
@@ -106,7 +109,7 @@ describe("framing a support or load", () => {
     const pressure = spec.loads[0] as Load;
     const [push] = loadArrows(pressure, topology, normals, 2);
     expect(near(push?.direction)).toEqual([0, 0, -1]);
-    expect(near(push?.origin)).toEqual([0.5, 0.5, 1.5]);
+    expect(near(push?.origin)).toEqual([0.5, 0.5, 1.6]);
     const suction = { ...pressure, magnitude: { value: -1, unit: "MPa" } } as Load;
     expect(near(loadArrows(suction, topology, normals, 2)[0]?.direction)).toEqual([0, 0, 1]);
   });
@@ -117,7 +120,7 @@ describe("framing a support or load", () => {
     const force = { id: "f", type: "force", name: "F", faces: [2], x: { value: 1, unit: "kN" }, y: null, z: null } as Load;
     const [arrow] = loadArrows(force, topology, normals, 2);
     expect(near(arrow?.direction)).toEqual([1, 0, 0]);
-    expect(near(arrow?.origin)).toEqual([0, 0.5, 1]);
-    expect(arrow?.length).toBe(0.5);
+    expect(near(arrow?.origin)).toEqual([-0.1, 0.5, 1]);
+    expect(arrow?.length).toBeCloseTo(0.6, 12);
   });
 });

@@ -19,21 +19,25 @@
 
 import {
   AmbientLight,
-  ArrowHelper,
   Box3,
   BufferAttribute,
   BufferGeometry,
   Color,
+  ConeGeometry,
+  CylinderGeometry,
   DataTexture,
   DirectionalLight,
   DoubleSide,
   LineBasicMaterial,
   LineSegments,
+  Group,
   Mesh,
   type Material,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   NearestFilter,
   PerspectiveCamera,
+  Quaternion,
   Raycaster,
   Scene,
   Sphere,
@@ -199,7 +203,7 @@ export class ModelView {
    * model swings, or null (M6.2). */
   private swing: Float32Array | null = null;
   private swingFrame = 0;
-  private arrows: ArrowHelper[] = [];
+  private arrows: Group[] = [];
 
   /** Throws if the browser cannot create a WebGL context. */
   constructor(
@@ -294,13 +298,14 @@ export class ModelView {
   }
 
   /** Points the camera at the whole model, or the faces left shown, from an isometric direction
-   * or, for a report figure (M7.2), from the direction given. */
-  resetView(from: readonly [number, number, number] = ISOMETRIC): void {
+   * or, for a report figure (M7.2), from the direction given and with the margin given (the
+   * distance as a multiple of the one at which the model's bounding sphere just fits). */
+  resetView(from: readonly [number, number, number] = ISOMETRIC, margin = 1.15): void {
     const sphere = this.shownSphere();
     if (!sphere) return;
     const radius = Math.max(sphere.radius, 1e-6);
     const fov = (this.camera.fov * Math.PI) / 180;
-    const distance = (radius / Math.sin(fov / 2)) * 1.15;
+    const distance = (radius / Math.sin(fov / 2)) * margin;
     const direction = new Vector3(...from).normalize();
     // Looking straight down y, the camera's up (y) would be undefined: lean it a little.
     if (Math.abs(direction.y) > 0.999) direction.set(0.02, Math.sign(direction.y), 0.02).normalize();
@@ -490,21 +495,20 @@ export class ModelView {
   setArrows(arrows: readonly Arrow[]): void {
     this.clearArrows();
     this.arrows = arrows.map(({ origin, direction, length }) => {
-      const arrow = new ArrowHelper(
-        new Vector3(...direction).normalize(),
-        new Vector3(...origin),
-        length,
-        COLOURS.arrow,
-        length * 0.25,
-        length * 0.12,
-      );
-      arrow.renderOrder = 10;
+      // A solid shaft and head, so the arrow reads at print size (a WebGL line is one pixel wide).
+      const head = length * 0.25;
+      const material = new MeshBasicMaterial({ color: COLOURS.arrow, depthTest: false, transparent: true });
+      const shaft = new Mesh(new CylinderGeometry(length * 0.025, length * 0.025, length - head, 12), material);
+      shaft.position.y = (length - head) / 2;
+      const tip = new Mesh(new ConeGeometry(length * 0.08, head, 16), material);
+      tip.position.y = length - head / 2;
+      const arrow = new Group();
+      arrow.add(shaft, tip);
+      // The parts are built along +y; turn them onto the direction.
+      arrow.quaternion.copy(new Quaternion().setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(...direction).normalize()));
+      arrow.position.set(...origin);
       arrow.traverse((part) => {
-        const material = (part as Mesh).material as Material | undefined;
-        if (material) {
-          material.depthTest = false;
-          material.transparent = true;
-        }
+        part.renderOrder = 10;
       });
       this.scene.add(arrow);
       return arrow;
@@ -692,7 +696,11 @@ export class ModelView {
   private clearArrows(): void {
     for (const arrow of this.arrows) {
       this.scene.remove(arrow);
-      arrow.dispose();
+      for (const part of arrow.children) {
+        if (!(part instanceof Mesh)) continue;
+        part.geometry.dispose();
+        (part.material as Material).dispose();
+      }
     }
     this.arrows = [];
   }

@@ -143,10 +143,17 @@ export function faceNormals(mesh: DisplayMesh): Map<number, Vector> {
   return normals;
 }
 
+/** How far from the faces' normal the camera looks at them: square on would hide the model's
+ * depth and an arrow into the face. */
+const FACING_TILT = (50 * Math.PI) / 180;
+
+const dot = (a: readonly number[], b: readonly number[]) => (a[0] ?? 0) * (b[0] ?? 0) + (a[1] ?? 0) * (b[1] ?? 0) + (a[2] ?? 0) * (b[2] ?? 0);
+
 /**
- * Where the camera looks from to show faces: from their side, leaning towards the usual
- * isometric direction so the model keeps its depth. Faces whose normals cancel (a bore, faces on
- * opposite sides) are shown from the isometric direction.
+ * Where the camera looks from to show faces: from their side, FACING_TILT off their mean normal
+ * towards the usual isometric direction, so the model keeps its depth and an arrow pushing on the
+ * faces shows. Faces whose normals cancel (a bore, faces on opposite sides) are shown from the
+ * isometric direction.
  */
 export function facingDirection(faces: readonly number[], normals: ReadonlyMap<number, Vector>): Vector {
   let sum: Vector = [0, 0, 0];
@@ -156,9 +163,17 @@ export function facingDirection(faces: readonly number[], normals: ReadonlyMap<n
     sum = plus(sum, n);
     area += length(n);
   }
-  if (area === 0 || length(sum) < 0.3 * area) return [...ISOMETRIC];
-  return unit(plus(unit(sum), scaled(unit(ISOMETRIC), 0.6)));
+  const iso = unit(ISOMETRIC);
+  if (area === 0 || length(sum) < 0.3 * area) return iso;
+  const normal = unit(sum);
+  // The isometric direction's part square to the normal; any square direction when they line up.
+  let across = plus(iso, scaled(normal, -dot(iso, normal)));
+  if (length(across) < 1e-6) across = Math.abs(normal[1]) < 0.9 ? [-normal[2], 0, normal[0]] : [1, 0, 0];
+  return plus(scaled(normal, Math.cos(FACING_TILT)), scaled(unit(across), Math.sin(FACING_TILT)));
 }
+
+/** A support's or load's figure is framed closer than the viewer's start, which leaves room around the model. */
+const ITEM_MARGIN = 0.95;
 
 /** The faces a support or load is drawn on: its own, or those of its bodies (heat generation).
  * Loads on every body (gravity, centrifugal, a temperature change) pick out no faces. */
@@ -183,7 +198,7 @@ export function loadArrows(
   normals: ReadonlyMap<number, Vector>,
   size: number,
 ): Arrow[] {
-  const long = 0.25 * size;
+  const long = 0.3 * size;
   const faces = new Map(topology.faces.map((f) => [f.tag, f]));
   const [x0, y0, z0, x1, y1, z1] = topology.bbox;
   const middle: Vector = [((x0 ?? 0) + (x1 ?? 0)) / 2, ((y0 ?? 0) + (y1 ?? 0)) / 2, ((z0 ?? 0) + (z1 ?? 0)) / 2];
@@ -400,7 +415,7 @@ async function drawItem(
   view.setHiddenFaces(new Set());
   view.setSelection(new Set(faces));
   view.setMesh(model.mesh, "outlines", false);
-  view.resetView(facingDirection(faces, model.normals));
+  view.resetView(facingDirection(faces, model.normals), ITEM_MARGIN);
   view.setArrows(load === null ? [] : loadArrows(load, model.topology, model.normals, sizeOf(model.topology)));
   return { legend: null };
 }
