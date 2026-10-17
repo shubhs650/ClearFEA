@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "source": "worker/benchmarks/solver/steps.json, fitted by worker/benchmarks/solver/fit.py",
   "analyses": {
     "linear_static": {
@@ -11,11 +11,19 @@
           "exponent": 1.2956,
           "largestRatio": 1.04403
         },
-        "jobSeconds": {
-          "constant": 1.01655,
-          "coefficient": 3.27287e-07,
-          "exponent": 1.69637,
-          "largestRatio": 1.28588
+        "jobSecondsByOrder": {
+          "order1": {
+            "constant": 0.83025,
+            "coefficient": 6.70225e-07,
+            "exponent": 1.63728,
+            "largestRatio": 1.17343
+          },
+          "order2": {
+            "constant": 1.21485,
+            "coefficient": 1.51203e-07,
+            "exponent": 1.75973,
+            "largestRatio": 1.05854
+          }
         },
         "fittedNodes": [
           5212,
@@ -34,11 +42,19 @@
           "exponent": 1.38531,
           "largestRatio": 1.03335
         },
-        "jobSeconds": {
-          "constant": 1.07535,
-          "coefficient": 3.9344e-08,
-          "exponent": 1.997,
-          "largestRatio": 1.1298
+        "jobSecondsByOrder": {
+          "order1": {
+            "constant": 1.01135,
+            "coefficient": 7.3744e-08,
+            "exponent": 1.94499,
+            "largestRatio": 1.08574
+          },
+          "order2": {
+            "constant": 1.1128,
+            "coefficient": 2.17365e-08,
+            "exponent": 2.04522,
+            "largestRatio": 1.10387
+          }
         },
         "fittedNodes": [
           5212,
@@ -57,11 +73,19 @@
           "exponent": 0.952542,
           "largestRatio": 1.12142
         },
-        "jobSeconds": {
-          "constant": 0.71905,
-          "coefficient": 9.25422e-06,
-          "exponent": 1.33845,
-          "largestRatio": 1.18157
+        "jobSecondsByOrder": {
+          "order1": {
+            "constant": 0.25185,
+            "coefficient": 5.00324e-05,
+            "exponent": 1.17926,
+            "largestRatio": 1.02867
+          },
+          "order2": {
+            "constant": 0.68355,
+            "coefficient": 1.55947e-05,
+            "exponent": 1.29966,
+            "largestRatio": 1.09493
+          }
         },
         "fittedNodes": [
           5212,
@@ -80,11 +104,19 @@
           "exponent": 0.952684,
           "largestRatio": 1.12106
         },
-        "jobSeconds": {
-          "constant": 1.0754,
-          "coefficient": 2.3005e-07,
-          "exponent": 1.70344,
-          "largestRatio": 1.47296
+        "jobSecondsByOrder": {
+          "order1": {
+            "constant": 0.7638,
+            "coefficient": 2.94449e-06,
+            "exponent": 1.45525,
+            "largestRatio": 1.02362
+          },
+          "order2": {
+            "constant": 0.773175,
+            "coefficient": 9.03777e-07,
+            "exponent": 1.60057,
+            "largestRatio": 1.14512
+          }
         },
         "fittedNodes": [
           5212,

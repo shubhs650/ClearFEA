@@ -933,7 +933,7 @@ describe("estimates (ADR-049)", () => {
     expect(response.status).toBe(200);
     const body = validateEstimateResponse(await response.json());
     if (!body.ok) throw new Error(body.errors.join(" "));
-    const fitted = estimateMesh(7108);
+    const fitted = estimateMesh(7108, 2);
     expect(body.value.estimate).toMatchObject({
       estimator: estimatorTable.version,
       nodes: 7108,
@@ -959,7 +959,7 @@ describe("estimates (ADR-049)", () => {
     const body = validateEstimateResponse(await asked.json());
     if (!body.ok) throw new Error(body.errors.join(" "));
     expect(body.value.estimate.solver).toBe("iterative_scaling");
-    expect(body.value.estimate.memoryBytes).toBe(estimateMesh(7108, "iterative_scaling").memoryBytes);
+    expect(body.value.estimate.memoryBytes).toBe(estimateMesh(7108, 2, "iterative_scaling").memoryBytes);
     const bad = await call("GET", `/api/simulations/${id}/estimate?solver=pardiso`, { cookie: alice });
     expect(bad.status).toBe(400);
     expect(((await bad.json()) as { error: string }).error).toContain("There is no solver called pardiso");

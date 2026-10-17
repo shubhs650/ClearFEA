@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The run estimator's coefficients (packages/spec/estimator.json, ADR-049) are the fit of the
-job-step benchmark, and the fit itself recovers a law it is given."""
+job-step benchmark, the fit itself recovers a law it is given, and the estimate is within the
+cost margin of every benchmark row (M8.9)."""
 
 import importlib.util
 import json
@@ -14,8 +15,8 @@ BENCHMARKS = Path(__file__).resolve().parents[1] / "benchmarks" / "solver"
 ESTIMATOR = Path(__file__).resolve().parents[2] / "packages" / "spec" / "estimator.json"
 
 
-def load_fit():  # type: ignore[no-untyped-def]
-    spec = importlib.util.spec_from_file_location("fit", BENCHMARKS / "fit.py")
+def load_fit(name: str = "fit"):  # type: ignore[no-untyped-def]
+    spec = importlib.util.spec_from_file_location(name, BENCHMARKS / f"{name}.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -128,3 +129,26 @@ def test_the_mesher_limit_in_the_fit_is_the_mesher_s() -> None:
     from clearfea_worker.meshing.mesher import MAX_ELEMENTS
 
     assert load_fit().MESHER_LIMIT == MAX_ELEMENTS
+
+
+def test_every_benchmark_row_is_estimated_within_the_cost_margin() -> None:
+    """Gate condition 3 (docs/DECISIONS.md): the cost the estimate predicts is within 30 percent
+    of the measured cost, or one billed second, on the benchmark set (benchmarks/solver/check.py,
+    ADR-081)."""
+    check = load_fit("check")
+    estimator = json.loads(ESTIMATOR.read_text())
+    rows = check.rows(json.loads((BENCHMARKS / "steps.json").read_text()), estimator)
+    assert len(rows) >= 60
+    outside = [row for row in rows if not row.within]
+    assert not outside, check.report(outside, estimator["version"])
+
+
+def test_the_check_bills_and_estimates_whole_seconds() -> None:
+    check = load_fit("check")
+    row = check.Row("linear_static", "pastix", 2, 1, 1, None, 9.001, 6.2)
+    assert (row.billed, row.estimated) == (10, 7)
+    assert row.error == pytest.approx(-0.3)
+    assert row.within
+    assert not check.Row("linear_static", "pastix", 2, 1, 1, None, 9.0, 5.9).within
+    # One second off is within the margin, however short the job (ADR-081).
+    assert check.Row("modal", "spooles", 2, 1, 1, 1, 2.0, 2.1).within

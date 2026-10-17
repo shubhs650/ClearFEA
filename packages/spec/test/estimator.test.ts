@@ -37,22 +37,33 @@ describe("the estimate of a mesh", () => {
   it("evaluates constant + coefficient × nodes ^ exponent, rounded up", () => {
     expect(powerLaw({ constant: 1, coefficient: 2, exponent: 2, largestRatio: 1 }, 3)).toBe(19);
     const model = estimatorTable.analyses.linear_static.pastix;
-    const estimate = estimateMesh(100_000);
+    const estimate = estimateMesh(100_000, 2);
     expect(estimate.memoryBytes).toBe(Math.ceil(powerLaw(model.peakMemoryBytes, 100_000)));
-    expect(estimate.seconds).toBe(Math.ceil(powerLaw(model.jobSeconds, 100_000)));
+    expect(estimate.seconds).toBe(Math.ceil(powerLaw(model.jobSecondsByOrder.order2, 100_000)));
     expect(estimate.extrapolated).toBe(false);
-    expect(estimateMesh(model.fittedNodes[1] + 1).extrapolated).toBe(true);
+    expect(estimateMesh(model.fittedNodes[1] + 1, 2).extrapolated).toBe(true);
+  });
+
+  it("times a static run with its element order's law and sizes memory for both (M8.9)", () => {
+    const model = estimatorTable.analyses.linear_static.iterative_scaling;
+    const first = estimateMesh(37_725, 1, "iterative_scaling");
+    const second = estimateMesh(37_725, 2, "iterative_scaling");
+    expect(first.seconds).toBe(Math.ceil(powerLaw(model.jobSecondsByOrder.order1, 37_725)));
+    expect(second.seconds).toBe(Math.ceil(powerLaw(model.jobSecondsByOrder.order2, 37_725)));
+    // Per node a ten-node mesh takes longer to solve iteratively than a four-node one.
+    expect(second.seconds).toBeGreaterThan(first.seconds);
+    expect(first.memoryBytes).toBe(second.memoryBytes);
   });
 
   it("grows with the mesh", () => {
-    const small = estimateMesh(10_000);
-    const large = estimateMesh(200_000);
+    const small = estimateMesh(10_000, 2);
+    const large = estimateMesh(200_000, 2);
     expect(large.memoryBytes).toBeGreaterThan(small.memoryBytes);
     expect(large.seconds).toBeGreaterThan(small.seconds);
   });
 
   it("refuses a node count that is not a whole number, 0 or more", () => {
-    for (const bad of [-1, 1.5, Number.NaN]) expect(() => estimateMesh(bad)).toThrow(RangeError);
+    for (const bad of [-1, 1.5, Number.NaN]) expect(() => estimateMesh(bad, 2)).toThrow(RangeError);
   });
 
   it("fits a machine only with the margin, in the usable share of its memory", () => {
@@ -66,7 +77,7 @@ describe("the solvers", () => {
   it("estimate with their own laws", () => {
     for (const solver of SOLVERS) {
       const model = estimatorTable.analyses.linear_static[solver];
-      expect(estimateMesh(50_000, solver).memoryBytes).toBe(Math.ceil(powerLaw(model.peakMemoryBytes, 50_000)));
+      expect(estimateMesh(50_000, 2, solver).memoryBytes).toBe(Math.ceil(powerLaw(model.peakMemoryBytes, 50_000)));
     }
   });
 
@@ -115,11 +126,11 @@ describe("a modal run (M6.3)", () => {
 
   it("costs more memory and time with more modes, and more than a static run", () => {
     for (const solver of runSolvers(modal(10))) {
-      const few = estimateMesh(50_000, solver, modal(1));
-      const many = estimateMesh(50_000, solver, modal(MAX_MODES));
+      const few = estimateMesh(50_000, 2, solver, modal(1));
+      const many = estimateMesh(50_000, 2, solver, modal(MAX_MODES));
       expect(many.memoryBytes).toBeGreaterThan(few.memoryBytes);
       expect(many.seconds).toBeGreaterThan(few.seconds);
-      expect(few.seconds).toBeGreaterThanOrEqual(estimateMesh(50_000, solver).seconds * 0.5);
+      expect(few.seconds).toBeGreaterThanOrEqual(estimateMesh(50_000, 2, solver).seconds * 0.5);
     }
   });
 
@@ -140,6 +151,6 @@ describe("a modal run (M6.3)", () => {
 
   it("leaves a solver that cannot solve it to pre-run validation", () => {
     expect(elementLimitProblem("iterative_cholesky", 2, 10_000_000, modal(10))).toBeNull();
-    expect(() => estimateMesh(1000, "iterative_cholesky", modal(10))).toThrow("cannot solve a modal analysis");
+    expect(() => estimateMesh(1000, 2, "iterative_cholesky", modal(10))).toThrow("cannot solve a modal analysis");
   });
 });

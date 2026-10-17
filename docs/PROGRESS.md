@@ -40,7 +40,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [ ] M8.6 Storage accounting per user, free quota, retention of raw output, pin, regenerate by rerun
 - [ ] M8.7 Read-only share link per run, revocable
 - [ ] M8.8 Data isolation tests across every route and file key
-- [ ] M8.9 Estimator check: predicted against measured on the benchmark set
+- [x] M8.9 Estimator check: predicted against measured on the benchmark set; job time fitted per element order (ADR-081)
 - [ ] M8.10 Self-hosting mode flag: wallet informational
 
 ### M7 Report
@@ -153,6 +153,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M8.9 (2026-10-17): the estimator check (ADR-081, accepted under Shubham's M8 autodrive; the refit and the one-second allowance were his choice on a decision card). Physics-critical in CLAUDE.md's sense only through the estimate's price (`apps/api/src/billing/estimate.ts` now takes the mesh's element order); cost arithmetic and ledger unchanged. `worker/benchmarks/solver/check.py` prices every `steps.json` row as a run is priced (fitted and measured seconds, each rounded up to whole seconds) and passes a row within 30 percent or one billed second; `test_estimator.py` runs it in `make test`. Estimator version 5 fits job time per element order (`jobSecondsByOrder`), which brought iterative scaling from +31/−30 percent to −13/+24; memory and element limits are unchanged. All 69 rows pass. A by-hand run of the block through the platform (16 runs) had 14 within the margin and two SPOOLES overestimates of 32 to 34 percent: SPOOLES runs faster in the worker container than on the host where `steps.json` was measured, while small PaStiX runs pay 1 to 2 s of transfers that `steps.py` does not time. `make verify` now lists each case's estimated and billed solve seconds (information only). For M8.3: the stop limit is a multiple of this estimate, which can be about 25 percent low for jobs of a few seconds on the platform.
 
 > M8.1 (2026-10-17): the wallet page (ADR-080, accepted under Shubham's M8 autodrive, pending his review; the grant and the refusal went to him on a decision card and were built on its recommended option). Billing module touched for reads only: `apps/api/src/billing/ledger.ts` gains `balanceOf` and `walletOf`, `billing/wallet.ts` the two refusal messages; `cost.ts` and the charge statement are unchanged. `GET /api/wallet` (`wallet.schema.json`) answers balance, granted, charged and every entry newest first with its job and the run or mesh it paid for; "Wallet" in the status bar opens `apps/web/src/billing/WalletPage.tsx` over the workbench. The seed now gives alice and bob one 100-credit grant each (idempotent), and API tests that mesh or run re-apply the seed after clearing the ledger. Runs whose estimate is above the balance, and new meshes at a balance of 0 or less, are refused with 409. `credits()` now lives in `packages/spec`. For M8.10: the self-hosting flag should skip `runFundsProblem` and `meshFundsProblem`. For M8.3: a run can still cost more than its estimate, so the balance can go below 0. No E-test opens the wallet page (none is listed).
 
@@ -320,6 +322,7 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 - A rigid (kinematic) option for remote loads, which keeps the loaded faces' shape (ADR-041 item 2), and drawing a remote load's reference point in the viewer. Needs the maintainer's decision on the option.
 - Fix CalculiX's PaStiX interface on the frequency step (`pastix.c`, `pastix_factor_main_generic` writes into memory Scotch freed; found in M6.3, ADR-072) with a patch in `worker/ccx/build.sh` and a full verification run, then allow PaStiX for held modal setups again and benchmark it.
 - A 64-bit-integer PaStiX build and per-size limits for machines above 16 GB (ADR-063 item 10), when larger machines are benchmarked.
+- Re-measure `steps.json` inside the worker container, including the job's downloads and uploads (ADR-081 item 5), so the estimator is fitted to what the platform bills; and a shape term for slender parts (ADR-049 item 3).
 - A modal run's export (CSV of frequencies, VTK with every mode shape) and its modal participation factors and effective masses, which the `.dat` file holds after the eigenvalues (ADR-071 item 2).
 - Keep a unit system picked before the project has loaded (`apps/web/src/units/useProject.ts` draws the loaded system over it right after sign-in; found by E-02, which waits for the load).
 
@@ -329,6 +332,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M8.9 estimator check (ADR-081): `benchmarks/solver/check.py` compares estimated with measured cost on all 69 benchmark rows (30 percent, or one billed second) and runs in `make test`; job time is now fitted per element order (estimator version 5), and all rows pass. Learned: the worker container runs SPOOLES 20 to 25 percent faster than the host the benchmark was measured on.
 - M8.1 wallet page (ADR-080): `GET /api/wallet` and a Wallet page from the status bar with balance, granted, charged and every ledger entry with the run or mesh it paid for; the seed gives each test user a 100-credit play-money grant; runs above the balance and new meshes at 0 or less are refused.
 - Report rounding (ADR-079, the maintainer's choice at the M7 close): force and moment components below one millionth of the run's balance scales print as 0 in the report's reaction and balance tables. ADR-073 to ADR-078 recorded as accepted by him.
 - M7 closed: phase-end workflow run by hand on main e5a312c ([run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) green, `make verify` full tier 302 of 302 checks in all 26 cases and `make e2e` E-01 to E-05. Next: M8, waiting on the maintainer's go.

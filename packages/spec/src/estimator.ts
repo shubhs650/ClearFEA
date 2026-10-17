@@ -137,12 +137,14 @@ export interface MeshEstimate {
 }
 
 /**
- * What a solve of a mesh with `nodes` nodes is fitted to need with `solver`: a linear static
- * one unless `kind` says otherwise. Throws when `solver` cannot solve a run of `kind`
+ * What a solve of a mesh with `nodes` nodes of element `order` is fitted to need with `solver`:
+ * a linear static one unless `kind` says otherwise. The static job time is fitted per element
+ * order (M8.9); memory, and a modal run's model, are for both orders. Throws when `solver` cannot solve a run of `kind`
  * (runSolverProblem says why).
  */
 export function estimateMesh(
   nodes: number,
+  order: ElementOrder,
   solver: Solver = DEFAULT_SOLVER,
   kind: RunKind = STATIC_RUN,
   estimator: EstimatorTable = estimatorTable,
@@ -155,7 +157,7 @@ export function estimateMesh(
     const { model } = found;
     return {
       memoryBytes: Math.ceil(powerLaw(model.peakMemoryBytes, nodes)),
-      seconds: Math.ceil(powerLaw(model.jobSeconds, nodes)),
+      seconds: Math.ceil(powerLaw(order === 1 ? model.jobSecondsByOrder.order1 : model.jobSecondsByOrder.order2, nodes)),
       extrapolated: nodes > model.fittedNodes[1],
     };
   }
