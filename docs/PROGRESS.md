@@ -5,8 +5,8 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M9 Gate, not started (M8 closed 2026-10-17)
-- **Next task:** M9.1, after the maintainer's go-ahead
+- **Current milestone:** M9 Gate, in progress (started 2026-10-17 under the maintainer's autodrive)
+- **Next task:** M9.2
 - **Blocked on:** nothing
 
 ## Milestones
@@ -22,7 +22,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M6 | Modal | Done (phase-end run on main green, [run 38991537033](https://github.com/shubhs650/ClearFEA/actions/runs/38991537033)) | 2026-10-17 |
 | M7 | Report | Done (phase-end run on main green, [run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) | 2026-10-17 |
 | M8 | Platform | Done (phase-end run on main green, [run 39023659289](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289); verify 307 of 307 with the ledger reconciling over 26 cases, E-01 to E-07) | 2026-10-17 |
-| M9 | Gate | Not started | |
+| M9 | Gate | In progress | |
 
 Status values: Not started, In progress, Verifying, Done.
 
@@ -32,7 +32,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 
 ### M9 Gate
 
-- [ ] M9.1 Run a model at each solver's element limit (ADR-063) in the development environment; fix what breaks.
+- [x] M9.1 Run a model at each solver's element limit (ADR-063) in the development environment; fix what breaks (`python -m harness.limits`, ADR-093)
 - [ ] M9.2 Set up and run on the laptop; demonstrate the laptop tier; fix viewer performance.
 - [x] M9.3 User guide for the main flow; self-hosting instructions (`docs/USER_GUIDE.md` with the plate-with-hole tutorial, `docs/SELF_HOSTING.md`; the Windows steps are checked in M9.2)
 - [x] M9.4 Build the two acceptance models as original geometry that can be published (`verification/acceptance/`)
@@ -165,6 +165,21 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M9.1 (2026-10-17): ADR-093. A model at every solver's element limit now runs on `make dev`: `cd verification && uv run --project ../worker --locked python -m harness.limits` (against :8787; `--out DIR`, case keys such as `pastix-2` to pick) runs the M2.11 block at each limit and prints the table below. Two things broke and are fixed: job uploads over 200 MiB were refused (both iterative solvers' 10-node limit write a 250 MB `results.frd`; the modal 10-node limit about 1 GB), now streamed and capped at 5 GiB; and after an upload of about 1 GB, wrangler dev drops the next request, so the worker now retries a transfer twice on a 5xx or a lost connection (wrangler's own proxy retries GETs, not PUTs). Surprising: Gmsh cannot mesh the block between 136,092 and 144,794 elements, nor between 440,406 and about 461,400, so the PaStiX 10-node and the 461,000 limits were run at 96 percent. The time estimate was 1.3 to 2.2 times the measured time on every limit (iterative scaling 10-node most), the safe side; the solver's peak memory was within 3 percent of the estimate above 2 GiB and within 7 percent below. The sandbox kept 1.4 GiB free at worst (the modal 10-node run, 10.3 GiB solver peak). Viewer screenshots of the 1.1-million-element run (results, cut plane) and of the modal run are in the project's `m9.1/` folder; drawing speed on the laptop is M9.2's.
+>
+> | Limit | Elements | Nodes | Estimated s | Run s | Est. GiB | Solver peak GiB |
+> | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+> | PaStiX 10-node 142,000 | 136,092 | 194,175 | 307 | 181 | 9.86 | 10.12 |
+> | PaStiX 4-node 1,103,000 | 1,102,690 | 190,543 | 297 | 174 | 9.62 | 9.37 |
+> | SPOOLES 10-node 161,000 | 158,054 | 224,646 | 1,917 | 1,431 | 10.27 | 10.12 |
+> | SPOOLES 4-node 461,000 | 440,406 | 78,246 | 244 | 190 | 2.47 | 2.53 |
+> | Iterative Cholesky 10-node 461,000 | 440,406 | 612,670 | 519 | 284 | 2.31 | 2.33 |
+> | Iterative Cholesky 4-node 461,000 | 440,406 | 78,246 | 30 | 20 | 0.41 | 0.44 |
+> | Iterative scaling 10-node 461,000 | 440,406 | 612,670 | 1,657 | 754 | 2.31 | 2.33 |
+> | Iterative scaling 4-node 461,000 | 440,406 | 78,246 | 40 | 23 | 0.41 | 0.44 |
+> | Modal SPOOLES 10-node 136,000, 100 modes | 135,655 | 193,594 | 8,710 | 6,758 | 10.32 | 10.33 |
+> | Modal SPOOLES 4-node 461,000, 100 modes | 440,406 | 78,246 | 1,932 | 1,446 | 3.26 | 3.39 |
 
 > M9.7 (2026-10-17): the verification results page (ADR-092, under Shubham's M9 autodrive, pending his review). `docs/VERIFICATION_RESULTS.md` is written by `cd verification && uv run --project ../worker --locked python -m harness.page` from `verification/results/` (`suite.md`: the result table cut from the log of M8's phase-end run 39023659289 with `--from-log`; `acceptance.md`: a local full-tier `CASES="A B" make verify`, 34 of 34; `sources.json` names each run). A harness test fails `make test` if the page is not what those tables give. The report's `verificationUrl` now points at the page. For Close M9: download the M9 phase-end run's log (Actions tab, or the GitHub tools' run-logs URL), re-run `--from-log` into `results/suite.md`, refresh A and B if the harness or worker changed, update `sources.json` and regenerate. Automating that (the phase-end run uploading `results.json`) is a CI change left to Shubham. No physics-critical module touched.
 
@@ -379,6 +394,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M9.1 element limits (ADR-093): a model at each of the ten solver and order limits ran through `make dev` with `harness/limits.py`; all succeed after two fixes, job uploads streamed up to 5 GiB (were refused over 200 MiB) and a worker retry for the request wrangler dev drops after a gigabyte upload. Learned: Gmsh's count on the benchmark block jumps across the 142,000 and 461,000 limits, so those were run at 96 percent.
 - M9.7 verification results page: `docs/VERIFICATION_RESULTS.md` from the M8 phase-end run's table and a local full-tier run of A and B, generated by `harness.page`, linked from every report (ADR-092). Learned: the phase-end log already carries the whole result table, so no CI change was needed to build the page from it.
 - M9.3 user guide and self-hosting instructions: `docs/USER_GUIDE.md` (tutorial plate with a hole, screenshots from the dev environment) and `docs/SELF_HOSTING.md`; linked from the README. Learned: Playwright can orbit the three.js viewer with a mouse drag and zoom with the wheel, so faces at the back of a model can be picked through the hover text.
 

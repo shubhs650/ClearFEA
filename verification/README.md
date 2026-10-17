@@ -39,3 +39,11 @@ cases/V-01-thick-cylinder/
 Every case also gets the automatic checks: the STEP unit detected, reactions balancing the applied loads within 0.1 percent (pressures, forces, remote loads' forces, hydrostatic pressures, and gravity and centrifugal loads on the volume the run's surface encloses; with no applied load, measured against the larger of the reactions' sizes and the run's own sum of the supports' nodal force sizes, ADR-067 item 6), the run's own balance check (force and moment, ADR-051) within the same 0.1 percent (both left out for a steady-state thermal case, which has no forces; a thermal stress case, M5.4, gets them and the heat balance), no unexpected solver warnings, and billed seconds with one ledger entry. After the last case, the "Ledger" rows check that the harness user's ledger, the costs its runs recorded and the wallet agree to the micro-credit over the whole run (M8 exit). The harness reads everything through the API, never the API's database file (ADR-090).
 
 A tolerance is never loosened to make a case pass without a written reason in `reference.md` (docs/VERIFICATION.md).
+
+## Element limits (M9.1)
+
+`python -m harness.limits` is not part of `make verify`. It runs the M2.11 benchmark block at each solver's element limit (ADR-063, ADR-072) through a running API and worker, by default `make dev`'s on :8787, and prints elements, estimated and measured time, estimated and measured solver memory and the host's least free memory per limit (ADR-093). The ten runs take about four hours and need the 16 GB machine the limits are for.
+
+```
+cd verification && uv run --project ../worker --locked python -m harness.limits [--out DIR] [pastix-2 ...]
+```

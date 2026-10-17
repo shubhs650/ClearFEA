@@ -66,8 +66,11 @@ internal.use("*", async (c, next) => {
   await next();
 });
 
-/** Largest file a job may upload through the pass-through route. */
-export const MAX_JOB_UPLOAD_BYTES = 200 * 1024 * 1024;
+/**
+ * Largest file a job may upload through the pass-through route: 5 GiB, the most one R2 PUT
+ * stores. A modal run at its element limit writes about 1 GB of raw output (M9.1).
+ */
+export const MAX_JOB_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024;
 
 function payload(job: Job) {
   return { id: job.id, type: job.type, targetId: job.targetId };
@@ -137,7 +140,10 @@ internal.put("/jobs/:id/files/:name", async (c) => {
       413,
     );
   }
-  await c.env.FILES.put(held.file.key, await c.req.arrayBuffer());
+  // Streamed, not buffered: raw output at the element limits is up to about 1 GB (M9.1).
+  const body = c.req.raw.body;
+  if (body === null) return c.json({ error: "Send the file as the request body." }, 400);
+  await c.env.FILES.put(held.file.key, body);
   return c.json({ stored: held.file.name });
 });
 

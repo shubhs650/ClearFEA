@@ -269,6 +269,52 @@ def test_runs_an_import_job_through_its_transfer_urls(tmp_path: Path) -> None:
         assert api.uploads[("j1", "display.bin")][:4] == b"CFDM"
 
 
+def test_a_transfer_the_server_drops_is_tried_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The local API drops the request after a gigabyte upload (M9.1); a retry gets through.
+    monkeypatch.setattr("clearfea_worker.api.TRANSFER_RETRY_PAUSES", (0.0, 0.0))
+    step = block_with_hole(tmp_path / "block.step").read_bytes()
+    with FakeApi() as api:
+        api.enqueue(
+            "j1",
+            "import",
+            params={"confirmedUnit": None},
+            downloads={"model.step": step},
+            uploads=("topology.json", "display.bin"),
+        )
+        api.transfer_failures = {"model.step": 1, "display.bin": 2}
+        settings = settings_for(api)
+        assert run_once(client_for(settings), settings, HANDLERS) is True
+        assert api.jobs["j1"]["status"] == "succeeded", api.jobs["j1"].get("outcome")
+        assert api.uploads[("j1", "display.bin")][:4] == b"CFDM"
+        assert api.transfer_failures == {"model.step": 0, "display.bin": 0}
+
+
+def test_a_transfer_that_keeps_failing_fails_the_job_as_a_platform_fault(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("clearfea_worker.api.TRANSFER_RETRY_PAUSES", (0.0, 0.0))
+    step = block_with_hole(tmp_path / "block.step").read_bytes()
+    with FakeApi() as api:
+        api.enqueue(
+            "j1",
+            "import",
+            params={"confirmedUnit": None},
+            downloads={"model.step": step},
+            uploads=("topology.json", "display.bin"),
+        )
+        api.transfer_failures = {"topology.json": 3}
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert (outcome["failureCategory"], outcome["failureCause"]) == (
+            "platform_fault",
+            "transfer_failed",
+        )
+        assert api.transfer_failures == {"topology.json": 0}
+
+
 def test_an_unusable_file_fails_the_import_as_the_users_fault() -> None:
     with FakeApi() as api:
         api.enqueue(

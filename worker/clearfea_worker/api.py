@@ -7,8 +7,10 @@ generated from packages/spec/schemas/jobs.schema.json.
 
 import json
 import shutil
+import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +37,21 @@ __all__ = ["ApiClient", "ApiError", "ClaimedJob", "HeartbeatAction"]
 
 class ApiError(Exception):
     """The API could not be reached or answered with an error."""
+
+
+#: Pauses before the second and third try of a file transfer that failed on the server's side
+#: or on the connection. The local API (wrangler dev) drops the next request after a transfer
+#: of about a gigabyte, the raw output of a modal run at its element limit (M9.1); storage in
+#: the cloud can fail a request now and then too. A transfer sends or fetches the whole file
+#: again, so a retry cannot store half of one.
+TRANSFER_RETRY_PAUSES = (1.0, 4.0)
+
+
+def _retryable(error: Exception) -> bool:
+    """A 5xx answer or no answer at all; a 4xx answer would only be repeated."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code >= 500
+    return isinstance(error, urllib.error.URLError | OSError)
 
 
 class ApiClient:
@@ -71,13 +88,14 @@ class ApiClient:
 
     def download(self, url: str, destination: Path) -> None:
         """Streams the file at a transfer URL to ``destination``."""
-        request = urllib.request.Request(url, method="GET", headers=self._headers(url))
-        try:
+
+        def fetch() -> None:
+            request = urllib.request.Request(url, method="GET", headers=self._headers(url))
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 with destination.open("wb") as f:
                     shutil.copyfileobj(response, f)
-        except (urllib.error.URLError, OSError) as error:
-            raise self._transfer_error(url, error) from None
+
+        self._transfer(url, fetch)
 
     def upload(self, url: str, source: Path) -> None:
         """Sends ``source`` to a transfer URL."""
@@ -86,13 +104,28 @@ class ApiClient:
             "Content-Type": "application/octet-stream",
             "Content-Length": str(source.stat().st_size),
         }
-        try:
+
+        def send() -> None:
             with source.open("rb") as f:
                 request = urllib.request.Request(url, data=f, method="PUT", headers=headers)
                 with urllib.request.urlopen(request, timeout=self._timeout) as response:
                     response.read()
-        except (urllib.error.URLError, OSError) as error:
-            raise self._transfer_error(url, error) from None
+
+        self._transfer(url, send)
+
+    def _transfer(self, url: str, attempt: Callable[[], None]) -> None:
+        """Runs ``attempt``, again after each pause of TRANSFER_RETRY_PAUSES while it fails in
+        a way a retry can fix."""
+        for pause in (*TRANSFER_RETRY_PAUSES, None):
+            try:
+                attempt()
+                return
+            except (urllib.error.URLError, OSError) as error:
+                if pause is None or not _retryable(error):
+                    raise self._transfer_error(url, error) from None
+                if isinstance(error, urllib.error.HTTPError):
+                    error.read()
+                time.sleep(pause)
 
     def _post(self, path: str, body: BaseModel) -> tuple[int, Any]:
         data = body.model_dump_json(by_alias=True, exclude_unset=True).encode()
