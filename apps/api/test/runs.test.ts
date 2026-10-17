@@ -638,6 +638,21 @@ describe("a finished solve job", () => {
     expect((await startRun(id)).status).toBe(201);
   });
 
+  it("streams a large upload to storage byte for byte (M9.1)", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    // Larger than one chunk of the request stream, and not text.
+    const bytes = new Uint8Array(1024 * 1024 + 17);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 2654435761) >>> 24;
+    const put = await call("PUT", transferPath(job, "results.frd", "upload"), { raw: bytes, token: TOKEN });
+    expect(put.status).toBe(200);
+    const stored = await env.FILES.get(`owners/${aliceId}/runs/${run.id}/results.frd`);
+    const back = new Uint8Array((await stored?.arrayBuffer()) ?? new ArrayBuffer(0));
+    expect(back.length).toBe(bytes.length);
+    expect(back.every((b, i) => b === bytes[i])).toBe(true);
+  });
+
   it("serves the viewer's result files once the run has succeeded", async () => {
     const id = await meshed();
     const run = await runOf(await startRun(id));
