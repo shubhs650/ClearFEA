@@ -4,7 +4,7 @@ Open cloud finite element analysis with published, compute-based pricing.
 
 ClearFEA lets an engineer upload a STEP file, set up a structural or thermal analysis in the browser, run it on CalculiX, inspect the results and export a report. It is built for working engineers who know FEA basics and do not have a commercial licence.
 
-**Status: pre-alpha.** Phase 0 (a fully working localhost prototype) is in progress. Nothing here is usable yet. See [docs/PROGRESS.md](docs/PROGRESS.md).
+**Status: pre-alpha.** Phase 0, a localhost prototype, is in its final gate milestone. It runs on your own machine ([self-hosting](docs/SELF_HOSTING.md)) and is not yet ready for production work. See [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ## What it will do at the Phase 0 gate
 
@@ -32,6 +32,8 @@ No fluids, no nonlinear analysis, no shells or beams, no geometry editing. The f
 
 | Document | Purpose |
 | --- | --- |
+| [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | User guide: the main flow, with a tutorial model |
+| [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) | Running ClearFEA on your own machine |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Product decisions, scope and non-goals |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design and technology choices |
 | [docs/PLAN.md](docs/PLAN.md) | Milestones, tasks and exit criteria |
@@ -50,7 +52,7 @@ make dev       # API on :8787, web app on http://localhost:5173, worker in Docke
 make test      # fast test tier: generated-code check, unit tests, type checks, lint
 ```
 
-Open http://localhost:5173 and sign in as a local test user: `alice` / `alice-local` or `bob` / `bob-local`. The first `make dev` builds the worker image, which takes a few minutes. Behind a TLS-intercepting proxy, pass its CA bundle: `make dev BUILD_CA=/path/to/ca-bundle.crt`.
+Open http://localhost:5173 and sign in as a local test user: `alice` / `alice-local` or `bob` / `bob-local`. The [user guide](docs/USER_GUIDE.md) walks through a first model; [self-hosting](docs/SELF_HOSTING.md) covers machine requirements, Windows, the self-hosting mode and backups. The first `make dev` builds the worker image, which takes a few minutes. Behind a TLS-intercepting proxy, pass its CA bundle: `make dev BUILD_CA=/path/to/ca-bundle.crt`.
 
 ## Licence
 
