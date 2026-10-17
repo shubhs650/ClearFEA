@@ -378,6 +378,8 @@ def table(outcomes: list[Outcome], tier: str) -> str:
             )
     lines.append("")
     for o in outcomes:
+        if o.case.id == "Ledger":
+            continue
         versions = ", ".join(f"{k} {v}" for k, v in o.software.items() if v is not None)
         solve = ""
         if o.estimated_seconds is not None and o.billed_seconds is not None:
@@ -388,7 +390,8 @@ def table(outcomes: list[Outcome], tier: str) -> str:
         )
     checks = [r.ok for o in outcomes for r in o.rows] + [False for o in outcomes if o.problem]
     lines.append("")
-    lines.append(f"{sum(checks)} of {len(checks)} checks passed, {len(outcomes)} cases.")
+    cases = sum(1 for o in outcomes if o.case.id != "Ledger")
+    lines.append(f"{sum(checks)} of {len(checks)} checks passed, {cases} cases.")
     return "\n".join(lines)
 
 
