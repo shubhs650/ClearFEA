@@ -5,8 +5,8 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M7 Report, in progress (under the maintainer's M7 autodrive, 2026-10-17)
-- **Next task:** M7 close (every M7 task merged)
+- **Current milestone:** M8 Platform, not started (M7 closed 2026-10-17; M8 waits for the maintainer's go)
+- **Next task:** M8.1, once the maintainer says go
 - **Blocked on:** nothing
 
 ## Milestones
@@ -20,7 +20,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M4 | Assemblies | Done (phase-end run on main green, [run 38891468547](https://github.com/shubhs650/ClearFEA/actions/runs/38891468547)) | 2026-10-16 |
 | M5 | Thermal | Done (phase-end run on main green, [run 38931101479](https://github.com/shubhs650/ClearFEA/actions/runs/38931101479)) | 2026-10-16 |
 | M6 | Modal | Done (phase-end run on main green, [run 38991537033](https://github.com/shubhs650/ClearFEA/actions/runs/38991537033)) | 2026-10-17 |
-| M7 | Report | In progress | |
+| M7 | Report | Done (phase-end run on main green, [run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) | 2026-10-17 |
 | M8 | Platform | Not started | |
 | M9 | Gate | Not started | |
 
@@ -135,11 +135,13 @@ Things only the maintainer can do.
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-20, V-21 and V-22 28 of 28 (M6.1, new modal cases; V-22 on SPOOLES); before that all 23 cases, all 23 cases, 271 of 271 checks (M5.6: new V-14 tube wall and V-27 two-layer tube); before that 249 of 249 (M5.5: new V-19); 230 of 230 (M5.4: new V-18 thermal stress cylinder); V-08, V-12, V-18 and V-24 61 of 61 again after the no-load balance scale change |
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4); V-18 16 of 16 (M5.4); V-19 19 of 19 (2026-10-16, M5.5); V-14 and V-27 22 of 22 (M5.6); V-20 and V-21 at 3 mm 16 of 16, V-22 at 2 mm 12 of 12 (2026-10-16, M6.1) |
 | Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 (one body, every result step to M3.8), E-02 (mixed-unit entry, written during M6), E-03 (two bonded bodies; also as thermal stress with heat across the bond since M5.6) and E-04 (thermal stress, M5.4; with conductivity and Young's modulus tables since M5.5); E-01 also checks the ADR-063 solver choice |
-| Phase end (CI) | 2026-10-17 (`phase-end.yml` by hand on main becaad2, [run 38991537033](https://github.com/shubhs650/ClearFEA/actions/runs/38991537033); closed M6) | Green: full tier 302 of 302 checks in all 26 cases (V-01 to V-22, V-24 to V-27); E-01 to E-04 |
+| Phase end (CI) | 2026-10-17 (`phase-end.yml` by hand on main e5a312c, [run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940); closed M7) | Green: full tier 302 of 302 checks in all 26 cases (V-01 to V-22, V-24 to V-27); E-01 to E-05 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M7 close (2026-10-17): M7 closed on a green manual phase-end run on main (see the Milestones table). Every M7 task is in, and E-05, the one browser test listed for M7, runs in it; no verification case is listed for M7 (the report adds no physics). PLAN.md's M7.3 box was left unticked by PR #82 and is ticked here. The exit (a report the maintainer would hand to a reviewer) is his call: a V-02 report in US units, Word and PDF, was made through the UI from main e5a312c and is in the project's `m7-close/` folder. Open question for him: sums that are really zero print as rounding noise (V-02's reaction table shows Fx -0.00003084 lbf, wrapping in the narrow cell; ADR-077 kept stored values as they are). ADR-073 to ADR-078 await his review. Next is M8 in PLAN.md order, which waits for his go.
 
 > M7.4 (2026-10-17): the PDF report (ADR-078, accepted under Shubham's M7 autodrive, pending his review). No physics-critical module touched. The report job prints its `report.docx` to `report.pdf` with headless LibreOffice Writer (`worker/clearfea_worker/report/pdf.py`; own profile per job, 300 s limit, lossless pictures), so the PDF has the DOCX's pages; the worker image gains `libreoffice-writer-nogui`, `fonts-liberation` (Arial's widths) and `fonts-dejavu-core`. Stored as `reports/<job>.pdf`, downloaded from `GET /api/runs/:id/report/pdf`; `pdfSizeBytes` on `ReportJobResult` and `RunReport` (null for reports made before M7.4, whose PDF link says to make the report again). The Report panel's group is now "Word and PDF report" with "Make the report" and two downloads. E-05 downloads the PDF and checks pages, title and the twelve section bookmarks. The real-conversion worker test runs only where `soffice` is installed (the sandbox, the worker image); the fast tier's stand-in tests cover the rest. PLAN.md's M7.3 box is still unticked (PR #82 left it); for the M7 close. Page images beside the DOCX's in the project's `m7.4/` folder. Next: M7 close.
 
@@ -312,6 +314,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M7 closed: phase-end workflow run by hand on main e5a312c ([run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) green, `make verify` full tier 302 of 302 checks in all 26 cases and `make e2e` E-01 to E-05. Next: M8, waiting on the maintainer's go.
 - M7.4: the PDF report, the Word report printed by LibreOffice in the worker, offered beside it (ADR-078); E-05 downloads it. Learned: LibreOffice writes Word headings as PDF bookmarks, which gives a browser test the section list without a PDF text reader.
 - M7.3: the Word report, made by a report job from parameters the API freezes, with every section of DECISIONS' Report row, the standing statements and notes, values in the report's unit system (ADR-077); new browser test E-05. Learned: python-docx's Footer style has its own centre tab stop, so a right-aligned page number needs it cleared.
 - M7.2: the report's figures drawn in the browser by the viewer (ADR-075): one per support and load of the run's frozen setup, one per saved view picked, stored on the run as PNGs. Learned: a WebGL canvas can be copied right after `renderer.render` in the same task without `preserveDrawingBuffer`, so the viewer needs no slower setting for figures.

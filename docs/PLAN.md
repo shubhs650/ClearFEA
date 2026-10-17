@@ -131,7 +131,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 
 - [x] M7.1 Report options: sections, saved views, title block, company name, logo.
 - [x] M7.2 Figure capture in the browser: one per load and support, plus selected result views.
-- [ ] M7.3 DOCX assembly with all sections in `DECISIONS.md`.
+- [x] M7.3 DOCX assembly with all sections in `DECISIONS.md`.
 - [x] M7.4 PDF output matching the DOCX.
 - [x] M7.5 Standing statements: analysis-tool positioning, versions, verification link, tied-interface note. No verdict wording anywhere.
 - [x] M7.6 Values printed in the report's chosen unit system.
