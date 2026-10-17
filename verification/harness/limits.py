@@ -219,7 +219,8 @@ def run_limit(
     # What the viewer fetches: the surface and its fields on opening the results, the volume
     # mesh and the values at every node for a cut plane (fetched here whole, not per field).
     fetches = [
-        fetch_timed(api, f"/api/runs/{rid}/{name}") for name in ("surface", "fields", "mesh", "nodes")
+        fetch_timed(api, f"/api/runs/{rid}/{file}")
+        for file in ("surface", "fields", "mesh", "nodes")
     ]
     row["fetches"] = fetches
     row["fetchSeconds"] = round(sum(f["seconds"] for f in fetches), 1)

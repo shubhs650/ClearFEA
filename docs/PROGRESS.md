@@ -5,8 +5,8 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M9 Gate, not started (M8 closed 2026-10-17)
-- **Next task:** M9.1, after the maintainer's go-ahead
+- **Current milestone:** M9 Gate, in progress (started 2026-10-17 under the maintainer's autodrive)
+- **Next task:** M9.2
 - **Blocked on:** nothing
 
 ## Milestones
@@ -22,13 +22,25 @@ Current state of the project. Update this file at the end of every working sessi
 | M6 | Modal | Done (phase-end run on main green, [run 38991537033](https://github.com/shubhs650/ClearFEA/actions/runs/38991537033)) | 2026-10-17 |
 | M7 | Report | Done (phase-end run on main green, [run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) | 2026-10-17 |
 | M8 | Platform | Done (phase-end run on main green, [run 39023659289](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289); verify 307 of 307 with the ledger reconciling over 26 cases, E-01 to E-07) | 2026-10-17 |
-| M9 | Gate | Not started | |
+| M9 | Gate | In progress | |
 
 Status values: Not started, In progress, Verifying, Done.
 
 ## Current milestone tasks
 
 Copy the task list for the current milestone from `PLAN.md` here when the milestone starts, and tick tasks as they merge.
+
+### M9 Gate
+
+- [x] M9.1 Run a model at each solver's element limit (ADR-063) in the development environment; fix what breaks. (The 2-million-element target was dropped by ADR-063.) (ADR-091)
+- [ ] M9.2 Set up and run on the laptop; demonstrate the laptop tier; fix viewer performance.
+- [ ] M9.3 User guide for the main flow; self-hosting instructions.
+- [ ] M9.4 Build the two acceptance models as original geometry that can be published.
+- [ ] M9.5 Acceptance case A: nozzle, shell and pad under pressure and nozzle loads. Hand checks and FreeCAD FEM comparison.
+- [ ] M9.6 Acceptance case B: thermal stress. Hand checks and FreeCAD FEM comparison.
+- [ ] M9.7 Publish the verification results page.
+- [ ] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found.
+- [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome.
 
 ### M8 Platform
 
@@ -153,6 +165,21 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M9.1 (2026-10-17): ADR-091. A model at every solver's element limit now runs on `make dev`: `cd verification && uv run --project ../worker --locked python -m harness.limits` (against :8787; `--out DIR`, case keys such as `pastix-2` to pick) runs the M2.11 block at each limit and prints the table below. Two things broke and are fixed: job uploads over 200 MiB were refused (both iterative solvers' 10-node limit write a 250 MB `results.frd`; the modal 10-node limit about 1 GB), now streamed and capped at 5 GiB; and after an upload of about 1 GB, wrangler dev drops the next request, so the worker now retries a transfer twice on a 5xx or a lost connection (wrangler's own proxy retries GETs, not PUTs). Surprising: Gmsh cannot mesh the block between 136,092 and 144,794 elements, nor between 440,406 and about 461,400, so the PaStiX 10-node and the 461,000 limits were run at 96 percent. The time estimate was 1.3 to 2.2 times the measured time on every limit (iterative scaling 10-node most), the safe side; the solver's peak memory was within 3 percent of the estimate above 2 GiB and within 7 percent below. The sandbox kept 1.4 GiB free at worst (the modal 10-node run, 10.3 GiB solver peak). Viewer screenshots of the 1.1-million-element run (results, cut plane) and of the modal run are in the project's `m9.1/` folder; drawing speed on the laptop is M9.2's.
+>
+> | Limit | Elements | Nodes | Estimated s | Run s | Est. GiB | Solver peak GiB |
+> | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+> | PaStiX 10-node 142,000 | 136,092 | 194,175 | 307 | 181 | 9.86 | 10.12 |
+> | PaStiX 4-node 1,103,000 | 1,102,690 | 190,543 | 297 | 174 | 9.62 | 9.37 |
+> | SPOOLES 10-node 161,000 | 158,054 | 224,646 | 1,917 | 1,431 | 10.27 | 10.12 |
+> | SPOOLES 4-node 461,000 | 440,406 | 78,246 | 244 | 190 | 2.47 | 2.53 |
+> | Iterative Cholesky 10-node 461,000 | 440,406 | 612,670 | 519 | 284 | 2.31 | 2.33 |
+> | Iterative Cholesky 4-node 461,000 | 440,406 | 78,246 | 30 | 20 | 0.41 | 0.44 |
+> | Iterative scaling 10-node 461,000 | 440,406 | 612,670 | 1,657 | 754 | 2.31 | 2.33 |
+> | Iterative scaling 4-node 461,000 | 440,406 | 78,246 | 40 | 23 | 0.41 | 0.44 |
+> | Modal SPOOLES 10-node 136,000, 100 modes | 135,655 | 193,594 | 8,710 | 6,758 | 10.32 | 10.33 |
+> | Modal SPOOLES 4-node 461,000, 100 modes | 440,406 | 78,246 | 1,932 | 1,446 | 3.26 | 3.39 |
 
 > Close M8 (2026-10-17): ADR-090. PLAN.md now ticks every M8 task. Nothing listed for M8 was left unbuilt except a check of the exit itself: `make verify` checked one ledger entry per case but never the ledger over the run, so `verification/harness/ledger.py` adds five "Ledger" rows after the last case (balances chain, wallet equals the sum, each job charge priced as `costOf` prices it, each charged run's entry equals its recorded cost, nothing but the grant without a job). The first branch phase-end run (39020876400) had all seven browser tests green and the ledger reconciling over 52 jobs in 26 cases, but V-22 failed: the harness's `wrangler d1 execute` read locked the API's SQLite file (`SQLITE_BUSY`), the same flake M8.5 saw on V-16; a local stress test made the API answer 500 the same way. The harness now reads only through the API and `infra/verify.sh` no longer passes `--persist-to`. Isolation: `apps/api/test/isolation.test.ts` passes in `make test`. The phase-end run on main, [39023659289](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289), passed: full-tier verify 307 of 307 in 26 cases (the five Ledger rows over 53 entries, 52 jobs and 26 runs), `make e2e` 7 of 7 with no rerun. Sample screenshots for the maintainer are in the project's `m8-close/` folder, staged on `make dev` through the API (two solves, a cancel, a stop at 0.25 ×, and an out-of-memory run on the small size shrunk to 64 MiB in that dev database only, then restored; storage charged with the free allowance set to 0 there).
 
@@ -353,6 +380,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M9.1 element limits (ADR-091): a model at each of the ten solver and order limits ran through `make dev` with `harness/limits.py`; all succeed after two fixes, job uploads streamed up to 5 GiB (were refused over 200 MiB) and a worker retry for the request wrangler dev drops after a gigabyte upload. Learned: Gmsh's count on the benchmark block jumps across the 142,000 and 461,000 limits, so those were run at 96 percent.
 - Close M8 (ADR-090): M8 closed on phase-end run 39023659289 on main (verify 307 of 307, E-01 to E-07). `make verify` now checks that the ledger reconciles over the whole run, the M8 exit, and reads it through the API; reading the API's database from a second process had made V-22 fail with a locked database. Learned: `wrangler d1 execute` beside a running `wrangler dev` can fail either side with SQLITE_BUSY.
 - M8.8 isolation tests: `apps/api/test/isolation.test.ts` signs bob in and calls all 72 routes the API serves with alice's ids. Each owned route answers him exactly as for an id nobody owns, and nothing of hers changes in the database or in storage. Every job's file keys stay under the owner's prefix. A route missing from the sweep fails `make test`. No leak was found, so no route changed. Learned: Hono's `app.routes` lists every served route, so a test can tell when a new one goes unchecked.
 - M8.4 failure classification (ADR-089): a job whose worker sends no heartbeat for 120 s, or whose worker asks for another job after a restart, now fails as a fault in ClearFEA (`worker_lost`, not charged) instead of staying solving; SPOOLES's singular matrix is the user's (`singular_matrix`); the run record shows "Failure" with who is at fault, the cause and what it means for the cost. Learned: on a singular model only SPOOLES complains (exit 255, in `spooles.out`); PaStiX and the iterative solvers return nonsense without an error.
