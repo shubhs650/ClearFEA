@@ -146,7 +146,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 - [ ] M8.4 Failure classification end to end, with category and reason shown on the run.
 - [ ] M8.5 Simulated machine sizes on localhost (thread count, memory limit); out-of-memory path tested.
 - [ ] M8.6 Storage accounting per user, free quota, retention of raw output, pin, regenerate by rerun.
-- [ ] M8.7 Read-only share link per run, revocable.
+- [x] M8.7 Read-only share link per run, revocable.
 - [ ] M8.8 Data isolation tests across every route and file key.
 - [ ] M8.9 Estimator check: predicted against measured on the benchmark set.
 - [ ] M8.10 Self-hosting mode flag: wallet informational.
