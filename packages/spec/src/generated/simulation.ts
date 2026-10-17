@@ -1319,6 +1319,64 @@ export interface RunListResponse {
   runs: RunView[];
 }
 /**
+ * A run's active read-only share link as its owner sees it (M8.7). Only a hash of the link's token is stored, so the link itself is shown once, when it is made.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "ShareLinkView".
+ */
+export interface ShareLinkView {
+  createdAt: string;
+}
+/**
+ * Answer to GET and DELETE /api/runs/{id}/share: the run's active share link, or null when it has none (after DELETE, always null).
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "ShareLinkResponse".
+ */
+export interface ShareLinkResponse {
+  share: ShareLinkView | null;
+}
+/**
+ * Answer to POST /api/runs/{id}/share (HTTP 201): the new link and its token, which opens the run read-only at /share/{token} until it is revoked. Making a link revokes the run's earlier one.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "CreatedShareLinkResponse".
+ */
+export interface CreatedShareLinkResponse {
+  share: ShareLinkView;
+  token: string;
+}
+/**
+ * A succeeded run as anyone holding its share link sees it (M8.7): the frozen setup, mesh, versions and results, without the owner's machine, estimate or cost.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "SharedRunView".
+ */
+export interface SharedRunView {
+  id: string;
+  spec: SimulationSpec;
+  mesh: RunMesh;
+  software: RunSoftware;
+  /**
+   * Always succeeded: only a succeeded run can be shared.
+   */
+  status: "succeeded";
+  result: SolveResult;
+  createdAt: string;
+  finishedAt: string | null;
+}
+/**
+ * Answer to GET /api/shared/{token}: the shared run, the name of the simulation it was run from, and the owner's unit system, which the results are first shown in.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "SharedRunResponse".
+ */
+export interface SharedRunResponse {
+  run: SharedRunView;
+  simulationName: string;
+  unitSystem: string;
+}
+/**
  * Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -1417,4 +1475,9 @@ export const validateCreateRunRequest = validator<CreateRunRequest>(schema, "Cre
 export const validateRunView = validator<RunView>(schema, "RunView");
 export const validateRunResponse = validator<RunResponse>(schema, "RunResponse");
 export const validateRunListResponse = validator<RunListResponse>(schema, "RunListResponse");
+export const validateShareLinkView = validator<ShareLinkView>(schema, "ShareLinkView");
+export const validateShareLinkResponse = validator<ShareLinkResponse>(schema, "ShareLinkResponse");
+export const validateCreatedShareLinkResponse = validator<CreatedShareLinkResponse>(schema, "CreatedShareLinkResponse");
+export const validateSharedRunView = validator<SharedRunView>(schema, "SharedRunView");
+export const validateSharedRunResponse = validator<SharedRunResponse>(schema, "SharedRunResponse");
 export const validateRunLogResponse = validator<RunLogResponse>(schema, "RunLogResponse");

@@ -14,6 +14,7 @@ import { reportFigures } from "./routes/reportFigures";
 import { reports } from "./routes/reports";
 import { runs } from "./routes/runs";
 import { session } from "./routes/session";
+import { shared, shareLinks } from "./routes/shareLinks";
 import { simulations } from "./routes/simulations";
 import { wallet } from "./routes/wallet";
 
@@ -45,6 +46,8 @@ app.route("/api/meshes", meshes);
 app.route("/api/runs", runs);
 app.route("/api/runs", reportFigures);
 app.route("/api/runs", reports);
+app.route("/api/runs", shareLinks);
+app.route("/api/shared", shared);
 app.route("/api/report-branding", reportBranding);
 app.route("/api/wallet", wallet);
 app.route("/internal", internal);
