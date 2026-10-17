@@ -231,7 +231,7 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     files.upload("solver.log", run.log_path)
     if run.out_of_memory:
         # Who pays is the API's call: it knows whether the size was chosen against the
-        # recommendation (ADR-081). The message is replaced there.
+        # recommendation (ADR-082). The message is replaced there.
         limit = params.machine.memory_limit_bytes if params.machine else None
         raise JobFailure(
             "platform_fault",

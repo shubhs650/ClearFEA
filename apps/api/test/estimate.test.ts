@@ -128,7 +128,7 @@ describe("the size a run goes on", () => {
   });
 });
 
-describe("a simulated machine size (M8.5, ADR-081)", () => {
+describe("a simulated machine size (M8.5, ADR-082)", () => {
   it("has the size's cores and its usable memory as the limit", () => {
     const [big] = estimateRun(500_000, SIZES, "pastix", STATIC_RUN, TABLE).sizes.filter((s) => s.size === "big");
     if (big === undefined) throw new Error("No big size.");
@@ -140,7 +140,7 @@ describe("a simulated machine size (M8.5, ADR-081)", () => {
   });
 });
 
-describe("who pays when a run runs out of memory (M8.5, ADR-081)", () => {
+describe("who pays when a run runs out of memory (M8.5, ADR-082)", () => {
   // 1,000,000 nodes: 1.25 GB with the margin, too much for tiny's 0.85 GiB, so big is recommended.
   const tooBigForTiny = estimateRun(1_000_000, SIZES, "pastix", STATIC_RUN, TABLE);
 

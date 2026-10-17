@@ -1044,7 +1044,7 @@ M8.1 adds the wallet page (PLAN M8.1: balance, ledger, per-run cost; DECISIONS "
 5. **One formatter.** `credits()` moved from the web app to `packages/spec`, so the API's messages write amounts as the page does.
 6. **Verification.** The billing arithmetic (`cost.ts`) and the charge statement are unchanged; the ledger module gains reads only. API tests check the wallet's entries and totals, the owner scoping, the seed's single grant, and both refusals; a web test opens and closes the page. `make verify` and `make e2e` run as the seeded users, whose grant covers them.
 
-### ADR-081: A machine size is simulated by holding the solver to its cores and stopping it past its usable memory; the API decides who pays for running out of memory
+### ADR-082: A machine size is simulated by holding the solver to its cores and stopping it past its usable memory; the API decides who pays for running out of memory
 2026-10-17 · Accepted (under Shubham's M8 autodrive, pending his review).
 
 M8.5 simulates the machine sizes on one physical machine (PLAN M8.5; ARCHITECTURE "Metering": "it sets the solver thread count and a memory limit on the solver process") and builds the out-of-memory path that DECISIONS "Failed runs" asks for. ADR-049 item 5 and item 7 left both for this task. Choices it needed:

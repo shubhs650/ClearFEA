@@ -927,7 +927,7 @@ export interface SolveParams {
   machine?: SimulatedMachine;
 }
 /**
- * How the worker simulates the run's machine size on one physical machine (M8.5, ADR-081): the solver process is held to `cores` processors and is stopped as out of memory when its resident memory passes memoryLimitBytes, the size's usable memory (the estimator's usableMemoryFraction of it). Jobs queued before M8.5 have none and run unlimited.
+ * How the worker simulates the run's machine size on one physical machine (M8.5, ADR-082): the solver process is held to `cores` processors and is stopped as out of memory when its resident memory passes memoryLimitBytes, the size's usable memory (the estimator's usableMemoryFraction of it). Jobs queued before M8.5 have none and run unlimited.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulatedMachine".

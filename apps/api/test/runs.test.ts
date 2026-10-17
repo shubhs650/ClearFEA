@@ -857,7 +857,7 @@ describe("metering (ADR-033)", () => {
   });
 });
 
-describe("running out of memory (M8.5, ADR-081)", () => {
+describe("running out of memory (M8.5, ADR-082)", () => {
   const SMALL = 8 * 2 ** 30;
   /** The small size shrunk to 1 MiB, so the test mesh no longer fits it and medium is recommended. */
   async function withTinySmall(test: () => Promise<void>): Promise<void> {
@@ -923,7 +923,7 @@ describe("running out of memory (M8.5, ADR-081)", () => {
       const run = await outOfMemory("small");
       expect(run.cost).toMatchObject({ charged: true, billedSeconds: 3 });
       expect(run.problem).toBe(
-        "The run ran out of memory on the small machine size (0 GiB), which was chosen although the estimate needs more memory than it has, so the time it used is charged. Run it again on the recommended size, medium, or larger.",
+        "The run ran out of memory on the small machine size (1 MiB), which was chosen although the estimate needs more memory than it has, so the time it used is charged. Run it again on the recommended size, medium, or larger.",
       );
       const [, solve] = await charges(aliceId);
       expect(solve?.reason).toBe("solve");

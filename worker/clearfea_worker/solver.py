@@ -5,7 +5,7 @@ The solver's console output is the run's log: each line goes to ``on_output`` as
 written, so the API can stream it, and the whole log is kept in ``solver.log`` beside the
 deck. A crash of the solver ends only the child process, never the worker.
 
-On one physical machine a run's machine size is simulated (M8.5, ADR-081): the solver is held
+On one physical machine a run's machine size is simulated (M8.5, ADR-082): the solver is held
 to the size's cores and stopped as out of memory when its resident memory passes the size's
 usable memory, as the kernel would stop it on a real machine of that size.
 """

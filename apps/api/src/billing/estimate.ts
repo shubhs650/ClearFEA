@@ -78,7 +78,7 @@ export function runSize(estimate: RunEstimate, requested?: string): SizeEstimate
 }
 
 /**
- * How the worker simulates `size` (M8.5, ADR-081): the solver held to the size's cores and
+ * How the worker simulates `size` (M8.5, ADR-082): the solver held to the size's cores and
  * stopped as out of memory past its usable memory, the share of it the recommendation counts on.
  */
 export function simulatedMachine(size: SizeEstimate, estimator: EstimatorTable = estimatorTable): SimulatedMachine {
@@ -91,7 +91,7 @@ export function simulatedMachine(size: SizeEstimate, estimator: EstimatorTable =
 
 /**
  * Who pays for a run that ran out of memory on the size `sizeName` (DECISIONS "Failed runs",
- * ADR-081). The user does when they chose that size against the platform: it is not the size
+ * ADR-082). The user does when they chose that size against the platform: it is not the size
  * the platform would have put the run on (the recommended one, or the largest when none fits)
  * and by the estimate its memory does not fit. Otherwise the platform's recommendation or its
  * estimate was wrong, and it pays. A run without an estimate (before M2.12) is the platform's.
