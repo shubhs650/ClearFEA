@@ -47,6 +47,8 @@ from .ledger import entries_for_run, reconcile
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / "verification" / "cases"
+#: The acceptance models (M9.4): run only when named, never as part of the default suite.
+ACCEPTANCE = ROOT / "verification" / "acceptance"
 LOGIN, PASSWORD = "alice", "alice-local"  # seeded local test user (ADR-022)
 #: The row group of the ledger check over the whole run, shown in the table like a case.
 LEDGER = Case("Ledger", "Wallet ledger over the suite", CASES, "m", {}, {}, [], [], {})
@@ -373,7 +375,9 @@ def table(outcomes: list[Outcome], tier: str) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("cases", nargs="*", help="case ids, for example V-01; default all")
+    parser.add_argument(
+        "cases", nargs="*", help="case ids, for example V-01 or A; default every V case"
+    )
     parser.add_argument("--api", required=True, help="API base URL")
     parser.add_argument("--tier", choices=TIERS, default="coarse")
     parser.add_argument("--timeout", type=float, default=None, help="seconds per mesh or solve")
@@ -382,9 +386,13 @@ def main() -> int:
     timeout = args.timeout or (900.0 if args.tier == "coarse" else 7200.0)
     folders = sorted(p for p in CASES.iterdir() if (p / "case.yaml").exists())
     if args.cases:
+        folders += sorted(p for p in ACCEPTANCE.iterdir() if (p / "case.yaml").exists())
         folders = [p for p in folders if p.name.startswith(tuple(f"{c}-" for c in args.cases))]
         if not folders:
-            print(f"No case matches {args.cases}. Cases are in {CASES}.", file=sys.stderr)
+            print(
+                f"No case matches {args.cases}. Cases are in {CASES} and {ACCEPTANCE}.",
+                file=sys.stderr,
+            )
             return 2
     out = args.out or Path(tempfile.mkdtemp(prefix="verify-"))
     out.mkdir(parents=True, exist_ok=True)

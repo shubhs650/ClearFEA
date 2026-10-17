@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Acceptance case A (M9.4): a nozzle with a reinforcing pad on a cylindrical shell, three bonded
+# bodies under internal pressure with end thrust and a piping load on the nozzle. The design
+# and the basis of each value: model.md. Layout: verification/README.md.
+# Not part of the default `make verify` suite; run it with CASES=A (verification/acceptance).
+id: A
+title: Nozzle with reinforcing pad on a cylindrical shell
+analysis: linear_static
+features: [multi-body, bonded interface, pressure, force, remote force and moment, fixed support]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit.
+faces:
+  held-end: { min: [-600, -310, -310], max: [-600, 310, 310] }
+  free-end: { min: [600, -310, -310], max: [600, 310, 310] }
+  shell-inside: { min: [-600, -300, -300], max: [600, 300, 300] }
+  nozzle-bore: { min: [-75, -75, 290.474], max: [75, 75, 560] }
+  nozzle-foot-a: { min: [-83, -83, 288.29], max: [83, 0, 300] }
+  nozzle-foot-b: { min: [-83, 0, 288.29], max: [83, 83, 300] }
+  nozzle-end: { min: [-83, -83, 560], max: [83, 83, 560] }
+  shell-outside: { min: [-600, -310, -310], max: [600, 310, 310] }
+mesh:
+  coarse: { value: 15, unit: mm }
+  full: { value: 12, unit: mm }
+# M9.5 owns the acceptance checks (hand checks, WRC-style local stresses, FreeCAD). This one
+# only shows the model reaches the closed-end membrane state where model.md says it should.
+checks:
+  # Lamé, closed ends, at the outside: σθ = 2 p ri² / (ro² − ri²), σx = σθ / 2, σr = 0.
+  # 3 percent because both tiers put one quadratic element through the 10 mm wall, which
+  # reads the outside hoop stress about 2.4 percent low (model.md); M9.5 refines the wall.
+  - name: Membrane von Mises at the shell outside, under the shell, 450 mm past the nozzle
+    quantity: vonMises
+    face: shell-outside
+    box: { min: [440, -100, -311], max: [460, 100, -290] }
+    reference: { value: 51.109, unit: MPa }
+    tolerance: { coarse: 0.03, full: 0.03 }

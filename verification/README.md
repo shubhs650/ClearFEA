@@ -9,6 +9,10 @@ VERIFY_TIER=full CASES="V-01" make verify             # full tier, one case
 
 `infra/verify.sh` starts a fresh API on :8788 with an empty local database and a worker container, runs `python -m harness` from this folder with the worker's uv environment, prints the result table and stops both. Logs, `results.md` and `results.json` go to the folder it names at the end. The exit status is 1 if any check fails.
 
+## Acceptance models
+
+`acceptance/` holds the two acceptance models of `docs/VERIFICATION.md` (M9.4): `A-nozzle-on-shell` and `B-flanged-pipe-thermal`. Each is a case folder like those below, with `model.md` (the design, the setup and what the hand checks can use) in place of `reference.md`. They are not part of the default suite; name them to run them: `CASES="A B" make verify`. M9.5 and M9.6 add their acceptance checks to the same `case.yaml` files.
+
 ## A case
 
 ```
