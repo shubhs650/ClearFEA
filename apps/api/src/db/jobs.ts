@@ -31,6 +31,8 @@ export interface Job {
   billableMs: number | null;
   billedSeconds: number | null;
   cost: number | null;
+  /** How the owner (or M8.3's stop limit) asked a running job to end, until the worker has stopped (M8.2). */
+  stopRequested: StopReason | null;
   createdAt: string;
   claimedAt: string | null;
   finishedAt: string | null;
@@ -56,6 +58,7 @@ interface JobRow {
   billable_ms: number | null;
   billed_seconds: number | null;
   cost: number | null;
+  stop_requested: StopReason | null;
   created_at: string;
   claimed_at: string | null;
   finished_at: string | null;
@@ -82,6 +85,7 @@ function toJob(row: JobRow): Job {
     billableMs: row.billable_ms,
     billedSeconds: row.billed_seconds,
     cost: row.cost,
+    stopRequested: row.stop_requested,
     createdAt: row.created_at,
     claimedAt: row.claimed_at,
     finishedAt: row.finished_at,
@@ -89,6 +93,9 @@ function toJob(row: JobRow): Job {
 }
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+
+/** The status a job ends with when it is asked to stop: by its owner, or at its stop limit (M8.3). */
+export type StopReason = "cancelled" | "stopped_at_limit";
 
 /** Statuses in which the claiming worker may still report on a job. */
 const ACTIVE = "('claimed', 'running')";
@@ -199,8 +206,9 @@ export type HeartbeatOutcome = { found: false } | { found: true; action: Heartbe
 
 /**
  * Records that the worker is alive and at the given stage. The first heartbeat
- * moves a claimed job to running. If the job has left the active statuses
- * (cancelled or stopped by the API), tells the worker to give up.
+ * moves a claimed job to running. When the job has been asked to stop (M8.2), or has left the
+ * active statuses, tells the worker to give up: `cancel` for its owner's cancel, `stop` at its
+ * stop limit.
  */
 export async function recordHeartbeat(
   db: D1Database,
@@ -212,11 +220,14 @@ export async function recordHeartbeat(
     .prepare(
       `UPDATE jobs SET status = 'running', stage = ?, heartbeat_at = ${NOW}
         WHERE id = ? AND claimed_by = ? AND status IN ${ACTIVE}
-        RETURNING id`,
+        RETURNING stop_requested`,
     )
     .bind(stage, jobId, workerId)
-    .first<{ id: string }>();
-  if (updated !== null) return { found: true, action: "continue" };
+    .first<{ stop_requested: StopReason | null }>();
+  if (updated !== null) {
+    const asked = updated.stop_requested;
+    return { found: true, action: asked === null ? "continue" : asked === "stopped_at_limit" ? "stop" : "cancel" };
+  }
 
   const current = await db
     .prepare("SELECT status FROM jobs WHERE id = ? AND claimed_by = ?")
@@ -228,6 +239,8 @@ export async function recordHeartbeat(
 
 export type Completion =
   | { status: "succeeded"; result: unknown }
+  /** The worker stopped as it was asked to (M8.2); the job ends with the reason asked for. */
+  | { status: StopReason }
   | {
       status: "failed";
       failureCategory: FailureCategory;
@@ -263,6 +276,7 @@ export async function completeJob(
   charge: JobCharge | null,
 ): Promise<Job | null> {
   const succeeded = completion.status === "succeeded";
+  const failed = completion.status === "failed" ? completion : null;
   const complete = db
     .prepare(
       `UPDATE jobs
@@ -275,9 +289,9 @@ export async function completeJob(
     .bind(
       completion.status,
       succeeded ? JSON.stringify(completion.result ?? null) : null,
-      succeeded ? null : completion.failureCategory,
-      succeeded ? null : completion.failureCause,
-      succeeded ? null : completion.failureMessage,
+      failed?.failureCategory ?? null,
+      failed?.failureCause ?? null,
+      failed?.failureMessage ?? null,
       billableMs,
       charge?.billedSeconds ?? null,
       charge?.cost ?? null,

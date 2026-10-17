@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .api import ApiClient, ApiError, ClaimedJob
 from .config import Settings
-from .jobs import HANDLERS, Files, Handler, JobContext, JobFailure
+from .jobs import HANDLERS, Files, Handler, JobContext, JobFailure, JobStopped
 from .versions import worker_software
 
 log = logging.getLogger(__name__)
@@ -106,6 +106,11 @@ def run_job(
         meter = _Meter(clock)
         try:
             result = handler(job, context)
+        except JobStopped:
+            meter.stop()
+            log.info("Job %s (%s) stopped as the API asked", job.id, job.type)
+            client.stopped(job.id, billable_ms=meter.billable_ms)
+            return "stopped"
         except JobFailure as failure:
             meter.stop()
             log.info("Job %s (%s) failed: %s", job.id, job.type, failure.message)
@@ -128,10 +133,15 @@ def run_job(
             client.fail(job.id, "platform_fault", "internal_error", billable_ms=meter.billable_ms)
             return "failed"
         meter.stop()
-    if context.cancelled.is_set():
-        log.info("Job %s was cancelled or stopped by the API; not reporting a result", job.id)
+    # A handler that finished before it saw a cancel reports its result all the same: the work
+    # is done. Only a job the API has already ended refuses it.
+    try:
+        client.succeed(job.id, result, meter.billable_ms)
+    except ApiError as error:
+        if not context.cancelled.is_set():
+            raise
+        log.info("Job %s was ended by the API before its result: %s", job.id, error)
         return "cancelled"
-    client.succeed(job.id, result, meter.billable_ms)
     return "succeeded"
 
 

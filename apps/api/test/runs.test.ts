@@ -408,6 +408,129 @@ describe("a solving run", () => {
   });
 });
 
+describe("a solving run's progress (M8.2)", () => {
+  it("is waiting while queued, then counts time and cost from the worker's claim", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    expect(run.progress).toEqual({ startedAt: null, elapsedMs: null, costSoFar: null, cancelling: false });
+    const job = await claim("solve");
+    // As if the worker had taken it 2.5 s ago: 3 s on small, 0.5 credit an hour.
+    await env.DB.prepare(
+      "UPDATE jobs SET claimed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-2.5 seconds') WHERE id = ?",
+    )
+      .bind(job.id)
+      .run();
+    const progress = (await readRun(run.id)).progress;
+    expect(progress?.startedAt).not.toBeNull();
+    expect(progress?.elapsedMs).toBeGreaterThanOrEqual(2500);
+    expect(progress?.elapsedMs).toBeLessThan(10_000);
+    expect(progress?.costSoFar).toBeGreaterThanOrEqual(417);
+    expect(progress?.cancelling).toBe(false);
+  });
+
+  it("is gone once the run has finished", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    expect((await readRun(run.id)).progress).toBeNull();
+  });
+});
+
+describe("cancelling a run (M8.2)", () => {
+  async function cancel(runId: string, cookie = alice): Promise<Response> {
+    return call("POST", `/api/runs/${runId}/cancel`, { cookie });
+  }
+
+  async function beat(jobId: string): Promise<unknown> {
+    const response = await call("POST", `/internal/jobs/${jobId}/heartbeat`, {
+      json: { workerId: "w1", stage: "solving" },
+      token: TOKEN,
+    });
+    expect(response.status).toBe(200);
+    return response.json();
+  }
+
+  it("ends a run still waiting for the worker at once, without a charge", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const response = await cancel(run.id);
+    expect(response.status).toBe(200);
+    const cancelled = await runOf(response);
+    expect(cancelled).toMatchObject({ status: "cancelled", stage: null, progress: null, files: [] });
+    expect(cancelled.problem).toContain("before the solver started, so nothing was charged");
+    expect(cancelled.cost).toEqual({ billedSeconds: 0, amount: 0, charged: false });
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+    // The worker never gets it, and the next run may start.
+    const none = await call("POST", "/internal/jobs/claim", { json: { workerId: "w1", jobTypes: ["solve"] }, token: TOKEN });
+    expect(none.status).toBe(204);
+    expect((await startRun(id)).status).toBe(201);
+  });
+
+  it("asks the worker to stop, then charges the time it reports", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    expect(await beat(job.id)).toEqual({ action: "continue" });
+    const asked = await runOf(await cancel(run.id));
+    expect(asked).toMatchObject({ status: "solving", progress: { cancelling: true } });
+    // Asking twice changes nothing.
+    expect((await runOf(await cancel(run.id))).progress?.cancelling).toBe(true);
+    expect(await beat(job.id)).toEqual({ action: "cancel" });
+    await upload(job, ["deck.inp", "solver.log"]);
+    await complete(job.id, { status: "stopped", metering: { billableMs: 12_300 } });
+    const ended = await readRun(run.id);
+    expect(ended).toMatchObject({ status: "cancelled", progress: null, files: ["deck.inp", "solver.log"] });
+    expect(ended.problem).toBe("You cancelled the run after 13 s. The time it used is charged. Run it again for results.");
+    // 13 s at 0.5 credit an hour: 1,805.56 rounds to 1,806 micro-credits.
+    expect(ended.cost).toEqual({ billedSeconds: 13, amount: 1806, charged: true });
+    expect((await charges(aliceId)).map((e) => [e.reason, e.amount])).toEqual([
+      ["mesh", -833],
+      ["solve", -1806],
+    ]);
+    expect(await getJob(env.DB, aliceId, job.id)).toMatchObject({ status: "cancelled", failureCategory: null });
+    // A cancelled run has no results, and its deck and log can be read.
+    expect((await call("GET", `/api/runs/${run.id}/fields`, { cookie: alice })).status).toBe(409);
+    expect((await call("GET", `/api/runs/${run.id}/files/solver.log`, { cookie: alice })).status).toBe(200);
+  });
+
+  it("keeps the result of a job that finished before it saw the cancel", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await cancel(run.id);
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    expect(await readRun(run.id)).toMatchObject({ status: "succeeded", cost: { charged: true } });
+  });
+
+  it("refuses a stop nobody asked for", async () => {
+    const id = await meshed();
+    await startRun(id);
+    const job = await claim("solve");
+    const done = await call("POST", `/internal/jobs/${job.id}/complete`, {
+      json: { workerId: "w1", status: "stopped", metering: { billableMs: 1000 } },
+      token: TOKEN,
+    });
+    expect(done.status).toBe(409);
+    expect((await getJob(env.DB, aliceId, job.id))?.status).toBe("claimed");
+  });
+
+  it("refuses a finished run and answers another user's like a missing one", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    expect((await cancel(run.id, bob)).status).toBe(404);
+    expect((await readRun(run.id)).status).toBe("solving");
+    const job = await claim("solve");
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: SOLVED });
+    const late = await cancel(run.id);
+    expect(late.status).toBe(409);
+    expect((await late.json<{ error: string }>()).error).toContain("already finished");
+  });
+});
+
 describe("a finished solve job", () => {
   it("stores the result summary and the run's files", async () => {
     const id = await meshed();

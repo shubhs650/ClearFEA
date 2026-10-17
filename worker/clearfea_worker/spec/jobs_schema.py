@@ -180,7 +180,21 @@ class CompleteFailed(BaseModel):
     """
 
 
-type CompleteRequest = CompleteSucceeded | CompleteFailed
+class CompleteStopped(BaseModel):
+    """
+    The worker ended the job because a heartbeat told it to (cancel or stop, M8.2): it reports the time it used. The API records the job as cancelled or stopped at its limit, as it asked, and charges the time (DECISIONS "Failed runs").
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    worker_id: Annotated[WorkerId, Field(alias="workerId")]
+    status: Literal["stopped"]
+    metering: Metering
+
+
+type CompleteRequest = CompleteSucceeded | CompleteFailed | CompleteStopped
 """
 Body of POST /internal/jobs/{id}/complete.
 """

@@ -55,6 +55,12 @@ describe("who pays", () => {
     });
   });
 
+  it("charges the time a cancelled or stopped job used (M8.2)", () => {
+    for (const status of ["cancelled", "stopped_at_limit"] as const) {
+      expect(chargeFor(2500, 3_600_000, { status })).toMatchObject({ billedSeconds: 3, cost: 3000, charged: true });
+    }
+  });
+
   it("meters meshing and solving only; import is free", () => {
     expect(["noop", "import", "mesh", "solve", "report"].filter((t) => isMetered(t as never))).toEqual([
       "mesh",

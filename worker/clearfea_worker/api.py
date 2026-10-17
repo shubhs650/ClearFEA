@@ -19,6 +19,7 @@ from .spec.jobs_schema import (
     ClaimRequest,
     ClaimResponse,
     CompleteFailed,
+    CompleteStopped,
     CompleteSucceeded,
     FailureCategory,
     HeartbeatAction,
@@ -175,5 +176,13 @@ class ApiClient:
             failure_cause=cause,
             metering=Metering(billable_ms=billable_ms),
             **extra,
+        )
+        self._post(f"/jobs/{job_id}/complete", request)
+
+    def stopped(self, job_id: str, *, billable_ms: int) -> None:
+        """Reports that the job ended because a heartbeat asked it to (M8.2), with the time it
+        used; the API records it as cancelled or stopped at its limit and charges the time."""
+        request = CompleteStopped(
+            worker_id=self._worker_id, status="stopped", metering=Metering(billable_ms=billable_ms)
         )
         self._post(f"/jobs/{job_id}/complete", request)

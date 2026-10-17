@@ -983,10 +983,28 @@ class SolveResult(BaseModel):
     """
 
 
-type RunStatus = Literal["solving", "succeeded", "failed"]
+type RunStatus = Literal["solving", "succeeded", "failed", "cancelled"]
 """
-solving while the solve job is queued or running; succeeded or failed once it ends.
+solving while the solve job is queued or running; succeeded, failed or cancelled (by its owner, M8.2) once it ends.
 """
+
+
+class RunProgress(BaseModel):
+    """
+    A solving run as it goes (M8.2): when the worker took it (null while queued), the time since then when the answer was made, what that time costs so far at the run's rate (elapsed time rounded up to whole seconds, as metering bills it; null while queued and for runs that are not metered), and whether its owner has asked to cancel it and the worker has not stopped yet.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    started_at: Annotated[str | None, Field(alias="startedAt")]
+    elapsed_ms: Annotated[int | None, Field(alias="elapsedMs", ge=0)]
+    cost_so_far: Annotated[int | None, Field(alias="costSoFar", ge=0)]
+    """
+    Micro-credits.
+    """
+    cancelling: bool
 
 
 class RunSoftware(BaseModel):
@@ -1479,9 +1497,13 @@ class RunView(BaseModel):
     """
     What the solve job is doing: queued, then the worker's stage.
     """
+    progress: RunProgress | None
+    """
+    While the run solves; null once it has ended.
+    """
     problem: str | None
     """
-    Why the run failed, in plain language.
+    Why the run failed, or that it was cancelled, in plain language.
     """
     result: SolveResult | None
     created_at: Annotated[str, Field(alias="createdAt")]

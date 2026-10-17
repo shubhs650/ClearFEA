@@ -129,12 +129,12 @@ export type XYZ1 = [number, number, number];
  */
 export type XYZ2 = [number, number, number];
 /**
- * solving while the solve job is queued or running; succeeded or failed once it ends.
+ * solving while the solve job is queued or running; succeeded, failed or cancelled (by its owner, M8.2) once it ends.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "RunStatus".
  */
-export type RunStatus = "solving" | "succeeded" | "failed";
+export type RunStatus = "solving" | "succeeded" | "failed" | "cancelled";
 /**
  * A file a solve job stores for its run. deck.inp and solver.log can be viewed and downloaded through GET /api/runs/{id}/files/{name}.
  *
@@ -1113,6 +1113,21 @@ export interface SolveSoftware {
   calculix: string;
 }
 /**
+ * A solving run as it goes (M8.2): when the worker took it (null while queued), the time since then when the answer was made, what that time costs so far at the run's rate (elapsed time rounded up to whole seconds, as metering bills it; null while queued and for runs that are not metered), and whether its owner has asked to cancel it and the worker has not stopped yet.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "RunProgress".
+ */
+export interface RunProgress {
+  startedAt: string | null;
+  elapsedMs: number | null;
+  /**
+   * Micro-credits.
+   */
+  costSoFar: number | null;
+  cancelling: boolean;
+}
+/**
  * Versions that produced a run (ADR-032): gmsh and occt made its mesh; clearfea, deckFormat and calculix are the worker's that solved it. Null when not known, for example before the worker has reported or for runs made before M1.10.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -1282,7 +1297,11 @@ export interface RunView {
    */
   stage: string | null;
   /**
-   * Why the run failed, in plain language.
+   * While the run solves; null once it has ended.
+   */
+  progress: RunProgress | null;
+  /**
+   * Why the run failed, or that it was cancelled, in plain language.
    */
   problem: string | null;
   result: SolveResult | null;
@@ -1424,8 +1443,9 @@ export const validateBalanceCheck = validator<BalanceCheck>(schema, "BalanceChec
 export const validateHeatFlow = validator<HeatFlow>(schema, "HeatFlow");
 export const validateHeatBalance = validator<HeatBalance>(schema, "HeatBalance");
 export const validateSolveResult = validator<SolveResult>(schema, "SolveResult");
-export const RunStatusValues = ["solving", "succeeded", "failed"] as const satisfies readonly RunStatus[];
+export const RunStatusValues = ["solving", "succeeded", "failed", "cancelled"] as const satisfies readonly RunStatus[];
 export const validateRunStatus = validator<RunStatus>(schema, "RunStatus");
+export const validateRunProgress = validator<RunProgress>(schema, "RunProgress");
 export const validateRunSoftware = validator<RunSoftware>(schema, "RunSoftware");
 export const validateRunMesh = validator<RunMesh>(schema, "RunMesh");
 export const RunFileNameValues = ["deck.inp", "solver.log", "results.frd", "results.dat", "surface.bin", "fields.bin", "nodes.bin"] as const satisfies readonly RunFileName[];
