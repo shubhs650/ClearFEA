@@ -49,7 +49,7 @@ import {
   type SolveResult,
   systemUnit,
 } from "@clearfea/spec";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { runFileUrl } from "../api/runs";
 import { credits } from "../billing/credits";
 import { duration, memory } from "../billing/estimate";
@@ -617,8 +617,90 @@ function costText(run: RunView): string {
   if (run.machine === null) return "Not metered: the run was made before metering.";
   if (run.cost === null) return "Counted when the run has finished.";
   const time = `${run.cost.billedSeconds.toLocaleString("en-US")} s`;
+  if (!run.cost.charged && run.status === "cancelled") return "Nothing: the run was cancelled before the solver started.";
   if (!run.cost.charged) return `Not charged: the run stopped because of a fault in ClearFEA (${time}).`;
   return `${credits(run.cost.amount)} for ${time}`;
+}
+
+/** Time on a running clock: m:ss, or h:mm:ss from an hour. */
+export function clock(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const [h, m, s] = [Math.floor(total / 3600), Math.floor((total % 3600) / 60), total % 60];
+  const two = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${m}:${two(s)}`;
+}
+
+/** Milliseconds since the component last saw `key` change, refreshed every second. */
+function useTicking(key: unknown): number {
+  const [since, setSince] = useState({ key, at: Date.now() });
+  const [now, setNow] = useState(Date.now());
+  if (since.key !== key) setSince({ key, at: Date.now() });
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return since.key === key ? Math.max(0, now - since.at) : 0;
+}
+
+/**
+ * A solving run as it goes (M8.2): its stage, how long the solver has had it against the
+ * estimate, what that time costs so far against the estimated cost, and a cancel button. The
+ * clock runs on between the API's answers; the cost is the API's, refreshed with each one.
+ */
+function RunningJob({
+  run,
+  requesting,
+  onCancel,
+}: {
+  run: RunView;
+  requesting: boolean;
+  onCancel: () => void;
+}) {
+  const progress = run.progress;
+  const ticked = useTicking(progress);
+  const waiting = progress === null || progress.elapsedMs === null;
+  const cancelling = progress?.cancelling === true;
+  const estimate = run.estimate;
+  const size = estimate?.sizes.find((s) => s.size === run.machine?.size);
+  const stage = cancelling
+    ? "Cancelling: the solver stops at its next check-in, within a few seconds…"
+    : run.stage === "queued" || run.stage === null
+      ? "Waiting for the solver…"
+      : `Solver: ${run.stage}…`;
+  return (
+    <section aria-label="Running job">
+      <p role="status" aria-label="Run stage">
+        {stage}
+      </p>
+      {!waiting && (
+        <dl className="geometry-facts">
+          <dt>Elapsed</dt>
+          <dd data-testid="run-elapsed">
+            {clock((progress.elapsedMs ?? 0) + ticked)}
+            {estimate !== null && <span className="field-hint"> of about {duration(estimate.seconds)} estimated</span>}
+          </dd>
+          {progress.costSoFar !== null && (
+            <>
+              <dt>Cost so far</dt>
+              <dd data-testid="run-cost-so-far">
+                {credits(progress.costSoFar)}
+                {size !== undefined && <span className="field-hint"> of about {credits(size.cost)} estimated</span>}
+              </dd>
+            </>
+          )}
+        </dl>
+      )}
+      <button type="button" onClick={onCancel} disabled={requesting || cancelling}>
+        Cancel the run
+      </button>
+      <p className="field-hint">
+        {waiting
+          ? "Cancelled before the solver starts, the run costs nothing."
+          : "Cancelled, the run is charged for the time it has used."}{" "}
+        It carries on if you close the browser.
+      </p>
+    </section>
+  );
 }
 
 const FILE_LABELS: Partial<Record<RunFileName, string>> = { "deck.inp": "Solver input", "solver.log": "Solver log" };
@@ -860,6 +942,7 @@ export function RunPanel({
   requesting,
   requestProblem,
   onRun,
+  onCancel,
   choice,
   onChoiceChange,
   onSignedOut = ignoreSignedOut,
@@ -890,6 +973,8 @@ export function RunPanel({
   requestProblem?: string;
   /** Starts a run on the machine size chosen. */
   onRun: (machineSize: string | undefined) => void;
+  /** Cancels the solving run (M8.2). */
+  onCancel: () => void;
   choice: ResultChoice;
   onChoiceChange: (next: ResultChoice) => void;
   /** Called when the API says the user is signed out, from the share link's calls. */
@@ -935,11 +1020,7 @@ export function RunPanel({
           {requestProblem}
         </p>
       )}
-      {solving && (
-        <p role="status" aria-label="Run stage">
-          {run.stage === "queued" || run.stage === null ? "Waiting for the solver…" : `Solver: ${run.stage}…`}
-        </p>
-      )}
+      {solving && <RunningJob run={run} requesting={requesting} onCancel={onCancel} />}
       {result && run !== null && (
         <RunResults
           run={run}

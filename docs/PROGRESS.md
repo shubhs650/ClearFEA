@@ -33,7 +33,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M8 Platform
 
 - [x] M8.1 Wallet page: balance, ledger, per-run cost; seeded play-money grant and low-balance refusal (ADR-080)
-- [ ] M8.2 Running-job view: stage, elapsed time, cost so far against estimate, live log, cancel
+- [x] M8.2 Running-job view: stage, elapsed time, cost so far against estimate, live log, cancel; a cancelled run is charged the time it used (ADR-085)
 - [ ] M8.3 Stop limit per run with a default multiplier and user override
 - [ ] M8.4 Failure classification end to end, with category and reason shown on the run
 - [x] M8.5 Simulated machine sizes on localhost (cores, memory limit); out-of-memory path tested, with who pays decided by the API (ADR-082)
@@ -153,6 +153,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M8.2 (2026-10-17): the running-job view and cancel (ADR-085, accepted under Shubham's M8 autodrive, pending his review). Billing module touched: `isCharged` in `apps/api/src/billing/cost.ts` now charges `cancelled` and `stopped_at_limit` jobs their time, and the wallet's run status reads `cancelled` (`ledger.ts`, a read). `POST /api/runs/:id/cancel` ends a queued job at once (0 s, not charged) or sets `jobs.stop_requested` (migration 0018); the heartbeat answers `cancel` (or `stop` for `stopped_at_limit`), the worker raises `JobStopped`, uploads deck and log and completes with `status: "stopped"` (`CompleteStopped`), and the API ends the job with the status asked for. The `runs` table keeps `failed` for a cancelled run (its CHECK cannot change without a rebuild); `RunStatus` `cancelled` comes from the job. `RunView.progress` (startedAt, elapsedMs, costSoFar, cancelling) feeds `RunningJob` in `RunPanel.tsx`. For M8.3: set `stop_requested = 'stopped_at_limit'` (from the heartbeat, when elapsed passes the limit) and the rest is in place; `stoppedProblem` in `internal.ts` already words the run's message, and the run currently reads `failed` for it (map it in `toRun` if a `stopped` status is wanted). Add the stop-limit test to `e06-running-job.e2e.ts` with its `slowRun` helper (the E-01 block at 1 mm, quadratic, SPOOLES: about 112 s by the estimate). Known gap: a dead worker leaves a pending cancel unanswered (no heartbeat timeout). Screenshots in the project's `m8.2/` folder.
 
 > M8.10 (2026-10-17): the self-hosting flag (ADR-084, accepted under Shubham's M8 autodrive, pending his review). `SELF_HOSTED=true` (or `1`) in `apps/api/.dev.vars` turns it on (`apps/api/src/selfHosting.ts`); unset is the hosted mode, so `make dev`, `make verify` and `make e2e` are unchanged. The mesh and run routes skip `meshFundsProblem` and `runFundsProblem` when it is on; jobs are still metered and charged to the ledger, so the balance can go below zero, and the seed's grant is unchanged. `GET /api/wallet` answers `selfHosted`, and the wallet page then says it is information only instead of the refusal sentence. No billing module file changed and no migration. For M8.3: decide whether the stop limit applies when self-hosted (it bounds a run's time as well as its cost, so keeping it seems right). For M9.3: the self-hosting instructions should name the flag. Screenshots in the project's `m8.10/` folder.
 
@@ -338,6 +340,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M8.2 running-job view and cancel (ADR-085): while a run solves, the Run panel shows its stage, elapsed time against the estimate, cost so far against the estimated cost, the live log and "Cancel the run"; the worker stops at its next heartbeat, keeps deck and log and reports the time used, which is charged; a run cancelled before the worker takes it costs nothing. New browser test E-06 (cancel part). Learned: `pkill -f infra/e2e.sh` also kills the shell that runs it.
 - M8.10 self-hosting flag (ADR-084): `SELF_HOSTED=true` in `apps/api/.dev.vars` makes the wallet informational. Jobs are still charged to the ledger, but no run or mesh is refused for its balance, and the wallet page says so. Learned: Hono's `app.request(path, init, env)` lets an API test run the app with one binding changed.
 - M8.7 read-only share link (ADR-083): the owner makes, copies once and revokes one link per succeeded run from the Run panel; `/share/<token>` shows the run's results read-only without signing in; only the token's hash is stored. New browser test E-07. Learned: `make e2e <test>` does not reach Playwright; `infra/e2e.sh <test>` does.
 

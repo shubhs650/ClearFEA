@@ -98,7 +98,8 @@ class FakeApi:
             job["log"] = job.get("log", "") + body.get("log", "")
             return 200, _checked(HeartbeatResponse, {"action": self.heartbeat_action})
         _complete_request.validate_python(body)
-        job["status"] = body["status"]
+        # A stopped job ends as the API asked: here always a cancel.
+        job["status"] = "cancelled" if body["status"] == "stopped" else body["status"]
         job["outcome"] = body
         answer = {"job": {k: job[k] for k in ("id", "type", "targetId", "status")}}
         return 200, _checked(CompleteResponse, answer)

@@ -98,9 +98,10 @@ def test_reports_a_handler_error_as_platform_fault() -> None:
         assert outcome["failureCause"] == "internal_error"
 
 
-def test_does_not_report_success_after_a_cancel() -> None:
+def test_a_cancel_ends_the_job_with_the_time_it_used() -> None:
     def slow(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
         assert context.cancelled.wait(5), "the heartbeat never passed on the cancel"
+        context.check_stopped()
         return {}
 
     with FakeApi() as api:
@@ -108,7 +109,22 @@ def test_does_not_report_success_after_a_cancel() -> None:
         api.heartbeat_action = "cancel"
         settings = settings_for(api)
         run_once(client_for(settings), settings, {"noop": slow})
-        assert "outcome" not in api.jobs["j1"]
+        outcome = api.jobs["j1"]["outcome"]
+        assert outcome["status"] == "stopped"
+        assert outcome["metering"]["billableMs"] >= 0
+
+
+def test_a_job_done_before_it_saw_the_cancel_reports_its_result() -> None:
+    def finishes(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
+        assert context.cancelled.wait(5), "the heartbeat never passed on the cancel"
+        return {"message": "done"}
+
+    with FakeApi() as api:
+        api.heartbeat_action = "cancel"
+        client = client_for(settings_for(api))
+        job = _claimed(api, client)
+        assert run_job(client, job, {"noop": finishes}, 0.01) == "succeeded"
+        assert api.jobs["j1"]["outcome"]["result"] == {"message": "done"}
 
 
 def test_wrong_token_raises_a_plain_error() -> None:
@@ -197,6 +213,26 @@ def test_reports_the_time_of_a_failed_job_too() -> None:
         outcome = api.jobs["j1"]["outcome"]
         assert outcome["failureCategory"] == "user_fault"
         assert outcome["metering"] == {"billableMs": 7}
+
+
+def test_reports_the_time_of_a_cancelled_job_too() -> None:
+    def cancelled(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
+        from clearfea_worker.jobs import JobStopped
+
+        raise JobStopped()
+
+    with FakeApi() as api:
+        client = client_for(settings_for(api))
+        job = _claimed(api, client)
+        assert (
+            run_job(client, job, {"noop": cancelled}, 0.01, clock=_clock(0, 4_000_000_001))
+            == "stopped"
+        )
+        assert api.jobs["j1"]["outcome"] == {
+            "workerId": "w1",
+            "status": "stopped",
+            "metering": {"billableMs": 4001},
+        }
 
 
 def test_measures_real_time_by_default() -> None:
@@ -361,6 +397,7 @@ def fake_calculix(
     lines: tuple[str, ...] = ("Job finished\n",),
     out_of_memory: bool = False,
     machines: list[Any] | None = None,
+    cancelled_run: bool = False,
 ) -> Any:
     """Stands in for run_calculix: writes the fixture's output beside the deck, and keeps the
     simulated machine it was given in ``machines``."""
@@ -376,6 +413,8 @@ def fake_calculix(
             on_output(line)
         if out_of_memory:
             return SolverRun(None, log, out_of_memory=True)
+        if cancelled_run:
+            return SolverRun(None, log)
         for suffix in (".frd", ".dat"):
             shutil.copy(SOLVE / f"job{suffix}", deck.with_suffix(suffix))
         return SolverRun(returncode, log)
@@ -484,6 +523,19 @@ def test_a_solver_out_of_memory_keeps_deck_and_log_and_leaves_who_pays_to_the_ap
             "out_of_memory",
         )
         assert "6.8 GiB" in outcome["failureMessage"]
+        assert set(api.uploads) == {("j1", "deck.inp"), ("j1", "solver.log")}
+
+
+def test_a_cancelled_solve_keeps_deck_and_log_and_reports_the_time_it_used(
+    tmp_path: Path, no_calculix: Any
+) -> None:
+    no_calculix.setattr(solver, "run_calculix", fake_calculix(cancelled_run=True))
+    with FakeApi() as api:
+        solve_job(api, tmp_path, fixture_spec())
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert outcome["status"] == "stopped"
         assert set(api.uploads) == {("j1", "deck.inp"), ("j1", "solver.log")}
 
 

@@ -887,8 +887,20 @@
       }
     },
     "RunStatus": {
-      "description": "solving while the solve job is queued or running; succeeded or failed once it ends.",
-      "enum": ["solving", "succeeded", "failed"]
+      "description": "solving while the solve job is queued or running; succeeded, failed or cancelled (by its owner, M8.2) once it ends.",
+      "enum": ["solving", "succeeded", "failed", "cancelled"]
+    },
+    "RunProgress": {
+      "description": "A solving run as it goes (M8.2): when the worker took it (null while queued), the time since then when the answer was made, what that time costs so far at the run's rate (elapsed time rounded up to whole seconds, as metering bills it; null while queued and for runs that are not metered), and whether its owner has asked to cancel it and the worker has not stopped yet.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startedAt", "elapsedMs", "costSoFar", "cancelling"],
+      "properties": {
+        "startedAt": { "type": ["string", "null"] },
+        "elapsedMs": { "type": ["integer", "null"], "minimum": 0 },
+        "costSoFar": { "description": "Micro-credits.", "type": ["integer", "null"], "minimum": 0 },
+        "cancelling": { "type": "boolean" }
+      }
     },
     "RunSoftware": {
       "description": "Versions that produced a run (ADR-032): gmsh and occt made its mesh; clearfea, deckFormat and calculix are the worker's that solved it. Null when not known, for example before the worker has reported or for runs made before M1.10.",
@@ -1007,7 +1019,7 @@
       "additionalProperties": false,
       "required": [
         "id", "simulationId", "meshId", "spec", "mesh", "software", "files", "machine", "estimate", "cost", "status", "stage",
-        "problem", "result", "createdAt", "finishedAt"
+        "progress", "problem", "result", "createdAt", "finishedAt"
       ],
       "properties": {
         "id": { "type": "string" },
@@ -1035,7 +1047,11 @@
         },
         "status": { "$ref": "#/$defs/RunStatus" },
         "stage": { "description": "What the solve job is doing: queued, then the worker's stage.", "type": ["string", "null"] },
-        "problem": { "description": "Why the run failed, in plain language.", "type": ["string", "null"] },
+        "progress": {
+          "description": "While the run solves; null once it has ended.",
+          "oneOf": [{ "$ref": "#/$defs/RunProgress" }, { "type": "null" }]
+        },
+        "problem": { "description": "Why the run failed, or that it was cancelled, in plain language.", "type": ["string", "null"] },
         "result": { "oneOf": [{ "$ref": "#/$defs/SolveResult" }, { "type": "null" }] },
         "createdAt": { "type": "string" },
         "finishedAt": { "type": ["string", "null"] }

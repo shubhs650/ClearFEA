@@ -42,10 +42,15 @@ export function costOf(seconds: number, ratePerHour: number): number {
 
 /**
  * Who pays (docs/ARCHITECTURE.md, failure classification): the user pays for a job that
- * succeeded or failed through their own setup; a fault in ClearFEA is not charged.
+ * succeeded, failed through their own setup, or was cancelled or stopped at its limit once it
+ * had started (the time used, M8.2); a fault in ClearFEA is not charged.
  */
-export function isCharged(outcome: { status: "succeeded" } | { status: "failed"; failureCategory: FailureCategory }) {
-  return outcome.status === "succeeded" || outcome.failureCategory === "user_fault";
+export function isCharged(
+  outcome:
+    | { status: "succeeded" | "cancelled" | "stopped_at_limit" }
+    | { status: "failed"; failureCategory: FailureCategory },
+) {
+  return outcome.status !== "failed" || outcome.failureCategory === "user_fault";
 }
 
 export interface JobCharge {

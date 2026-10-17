@@ -46,6 +46,11 @@ export interface Run {
   /** The solve job's status and stage, for the stage line the owner sees. */
   jobStatus: JobStatus;
   jobStage: string | null;
+  /** When the worker took the solve job, and the time since then when the run was read (M8.2). */
+  jobClaimedAt: string | null;
+  jobElapsedMs: number | null;
+  /** Whether the run has been asked to stop and its worker has not stopped yet (M8.2). */
+  stopRequested: boolean;
   createdAt: string;
   finishedAt: string | null;
 }
@@ -65,6 +70,9 @@ interface RunRow {
   job_id: string;
   job_status: JobStatus;
   job_stage: string | null;
+  job_claimed_at: string | null;
+  job_elapsed_ms: number | null;
+  job_stop_requested: string | null;
   job_machine_size: string | null;
   job_rate_per_hour: number | null;
   job_billed_seconds: number | null;
@@ -102,12 +110,17 @@ function toRun(row: RunRow): Run {
       row.job_billed_seconds === null || row.job_cost === null
         ? null
         : { billedSeconds: row.job_billed_seconds, amount: row.job_cost, charged: row.job_charged === 1 },
-    status: row.status,
+    // The runs table keeps 'failed' for every run that ended without results; the job says
+    // whether its owner cancelled it (M8.2, ADR-085).
+    status: row.status === "failed" && row.job_status === "cancelled" ? "cancelled" : row.status,
     problem: row.problem,
     result: row.result === null ? null : JSON.parse(row.result),
     jobId: row.job_id,
     jobStatus: row.job_status,
     jobStage: row.job_stage,
+    jobClaimedAt: row.job_claimed_at,
+    jobElapsedMs: row.job_elapsed_ms,
+    stopRequested: row.job_stop_requested !== null && (row.job_status === "claimed" || row.job_status === "running"),
     createdAt: row.created_at,
     finishedAt: row.finished_at,
   };
@@ -116,6 +129,10 @@ function toRun(row: RunRow): Run {
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
 const SELECT = `SELECT runs.*, jobs.status AS job_status, jobs.stage AS job_stage,
+                       jobs.claimed_at AS job_claimed_at, jobs.stop_requested AS job_stop_requested,
+                       CASE WHEN jobs.claimed_at IS NULL THEN NULL
+                            ELSE MAX(0, CAST(ROUND((julianday('now') - julianday(jobs.claimed_at)) * 86400000) AS INTEGER))
+                       END AS job_elapsed_ms,
                        jobs.machine_size AS job_machine_size, jobs.rate_per_hour AS job_rate_per_hour,
                        jobs.billed_seconds AS job_billed_seconds, jobs.cost AS job_cost,
                        EXISTS (SELECT 1 FROM ledger_entries l WHERE l.job_id = jobs.id) AS job_charged,
@@ -210,7 +227,9 @@ export async function listRuns(db: D1Database, userId: string, simulationId: str
   return results.map(toRun);
 }
 
-export type RunOutcome = { status: "succeeded"; result: SolveResult } | { status: "failed"; problem: string };
+export type RunOutcome =
+  | { status: "succeeded"; result: SolveResult }
+  | { status: "failed" | "cancelled" | "stopped_at_limit"; problem: string };
 
 /**
  * Applies a finished solve job to its run: the outcome, the files the job stored and the
@@ -233,7 +252,8 @@ export async function recordRunOutcome(
         WHERE id = ? AND owner_id = ? AND job_id = ? AND status = 'solving'`,
     )
     .bind(
-      outcome.status,
+      // Every run that ended without results is 'failed' in the table (ADR-085).
+      succeeded ? "succeeded" : "failed",
       succeeded ? null : outcome.problem,
       succeeded ? JSON.stringify(outcome.result) : null,
       JSON.stringify(files),
@@ -245,4 +265,48 @@ export async function recordRunOutcome(
       job.id,
     )
     .run();
+}
+
+/** What cancelling a run did (M8.2). */
+export type CancelOutcome = "ended" | "asked" | "finished";
+
+/** What the owner is told about a run cancelled before the worker took it. */
+const CANCELLED_QUEUED = "You cancelled the run before the solver started, so nothing was charged. Run it again for results.";
+
+/**
+ * Cancels the user's solving run, in one batch: a run whose job is still queued ends at once,
+ * uncharged; a run whose job a worker holds is marked to stop, and the worker's next heartbeat
+ * tells it to (it then reports the time it used, which is charged). Returns which happened, or
+ * "finished" when the run had already ended (or is not the user's).
+ */
+export async function cancelRun(db: D1Database, userId: string, runId: string): Promise<CancelOutcome> {
+  const job = "(SELECT job_id FROM runs WHERE id = ? AND owner_id = ?)";
+  const [ended, , asked] = await db.batch([
+    db
+      .prepare(
+        `UPDATE jobs
+            SET status = 'cancelled', stop_requested = 'cancelled', stop_requested_at = ${NOW},
+                finished_at = ${NOW}, billable_ms = 0,
+                billed_seconds = CASE WHEN rate_per_hour IS NULL THEN NULL ELSE 0 END,
+                cost = CASE WHEN rate_per_hour IS NULL THEN NULL ELSE 0 END
+          WHERE id = ${job} AND owner_id = ? AND status = 'queued'`,
+      )
+      .bind(runId, userId, userId),
+    db
+      .prepare(
+        `UPDATE runs SET status = 'failed', problem = ?, files = '[]', finished_at = ${NOW}
+          WHERE id = ? AND owner_id = ? AND status = 'solving'
+            AND EXISTS (SELECT 1 FROM jobs WHERE jobs.id = runs.job_id AND jobs.status = 'cancelled')`,
+      )
+      .bind(CANCELLED_QUEUED, runId, userId),
+    db
+      .prepare(
+        `UPDATE jobs SET stop_requested = 'cancelled', stop_requested_at = ${NOW}
+          WHERE id = ${job} AND owner_id = ? AND status IN ('claimed', 'running') AND stop_requested IS NULL`,
+      )
+      .bind(runId, userId, userId),
+  ]);
+  if ((ended?.meta.changes ?? 0) > 0) return "ended";
+  if ((asked?.meta.changes ?? 0) > 0) return "asked";
+  return "finished";
 }
