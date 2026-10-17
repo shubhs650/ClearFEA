@@ -16,7 +16,7 @@
 // (M5.1) has no displacement: its temperatures are drawn on the undeformed shape. A modal run
 // (M6.2, ADR-071) shows the shape of one mode, coloured by its relative displacement and drawn
 // deformed with its largest displacement at a tenth of the model's size, and can swing it.
-// Through a share link (M8.7, ADR-082) it draws a run's results read-only, with the run's files
+// Through a share link (M8.7, ADR-083) it draws a run's results read-only, with the run's files
 // read through the link instead of the owner's routes.
 
 import type {

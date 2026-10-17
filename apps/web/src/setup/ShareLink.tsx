@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// A succeeded run's read-only share link (M8.7, ADR-082), in the Run panel. The owner makes a
+// A succeeded run's read-only share link (M8.7, ADR-083), in the Run panel. The owner makes a
 // link, copies it while it is shown, and revokes it; only a hash of the link is stored, so an
 // earlier link cannot be shown again, and making a new one stops it.
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Read-only share links of runs (M8.7, ADR-082): made, read and revoked by the run's owner;
+// Read-only share links of runs (M8.7, ADR-083): made, read and revoked by the run's owner;
 // opened by anyone holding the link, for the run's results only, until the link is revoked.
 import {
   type SimulationSpec,

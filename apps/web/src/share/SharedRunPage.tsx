@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The page a read-only share link opens (/share/<token>, M8.7, ADR-082), for anyone holding the
+// The page a read-only share link opens (/share/<token>, M8.7, ADR-083), for anyone holding the
 // link, signed in or not. It reads the run through the link alone and shows what the owner sees
 // of its results: the viewer with the quantity, shape and units chosen here, the result figures
 // and the run's record without its cost. Nothing on it changes data; choices last until reload.

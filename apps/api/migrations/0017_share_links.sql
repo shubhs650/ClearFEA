@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
--- Read-only share links of runs (M8.7, ADR-082; docs/ARCHITECTURE.md section 10). A run has at
+-- Read-only share links of runs (M8.7, ADR-083; docs/ARCHITECTURE.md section 10). A run has at
 -- most one active link. The link's token is random and shown to the owner once; only its SHA-256
 -- hash is stored, so the database alone cannot open a shared run. Revoking a link deletes its row,
 -- and making a new link replaces the run's earlier one.

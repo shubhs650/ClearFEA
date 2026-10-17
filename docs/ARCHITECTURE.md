@@ -272,7 +272,7 @@ Design direction: quiet and dense enough for engineering work, with the viewer t
 - STEP files are untrusted input to a large native parser. The worker container runs as a non-root user, with no network access except the API and storage endpoints, and with CPU, memory and time limits.
 - One job per machine in the cloud, so one user's data never shares a machine with another's.
 - The worker holds no long-lived storage credentials; transfer URLs are scoped to one job and expire.
-- Share links carry a random token; only its hash is stored. Since M8.7 (ADR-082) a succeeded run has at most one; it opens the run's results read-only at `/share/<token>` (served by `/api/shared/:token`), never the owner's other records, and a revoked token answers like an unknown one.
+- Share links carry a random token; only its hash is stored. Since M8.7 (ADR-083) a succeeded run has at most one; it opens the run's results read-only at `/share/<token>` (served by `/api/shared/:token`), never the owner's other records, and a revoked token answers like an unknown one.
 - Automated tests prove that user A cannot read, list or modify user B's records or files through any route.
 - Secrets come from environment configuration and are never committed.
 

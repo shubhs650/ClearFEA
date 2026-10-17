@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The page a read-only share link opens (M8.7, ADR-082): the run's results read through the link
+// The page a read-only share link opens (M8.7, ADR-083): the run's results read through the link
 // alone, with nothing that changes data, and a plain message when the link no longer works.
 
 import type { SharedRunResponse, SimulationSpec } from "@clearfea/spec";

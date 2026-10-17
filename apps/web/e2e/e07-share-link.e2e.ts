@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // E-07 (docs/VERIFICATION.md): a second user cannot open the first user's project, and a revoked
-// share link opens nothing (M8.7, ADR-082). Alice sets up and solves a block as in E-01 and makes a
+// share link opens nothing (M8.7, ADR-083). Alice sets up and solves a block as in E-01 and makes a
 // read-only link to the run. A browser that is not signed in opens the link and sees the results,
 // and nothing to change. Bob, signed in, finds none of alice's geometry, simulation or run through
 // the API. Alice revokes the link, and the same browser is told it does not work. The exhaustive

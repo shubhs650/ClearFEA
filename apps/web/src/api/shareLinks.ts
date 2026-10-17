@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Client for a run's read-only share link (M8.7, ADR-082): the owner's /api/runs/:id/share, and
+// Client for a run's read-only share link (M8.7, ADR-083): the owner's /api/runs/:id/share, and
 // /api/shared/:token, which the link's page reads without signing in. Shapes:
 // simulation.schema.json.
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Read-only share links of runs (M8.7, ADR-082). The owner makes, reads and revokes a run's link
+// Read-only share links of runs (M8.7, ADR-083). The owner makes, reads and revokes a run's link
 // under /api/runs/:id/share; anyone holding the link reads the run's results under
 // /api/shared/:token without signing in, and nothing else: no other run, no setup, no files
 // beyond what the result view draws, and nothing that changes data. A revoked, replaced or

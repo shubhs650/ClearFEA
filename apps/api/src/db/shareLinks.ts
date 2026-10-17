@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Read-only share links of runs (M8.7, ADR-082). Functions used on behalf of the owner take the
+// Read-only share links of runs (M8.7, ADR-083). Functions used on behalf of the owner take the
 // owner's id and filter on owner_id. resolveShareLink is the one lookup without a user id: the
 // link's token is the credential, and it answers only the owner and run the token was made for,
 // which the caller then reads through the owner-scoped functions. Only the token's hash is stored.

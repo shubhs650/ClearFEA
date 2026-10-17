@@ -23,7 +23,7 @@
 // from M6.2 (ADR-071) they form a table whose rows pick the mode shape drawn, exaggerated or
 // undeformed, and swinging when asked. From M6.3 a modal setup's solver list and estimate use
 // the modal fit: limits for the most modes, the solvers that may solve it, the modes asked for.
-// From M8.7 (ADR-082) the owner can make a read-only link to a succeeded run, and revoke it; the
+// From M8.7 (ADR-083) the owner can make a read-only link to a succeeded run, and revoke it; the
 // shared run's page shows the same results through RunResults.
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
