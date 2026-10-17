@@ -156,7 +156,7 @@ describe("the size a run goes on", () => {
 
 describe("a simulated machine size (M8.5, ADR-082)", () => {
   it("has the size's cores and its usable memory as the limit", () => {
-    const [big] = estimateRun(500_000, SIZES, "pastix", STATIC_RUN, TABLE).sizes.filter((s) => s.size === "big");
+    const [big] = estimateRun(500_000, 2, SIZES, "pastix", STATIC_RUN, TABLE).sizes.filter((s) => s.size === "big");
     if (big === undefined) throw new Error("No big size.");
     expect(simulatedMachine(big, TABLE)).toEqual({
       size: "big",
@@ -168,7 +168,7 @@ describe("a simulated machine size (M8.5, ADR-082)", () => {
 
 describe("who pays when a run runs out of memory (M8.5, ADR-082)", () => {
   // 1,000,000 nodes: 1.25 GB with the margin, too much for tiny's 0.85 GiB, so big is recommended.
-  const tooBigForTiny = estimateRun(1_000_000, SIZES, "pastix", STATIC_RUN, TABLE);
+  const tooBigForTiny = estimateRun(1_000_000, 2, SIZES, "pastix", STATIC_RUN, TABLE);
 
   it("is the user on a size chosen against the estimate", () => {
     expect(tooBigForTiny.recommended).toBe("big");
@@ -177,13 +177,13 @@ describe("who pays when a run runs out of memory (M8.5, ADR-082)", () => {
 
   it("is the platform on the recommended size, or any size the estimate says fits", () => {
     expect(outOfMemoryFault(tooBigForTiny, "big")).toBe("platform_fault");
-    const fitsBoth = estimateRun(500_000, SIZES, "pastix", STATIC_RUN, TABLE);
+    const fitsBoth = estimateRun(500_000, 2, SIZES, "pastix", STATIC_RUN, TABLE);
     expect(outOfMemoryFault(fitsBoth, "big")).toBe("platform_fault");
     expect(outOfMemoryFault(fitsBoth, "tiny")).toBe("platform_fault");
   });
 
   it("is the platform on the size it picks when none fits, and the user on any other", () => {
-    const fitsNone = estimateRun(10_000_000, SIZES, "pastix", STATIC_RUN, TABLE);
+    const fitsNone = estimateRun(10_000_000, 2, SIZES, "pastix", STATIC_RUN, TABLE);
     expect(fitsNone.recommended).toBeNull();
     expect(outOfMemoryFault(fitsNone, "big")).toBe("platform_fault");
     expect(outOfMemoryFault(fitsNone, "tiny")).toBe("user_fault");
