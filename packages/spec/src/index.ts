@@ -68,6 +68,7 @@ export {
   specSolver,
 } from "./estimator";
 export { checkReportNotes, hasTiedBonds, reportNotes, runReportNotes } from "./report";
+export { defaultReportOptions, orderedReportOptions, reportSectionLabels } from "./reportOptions";
 export { checkUnitsTable, isUnitSystem, systemUnit, unitsTable } from "./units";
 export { type Validation, validator } from "./validate";
 export { checkMaterialLibrary, materialLibrary } from "./library";

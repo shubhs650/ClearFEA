@@ -627,6 +627,12 @@ export function runStatus(run: RunView | null): ItemStatus {
   return { mark: "complete", notes: [] };
 }
 
+/** The report (M7.1) is made from a solved run; its options can be set before. */
+export function reportStatus(run: RunView | null): ItemStatus {
+  if (run?.status === "succeeded") return { mark: "complete", notes: [] };
+  return { mark: "incomplete", notes: ["A report is made from a solved run. Its options can be set now."] };
+}
+
 /** JSON text with object keys sorted, so two specs compare by content, not key order. */
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;

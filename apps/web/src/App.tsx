@@ -30,6 +30,7 @@ import { AnalysisPanel, GroupPanel, LoadPanel, MaterialPanel, SupportPanel } fro
 import { MaterialChooser } from "./setup/MaterialLibrary";
 import { LocalSizePanel, MeshPanel } from "./setup/MeshPanel";
 import { useDisplayUnits } from "./setup/displayUnits";
+import { ReportPanel } from "./setup/ReportPanel";
 import { type ResultChoice, type RunBlocker, RunPanel } from "./setup/RunPanel";
 import { useEstimate } from "./setup/useEstimate";
 import {
@@ -45,6 +46,7 @@ import {
   localSizeOf,
   meshIsCurrent,
   meshStatus,
+  reportStatus,
   runStatus,
   type SupportType,
   setupStatus,
@@ -157,6 +159,7 @@ export function App() {
     const settings = result.get("mesh");
     if (settings) result.set("mesh", meshStatus(settings, setup.spec, mesh));
     result.set("run", runStatus(run));
+    result.set("report", reportStatus(run));
     return result;
   }, [setup, mesh, run]);
 
@@ -343,6 +346,9 @@ export function App() {
           onChoiceChange={setResultChoice}
         />
       );
+    }
+    if (selected === "report" && setup.kind === "open") {
+      return <ReportPanel key={setup.id} simulationId={setup.id} status={status} onSignedOut={signedOut} />;
     }
     if (selected === "bonds" && setup.kind === "open") {
       return (

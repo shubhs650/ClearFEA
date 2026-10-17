@@ -32,6 +32,10 @@ import {
   specRunKind,
   specSolver,
   type ViewListResponse,
+  defaultReportOptions,
+  orderedReportOptions,
+  type ReportOptionsResponse,
+  validateReportOptions,
   type ViewResponse,
   sameMeshSettings,
   specBonds,
@@ -64,6 +68,7 @@ import {
   type Simulation,
   saveSpec,
 } from "../db/simulations";
+import { getReportOptions, saveReportOptions } from "../db/report";
 import { deleteView, listViews, saveView } from "../db/views";
 import type { Env } from "../env";
 import { requireUser, type SessionEnv } from "../session";
@@ -418,4 +423,45 @@ simulations.delete("/:id/views/:viewId", async (c) => {
     return c.json({ error: "There is no saved view with that id in this simulation." }, 404);
   }
   return c.body(null, 204);
+});
+
+// Report options (M7.1, ADR-073). Views must be saved views of the simulation; a view deleted
+// later is left out of the answer, and the report draws only the views still there.
+async function reportOptionsView(
+  db: D1Database,
+  userId: string,
+  simulation: Simulation,
+): Promise<ReportOptionsResponse> {
+  const [saved, views] = await Promise.all([
+    getReportOptions(db, userId, simulation.id),
+    listViews(db, userId, simulation.id),
+  ]);
+  if (saved === null) return { options: defaultReportOptions(simulation.name), saved: false, updatedAt: null };
+  const known = new Set(views.map((v) => v.id));
+  const options = { ...saved.options, views: saved.options.views.filter((id) => known.has(id)) };
+  return { options, saved: true, updatedAt: saved.updatedAt };
+}
+
+simulations.get("/:id/report-options", async (c) => {
+  const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
+  if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  return c.json(await reportOptionsView(c.env.DB, c.var.userId, simulation));
+});
+
+simulations.put("/:id/report-options", async (c) => {
+  const body = await readBody(c.req.raw, validateReportOptions, "ReportOptions", "report.schema.json");
+  if ("error" in body) return c.json({ error: body.error }, 400);
+  const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
+  if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  const known = new Set((await listViews(c.env.DB, c.var.userId, simulation.id)).map((v) => v.id));
+  const missing = body.value.views.filter((id) => !known.has(id));
+  if (missing.length > 0) {
+    return c.json(
+      { error: "A view picked for the report is not a saved view of this simulation. Reload the views and pick again." },
+      400,
+    );
+  }
+  const saved = await saveReportOptions(c.env.DB, c.var.userId, simulation.id, orderedReportOptions(body.value));
+  if (saved === null) return c.json({ error: NOT_FOUND }, 404);
+  return c.json(await reportOptionsView(c.env.DB, c.var.userId, simulation));
 });
