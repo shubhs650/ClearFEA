@@ -17,8 +17,7 @@ wall it is a least-squares quadratic in r through the nodes within 4 mm of the r
 
 Flange: points on the surface near the flange, each the inverse-distance mean of the surface
 nodes within 8 mm (no fit), in the same components. The largest von Mises stress anywhere is
-listed too; it sits in the sharp corner where the flange's back meets the pipe, so it depends
-on the mesh and is not compared.
+listed too, with where it is: in case B it is on the bore under the flange.
 """
 
 import argparse
@@ -172,10 +171,8 @@ def flange(res: Result) -> dict[str, dict[str, float]]:
         vals = [sum(x * _values(res, n)[k] for x, n in w) / total for k in range(len(NAMES))]
         out[name] = dict(zip(NAMES, vals, strict=True))
     peak = max(res.nodes, key=lambda n: mises(res.stress[n]))
-    out["Largest von Mises (corner, not compared)"] = dict(
-        zip(NAMES, _values(res, peak), strict=True)
-    )
-    out["Largest von Mises (corner, not compared)"]["at"] = list(res.nodes[peak])  # type: ignore[assignment]
+    out["Largest von Mises anywhere"] = dict(zip(NAMES, _values(res, peak), strict=True))
+    out["Largest von Mises anywhere"]["at"] = list(res.nodes[peak])  # type: ignore[assignment]
     return out
 
 
@@ -216,20 +213,25 @@ def main() -> None:
         table["flange"][key] = {label: f[key] for label, f in zip(labels, fl, strict=True)}
 
     def show(section: str, cols: list[str]) -> None:
-        print(f"\n{section}: T (°C), σr, σθ, σz, von Mises (MPa)")
+        """A Markdown table: each column's T, σθ, σz and von Mises, then the differences of
+        each later column from the first (T in K, σθ in MPa, von Mises in percent)."""
+        print(f"\n{section}: T (°C), σθ, σz, von Mises (MPa); differences from {cols[0]}")
+        head = [f"{c} {q}" for c in cols for q in ("T", "σθ", "σz", "VM")]
+        head += [f"{c} − {cols[0]} {q}" for c in cols[1:] for q in ("ΔT", "Δσθ", "ΔVM %")]
+        print("| Point | " + " | ".join(head) + " |")
+        print("| --- " * (1 + len(head)) + "|")
         for key, row in table[section].items():
-            cells = []
-            for c in cols:
-                if c in row:
-                    cells.append(f"{c}: " + " ".join(f"{row[c][k]:8.2f}" for k in NAMES))
-            line = f"{key:45s} | " + " | ".join(cells)
-            base = cols[0] if cols[0] in row else None
-            if base and len(cols) > 1 and cols[1] in row:
-                a, b = row[base], row[cols[1]]
+            cells = [f"{row[c][k]:.2f}" for c in cols for k in ("T", "theta", "z", "vonMises")]
+            a = row[cols[0]]
+            for c in cols[1:]:
+                b = row[c]
                 dvm = 100 * (b["vonMises"] / a["vonMises"] - 1)
-                line += f" | ΔT {b['T'] - a['T']:+.2f} K, Δσθ {b['theta'] - a['theta']:+.2f}"
-                line += f", ΔVM {dvm:+.1f} %"
-            print(line)
+                cells += [
+                    f"{b['T'] - a['T']:+.2f}",
+                    f"{b['theta'] - a['theta']:+.2f}",
+                    f"{dvm:+.1f}",
+                ]
+            print(f"| {key} | " + " | ".join(cells) + " |")
 
     cols = (["hand"] if hand else []) + labels
     show("far", cols)
