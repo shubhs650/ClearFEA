@@ -34,6 +34,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 
 - [x] M7.1 Report options: sections, saved views, title block, company name, logo (ADR-074)
 - [x] M7.2 Figure capture in the browser: one per load and support, plus selected result views (ADR-075)
+- [x] M7.3 DOCX assembly with all sections in `DECISIONS.md` (ADR-077); E-05 report browser test
 - [x] M7.5 Standing statements: analysis-tool positioning, versions, verification link, tied-interface note (ADR-073)
 
 ### M0 Bootstrap
@@ -137,6 +138,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M7.3 (2026-10-17): the Word report (ADR-077, accepted under Shubham's M7 autodrive, pending his review). No physics-critical module touched. "Make the Word report" in the Report panel draws the figures again, `POST /api/runs/:id/report` freezes everything the report prints into a `report` job (`ReportJobParams`), and the worker writes `report.docx` (`worker/clearfea_worker/report/content.py` decides what is printed, `report/docx.py` lays it out with python-docx 1.2.0, a new worker dependency). Every value goes through M7.6's `ReportUnits`. E-05 makes one through the UI and reads the file back (`unzip` must be on the host). For M7.4: lay the same `ReportDocument` out as a PDF; LibreOffice converts the DOCX cleanly in the sandbox (`soffice --headless --convert-to pdf`) but is not in the worker image. Values that are rounding noise (1e-15 N applied force components) print as they are stored.
 
 > M7.2 (2026-10-17): report figures drawn in the browser (ADR-075, accepted under Shubham's M7 autodrive, pending his review). No physics-critical module touched. The Report panel's new Figures part ("Draw the figures") draws, from the latest solved run and the saved report options, one figure per support and load of the run's frozen setup (if Loads and supports is on) then one per picked view (if Result plots is on), 1600 × 1000 px PNGs, and stores them on the run (migration 0016 `report_figures`; `GET`/`DELETE /api/runs/:id/figures`, `PUT`/`GET /api/runs/:id/figures/:kind/:item`, caption and position in the query; R2 `owners/<id>/runs/<run>/figures/<kind>-<item>.png`). Drawing is `apps/web/src/report/figures.ts` (`planFigures`, `captureFigures`) with a ModelView off screen (white background, pixel ratio 1); `apps/web/src/viewer/figure.ts` paints the legend, min/max markers and an axis triad onto the picture. Viewer.tsx now exports `legendOf`, `cutValuesOf` and `boxOf`, shared by the viewer and the figures. Legends use the result display units the viewer uses; when M7.6 settles the report's own unit system, pass its units to `captureFigures`. For M7.3: ADR-011 says figures are captured when the report is generated, so the generate button should call `captureFigures` (with `planFigures` from the saved options) and then queue the report job, which reads `report_figures` in `position` order (captions as stored; `kind`/`item` match a support or load in the run's spec, or a view). Screenshots and sample figures in the project's `m7.2/` folder.
 
@@ -304,6 +307,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M7.3: the Word report, made by a report job from parameters the API freezes, with every section of DECISIONS' Report row, the standing statements and notes, values in the report's unit system (ADR-077); new browser test E-05. Learned: python-docx's Footer style has its own centre tab stop, so a right-aligned page number needs it cleared.
 - M7.2: the report's figures drawn in the browser by the viewer (ADR-075): one per support and load of the run's frozen setup, one per saved view picked, stored on the run as PNGs. Learned: a WebGL canvas can be copied right after `renderer.render` in the same task without `preserveDrawingBuffer`, so the viewer needs no slower setting for figures.
 - M7.1: report options (ADR-074): sections, saved views and title block per simulation; company name and logo per user. Learned: a logo's type and pixel size can be read from its first bytes, so no image library is needed in the API.
 - M7.5: the report's standing statements (tool positioning, versions, verification link) stored beside the tied-interface note in `packages/spec/report-notes.json` and filled from a run record (ADR-073).
