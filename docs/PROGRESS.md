@@ -33,6 +33,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M7 Report
 
 - [x] M7.1 Report options: sections, saved views, title block, company name, logo (ADR-074)
+- [x] M7.6 Values printed in the report's chosen unit system (ADR-075)
 - [x] M7.5 Standing statements: analysis-tool positioning, versions, verification link, tied-interface note (ADR-073)
 
 ### M0 Bootstrap
@@ -136,6 +137,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M7.6 (2026-10-17): the report prints in its own unit system (ADR-075, accepted under Shubham's M7 autodrive, pending his review). No physics-critical module changed. `ReportOptions.unitSystem` (required in `report.schema.json`; `defaultReportOptions(name, system)`) starts as the project's system; the API answers options saved before M7.6, or naming a system units.json no longer lists, with the project's, and refuses an unknown one on `PUT`. The Report panel has a "Units" group ("Report unit system"); E-01 picks US units and finds them kept while the project stays metric. For M7.3: `ReportUnits.of(options.unit_system)` in `worker/clearfea_worker/report/units.py` gives `text(si, kind)` for results, `quantity_text(quantity, kind)` for setup values ("1450 psi (entered as 10 MPa)"), `vector_text`, `name` (the system's name for the geometry-and-units section) and `units(kinds)`; numbers carry four significant figures (`format_number`). Pass the right kind (temperature vs temperatureDifference). Screenshot in the project's `m7.6/` folder.
 
 > M7.1 (2026-10-17): report options (ADR-074, accepted under Shubham's M7 autodrive, pending his review). Sections, the saved views drawn as result plots and the title block are stored per simulation (migration 0015 `report_options`, `GET`/`PUT /api/simulations/:id/report-options`); the company name and logo once per user (`report_branding`, `/api/report-branding`, logo `POST`/`GET`/`DELETE /api/report-branding/logo`, PNG or JPEG up to 1 MB, its pixel size read by `apps/api/src/logo.ts`, kept in R2 under `owners/<id>/report/logo`). Shapes in `packages/spec/schemas/report.schema.json` (Pydantic `report_schema.py` generated for the report job); `defaultReportOptions`, `orderedReportOptions` and `reportSectionLabels` in `packages/spec/src/reportOptions.ts`. Web: a Report row after Run opens `ReportPanel` (save button; logo uploads at once). E-01 now sets the options with a PNG logo it generates and reloads. No physics-critical module touched. For M7.2/M7.3: read the options with the run; a view id in the stored options can name a deleted view (the API answer leaves it out, so read through it or filter the same way); sections print in `ReportSectionValues` order; standing statements are not a section. Screenshots in the project's `m7.1/` folder.
 
@@ -301,6 +304,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
 
+- M7.6: values printed in the report's chosen unit system (ADR-075): a unit system in the report options, starting as the project's, and `ReportUnits` in the worker to print results and setup values in it. Learned: the sandbox host needs `libglu1-mesa` (apt) before `make test`'s Gmsh tests run.
 - M7.1: report options (ADR-074): sections, saved views and title block per simulation; company name and logo per user. Learned: a logo's type and pixel size can be read from its first bytes, so no image library is needed in the API.
 - M7.5: the report's standing statements (tool positioning, versions, verification link) stored beside the tied-interface note in `packages/spec/report-notes.json` and filled from a run record (ADR-073).
 - ADR-070 to ADR-072 (M6) reviewed and accepted by the maintainer; their status lines in DECISIONS.md updated.

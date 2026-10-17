@@ -118,6 +118,7 @@ A run stores a frozen copy of the spec. Editing a simulation never changes an ex
 - **Conversion to SI for solving** happens in exactly one place, the Python deck generator. The frontend converts only for display.
 - **Temperature:** stored in kelvin. Temperature differences and absolute temperatures are distinct quantity kinds, so that a 50 °C rise is never converted with an offset.
 - **Results** are stored in SI and converted on display, which is why display units can change without a rerun. The Run panel can pick a unit per kind over the system's for results only (ADR-056), kept per user in the browser.
+- **Reports** print in their own unit system, chosen in the report options and starting as the project's, never the browser's picks; the report job converts through the worker's units module (`clearfea_worker/report/units.py`, ADR-075).
 - A shared fixture file of known conversions is tested in both languages.
 
 ## 6. Jobs
