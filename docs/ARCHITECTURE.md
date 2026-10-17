@@ -186,7 +186,7 @@ Python package `clearfea_worker`:
 | `deck` | Pure function: spec + mesh → CalculiX input text. Physics-critical |
 | `deck.loads` | Translation of each load and support type. Physics-critical |
 | `results` | Parse `.frd` and `.dat`, derive fields, reaction sums, write viewer files. Physics-critical |
-| `report` | Assemble DOCX and PDF from run records and figures, with the standing notes of `packages/spec/report-notes.json` that the run's frozen spec calls for (ADR-062) |
+| `report` | Assemble DOCX and PDF from run records and figures, with the standing statements of `packages/spec/report-notes.json` filled from the run record and the notes its frozen spec calls for (ADR-062, ADR-073) |
 | `units` | Load `units.json`, convert to SI |
 
 ### Load and support translation
