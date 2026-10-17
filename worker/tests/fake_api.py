@@ -32,6 +32,8 @@ class FakeApi:
         #: Files the API serves to jobs, and files jobs uploaded, keyed by (job id, name).
         self.files: dict[tuple[str, str], bytes] = {}
         self.uploads: dict[tuple[str, str], bytes] = {}
+        #: Transfers of a file name to answer with a server error before one succeeds.
+        self.transfer_failures: dict[str, int] = {}
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
 
@@ -118,8 +120,18 @@ class FakeApi:
                 parts = self.path.split("/")  # ['', 'internal', 'jobs', id, 'files', name]
                 return parts[3], parts[5]
 
+            def _failed(self) -> bool:
+                """Answers 500 while the file still has failures to give (transfer_failures)."""
+                name = self._file_key()[1]
+                if api.transfer_failures.get(name, 0) <= 0:
+                    return False
+                api.transfer_failures[name] -= 1
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                self._send(500, {"error": "Network connection lost."})
+                return True
+
             def do_GET(self) -> None:  # noqa: N802 (name fixed by BaseHTTPRequestHandler)
-                if not self._authorised():
+                if not self._authorised() or self._failed():
                     return
                 content = api.files.get(self._file_key())
                 if content is None:
@@ -132,7 +144,7 @@ class FakeApi:
                 self.wfile.write(content)
 
             def do_PUT(self) -> None:  # noqa: N802 (name fixed by BaseHTTPRequestHandler)
-                if not self._authorised():
+                if not self._authorised() or self._failed():
                     return
                 length = int(self.headers.get("Content-Length", 0))
                 api.uploads[self._file_key()] = self.rfile.read(length)
