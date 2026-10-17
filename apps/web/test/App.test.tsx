@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 
@@ -191,6 +191,33 @@ describe("status bar", () => {
   });
 });
 
+const storageBody = {
+  storage: {
+    usedBytes: 6_442_450_944,
+    freeBytes: 5_368_709_120,
+    ratePerGibDay: 10_000,
+    retentionDays: 30,
+    parts: [
+      { kind: "geometry", bytes: 2048, files: 3 },
+      { kind: "mesh", bytes: 1_048_576, files: 2 },
+      { kind: "results", bytes: 3_145_728, files: 5 },
+      { kind: "rawOutput", bytes: 6_438_256_640, files: 2 },
+      { kind: "report", bytes: 0, files: 0 },
+    ],
+    runs: [
+      {
+        id: "r1",
+        simulationId: "s1",
+        simulationName: "Static structural",
+        startedAt: "2026-10-17T06:00:00.000Z",
+        bytes: 6_438_256_640,
+        pinned: false,
+        keptUntil: "2026-11-16T06:00:05.000Z",
+      },
+    ],
+  },
+};
+
 describe("wallet page (M8.1)", () => {
   it("opens from the status bar with the balance and every entry, and closes again", async () => {
     serve({
@@ -198,14 +225,26 @@ describe("wallet page (M8.1)", () => {
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
       "GET /api/geometries": noGeometries,
+      "GET /api/storage": { status: 200, body: storageBody },
       "GET /api/wallet": {
         status: 200,
         body: {
           wallet: {
-            balance: 99_998_750,
+            balance: 99_988_750,
             granted: 100_000_000,
-            charged: -1250,
+            charged: -11_250,
             entries: [
+              {
+                seq: 4,
+                createdAt: "2026-10-18T03:00:00.000Z",
+                reason: "storage",
+                amount: -10_000,
+                balance: 99_988_750,
+                job: null,
+                run: null,
+                mesh: null,
+                storage: { day: "2026-10-18", usedBytes: 6_442_450_944, freeBytes: 5_368_709_120, ratePerGibDay: 10_000 },
+              },
               {
                 seq: 3,
                 createdAt: "2026-10-17T06:00:03.000Z",
@@ -221,6 +260,7 @@ describe("wallet page (M8.1)", () => {
                   status: "succeeded",
                 },
                 mesh: null,
+                storage: null,
               },
               {
                 seq: 2,
@@ -231,6 +271,7 @@ describe("wallet page (M8.1)", () => {
                 job: { id: "j1", machineSize: "medium", ratePerHour: 1_000_000, billedSeconds: 3 },
                 run: null,
                 mesh: { id: "m1", geometryName: "bracket.step", elements: 4000, nodes: 7108 },
+                storage: null,
               },
               {
                 seq: 1,
@@ -241,6 +282,7 @@ describe("wallet page (M8.1)", () => {
                 job: null,
                 run: null,
                 mesh: null,
+                storage: null,
               },
             ],
           },
@@ -250,14 +292,28 @@ describe("wallet page (M8.1)", () => {
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Wallet" }));
-    expect((await screen.findByTestId("wallet-balance")).textContent).toBe("99.99875 credits");
+    expect((await screen.findByTestId("wallet-balance")).textContent).toBe("99.98875 credits");
     expect(screen.getByText(/A run is refused when its estimate is more than the balance/)).toBeTruthy();
     expect(screen.queryByTestId("wallet-self-hosted")).toBeNull();
-    const rows = screen.getAllByRole("row").slice(1).map((row) => row.textContent);
-    expect(rows[0]).toContain("Run of “Static structural”, started 2026-10-17 06:00:00 UTC (solved)");
-    expect(rows[0]).toContain("-0.000417 credits");
-    expect(rows[1]).toContain("Mesh of bracket.step (4,000 elements)");
-    expect(rows[2]).toContain("Credit grant");
+    const ledger = within(screen.getByRole("table", { name: "Ledger" }));
+    const rows = ledger.getAllByRole("row").slice(1).map((row) => row.textContent);
+    expect(rows[0]).toContain("Storage on 2026-10-18: 1 GiB above the 5 GiB free allowance (6 GiB stored)");
+    expect(rows[0]).toContain("-0.01 credits");
+    expect(rows[1]).toContain("Run of “Static structural”, started 2026-10-17 06:00:00 UTC (solved)");
+    expect(rows[1]).toContain("-0.000417 credits");
+    expect(rows[2]).toContain("Mesh of bracket.step (4,000 elements)");
+    expect(rows[3]).toContain("Credit grant");
+    // Storage (M8.6): what is kept by kind, and the runs holding raw output.
+    expect((await screen.findByTestId("storage-used")).textContent).toBe("6 GiB");
+    expect(screen.getByText(/removed 30 days after its run ends unless the run is pinned/)).toBeTruthy();
+    const kinds = within(screen.getByRole("table", { name: "Storage by kind" }))
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getAllByRole("cell").map((cell) => cell.textContent));
+    expect(kinds[0]).toEqual(["Geometry (STEP files, topology, display meshes)", "3", "2 KiB"]);
+    expect(kinds[3]).toEqual(["Raw solver output (.frd, .dat)", "2", "6 GiB"]);
+    const raw = within(screen.getByRole("table", { name: "Raw solver output" })).getAllByRole("row")[1];
+    expect(raw?.textContent).toContain("Until 2026-11-16");
     fireEvent.click(screen.getByRole("button", { name: "Back to the workbench" }));
     expect(screen.queryByRole("region", { name: "Wallet" })).toBeNull();
     expect(screen.getByRole("navigation", { name: "Simulation tree" })).toBeTruthy();
@@ -269,6 +325,7 @@ describe("wallet page (M8.1)", () => {
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
       "GET /api/geometries": noGeometries,
+      "GET /api/storage": { status: 200, body: storageBody },
       "GET /api/wallet": {
         status: 200,
         body: { wallet: { balance: -5000, granted: 0, charged: -5000, entries: [] }, selfHosted: true },

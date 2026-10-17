@@ -365,6 +365,7 @@ describe("run mark", () => {
     result: null,
     createdAt: "2026-10-15T12:00:00.000Z",
     finishedAt: null,
+    rawOutput: { pinned: false, keptUntil: null, removedAt: null, rerunOf: null },
     ...overrides,
   });
 

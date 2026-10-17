@@ -2,7 +2,8 @@
 // Client for a simulation's runs and /api/runs (M1.8), a run's result files (M1.9) and its
 // solver input and log (M1.10), the estimate before a run (M2.12), and its mesh and values at
 // every node for cut planes (M3.4) and export (M3.8); the estimate is for a solver (ADR-063)
-// and an analysis, with a modal run's modes (M6.3). Shapes: simulation.schema.json.
+// and an analysis, with a modal run's modes (M6.3); a run's pin and a rerun of its frozen setup
+// that regenerates removed raw output (M8.6). Shapes: simulation.schema.json.
 
 import {
   type RunEstimate,
@@ -100,9 +101,23 @@ export function fetchRunNodes(runId: string): Promise<ApiResult<ArrayBuffer>> {
 
 /**
  * Where the browser shows one of a run's text files (deck.inp, solver.log), or with `download`
- * saves it. Plain links, so the browser streams large files itself.
+ * saves it; the raw solver output (results.frd, results.dat) is always saved. Plain links, so
+ * the browser streams large files itself.
  */
 export function runFileUrl(runId: string, name: RunFileName, download = false): string {
   const path = `/api/runs/${encodeURIComponent(runId)}/files/${encodeURIComponent(name)}`;
   return download ? `${path}?download=1` : path;
+}
+
+/** Pins the run so its raw solver output is kept, or unpins it (M8.6, ADR-086). */
+export async function pinRun(runId: string, pinned: boolean): Promise<ApiResult<RunView>> {
+  const path = `/api/runs/${encodeURIComponent(runId)}/pin`;
+  const result = await apiRequest("PUT", path, validateRunResponse, { pinned });
+  return result.kind === "ok" ? { kind: "ok", value: result.value.run } : result;
+}
+
+/** Solves the run's frozen setup again on its mesh, as a new run (M8.6, ADR-086). */
+export async function rerunRun(runId: string): Promise<ApiResult<RunView>> {
+  const result = await apiRequest("POST", `/api/runs/${encodeURIComponent(runId)}/rerun`, validateRunResponse);
+  return result.kind === "ok" ? { kind: "ok", value: result.value.run } : result;
 }

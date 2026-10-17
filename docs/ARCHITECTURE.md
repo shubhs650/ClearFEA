@@ -77,10 +77,11 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | `geometries` | Project, original file key, length unit as read and as confirmed, import status, counts of bodies and faces |
 | `simulations` | Project, geometry, analysis type, current `SimulationSpec` JSON, spec schema version |
 | `meshes` | Geometry, mesh-settings hash, element and node counts, quality summary, file keys |
-| `runs` | Simulation, frozen spec JSON, mesh id, machine size, status, estimate, final cost, failure category, software versions, pinned flag |
+| `runs` | Simulation, frozen spec JSON, mesh id, machine size, status, estimate, final cost, failure category, software versions, pinned flag, when the raw output was removed, the run it reran (ADR-086) |
 | `jobs` | Type (`import`, `mesh`, `solve`, `report`), target record, status, stage, claimed-by, heartbeat, start and end times, metering figures |
 | `job_logs` | Job, sequence number, text chunk |
 | `ledger_entries` | User, amount, reason, job id, running balance. Append-only |
+| `storage_charges` | User, UTC day, bytes stored, allowance, rate and amount of a day's storage charge, and its ledger entry (ADR-086) |
 | `materials` | A user's own materials: owner, name (unique per owner), the material as JSON with its source note. The generic library is the reviewed file `packages/spec/library/materials.json`, not rows here (ADR-046) |
 | `views` | Saved views of a simulation: name (unique per simulation), camera, hidden bodies and the result display as JSON (`view.schema.json`, ADR-055). The report picks its pictures from them |
 | `report_options` | A simulation's report options: sections, saved views for the result plots and the title block as JSON (`report.schema.json`, ADR-074) |
@@ -88,7 +89,7 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | `report_figures` | A run's report figures, drawn in the browser: kind (support, load or view), item id, caption, order, pixel size; the PNGs are in R2 under the run (ADR-011, ADR-075) |
 | `share_links` | Run, token hash, revoked flag |
 | `machine_sizes` | Name, cores, memory, hourly rate. Configuration |
-| `settings` | Free storage quota, retention days, stop-limit multiplier. Configuration |
+| `settings` | Free storage quota, retention days, storage rate (M8.6, ADR-086), stop-limit multiplier. Configuration |
 
 Files in R2, keyed by owner and record id:
 
@@ -100,6 +101,8 @@ Files in R2, keyed by owner and record id:
 | Solver input (`.inp`), solver log | Permanently |
 | Viewer result files | Permanently |
 | Raw solver output (`.frd`, `.dat`) | Retention period, unless the run is pinned |
+
+Since M8.6 (ADR-086) a user's storage is measured by listing these files under `owners/<id>/` (`GET /api/storage`), and a daily sweep (the Worker's cron trigger; `make dev` calls it every hour) removes unpinned raw output past the retention period and charges what is above the free allowance once a day, as a ledger entry with reason `storage`. `POST /api/runs/:id/rerun` solves a run's frozen spec on its mesh again as a new run, which regenerates removed raw output.
 | Report files and figures | Permanently |
 | A user's report logo | Until replaced or removed |
 
