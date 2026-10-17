@@ -10,6 +10,7 @@ How each case is built and where its reference values come from: [VERIFICATION.m
 ## Where these numbers come from
 
 - **Verification cases**: the [phase-end run](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289) on `main` at commit c34302a on 2026-10-17, which closed M8 (`make verify` in GitHub Actions, ADR-037). Full tier; 26 cases, 307 of 307 checks within tolerance. Software: clearfea 0.0.0+c34302a, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1.
+- **Acceptance cases**: a local `VERIFY_TIER=full CASES="A B" make verify` on `main` at commit 1da1550 on 2026-10-17, in the Claude Code cloud development environment (the phase-end run does not run them). Full tier; 2 cases, 34 of 34 checks within tolerance. Software: clearfea 0.0.0+1da1550, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1.
 
 To produce the same tables: `VERIFY_TIER=full make verify` for the verification cases and `VERIFY_TIER=full CASES="A B" make verify` for the acceptance cases (verification/README.md).
 
@@ -538,4 +539,68 @@ The wallet ledger over the whole run: every charge the cases made, against the c
 | Wallet balance equals the sum of the ledger | 99.934855 credits | 99.934855 credits |   | exact | yes |
 | Each job charge is its billed seconds at its rate | 52 jobs, 0.065145 credits | 0.065145 credits |   | exact | yes |
 | Each charged run has one entry for exactly its recorded cost | 26 runs, 0.051251 credits | 26 runs matched |   | exact | yes |
+| No entry without a job other than the grant | none | none |   | exact | yes |
+
+## Acceptance cases
+
+The two acceptance models of Phase 0 (VERIFICATION.md, Acceptance cases): A, a nozzle with a reinforcing pad on a cylindrical shell under pressure and a piping load; B, thermal stress in a thick-walled flanged pipe. The rows below are the checks with a hand-calculated value. The WRC-style comparison (A) and the FreeCAD FEM comparisons (A and B) are written up, with their numbers, in each case's hand_checks.md and are not repeated here.
+
+| Case | Mesh | Checks within tolerance |
+| --- | --- | --- |
+| [A Nozzle with reinforcing pad on a cylindrical shell](#a-nozzle-with-reinforcing-pad-on-a-cylindrical-shell) | 12 mm, 123317 elements, 248060 nodes | 15 of 15 |
+| [B Thermal stress in a thick-walled flanged pipe](#b-thermal-stress-in-a-thick-walled-flanged-pipe) | 6 mm, 119405 elements, 176853 nodes | 14 of 14 |
+
+### A Nozzle with reinforcing pad on a cylindrical shell
+
+Mesh 12 mm, 123317 elements, 248060 nodes; 147 s from upload to result. Reference values: [hand_checks.md](../verification/acceptance/A-nozzle-on-shell/hand_checks.md).
+
+| Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
+| --- | --- | --- | --- | --- | --- |
+| STEP length unit detected | mm | mm |   | equal | yes |
+| Membrane von Mises at the shell outside, under the shell, 450 mm past the nozzle | 51.109 MPa | 50.199 MPa (134 vertices) | -1.78 % | 3 % | yes |
+| Membrane hoop stress at the shell outside, under the shell, 450 mm past the nozzle | 59.016 MPa | 58.142 MPa (100 vertices) | -1.48 % | 3 % | yes |
+| Membrane axial stress at the shell outside, under the shell, 450 mm past the nozzle | 29.508 MPa | 29.388 MPa (134 vertices) | -0.41 % | 3 % | yes |
+| Membrane hoop stress at the shell inside, under the shell, 450 mm past the nozzle | 61.016 MPa | 61.409 MPa (99 vertices) | +0.64 % | 3 % | yes |
+| Reaction at the held end, x | -569.49 kN | -569.49 kN (support held-end) | +0.00 % | 0.1 % | yes |
+| Reaction at the held end, y | 3 kN | 3 kN (support held-end) | -0.00 % | 0.1 % | yes |
+| Reaction at the held end, z | 6 kN | 5.9999 kN (support held-end) | -0.00 % | 0.1 % | yes |
+| Reaction moment at the held end about its centre, x | -3.68 kN·m | -3.68 kN·m (support held-end) | +0.00 % | 0.1 % | yes |
+| Reaction moment at the held end about its centre, y | -8.84 kN·m | -8.8399 kN·m (support held-end) | -0.00 % | 0.1 % | yes |
+| Reaction moment at the held end about its centre, z | 0.3 kN·m | 0.3 kN·m (support held-end) | -0.00 % | 0.1 % | yes |
+| Reactions balance the applied load | applied 5.6949e+05, -3000, -5963.6 N | reactions -5.6949e+05, 3000, 5999.9 N | 0.0007 % of 5.3464e+06 N | 0.1 % | yes |
+| The run's balance check closes | force and moment | force 9.9e-08 %, moment 8.4e-09 % | 0.0000 % | 0.1 % | yes |
+| Solver log has no unexpected warnings | none | none |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 116 s, charged True, 1 entry |   |   | yes |
+
+### B Thermal stress in a thick-walled flanged pipe
+
+Mesh 6 mm, 119405 elements, 176853 nodes; 245 s from upload to result. Reference values: [hand_checks.md](../verification/acceptance/B-flanged-pipe-thermal/hand_checks.md).
+
+| Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
+| --- | --- | --- | --- | --- | --- |
+| STEP length unit detected | mm | mm |   | equal | yes |
+| Bore temperature away from the flange | 233.86 °C | 233.86 °C (1110 vertices) | -0.00 % | 0.2 % | yes |
+| Outside temperature away from the flange | 153.03 °C | 153.02 °C (1647 vertices) | -0.00 % | 0.2 % | yes |
+| Bore hoop stress away from the flange | -164.51 MPa | -163.24 MPa (40 vertices) | -0.77 % | 3 % | yes |
+| Bore axial stress away from the flange | -164.36 MPa | -163.08 MPa (1269 vertices) | -0.78 % | 3 % | yes |
+| Bore von Mises stress away from the flange | 164.43 MPa | 162.6 MPa (1269 vertices) | -1.12 % | 3 % | yes |
+| Outside hoop stress away from the flange | 123.87 MPa | 124.05 MPa (40 vertices) | +0.15 % | 3 % | yes |
+| Outside axial stress away from the flange | 123.76 MPa | 122.68 MPa (1863 vertices) | -0.88 % | 3 % | yes |
+| Outside von Mises stress away from the flange | 123.82 MPa | 123.52 MPa (1863 vertices) | -0.24 % | 3 % | yes |
+| The run's heat balance closes | heat in 6388.5 W | heat out 6388.5 W | 0.0000 % of 6388.5 W | 0.1 % | yes |
+| Reactions balance the applied load | applied 0, 0, 0 N | reactions -0.016799, -0.00013126, -0.0060359 N | 0.0000 % of 4.6837e+06 N | 0.1 % | yes |
+| The run's balance check closes | force and moment | force 3.8e-07 %, moment 1.6e-07 % | 0.0000 % | 0.1 % | yes |
+| Solver log has no unexpected warnings | none | none |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 228 s, charged True, 1 entry |   |   | yes |
+
+### Ledger
+
+The wallet ledger over the whole run: every charge the cases made, against the costs their runs recorded (DECISIONS.md ADR-090).
+
+| Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
+| --- | --- | --- | --- | --- | --- |
+| Every running balance is the previous one plus the entry | 5 entries chained | 5 entries chained |   | exact | yes |
+| Wallet balance equals the sum of the ledger | 99.863334 credits | 99.863334 credits |   | exact | yes |
+| Each job charge is its billed seconds at its rate | 4 jobs, 0.136666 credits | 0.136666 credits |   | exact | yes |
+| Each charged run has one entry for exactly its recorded cost | 2 runs, 0.127777 credits | 2 runs matched |   | exact | yes |
 | No entry without a job other than the grant | none | none |   | exact | yes |

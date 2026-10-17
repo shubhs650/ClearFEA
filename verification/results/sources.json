@@ -3,5 +3,11 @@
     "file": "suite.md",
     "title": "Verification cases",
     "description": "the [phase-end run](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289) on `main` at commit c34302a on 2026-10-17, which closed M8 (`make verify` in GitHub Actions, ADR-037)."
+  },
+  {
+    "file": "acceptance.md",
+    "title": "Acceptance cases",
+    "description": "a local `VERIFY_TIER=full CASES=\"A B\" make verify` on `main` at commit 1da1550 on 2026-10-17, in the Claude Code cloud development environment (the phase-end run does not run them).",
+    "note": "The two acceptance models of Phase 0 (VERIFICATION.md, Acceptance cases): A, a nozzle with a reinforcing pad on a cylindrical shell under pressure and a piping load; B, thermal stress in a thick-walled flanged pipe. The rows below are the checks with a hand-calculated value. The WRC-style comparison (A) and the FreeCAD FEM comparisons (A and B) are written up, with their numbers, in each case's hand_checks.md and are not repeated here."
   }
 ]
