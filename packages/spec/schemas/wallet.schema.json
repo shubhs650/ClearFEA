@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Wallet",
+  "description": "Wire shapes of the wallet route (M8.1, ADR-080; docs/ARCHITECTURE.md sections 4 and 6). Money is in whole micro-credits: 1,000,000 is one credit. Each message is a definition under $defs.",
+  "$defs": {
+    "LedgerReason": {
+      "description": "What a ledger entry is for: a play-money credit grant, or the charge for a mesh or solve job (ADR-033).",
+      "type": "string",
+      "enum": ["grant", "mesh", "solve"]
+    },
+    "LedgerJob": {
+      "description": "The job a charge is for: the machine size and rate it was queued with and the seconds billed (ADR-033).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "machineSize", "ratePerHour", "billedSeconds"],
+      "properties": {
+        "id": { "type": "string" },
+        "machineSize": { "type": "string" },
+        "ratePerHour": { "description": "Micro-credits per hour of billable time.", "type": "integer", "minimum": 0 },
+        "billedSeconds": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "LedgerRun": {
+      "description": "The run a solve charge paid for.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "simulationId", "simulationName", "startedAt", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "simulationId": { "type": "string" },
+        "simulationName": { "type": "string" },
+        "startedAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["solving", "succeeded", "failed"] }
+      }
+    },
+    "LedgerMesh": {
+      "description": "The mesh a mesh charge paid for. A mesh belongs to a geometry and may serve several simulations (ADR-047), so it is named by its geometry. Counts are null when meshing failed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "geometryName", "elements", "nodes"],
+      "properties": {
+        "id": { "type": "string" },
+        "geometryName": { "type": "string" },
+        "elements": { "type": ["integer", "null"], "minimum": 0 },
+        "nodes": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "WalletEntry": {
+      "description": "One ledger entry, as the append-only ledger holds it, with what it paid for. amount is negative for a charge; balance is the balance after the entry. job, run and mesh are null where they do not apply.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "createdAt", "reason", "amount", "balance", "job", "run", "mesh"],
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1 },
+        "createdAt": { "type": "string" },
+        "reason": { "$ref": "#/$defs/LedgerReason" },
+        "amount": { "type": "integer" },
+        "balance": { "type": "integer" },
+        "job": { "oneOf": [{ "$ref": "#/$defs/LedgerJob" }, { "type": "null" }] },
+        "run": { "oneOf": [{ "$ref": "#/$defs/LedgerRun" }, { "type": "null" }] },
+        "mesh": { "oneOf": [{ "$ref": "#/$defs/LedgerMesh" }, { "type": "null" }] }
+      }
+    },
+    "WalletView": {
+      "description": "The signed-in user's wallet: the balance (the last entry's balance, 0 with no entries), what was granted and charged in all, and every ledger entry, newest first. granted + charged equals balance.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["balance", "granted", "charged", "entries"],
+      "properties": {
+        "balance": { "type": "integer" },
+        "granted": { "type": "integer", "minimum": 0 },
+        "charged": { "description": "The sum of the charges, zero or negative.", "type": "integer", "maximum": 0 },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/WalletEntry" } }
+      }
+    },
+    "WalletResponse": {
+      "description": "Answer to GET /api/wallet.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wallet"],
+      "properties": { "wallet": { "$ref": "#/$defs/WalletView" } }
+    }
+  }
+}

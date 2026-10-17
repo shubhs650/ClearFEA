@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { describe, expect, it } from "vitest";
 import { billedSeconds, chargeFor, costOf, isMetered } from "../src/billing/cost";
+import { meshFundsProblem, runFundsProblem } from "../src/billing/wallet";
 
 describe("billed seconds", () => {
   it("rounds the measured milliseconds up to whole seconds", () => {
@@ -59,5 +60,22 @@ describe("who pays", () => {
       "mesh",
       "solve",
     ]);
+  });
+});
+
+describe("funds (M8.1, ADR-080)", () => {
+  it("let a run start when its estimated cost is at most the balance", () => {
+    expect(runFundsProblem(1000, 1000, "small")).toBeNull();
+    expect(runFundsProblem(1000, 0, "small")).toBeNull();
+    expect(runFundsProblem(999, 1000, "medium")).toBe(
+      "This run is estimated to cost 0.001 credits on the medium machine size, and your wallet holds 0.000999 credits. Open the wallet to see what was charged, or choose a smaller machine size or a coarser mesh.",
+    );
+    expect(runFundsProblem(-5, 0, "small")).not.toBeNull();
+  });
+
+  it("let a mesh be made only above a zero balance", () => {
+    expect(meshFundsProblem(1)).toBeNull();
+    expect(meshFundsProblem(0)).toContain("holds 0 credits");
+    expect(meshFundsProblem(-833)).toContain("holds -0.000833 credits");
   });
 });

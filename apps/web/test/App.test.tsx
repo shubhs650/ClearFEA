@@ -190,3 +190,73 @@ describe("status bar", () => {
     expect(await screen.findByText("API not reachable")).toBeTruthy();
   });
 });
+
+describe("wallet page (M8.1)", () => {
+  it("opens from the status bar with the balance and every entry, and closes again", async () => {
+    serve({
+      "GET /api/health": healthy,
+      "GET /api/session": signedIn,
+      "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
+      "GET /api/wallet": {
+        status: 200,
+        body: {
+          wallet: {
+            balance: 99_998_750,
+            granted: 100_000_000,
+            charged: -1250,
+            entries: [
+              {
+                seq: 3,
+                createdAt: "2026-10-17T06:00:03.000Z",
+                reason: "solve",
+                amount: -417,
+                balance: 99_998_750,
+                job: { id: "j2", machineSize: "small", ratePerHour: 500_000, billedSeconds: 3 },
+                run: {
+                  id: "r1",
+                  simulationId: "s1",
+                  simulationName: "Static structural",
+                  startedAt: "2026-10-17T06:00:00.000Z",
+                  status: "succeeded",
+                },
+                mesh: null,
+              },
+              {
+                seq: 2,
+                createdAt: "2026-10-17T05:59:00.000Z",
+                reason: "mesh",
+                amount: -833,
+                balance: 99_999_167,
+                job: { id: "j1", machineSize: "medium", ratePerHour: 1_000_000, billedSeconds: 3 },
+                run: null,
+                mesh: { id: "m1", geometryName: "bracket.step", elements: 4000, nodes: 7108 },
+              },
+              {
+                seq: 1,
+                createdAt: "2026-10-17T05:00:00.000Z",
+                reason: "grant",
+                amount: 100_000_000,
+                balance: 100_000_000,
+                job: null,
+                run: null,
+                mesh: null,
+              },
+            ],
+          },
+        },
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Wallet" }));
+    expect((await screen.findByTestId("wallet-balance")).textContent).toBe("99.99875 credits");
+    const rows = screen.getAllByRole("row").slice(1).map((row) => row.textContent);
+    expect(rows[0]).toContain("Run of “Static structural”, started 2026-10-17 06:00:00 UTC (solved)");
+    expect(rows[0]).toContain("-0.000417 credits");
+    expect(rows[1]).toContain("Mesh of bracket.step (4,000 elements)");
+    expect(rows[2]).toContain("Credit grant");
+    fireEvent.click(screen.getByRole("button", { name: "Back to the workbench" }));
+    expect(screen.queryByRole("region", { name: "Wallet" })).toBeNull();
+    expect(screen.getByRole("navigation", { name: "Simulation tree" })).toBeTruthy();
+  });
+});
