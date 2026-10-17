@@ -55,7 +55,8 @@ def test_every_measured_mesh_under_a_limit_fits_16_gib_with_the_margin(solver: s
     rows = json.loads((BENCHMARKS / "steps.json").read_text())["runs"]
     checked = 0
     for row in rows:
-        if row["solver"] != solver:
+        # Modal rows have limits of their own (the next test).
+        if row["solver"] != solver or row.get("analysis", "linear_static") != "linear_static":
             continue
         limit = model.max_elements.order1 if row["order"] == 1 else model.max_elements.order2
         if row["elements"] <= limit:

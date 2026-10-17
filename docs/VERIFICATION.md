@@ -105,7 +105,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Internal heat generation | V-17 |
 | Thermal stress | V-18 |
 | Temperature-dependent properties | V-19 (conductivity, Young's modulus, Poisson's ratio and expansion tables, M5.5); `worker/spikes/heat_check` checks a conductivity table at every node |
-| Modal | V-20, V-21, V-22 (M6.1); `worker/spikes/modal_check` solves the same three bars at 4 mm and 2 mm |
+| Modal | V-20, V-21, V-22 (M6.1; all on SPOOLES since M6.3, ADR-072); `worker/spikes/modal_check` solves the same three bars at 4 mm and 2 mm |
 | Mode shapes | V-20 (M6.2: first and second bending modes at mid-span, scaled and signed as ADR-071 says); `worker/spikes/modal_check` checks the same three |
 | Modal with no support (rigid-body modes) | V-22 |
 | Heat flux results | V-13, V-15, V-16, V-17 (heat flux along the wall, M5.3) |

@@ -100,32 +100,32 @@
       "spooles": {
         "solver": "SPOOLES on one thread (ADR-048), CalculiX 2.21",
         "peakMemoryBytes": {
-          "constant": 107323000.0,
-          "coefficient": 413.098,
-          "exponent": 1.38887,
-          "largestRatio": 1.04921
+          "constant": 105252000.0,
+          "coefficient": 475.759,
+          "exponent": 1.37585,
+          "largestRatio": 1.04662
         },
         "peakMemoryBytesPerMode": {
           "constant": 0.0,
-          "coefficient": 80.4481,
-          "exponent": 1.02765,
-          "largestRatio": 1.1023
+          "coefficient": 104.127,
+          "exponent": 1.00094,
+          "largestRatio": 1.10783
         },
         "jobSeconds": {
-          "constant": 0.420225,
-          "coefficient": 8.01742e-08,
-          "exponent": 1.92949,
-          "largestRatio": 1.20399
+          "constant": 0.326842,
+          "coefficient": 1.15396e-07,
+          "exponent": 1.89507,
+          "largestRatio": 1.17491
         },
         "jobSecondsPerMode": {
-          "constant": 0.125903,
-          "coefficient": 3.29079e-08,
-          "exponent": 1.79051,
-          "largestRatio": 1.08743
+          "constant": 0.0646528,
+          "coefficient": 1.74603e-07,
+          "exponent": 1.63288,
+          "largestRatio": 1.18632
         },
         "fittedNodes": [
           5212,
-          140275
+          207025
         ],
         "fittedModes": [
           1,
@@ -133,7 +133,7 @@
         ],
         "maxElements": {
           "order1": 461000,
-          "order2": 97000
+          "order2": 136000
         }
       }
     }

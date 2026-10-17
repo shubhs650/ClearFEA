@@ -1598,6 +1598,35 @@
       "date": "2026-10-16"
     },
     {
+      "targetElements": 150000,
+      "order": 2,
+      "solver": "spooles",
+      "analysis": "modal",
+      "modes": 1,
+      "elements": 145471,
+      "nodes": 207025,
+      "stepSeconds": {
+        "readMesh": 0.24,
+        "deck": 1.74,
+        "writeDeck": 0.22,
+        "solver": 1358.91,
+        "readResults": 0.99,
+        "viewerFiles": 0.24
+      },
+      "jobSeconds": 1362.34,
+      "peakMemoryBytes": 9777303552,
+      "frdBytes": 40051785,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": null
+      },
+      "date": "2026-10-16"
+    },
+    {
       "targetElements": 3000,
       "order": 2,
       "solver": "spooles",
@@ -1828,6 +1857,64 @@
         "memoryLimitBytes": null
       },
       "date": "2026-10-16"
+    },
+    {
+      "targetElements": 100000,
+      "order": 2,
+      "solver": "spooles",
+      "analysis": "modal",
+      "modes": 100,
+      "elements": 97439,
+      "nodes": 140275,
+      "stepSeconds": {
+        "readMesh": 0.19,
+        "deck": 1.55,
+        "writeDeck": 0.2,
+        "solver": 4829.86,
+        "readResults": 49.94,
+        "viewerFiles": 2.36
+      },
+      "jobSeconds": 4884.1,
+      "peakMemoryBytes": 7302914048,
+      "frdBytes": 721416505,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": null
+      },
+      "date": "2026-10-16"
+    },
+    {
+      "targetElements": 150000,
+      "order": 2,
+      "solver": "spooles",
+      "analysis": "modal",
+      "modes": 100,
+      "elements": 145471,
+      "nodes": 207025,
+      "stepSeconds": {
+        "readMesh": 0.25,
+        "deck": 1.85,
+        "writeDeck": 0.07,
+        "solver": 8626.44,
+        "readResults": 77.62,
+        "viewerFiles": 3.69
+      },
+      "jobSeconds": 8709.92,
+      "peakMemoryBytes": 11808067584,
+      "frdBytes": 1064892261,
+      "ccxVersion": "2.21",
+      "machine": {
+        "cores": 4,
+        "ramBytes": 16874930176,
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+        "kernel": "6.18.44-fc-v139",
+        "memoryLimitBytes": null
+      },
+      "date": "2026-10-17"
     }
   ]
 }

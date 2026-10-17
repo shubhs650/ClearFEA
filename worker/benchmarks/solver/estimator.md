@@ -24,3 +24,13 @@ cd worker && uv run python benchmarks/solver/fit.py [--check]
 ## The fit
 
 Both quantities are fitted as `constant + coefficient × nodes^exponent` over all rows, both element orders together. On the committed data the memory law is within 2 percent of every row (and of M2.11's single-threaded SPOOLES rows in `results.json`, measured separately) and the time law within 21 percent. `memoryMargin` (1.25) and `usableMemoryFraction` (0.85) set how much memory a machine size must have before it is recommended.
+
+## Modal runs (M6.3, ADR-072)
+
+```
+cd worker && uv run python benchmarks/solver/steps.py --out /tmp/steps --solver spooles \
+    --analysis modal --modes 1 3000:2 12000:2 25000:2 50000:2 100000:2 150000:2 25000:1 ...
+uv run python benchmarks/solver/steps.py ... --modes 100 ...    # the same meshes again
+```
+
+A modal row is the same block held at the same end, with no load, steel's density and `--modes` modes; its rows carry `analysis: "modal"` and `modes` (rows without them are linear static). Each mesh is measured with 1 and with 100 modes. The line through those two rows splits the mesh's memory and time into a part for the mesh and a part per mode; `fit.py` fits each part as a power law over the meshes, and the `largestRatio` of the mesh parts is the worst shortfall of the whole sum over every modal row (also the rows at 10 and 50 modes of the 25,000-element mesh, which lie under the line). Modal element limits are for 100 modes, the most a setup may ask for. Only SPOOLES is measured: modal setups may not use PaStiX (ADR-072) or the iterative solvers (ADR-070). The committed modal set takes about 7 hours, most of it the largest meshes at 100 modes.
