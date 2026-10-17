@@ -924,6 +924,27 @@ export interface SolveParams {
    */
   meshId: string;
   spec: SimulationSpec;
+  machine?: SimulatedMachine;
+}
+/**
+ * How the worker simulates the run's machine size on one physical machine (M8.5, ADR-082): the solver process is held to `cores` processors and is stopped as out of memory when its resident memory passes memoryLimitBytes, the size's usable memory (the estimator's usableMemoryFraction of it). Jobs queued before M8.5 have none and run unlimited.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "SimulatedMachine".
+ */
+export interface SimulatedMachine {
+  /**
+   * The machine size's name.
+   */
+  size: string;
+  /**
+   * Processors the solver process may run on.
+   */
+  cores: number;
+  /**
+   * Resident memory past which the solver is stopped as out of memory.
+   */
+  memoryLimitBytes: number;
 }
 /**
  * A nodal result value and where it occurs. SI units; position in metres.
@@ -1394,6 +1415,7 @@ export const validateMeshView = validator<MeshView>(schema, "MeshView");
 export const validateMeshResponse = validator<MeshResponse>(schema, "MeshResponse");
 export const validateSimulationMeshResponse = validator<SimulationMeshResponse>(schema, "SimulationMeshResponse");
 export const validateSolveParams = validator<SolveParams>(schema, "SolveParams");
+export const validateSimulatedMachine = validator<SimulatedMachine>(schema, "SimulatedMachine");
 export const validateXYZ = validator<XYZ>(schema, "XYZ");
 export const validateNodeValue = validator<NodeValue>(schema, "NodeValue");
 export const validateSupportReaction = validator<SupportReaction>(schema, "SupportReaction");

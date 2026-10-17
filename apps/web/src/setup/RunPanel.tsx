@@ -306,8 +306,8 @@ function Estimate({
       )}
       {estimate.recommended !== null && chosen !== undefined && !chosen.fits && (
         <p className="field-hint">
-          The estimate needs more memory than this size has, so the run may stop for lack of memory. The recommended size
-          is {estimate.recommended}.
+          The estimate needs more memory than this size has, so the run may stop for lack of memory, and the time it used
+          is then charged. The recommended size is {estimate.recommended}.
         </p>
       )}
     </section>
