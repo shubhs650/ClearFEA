@@ -192,3 +192,154 @@ class ReportFigureListResponse(BaseModel):
         populate_by_name=True,
     )
     figures: list[ReportFigure]
+
+
+class ReportJobFigure(BaseModel):
+    """
+    A figure the report job places (M7.3): one of the run's stored figures (ReportFigure), downloaded under file.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    file: Annotated[str, Field(pattern="^figure-[0-9]{1,3}\\.png$")]
+    """
+    Its download among the job's transfers, for example figure-0.png.
+    """
+    kind: ReportFigureKind
+    item: Annotated[str, Field(pattern="^[A-Za-z0-9_-]{1,64}$")]
+    caption: ReportText
+    width: Annotated[int, Field(ge=1)]
+    height: Annotated[int, Field(ge=1)]
+
+
+class ReportJobText(BaseModel):
+    """
+    A standing statement or a note as printed, its names already filled from the run (ADR-062, ADR-073).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: Annotated[str, Field(min_length=1)]
+    title: Annotated[str, Field(min_length=1)]
+    text: Annotated[str, Field(min_length=1)]
+
+
+class ReportGeometry(BaseModel):
+    """
+    The geometry a report's run uses: its uploaded file's name and the length unit confirmed for it. Its bodies and size come from topology.json.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    name: str
+    unit: str | None
+
+
+class ReportJobParams(BaseModel):
+    """
+    Parameters of a report job (M7.3, ADR-077), built by the API when the report is asked for from the run's frozen record, the simulation's saved report options and the user's company name and logo. The job downloads the figures, the logo, the geometry's topology.json and the run's solver.log, and uploads report.docx. run and meshQuality are a RunView and a MeshQuality of simulation.schema.json, which the job checks against that schema.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    run_id: Annotated[str, Field(alias="runId", min_length=1)]
+    generated_at: Annotated[str, Field(alias="generatedAt", min_length=10)]
+    """
+    When the report was asked for (UTC, ISO 8601); its date is the report's date.
+    """
+    unit_system: Annotated[str, Field(alias="unitSystem", max_length=50, min_length=1)]
+    """
+    Id of the unit system in packages/spec/units.json that every value prints in (M7.6).
+    """
+    sections: list[ReportSection]
+    """
+    The sections to print, in printing order.
+    """
+    title_block: Annotated[TitleBlock, Field(alias="titleBlock")]
+    company_name: Annotated[ReportText, Field(alias="companyName")]
+    logo: ReportLogo | None
+    """
+    The user's logo, downloaded as logo; null when they have none.
+    """
+    project_name: Annotated[str, Field(alias="projectName")]
+    simulation_name: Annotated[str, Field(alias="simulationName")]
+    geometry: ReportGeometry
+    run: dict[str, Any]
+    """
+    The run as its owner sees it (RunView in simulation.schema.json); it has succeeded.
+    """
+    mesh_quality: Annotated[dict[str, Any] | None, Field(alias="meshQuality")]
+    """
+    The quality summary of the run's mesh (MeshQuality in simulation.schema.json); null for meshes made before M2.8.
+    """
+    figures: Annotated[list[ReportJobFigure], Field(max_length=1000)]
+    """
+    The run's stored figures in order, without those of sections not printed.
+    """
+    statements: list[ReportJobText]
+    """
+    The standing statements, in printing order.
+    """
+    notes: list[ReportJobText]
+    """
+    The notes the run's frozen setup calls for, in printing order.
+    """
+
+
+class ReportJobResult(BaseModel):
+    """
+    Result of a succeeded report job (M7.3): the size of report.docx and how many figures it placed.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    size_bytes: Annotated[int, Field(alias="sizeBytes", ge=1)]
+    figures: Annotated[int, Field(ge=0)]
+
+
+type ReportStatus = Literal["queued", "making", "succeeded", "failed"]
+"""
+Where a run's report is: queued for the worker, being made, made (it can be downloaded) or failed.
+"""
+
+
+class RunReport(BaseModel):
+    """
+    The latest report asked for of a run (M7.3). Its DOCX is GET /api/runs/:id/report/docx once it has succeeded.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: str
+    status: ReportStatus
+    problem: str | None
+    """
+    Why it failed, in plain language.
+    """
+    size_bytes: Annotated[int | None, Field(alias="sizeBytes")]
+    created_at: Annotated[str, Field(alias="createdAt")]
+    finished_at: Annotated[str | None, Field(alias="finishedAt")]
+
+
+class RunReportResponse(BaseModel):
+    """
+    Answer to GET and POST /api/runs/:id/report: the run's latest report, or null when none has been asked for.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    report: RunReport | None

@@ -125,6 +125,93 @@
       "additionalProperties": false,
       "required": ["figures"],
       "properties": { "figures": { "type": "array", "items": { "$ref": "#/$defs/ReportFigure" } } }
+    },
+    "ReportJobFigure": {
+      "description": "A figure the report job places (M7.3): one of the run's stored figures (ReportFigure), downloaded under file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "kind", "item", "caption", "width", "height"],
+      "properties": {
+        "file": { "description": "Its download among the job's transfers, for example figure-0.png.", "type": "string", "pattern": "^figure-[0-9]{1,3}\\.png$" },
+        "kind": { "$ref": "#/$defs/ReportFigureKind" },
+        "item": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+        "caption": { "$ref": "#/$defs/ReportText" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ReportJobText": {
+      "description": "A standing statement or a note as printed, its names already filled from the run (ADR-062, ADR-073).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "text"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ReportGeometry": {
+      "description": "The geometry a report's run uses: its uploaded file's name and the length unit confirmed for it. Its bodies and size come from topology.json.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "unit"],
+      "properties": { "name": { "type": "string" }, "unit": { "type": ["string", "null"] } }
+    },
+    "ReportJobParams": {
+      "description": "Parameters of a report job (M7.3, ADR-077), built by the API when the report is asked for from the run's frozen record, the simulation's saved report options and the user's company name and logo. The job downloads the figures, the logo, the geometry's topology.json and the run's solver.log, and uploads report.docx. run and meshQuality are a RunView and a MeshQuality of simulation.schema.json, which the job checks against that schema.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runId", "generatedAt", "unitSystem", "sections", "titleBlock", "companyName", "logo", "projectName", "simulationName", "geometry", "run", "meshQuality", "figures", "statements", "notes"],
+      "properties": {
+        "runId": { "type": "string", "minLength": 1 },
+        "generatedAt": { "description": "When the report was asked for (UTC, ISO 8601); its date is the report's date.", "type": "string", "minLength": 10 },
+        "unitSystem": { "description": "Id of the unit system in packages/spec/units.json that every value prints in (M7.6).", "type": "string", "minLength": 1, "maxLength": 50 },
+        "sections": { "description": "The sections to print, in printing order.", "type": "array", "items": { "$ref": "#/$defs/ReportSection" }, "uniqueItems": true },
+        "titleBlock": { "$ref": "#/$defs/TitleBlock" },
+        "companyName": { "$ref": "#/$defs/ReportText" },
+        "logo": { "description": "The user's logo, downloaded as logo; null when they have none.", "oneOf": [{ "$ref": "#/$defs/ReportLogo" }, { "type": "null" }] },
+        "projectName": { "type": "string" },
+        "simulationName": { "type": "string" },
+        "geometry": { "$ref": "#/$defs/ReportGeometry" },
+        "run": { "description": "The run as its owner sees it (RunView in simulation.schema.json); it has succeeded.", "type": "object" },
+        "meshQuality": { "description": "The quality summary of the run's mesh (MeshQuality in simulation.schema.json); null for meshes made before M2.8.", "type": ["object", "null"] },
+        "figures": { "description": "The run's stored figures in order, without those of sections not printed.", "type": "array", "items": { "$ref": "#/$defs/ReportJobFigure" }, "maxItems": 1000 },
+        "statements": { "description": "The standing statements, in printing order.", "type": "array", "items": { "$ref": "#/$defs/ReportJobText" } },
+        "notes": { "description": "The notes the run's frozen setup calls for, in printing order.", "type": "array", "items": { "$ref": "#/$defs/ReportJobText" } }
+      }
+    },
+    "ReportJobResult": {
+      "description": "Result of a succeeded report job (M7.3): the size of report.docx and how many figures it placed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sizeBytes", "figures"],
+      "properties": { "sizeBytes": { "type": "integer", "minimum": 1 }, "figures": { "type": "integer", "minimum": 0 } }
+    },
+    "ReportStatus": {
+      "description": "Where a run's report is: queued for the worker, being made, made (it can be downloaded) or failed.",
+      "enum": ["queued", "making", "succeeded", "failed"]
+    },
+    "RunReport": {
+      "description": "The latest report asked for of a run (M7.3). Its DOCX is GET /api/runs/:id/report/docx once it has succeeded.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "problem", "sizeBytes", "createdAt", "finishedAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "$ref": "#/$defs/ReportStatus" },
+        "problem": { "description": "Why it failed, in plain language.", "type": ["string", "null"] },
+        "sizeBytes": { "type": ["integer", "null"] },
+        "createdAt": { "type": "string" },
+        "finishedAt": { "type": ["string", "null"] }
+      }
+    },
+    "RunReportResponse": {
+      "description": "Answer to GET and POST /api/runs/:id/report: the run's latest report, or null when none has been asked for.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report"],
+      "properties": { "report": { "oneOf": [{ "$ref": "#/$defs/RunReport" }, { "type": "null" }] } }
     }
   }
 }

@@ -253,9 +253,54 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     return result.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
+def run_report(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
+    """Makes a run's Word report (M7.3) from the parameters the API built, the run's figures,
+    the user's logo, the geometry's topology.json and the run's solver log: report.docx."""
+    from .report.content import build_report
+    from .report.docx import write_docx
+    from .spec.geometry_schema import Topology
+    from .spec.report_schema import ReportJobParams, ReportJobResult
+    from .units import UnitError
+
+    try:
+        params = ReportJobParams.model_validate(job.params or {})
+    except ValidationError as error:
+        raise JobFailure("platform_fault", "bad_params", f"Report parameters: {error}") from None
+    files = context.require_files()
+    context.set_stage("downloading")
+    try:
+        topology = Topology.model_validate_json(files.download("topology.json").read_bytes())
+    except ValidationError as error:
+        raise JobFailure("platform_fault", "bad_topology", f"topology.json: {error}") from None
+    has_log = "solver.log" in ((job.params or {}).get("run") or {}).get("files", [])
+    log = (
+        files.download("solver.log").read_text(encoding="utf-8", errors="replace")
+        if has_log
+        else None
+    )
+    for figure in params.figures:
+        files.download(figure.file)
+    if params.logo is not None:
+        files.download("logo")
+    context.set_stage("writing the report")
+    try:
+        document = build_report(params, topology, log)
+    except (ValidationError, UnitError, ValueError) as error:
+        raise JobFailure(
+            "platform_fault", "bad_run", f"The run cannot be reported: {error}"
+        ) from None
+    path = files.workdir / "report.docx"
+    placed = write_docx(document, files.workdir, path, params.generated_at)
+    context.set_stage("uploading")
+    files.upload("report.docx", path)
+    result = ReportJobResult(size_bytes=path.stat().st_size, figures=placed)
+    return result.model_dump(mode="json", by_alias=True)
+
+
 HANDLERS: dict[str, Handler] = {
     "noop": run_noop,
     "import": run_import,
     "mesh": run_mesh,
     "solve": run_solve,
+    "report": run_report,
 }

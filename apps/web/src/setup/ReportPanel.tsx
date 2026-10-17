@@ -88,7 +88,6 @@ export function ReportPanel({
   status,
   run,
   geometryId,
-  units,
   onSignedOut,
 }: {
   simulationId: string;
@@ -96,8 +95,6 @@ export function ReportPanel({
   /** The simulation's latest run, whose figures the panel draws once it has succeeded. */
   run: RunView | null;
   geometryId: string | null;
-  /** Display units of the result quantities, for the figures' legends. */
-  units: Readonly<Record<string, string>>;
   onSignedOut: (problem: string) => void;
 }) {
   const [loaded, setLoaded] = useState<Loaded>({ kind: "loading" });
@@ -345,7 +342,6 @@ export function ReportPanel({
         options={loaded.options}
         views={viewList.kind === "ok" ? viewList.views : null}
         unsaved={changed}
-        units={units}
         onSignedOut={onSignedOut}
       />
     </section>

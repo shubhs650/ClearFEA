@@ -147,7 +147,7 @@ queued -> claimed -> running -> succeeded
 | `import` | STEP file | `topology.json`, display mesh, detected unit, candidate bonds | No |
 | `mesh` | STEP file, mesh settings | Volume mesh, face-to-element map, quality summary, mesh display file | Yes |
 | `solve` | Frozen spec, mesh | Deck, log, raw output, viewer result files, reaction table | Yes |
-| `report` | Run records, figures, options | PDF and DOCX | No |
+| `report` | Run record, figures, options, logo, `topology.json`, solver log (all frozen in its params when asked for, ADR-077) | DOCX (M7.3); PDF (M7.4) | No |
 
 A mesh job is queued only when the user has no ready or still-meshing mesh with the same settings hash: SHA-256 of the geometry, its scaling and the global size, order and local sizes as entered (`meshSettingsText` in `packages/spec`). Otherwise that mesh becomes the simulation's mesh, shared by its simulations and runs, and nothing is meshed or charged again (M2.10, ADR-047).
 
@@ -191,7 +191,7 @@ Python package `clearfea_worker`:
 | `deck` | Pure function: spec + mesh → CalculiX input text. Physics-critical |
 | `deck.loads` | Translation of each load and support type. Physics-critical |
 | `results` | Parse `.frd` and `.dat`, derive fields, reaction sums, write viewer files. Physics-critical |
-| `report` | Assemble DOCX and PDF from run records and figures, with the standing statements of `packages/spec/report-notes.json` filled from the run record and the notes its frozen spec calls for (ADR-062, ADR-073) |
+| `report` | Assemble DOCX and PDF from run records and figures, with the standing statements of `packages/spec/report-notes.json` filled from the run record and the notes its frozen spec calls for (ADR-062, ADR-073): `content.py` decides what is printed, every value through `units.py` (M7.6), and `docx.py` lays it out (ADR-077) |
 | `units` | Load `units.json`, convert to SI |
 
 ### Load and support translation

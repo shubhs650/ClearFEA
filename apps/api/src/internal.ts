@@ -14,6 +14,7 @@ import {
   validateHeartbeatRequest,
   validateImportResult,
   validateMeshResult,
+  validateReportJobResult,
   validateSolveResult,
 } from "@clearfea/spec";
 import { Hono } from "hono";
@@ -143,10 +144,11 @@ const resultChecks: Partial<Record<Job["type"], (result: unknown) => { ok: boole
   import: validateImportResult,
   mesh: validateMeshResult,
   solve: validateSolveResult,
+  report: validateReportJobResult,
 };
 
 /**
- * The completion to record. A succeeded import, mesh or solve job whose result or output files are
+ * The completion to record. A succeeded import, mesh, solve or report job whose result or output files are
  * not what its contract says becomes a platform fault, so a geometry or mesh never turns
  * ready on outputs the viewer or a later job cannot read.
  */
