@@ -23,7 +23,7 @@ pnpm --filter @clearfea/api typecheck
 | `scripts/hash-password.mjs` | Prints a password hash for the seed file |
 | `test/` | Tests; migrations are applied before each file |
 
-Local secrets live in `.dev.vars` (git-ignored); copy `.dev.vars.example` to start.
+Local secrets live in `.dev.vars` (git-ignored); copy `.dev.vars.example` to start. `SELF_HOSTED=true` there turns on self-hosting mode: the wallet is informational and never refuses a run or mesh (ADR-084).
 
 Routes so far:
 

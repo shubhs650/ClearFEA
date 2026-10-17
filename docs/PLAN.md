@@ -149,7 +149,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 - [x] M8.7 Read-only share link per run, revocable.
 - [ ] M8.8 Data isolation tests across every route and file key.
 - [ ] M8.9 Estimator check: predicted against measured on the benchmark set.
-- [ ] M8.10 Self-hosting mode flag: wallet informational.
+- [x] M8.10 Self-hosting mode flag: wallet informational.
 
 **Exit:** ledger reconciles exactly over the full verification suite; isolation tests pass.
 

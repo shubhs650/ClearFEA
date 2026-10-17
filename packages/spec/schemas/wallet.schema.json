@@ -77,8 +77,14 @@
       "description": "Answer to GET /api/wallet.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["wallet"],
-      "properties": { "wallet": { "$ref": "#/$defs/WalletView" } }
+      "required": ["wallet", "selfHosted"],
+      "properties": {
+        "wallet": { "$ref": "#/$defs/WalletView" },
+        "selfHosted": {
+          "description": "True in self-hosting mode (M8.10, ADR-084): jobs are still metered and charged to the ledger, but the wallet is informational and a balance refuses no run or mesh.",
+          "type": "boolean"
+        }
+      }
     }
   }
 }

@@ -8,4 +8,6 @@ export interface Env {
   WORKER_TOKEN?: string;
   /** Key that signs session cookies (ADR-022). Unset means signed-in routes refuse. */
   SESSION_SECRET?: string;
+  /** "true" turns on self-hosting mode: the wallet is informational and never refuses (ADR-084). */
+  SELF_HOSTED?: string;
 }

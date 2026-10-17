@@ -23,6 +23,7 @@ import fixture from "@clearfea/spec/fixtures/simulation-v1.json";
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { listLedger } from "../src/billing/ledger";
+import app from "../src/index";
 import { getJob } from "../src/db/jobs";
 
 const TOKEN = "test-worker-token";
@@ -1118,6 +1119,46 @@ describe("the wallet (M8.1, ADR-080)", () => {
     expect(error).toContain("your wallet holds 0 credits");
     const queued = await env.DB.prepare("SELECT count(*) AS n FROM jobs WHERE type = 'solve'").first<{ n: number }>();
     expect(queued?.n).toBe(0);
+  });
+
+  it("is hosted unless SELF_HOSTED says otherwise", async () => {
+    const response = await call("GET", "/api/wallet", { cookie: alice });
+    expect(((await response.json()) as { selfHosted: boolean }).selfHosted).toBe(false);
+  });
+
+  describe("when self-hosted (M8.10, ADR-084)", () => {
+    // The same app with SELF_HOSTED set, as `.dev.vars` would set it.
+    async function selfHostedCall(method: string, path: string): Promise<Response> {
+      return app.request(`http://localhost${path}`, { method, headers: { Cookie: alice } }, { ...env, SELF_HOSTED: "true" });
+    }
+
+    it("says so on the wallet", async () => {
+      const response = await selfHostedCall("GET", "/api/wallet");
+      expect(response.status).toBe(200);
+      const body = validateWalletResponse(await response.json());
+      if (!body.ok) throw new Error(body.errors.join(" "));
+      expect(body.value.selfHosted).toBe(true);
+    });
+
+    it("queues and charges a run the balance cannot cover, which takes the balance below zero", async () => {
+      const id = await meshed();
+      await env.DB.prepare("DELETE FROM ledger_entries").run();
+      const response = await selfHostedCall("POST", `/api/simulations/${id}/runs`);
+      expect(response.status).toBe(201);
+      const job = await claim("solve");
+      await upload(job, RUN_FILES);
+      await complete(job.id, { status: "succeeded", result: SOLVED });
+      const view = await wallet();
+      expect(view.entries.map((e) => [e.reason, e.amount])).toEqual([["solve", -417]]);
+      expect(view.balance).toBe(-417);
+    });
+
+    it("makes a new mesh at a balance of zero", async () => {
+      const id = await simulation();
+      await env.DB.prepare("DELETE FROM ledger_entries").run();
+      const response = await selfHostedCall("POST", `/api/simulations/${id}/mesh`);
+      expect(response.status).toBe(201);
+    });
   });
 });
 

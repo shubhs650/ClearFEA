@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The wallet page (M8.1, ADR-080): the balance, what was granted and charged, and every ledger
-// entry with the run or mesh it paid for. Drawn over the workbench, which stays as it was.
+// entry with the run or mesh it paid for. Drawn over the workbench, which stays as it was. In
+// self-hosting mode (M8.10, ADR-084) it says that the wallet is information only.
 
-import type { WalletEntry, WalletView } from "@clearfea/spec";
+import type { WalletEntry, WalletResponse, WalletView } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
 import { fetchWallet } from "../api/wallet";
 import { credits } from "./credits";
 
-type WalletState = { kind: "loading" } | { kind: "loaded"; wallet: WalletView } | { kind: "problem"; problem: string };
+type WalletState = { kind: "loading" } | { kind: "loaded"; wallet: WalletResponse } | { kind: "problem"; problem: string };
 
 export function WalletPage({ onClose, onSignedOut }: { onClose: () => void; onSignedOut: (notice?: string) => void }) {
   const [state, setState] = useState<WalletState>({ kind: "loading" });
@@ -41,12 +42,12 @@ export function WalletPage({ onClose, onSignedOut }: { onClose: () => void; onSi
           {state.problem}
         </p>
       )}
-      {state.kind === "loaded" && <WalletContent wallet={state.wallet} />}
+      {state.kind === "loaded" && <WalletContent wallet={state.wallet.wallet} selfHosted={state.wallet.selfHosted} />}
     </section>
   );
 }
 
-function WalletContent({ wallet }: { wallet: WalletView }) {
+function WalletContent({ wallet, selfHosted }: { wallet: WalletView; selfHosted: boolean }) {
   return (
     <>
       <dl className="wallet-totals">
@@ -65,12 +66,21 @@ function WalletContent({ wallet }: { wallet: WalletView }) {
           <dd>{credits(-wallet.charged)}</dd>
         </div>
       </dl>
-      <p className="wallet-note">
-        Play money: Phase 0 has no payments. Meshing and solving are charged per started second on the machine,
-        at the rate of the machine size the job was queued on. Importing is free, reusing a mesh is free, and a job
-        that stops because of a fault in ClearFEA is not charged. A run is refused when its estimate is more than
-        the balance.
-      </p>
+      {selfHosted ? (
+        <p className="wallet-note" data-testid="wallet-self-hosted">
+          Self-hosted: this wallet is information only. Meshing and solving are counted per started second on the
+          machine, at the rate of the machine size the job was queued on, so you can see what the work would cost
+          on the hosted service. Importing is free, reusing a mesh is free, and a job that stops because of a fault
+          in ClearFEA is not counted. Nothing is refused when the balance runs out, and it can go below zero.
+        </p>
+      ) : (
+        <p className="wallet-note">
+          Play money: Phase 0 has no payments. Meshing and solving are charged per started second on the machine,
+          at the rate of the machine size the job was queued on. Importing is free, reusing a mesh is free, and a
+          job that stops because of a fault in ClearFEA is not charged. A run is refused when its estimate is more
+          than the balance.
+        </p>
+      )}
       {wallet.entries.length === 0 ? (
         <p className="pane-empty">No entries yet.</p>
       ) : (

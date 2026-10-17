@@ -98,6 +98,10 @@ export interface WalletView {
  */
 export interface WalletResponse {
   wallet: WalletView;
+  /**
+   * True in self-hosting mode (M8.10, ADR-084): jobs are still metered and charged to the ledger, but the wallet is informational and a balance refuses no run or mesh.
+   */
+  selfHosted: boolean;
 }
 
 export const LedgerReasonValues = ["grant", "mesh", "solve"] as const satisfies readonly LedgerReason[];

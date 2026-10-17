@@ -116,3 +116,7 @@ class WalletResponse(BaseModel):
         populate_by_name=True,
     )
     wallet: WalletView
+    self_hosted: Annotated[bool, Field(alias="selfHosted")]
+    """
+    True in self-hosting mode (M8.10, ADR-084): jobs are still metered and charged to the ledger, but the wallet is informational and a balance refuses no run or mesh.
+    """

@@ -52,6 +52,7 @@ import { Hono } from "hono";
 import { estimateRun, runSize, simulatedMachine } from "../billing/estimate";
 import { balanceOf } from "../billing/ledger";
 import { meshFundsProblem, runFundsProblem } from "../billing/wallet";
+import { selfHosted } from "../selfHosting";
 import { readBody } from "../body";
 import { type Geometry, geometryKey, getGeometry } from "../db/geometries";
 import {
@@ -251,8 +252,9 @@ simulations.post("/:id/mesh", async (c) => {
   if (reuse) {
     return c.json({ mesh: meshView(existing), reused: true } satisfies MeshResponse, 200);
   }
-  // A new mesh is metered; a reused one is free, so only a new one needs funds (ADR-080).
-  const noFunds = meshFundsProblem(await balanceOf(c.env.DB, c.var.userId));
+  // A new mesh is metered; a reused one is free, so only a new one needs funds (ADR-080). A
+  // self-hosted wallet is informational and refuses nothing (ADR-084).
+  const noFunds = selfHosted(c.env) ? null : meshFundsProblem(await balanceOf(c.env.DB, c.var.userId));
   if (noFunds !== null) return c.json({ error: noFunds }, 409);
   const { mesh } = await createMesh(c.env.DB, c.var.userId, { ...request, simulationId: simulation.id, hash });
   return c.json({ mesh: meshView(mesh), reused: false } satisfies MeshResponse, 201);
@@ -385,7 +387,9 @@ simulations.post("/:id/runs", async (c) => {
   if (latest?.status === "solving") {
     return c.json({ error: "The simulation is already being solved. Wait for that run to finish." }, 409);
   }
-  const noFunds = runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size);
+  const noFunds = selfHosted(c.env)
+    ? null
+    : runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size);
   if (noFunds !== null) return c.json({ error: noFunds }, 409);
   const created = await createRun(c.env.DB, c.var.userId, {
     simulationId: simulation.id,

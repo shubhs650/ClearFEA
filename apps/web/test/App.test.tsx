@@ -244,12 +244,15 @@ describe("wallet page (M8.1)", () => {
               },
             ],
           },
+          selfHosted: false,
         },
       },
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Wallet" }));
     expect((await screen.findByTestId("wallet-balance")).textContent).toBe("99.99875 credits");
+    expect(screen.getByText(/A run is refused when its estimate is more than the balance/)).toBeTruthy();
+    expect(screen.queryByTestId("wallet-self-hosted")).toBeNull();
     const rows = screen.getAllByRole("row").slice(1).map((row) => row.textContent);
     expect(rows[0]).toContain("Run of “Static structural”, started 2026-10-17 06:00:00 UTC (solved)");
     expect(rows[0]).toContain("-0.000417 credits");
@@ -258,5 +261,23 @@ describe("wallet page (M8.1)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Back to the workbench" }));
     expect(screen.queryByRole("region", { name: "Wallet" })).toBeNull();
     expect(screen.getByRole("navigation", { name: "Simulation tree" })).toBeTruthy();
+  });
+
+  it("says the wallet is information only when self-hosted (M8.10)", async () => {
+    serve({
+      "GET /api/health": healthy,
+      "GET /api/session": signedIn,
+      "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
+      "GET /api/wallet": {
+        status: 200,
+        body: { wallet: { balance: -5000, granted: 0, charged: -5000, entries: [] }, selfHosted: true },
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Wallet" }));
+    expect((await screen.findByTestId("wallet-balance")).textContent).toBe("-0.005 credits");
+    expect(screen.getByTestId("wallet-self-hosted").textContent).toContain("Nothing is refused when the balance runs out");
+    expect(screen.queryByText(/A run is refused/)).toBeNull();
   });
 });
