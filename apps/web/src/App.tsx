@@ -348,6 +348,7 @@ export function App() {
           onRun={(machineSize) => void runs.start(machineSize)}
           choice={shownChoice}
           onChoiceChange={setResultChoice}
+          onSignedOut={signedOut}
         />
       );
     }

@@ -1156,6 +1156,43 @@ class CreateRunRequest(BaseModel):
     machine_size: Annotated[str | None, Field(alias="machineSize", min_length=1)] = None
 
 
+class ShareLinkView(BaseModel):
+    """
+    A run's active read-only share link as its owner sees it (M8.7). Only a hash of the link's token is stored, so the link itself is shown once, when it is made.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    created_at: Annotated[str, Field(alias="createdAt")]
+
+
+class ShareLinkResponse(BaseModel):
+    """
+    Answer to GET and DELETE /api/runs/{id}/share: the run's active share link, or null when it has none (after DELETE, always null).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    share: ShareLinkView | None
+
+
+class CreatedShareLinkResponse(BaseModel):
+    """
+    Answer to POST /api/runs/{id}/share (HTTP 201): the new link and its token, which opens the run read-only at /share/{token} until it is revoked. Making a link revokes the run's earlier one.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    share: ShareLinkView
+    token: Annotated[str, Field(pattern="^[A-Za-z0-9_-]{43}$")]
+
+
 class RunLogResponse(BaseModel):
     """
     Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.
@@ -1510,3 +1547,39 @@ class RunListResponse(BaseModel):
         populate_by_name=True,
     )
     runs: list[RunView]
+
+
+class SharedRunView(BaseModel):
+    """
+    A succeeded run as anyone holding its share link sees it (M8.7): the frozen setup, mesh, versions and results, without the owner's machine, estimate or cost.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: str
+    spec: SimulationSpec
+    mesh: RunMesh
+    software: RunSoftware
+    status: Literal["succeeded"]
+    """
+    Always succeeded: only a succeeded run can be shared.
+    """
+    result: SolveResult
+    created_at: Annotated[str, Field(alias="createdAt")]
+    finished_at: Annotated[str | None, Field(alias="finishedAt")]
+
+
+class SharedRunResponse(BaseModel):
+    """
+    Answer to GET /api/shared/{token}: the shared run, the name of the simulation it was run from, and the owner's unit system, which the results are first shown in.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    run: SharedRunView
+    simulation_name: Annotated[str, Field(alias="simulationName")]
+    unit_system: Annotated[str, Field(alias="unitSystem")]

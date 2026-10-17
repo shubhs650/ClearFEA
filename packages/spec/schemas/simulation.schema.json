@@ -1055,6 +1055,57 @@
       "required": ["runs"],
       "properties": { "runs": { "type": "array", "items": { "$ref": "#/$defs/RunView" } } }
     },
+    "ShareLinkView": {
+      "description": "A run's active read-only share link as its owner sees it (M8.7). Only a hash of the link's token is stored, so the link itself is shown once, when it is made.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["createdAt"],
+      "properties": { "createdAt": { "type": "string" } }
+    },
+    "ShareLinkResponse": {
+      "description": "Answer to GET and DELETE /api/runs/{id}/share: the run's active share link, or null when it has none (after DELETE, always null).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["share"],
+      "properties": { "share": { "oneOf": [{ "$ref": "#/$defs/ShareLinkView" }, { "type": "null" }] } }
+    },
+    "CreatedShareLinkResponse": {
+      "description": "Answer to POST /api/runs/{id}/share (HTTP 201): the new link and its token, which opens the run read-only at /share/{token} until it is revoked. Making a link revokes the run's earlier one.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["share", "token"],
+      "properties": {
+        "share": { "$ref": "#/$defs/ShareLinkView" },
+        "token": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" }
+      }
+    },
+    "SharedRunView": {
+      "description": "A succeeded run as anyone holding its share link sees it (M8.7): the frozen setup, mesh, versions and results, without the owner's machine, estimate or cost.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "spec", "mesh", "software", "status", "result", "createdAt", "finishedAt"],
+      "properties": {
+        "id": { "type": "string" },
+        "spec": { "$ref": "#/$defs/SimulationSpec" },
+        "mesh": { "$ref": "#/$defs/RunMesh" },
+        "software": { "$ref": "#/$defs/RunSoftware" },
+        "status": { "description": "Always succeeded: only a succeeded run can be shared.", "const": "succeeded" },
+        "result": { "$ref": "#/$defs/SolveResult" },
+        "createdAt": { "type": "string" },
+        "finishedAt": { "type": ["string", "null"] }
+      }
+    },
+    "SharedRunResponse": {
+      "description": "Answer to GET /api/shared/{token}: the shared run, the name of the simulation it was run from, and the owner's unit system, which the results are first shown in.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run", "simulationName", "unitSystem"],
+      "properties": {
+        "run": { "$ref": "#/$defs/SharedRunView" },
+        "simulationName": { "type": "string" },
+        "unitSystem": { "type": "string" }
+      }
+    },
     "RunLogResponse": {
       "description": "Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.",
       "type": "object",
