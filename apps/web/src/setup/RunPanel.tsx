@@ -1108,10 +1108,11 @@ export function RunPanel({
         />
       )}
       {run !== null && result && !modal && <RunExport run={run} result={result} units={units} thermal={thermal} thermalStress={thermalStress} />}
-      {run !== null && result && <ShareLink key={run.id} runId={run.id} onSignedOut={onSignedOut} />}
+      {/* Sibling keys must differ: two children with the run's id as key left stale copies behind. */}
+      {run !== null && result && <ShareLink key={`share-${run.id}`} runId={run.id} onSignedOut={onSignedOut} />}
       {run !== null && (
         <RawOutput
-          key={run.id}
+          key={`raw-${run.id}`}
           run={run}
           requesting={requesting}
           onRunChanged={onRunChanged}
