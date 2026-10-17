@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """The M8 exit check: the harness user's ledger reconciles exactly over the whole suite.
 
-Pure: takes the rows `make verify` read from the API's local database and its wallet view, and
+Pure: takes the wallet (GET /api/wallet) and the cost each run the suite made recorded, and
 says which of the reconciliation checks hold. Money is whole micro-credits (ADR-080), so every
-comparison is exact.
+comparison is exact. Everything comes through the API: a second process reading the API's local
+SQLite file locks it, and the API then fails with SQLITE_BUSY.
 """
 
 from dataclasses import dataclass
@@ -22,12 +23,22 @@ def _credits(micro: int) -> str:
     return f"{micro / 1_000_000:.6f} credits"
 
 
-def reconcile(
-    entries: list[dict[str, Any]], jobs: list[dict[str, Any]], wallet: dict[str, Any]
-) -> list[Reconciliation]:
-    """`entries`: the user's ledger_entries rows (seq, amount, balance, reason, job_id), in seq
-    order. `jobs`: the user's metered jobs (id, cost), every job with a cost recorded. `wallet`:
-    GET /api/wallet (balance, granted, charged)."""
+def cost_of(seconds: int, rate_per_hour: int) -> int:
+    """Seconds times the hourly rate over 3600, rounded to the nearest micro-credit, halves up
+    (apps/api/src/billing/cost.ts)."""
+    return (seconds * rate_per_hour + 1800) // 3600
+
+
+def entries_for_run(wallet: dict[str, Any], run_id: str) -> list[dict[str, Any]]:
+    """The wallet's ledger entries that paid for one run."""
+    return [e for e in wallet["entries"] if e["run"] is not None and e["run"]["id"] == run_id]
+
+
+def reconcile(wallet: dict[str, Any], runs: dict[str, dict[str, Any]]) -> list[Reconciliation]:
+    """`wallet`: GET /api/wallet's wallet (balance, granted, charged, entries newest first).
+    `runs`: run id -> the run's recorded cost (billedSeconds, amount, charged), for every run
+    the suite made."""
+    entries = sorted(wallet["entries"], key=lambda e: e["seq"])
     out: list[Reconciliation] = []
 
     # Each entry's balance is the one before it plus its amount, from zero.
@@ -56,31 +67,41 @@ def reconcile(
         )
     )
 
-    # Every charged job has exactly one entry for its cost, and every job entry is one of them.
-    by_job = {e["job_id"]: e for e in entries if e["job_id"] is not None}
-    charged = {j["id"]: j["cost"] for j in jobs if j["cost"]}
+    # Every job charge is its billed seconds at its rate, as the platform prices a job.
+    jobs = [e for e in entries if e["job"] is not None]
+    priced = sum(cost_of(e["job"]["billedSeconds"], e["job"]["ratePerHour"]) for e in jobs)
     wrong = [
-        f"job {jid}: cost {cost}, ledger {by_job[jid]['amount'] if jid in by_job else 'none'}"
-        for jid, cost in charged.items()
-        if jid not in by_job or by_job[jid]["amount"] != -cost
+        f"entry {e['seq']}: {-e['amount']} for {e['job']['billedSeconds']} s at "
+        f"{e['job']['ratePerHour']} per hour"
+        for e in jobs
+        if -e["amount"] != cost_of(e["job"]["billedSeconds"], e["job"]["ratePerHour"])
     ]
-    wrong += [
-        f"entry {e['seq']} for job {jid} that cost nothing"
-        for jid, e in by_job.items()
-        if jid not in charged
-    ]
-    paid = -sum(e["amount"] for e in by_job.values())
     out.append(
         Reconciliation(
-            "Each charged job has one entry for exactly its cost",
-            f"{len(charged)} jobs, {_credits(sum(charged.values()))}",
-            "; ".join(wrong[:3]) or f"{len(by_job)} entries, {_credits(paid)}",
+            "Each job charge is its billed seconds at its rate",
+            f"{len(jobs)} jobs, {_credits(priced)}",
+            "; ".join(wrong[:3]) or f"{_credits(-sum(e['amount'] for e in jobs))}",
+            not wrong,
+        )
+    )
+
+    # Every charged run has one entry for exactly the cost its record shows.
+    wrong = []
+    for rid, cost in runs.items():
+        paid = [-e["amount"] for e in entries_for_run(wallet, rid)]
+        if paid != ([cost["amount"]] if cost["charged"] else []):
+            wrong.append(f"run {rid}: cost {cost['amount']}, ledger {paid or 'none'}")
+    out.append(
+        Reconciliation(
+            "Each charged run has one entry for exactly its recorded cost",
+            f"{len(runs)} runs, {_credits(sum(c['amount'] for c in runs.values()))}",
+            "; ".join(wrong[:3]) or f"{len(runs)} runs matched",
             not wrong,
         )
     )
 
     # Nothing else moved the balance: only the seeded grant has no job (the sweep never runs).
-    other = [e for e in entries if e["job_id"] is None and e["reason"] != "grant"]
+    other = [e for e in entries if e["job"] is None and e["reason"] != "grant"]
     out.append(
         Reconciliation(
             "No entry without a job other than the grant",

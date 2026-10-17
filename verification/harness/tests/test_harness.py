@@ -914,45 +914,70 @@ def test_a_frequency_check_names_its_mode(tmp_path: Path, check: str, message: s
 # --- The suite's ledger reconciliation (M8 exit) ---
 
 
-def _ledger() -> tuple[list[dict], list[dict], dict]:  # type: ignore[type-arg]
+def _entry(seq, amount, balance, reason, job=None, run=None):  # type: ignore[no-untyped-def]
+    return {
+        "seq": seq,
+        "amount": amount,
+        "balance": balance,
+        "reason": reason,
+        "job": None if job is None else {"id": job, "billedSeconds": 5, "ratePerHour": 1_000_000},
+        "run": None if run is None else {"id": run},
+    }
+
+
+def _ledger():  # type: ignore[no-untyped-def]
+    # 5 s at 1 credit per hour is 1,388.9 micro-credits, rounded to 1,389.
     entries = [
-        {"seq": 1, "amount": 10**8, "balance": 10**8, "reason": "grant", "job_id": None},
-        {"seq": 2, "amount": -278, "balance": 99_999_722, "reason": "mesh", "job_id": "m1"},
-        {"seq": 3, "amount": -1_389, "balance": 99_998_333, "reason": "solve", "job_id": "s1"},
+        _entry(3, -1_389, 99_997_222, "solve", "s1", "r1"),
+        _entry(2, -1_389, 99_998_611, "mesh", "m1"),
+        _entry(1, 10**8, 10**8, "grant"),
     ]
-    jobs = [{"id": "m1", "cost": 278}, {"id": "s1", "cost": 1_389}, {"id": "s2", "cost": 0}]
-    wallet = {"balance": 99_998_333, "granted": 100_000_000, "charged": -1_667}
-    return entries, jobs, wallet
+    wallet = {"balance": 99_997_222, "granted": 10**8, "charged": -2_778, "entries": entries}
+    runs = {"r1": {"billedSeconds": 5, "amount": 1_389, "charged": True}}
+    return wallet, runs
+
+
+def test_prices_a_job_as_the_platform_does() -> None:
+    from harness.ledger import cost_of
+
+    assert cost_of(5, 1_000_000) == 1_389
+    assert cost_of(1, 1_800) == 1  # half a micro-credit rounds up
+    assert cost_of(0, 4_000_000) == 0
 
 
 def test_a_consistent_ledger_reconciles() -> None:
     from harness.ledger import reconcile
 
-    assert all(r.ok for r in reconcile(*_ledger()))
+    wallet, runs = _ledger()
+    runs["r2"] = {"billedSeconds": 0, "amount": 0, "charged": False}  # a run not charged
+    assert all(r.ok for r in reconcile(wallet, runs))
 
 
 def test_reconciliation_finds_each_kind_of_mismatch() -> None:
     from harness.ledger import reconcile
 
-    entries, jobs, wallet = _ledger()
-    entries[2]["balance"] -= 1  # a broken running balance
-    assert [r.ok for r in reconcile(entries, jobs, wallet)] == [False, True, True, True]
+    wallet, runs = _ledger()
+    wallet["entries"][0]["balance"] -= 1  # a broken running balance
+    wallet["balance"] -= 1
+    assert [r.ok for r in reconcile(wallet, runs)] == [False, False, True, True, True]
 
-    entries, jobs, wallet = _ledger()
+    wallet, runs = _ledger()
     wallet["balance"] += 1  # the wallet disagrees with the sum
-    assert [r.ok for r in reconcile(entries, jobs, wallet)] == [True, False, True, True]
+    assert [r.ok for r in reconcile(wallet, runs)] == [True, False, True, True, True]
 
-    entries, jobs, wallet = _ledger()
-    jobs[1]["cost"] = 1_390  # charged a different amount than the job's cost
-    assert [r.ok for r in reconcile(entries, jobs, wallet)] == [True, True, False, True]
+    wallet, runs = _ledger()
+    wallet["entries"][1]["job"]["billedSeconds"] = 6  # charged other than its time
+    assert [r.ok for r in reconcile(wallet, runs)] == [True, True, False, True, True]
 
-    entries, jobs, wallet = _ledger()
-    jobs.append({"id": "s3", "cost": 5})  # a charged job with no entry
-    assert [r.ok for r in reconcile(entries, jobs, wallet)] == [True, True, False, True]
+    wallet, runs = _ledger()
+    runs["r1"]["amount"] = 1_390  # the run's record disagrees with its charge
+    assert [r.ok for r in reconcile(wallet, runs)] == [True, True, True, False, True]
 
-    entries, jobs, wallet = _ledger()
-    entries.append(
-        {"seq": 4, "amount": -5, "balance": 99_998_328, "reason": "storage", "job_id": None}
-    )
-    wallet = {"balance": 99_998_328, "granted": 100_000_000, "charged": -1_672}
-    assert [r.ok for r in reconcile(entries, jobs, wallet)] == [True, True, True, False]
+    wallet, runs = _ledger()
+    runs["r2"] = {"billedSeconds": 3, "amount": 833, "charged": True}  # a charged run, no entry
+    assert [r.ok for r in reconcile(wallet, runs)] == [True, True, True, False, True]
+
+    wallet, runs = _ledger()
+    wallet["entries"].insert(0, _entry(4, -5, 99_997_217, "storage"))
+    wallet.update(balance=99_997_217, charged=-2_783)
+    assert [r.ok for r in reconcile(wallet, runs)] == [True, True, True, True, False]
