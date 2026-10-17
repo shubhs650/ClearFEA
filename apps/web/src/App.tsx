@@ -355,7 +355,6 @@ export function App() {
           status={status}
           run={run}
           geometryId={geometry?.id ?? null}
-          units={resultUnits}
           onSignedOut={signedOut}
         />
       );

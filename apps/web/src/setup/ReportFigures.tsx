@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { figurePath, listFigures } from "../api/figures";
 import { fetchRunReport, makeRunReport, reportDocxPath } from "../api/reports";
 import { captureFigures, planFigures } from "../report/figures";
+import { resultUnits } from "./displayUnits";
 
 /** How often a report being made is checked on. */
 export const REPORT_POLL_MS = 1500;
@@ -34,7 +35,6 @@ export function ReportFigures({
   options,
   views,
   unsaved,
-  units,
   onSignedOut,
 }: {
   /** The simulation's latest run; figures are drawn from it once it has succeeded. */
@@ -46,7 +46,6 @@ export function ReportFigures({
   views: SavedView[] | null;
   /** Whether the options shown differ from the saved ones. */
   unsaved: boolean;
-  units: Readonly<Record<string, string>>;
   onSignedOut: (problem: string) => void;
 }) {
   const solved = run?.status === "succeeded" ? run : null;
@@ -120,7 +119,8 @@ export function ReportFigures({
       run: solved,
       geometryId,
       planned,
-      units,
+      // Legends in the report's own unit system (ADR-076), not the units the viewer shows.
+      units: resultUnits(options.unitSystem, {}),
       onProgress: (done, total) => setCapture({ kind: "drawing", done, total }),
     });
     if (outcome.kind === "signedOut") {

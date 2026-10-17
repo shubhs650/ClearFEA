@@ -33,6 +33,8 @@ import {
   specSolver,
   type ViewListResponse,
   defaultReportOptions,
+  isUnitSystem,
+  unitsTable,
   orderedReportOptions,
   type ReportOptionsResponse,
   validateReportOptions,
@@ -68,11 +70,13 @@ import {
   type Simulation,
   saveSpec,
 } from "../db/simulations";
+import { userProject } from "../db/projects";
 import { getReportOptions, saveReportOptions } from "../db/report";
 import { deleteView, listViews, saveView } from "../db/views";
 import type { Env } from "../env";
 import { requireUser, type SessionEnv } from "../session";
 import { meshView } from "./meshes";
+import { projectUnitSystem } from "./projects";
 import { runView } from "./runs";
 
 export const simulations = new Hono<SessionEnv>();
@@ -426,19 +430,30 @@ simulations.delete("/:id/views/:viewId", async (c) => {
 });
 
 // Report options (M7.1, ADR-074). Views must be saved views of the simulation; a view deleted
-// later is left out of the answer, and the report draws only the views still there.
+// later is left out of the answer, and the report draws only the views still there. The report's
+// unit system (M7.6, ADR-076) starts as the project's; options saved before M7.6 have none, and a
+// system units.json no longer lists is answered as the project's too.
 async function reportOptionsView(
   db: D1Database,
   userId: string,
   simulation: Simulation,
 ): Promise<ReportOptionsResponse> {
-  const [saved, views] = await Promise.all([
+  const [saved, views, project] = await Promise.all([
     getReportOptions(db, userId, simulation.id),
     listViews(db, userId, simulation.id),
+    userProject(db, userId),
   ]);
-  if (saved === null) return { options: defaultReportOptions(simulation.name), saved: false, updatedAt: null };
+  const projectSystem = projectUnitSystem(project);
+  if (saved === null) {
+    return { options: defaultReportOptions(simulation.name, projectSystem), saved: false, updatedAt: null };
+  }
   const known = new Set(views.map((v) => v.id));
-  const options = { ...saved.options, views: saved.options.views.filter((id) => known.has(id)) };
+  const stored = saved.options.unitSystem as string | undefined;
+  const options = {
+    ...saved.options,
+    views: saved.options.views.filter((id) => known.has(id)),
+    unitSystem: stored !== undefined && isUnitSystem(stored) ? stored : projectSystem,
+  };
   return { options, saved: true, updatedAt: saved.updatedAt };
 }
 
@@ -453,6 +468,10 @@ simulations.put("/:id/report-options", async (c) => {
   if ("error" in body) return c.json({ error: body.error }, 400);
   const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
   if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
+  if (!isUnitSystem(body.value.unitSystem)) {
+    const systems = Object.keys(unitsTable.systems).join(", ");
+    return c.json({ error: `'${body.value.unitSystem}' is not a unit system. Use one of: ${systems}.` }, 400);
+  }
   const known = new Set((await listViews(c.env.DB, c.var.userId, simulation.id)).map((v) => v.id));
   const missing = body.value.views.filter((id) => !known.has(id));
   if (missing.length > 0) {

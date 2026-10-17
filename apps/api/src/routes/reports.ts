@@ -12,7 +12,6 @@ import {
   type RunReportResponse,
   runReportNotes,
   runReportStatements,
-  unitsTable,
 } from "@clearfea/spec";
 import { Hono } from "hono";
 import { getGeometry } from "../db/geometries";
@@ -24,6 +23,7 @@ import type { Run } from "../db/runs";
 import { getRun } from "../db/runs";
 import { getSimulation } from "../db/simulations";
 import { requireUser, type SessionEnv } from "../session";
+import { projectUnitSystem } from "./projects";
 import { runView } from "./runs";
 
 export const reports = new Hono<SessionEnv>();
@@ -32,10 +32,9 @@ reports.use("*", requireUser);
 
 const NOT_FOUND = "There is no run with that id in your account.";
 
-/** The report's unit system: the one saved in its options (M7.6), else the project's. */
-function reportUnitSystem(saved: string | undefined, project: string | null): string {
-  if (saved !== undefined && isUnitSystem(saved)) return saved;
-  return project !== null && isUnitSystem(project) ? project : unitsTable.defaultSystem;
+/** The report's unit system: the one saved in its options (ADR-076), else the project's. */
+function reportUnitSystem(saved: string | undefined, projectSystem: string): string {
+  return saved !== undefined && isUnitSystem(saved) ? saved : projectSystem;
 }
 
 /** Everything the report job prints, frozen now so a later change to the setup cannot reach it. */
@@ -50,13 +49,14 @@ async function reportParams(db: D1Database, userId: string, run: Run): Promise<R
     listFigures(db, userId, run.id),
   ]);
   if (simulation === null || geometry === null) return null;
-  const options = saved?.options ?? defaultReportOptions(simulation.name);
+  const projectSystem = projectUnitSystem(project);
+  const options = saved?.options ?? defaultReportOptions(simulation.name, projectSystem);
   const printed = new Set(options.sections);
   const shown = figures.filter((f) => (f.kind === "view" ? printed.has("results") : printed.has("loadsSupports")));
   return {
     runId: run.id,
     generatedAt: new Date().toISOString(),
-    unitSystem: reportUnitSystem((options as { unitSystem?: string }).unitSystem, project.unitSystem),
+    unitSystem: reportUnitSystem(options.unitSystem, projectSystem),
     sections: options.sections,
     titleBlock: options.titleBlock,
     companyName: branding.companyName,

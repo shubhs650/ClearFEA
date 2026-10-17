@@ -140,13 +140,13 @@ describe("logo images", () => {
 describe("report options", () => {
   it("need a signed-in user", async () => {
     expect((await call("GET", optionsPath())).status).toBe(401);
-    expect((await call("PUT", optionsPath(), { json: defaultReportOptions("x") })).status).toBe(401);
+    expect((await call("PUT", optionsPath(), { json: defaultReportOptions("x", "metric-mm") })).status).toBe(401);
   });
 
   it("start from the defaults until saved", async () => {
     const response = await call("GET", optionsPath(), { cookie: alice });
     expect(response.status).toBe(200);
-    expect(await options(response)).toEqual({ options: defaultReportOptions("Bracket"), saved: false, updatedAt: null });
+    expect(await options(response)).toEqual({ options: defaultReportOptions("Bracket", "metric-mm"), saved: false, updatedAt: null });
   });
 
   it("are saved with sections in printing order and views as picked", async () => {
@@ -155,7 +155,8 @@ describe("report options", () => {
     const sent: ReportOptions = {
       sections: ["warnings", "project", "results"],
       views: [iso, front],
-      titleBlock: { ...defaultReportOptions("Bracket").titleBlock, documentNumber: "CF-001", revision: "B" },
+      titleBlock: { ...defaultReportOptions("Bracket", "metric-mm").titleBlock, documentNumber: "CF-001", revision: "B" },
+      unitSystem: "us-in",
     };
     const response = await call("PUT", optionsPath(), { json: sent, cookie: alice });
     expect(response.status).toBe(200);
@@ -167,31 +168,62 @@ describe("report options", () => {
 
   it("refuse a view that is not one of the simulation's, and malformed options", async () => {
     const unknown = await call("PUT", optionsPath(), {
-      json: { ...defaultReportOptions("x"), views: ["no-such-view"] },
+      json: { ...defaultReportOptions("x", "metric-mm"), views: ["no-such-view"] },
       cookie: alice,
     });
     expect(unknown.status).toBe(400);
     expect(((await unknown.json()) as { error: string }).error).toContain("not a saved view of this simulation");
     for (const body of [
-      { ...defaultReportOptions("x"), sections: ["verdict"] },
-      { ...defaultReportOptions("x"), titleBlock: { title: "x" } },
+      { ...defaultReportOptions("x", "metric-mm"), sections: ["verdict"] },
+      { ...defaultReportOptions("x", "metric-mm"), titleBlock: { title: "x" } },
       { sections: [], views: [] },
     ]) {
       expect((await call("PUT", optionsPath(), { json: body, cookie: alice })).status).toBe(400);
     }
   });
 
+  it("print in the project's unit system until another is saved (M7.6)", async () => {
+    const project = (system: string) => call("PATCH", "/api/project", { json: { unitSystem: system }, cookie: alice });
+    try {
+      expect((await project("si")).status).toBe(200);
+      expect((await options(await call("GET", optionsPath(), { cookie: alice }))).options.unitSystem).toBe("si");
+      // A saved choice stays whatever the project's system becomes.
+      await call("PUT", optionsPath(), { json: defaultReportOptions("x", "us-in"), cookie: alice });
+      expect((await project("metric-mm")).status).toBe(200);
+      expect((await options(await call("GET", optionsPath(), { cookie: alice }))).options.unitSystem).toBe("us-in");
+      // Options saved before M7.6 have no system, and a system units.json no longer lists: the project's.
+      for (const stored of [undefined, "imperial-ft"]) {
+        const { unitSystem: _, ...rest } = defaultReportOptions("x", "si");
+        await env.DB.prepare("UPDATE report_options SET options = ? WHERE simulation_id = ?")
+          .bind(JSON.stringify(stored === undefined ? rest : { ...rest, unitSystem: stored }), simulationId)
+          .run();
+        expect((await options(await call("GET", optionsPath(), { cookie: alice }))).options.unitSystem).toBe("metric-mm");
+      }
+    } finally {
+      await project("metric-mm");
+    }
+  });
+
+  it("refuse a unit system units.json does not list", async () => {
+    const response = await call("PUT", optionsPath(), {
+      json: { ...defaultReportOptions("x", "metric-mm"), unitSystem: "imperial-ft" },
+      cookie: alice,
+    });
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as { error: string }).error).toContain("'imperial-ft' is not a unit system");
+  });
+
   it("leave out a view deleted after it was picked", async () => {
     const front = await saveView("Front");
     const iso = await saveView("Iso");
-    await call("PUT", optionsPath(), { json: { ...defaultReportOptions("x"), views: [front, iso] }, cookie: alice });
+    await call("PUT", optionsPath(), { json: { ...defaultReportOptions("x", "metric-mm"), views: [front, iso] }, cookie: alice });
     await call("DELETE", `/api/simulations/${simulationId}/views/${front}`, { cookie: alice });
     expect((await options(await call("GET", optionsPath(), { cookie: alice }))).options.views).toEqual([iso]);
   });
 
   it("belong to the simulation's owner only", async () => {
     expect((await call("GET", optionsPath(), { cookie: bob })).status).toBe(404);
-    expect((await call("PUT", optionsPath(), { json: defaultReportOptions("x"), cookie: bob })).status).toBe(404);
+    expect((await call("PUT", optionsPath(), { json: defaultReportOptions("x", "metric-mm"), cookie: bob })).status).toBe(404);
     expect((await options(await call("GET", optionsPath(), { cookie: alice }))).saved).toBe(false);
   });
 });

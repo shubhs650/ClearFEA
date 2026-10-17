@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Values printed in the report's own unit system (PLAN M7.6, ADR-075).
+"""Values printed in the report's own unit system (PLAN M7.6, ADR-076).
 
 A report prints every value in the one unit system its author chose for it, whatever the browser
 showed: results are stored in SI and setup values as typed (ARCHITECTURE section 5), so both are
