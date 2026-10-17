@@ -133,7 +133,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 - [ ] M7.2 Figure capture in the browser: one per load and support, plus selected result views.
 - [ ] M7.3 DOCX assembly with all sections in `DECISIONS.md`.
 - [ ] M7.4 PDF output matching the DOCX.
-- [ ] M7.5 Standing statements: analysis-tool positioning, versions, verification link, tied-interface note. No verdict wording anywhere.
+- [x] M7.5 Standing statements: analysis-tool positioning, versions, verification link, tied-interface note. No verdict wording anywhere.
 - [ ] M7.6 Values printed in the report's chosen unit system.
 
 **Exit:** the maintainer would hand the report for a verification case to a reviewer.

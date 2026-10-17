@@ -30,6 +30,10 @@ Status values: Not started, In progress, Verifying, Done.
 
 Copy the task list for the current milestone from `PLAN.md` here when the milestone starts, and tick tasks as they merge.
 
+### M7 Report
+
+- [x] M7.5 Standing statements: analysis-tool positioning, versions, verification link, tied-interface note (ADR-073)
+
 ### M0 Bootstrap
 
 - [x] M0.1 Confirm Docker works in the Claude Code cloud environment
@@ -131,6 +135,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M7.5 (2026-10-17): the report's standing statements (ADR-073, accepted under Shubham's M7 autodrive, pending his review). No physics-critical module touched. `packages/spec/report-notes.json` (version 2) now holds `statements` ("About this report", "Software versions", "Verification") beside the tied-interface note, and `verificationUrl` (docs/VERIFICATION.md on main until M9's results page). `runReportStatements({ spec, software })` in `packages/spec/src/report.ts` fills `{clearfea}`, `{gmsh}`, `{occt}`, `{deckFormat}`, `{calculix}`, `{solver}` and `{verificationUrl}` from a run record ("(not recorded)" where a version is null) and appends the iterative accuracy note after the solver when one was used. For M7.3: print `runReportStatements(run)` and `runReportNotes(run.spec)`; the simplest route is for the API to pass them filled to the report job. Nothing in the app shows the statements.
 
 > M6 close (2026-10-17): M6 closed on a green manual phase-end run on main (see the Milestones table). Every M6 task and verification case listed for M6 (V-20, V-21, V-22) is in; no browser test is listed for M6, so a modal run has no E-test (E-01 to E-04 cover static, thermal and mixed units). The exit (first frequencies match references within tolerance) is V-20 to V-22 at full tier. PLAN.md's M6.2 box was left unticked by PR #74 and is ticked here. The maintainer reviewed and accepted ADR-070 to ADR-072 (M6) after the close, so every ADR to date is accepted by him. Next is M7 in PLAN.md order, which waits for the maintainer's go.
 
@@ -291,6 +297,8 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-17
+
+- M7.5: the report's standing statements (tool positioning, versions, verification link) stored beside the tied-interface note in `packages/spec/report-notes.json` and filled from a run record (ADR-073).
 
 - ADR-070 to ADR-072 (M6) reviewed and accepted by the maintainer; their status lines in DECISIONS.md updated.
 - M6 closed: phase-end workflow run by hand on main becaad2 ([run 38991537033](https://github.com/shubhs650/ClearFEA/actions/runs/38991537033)) green, `make verify` full tier 302 of 302 checks in all 26 cases and `make e2e` E-01 to E-04. Next: M7, waiting on the maintainer's go.

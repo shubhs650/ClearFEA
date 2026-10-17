@@ -1,5 +1,26 @@
 {
-  "version": 1,
+  "version": 2,
+  "verificationUrl": "https://github.com/shubhs650/ClearFEA/blob/main/docs/VERIFICATION.md",
+  "statements": [
+    {
+      "id": "toolPositioning",
+      "title": "About this report",
+      "text": "ClearFEA is a general-purpose finite element analysis tool. This report gives the numbers it computed for the model, materials, loads and supports set up by the report's author. It does not compare them with any design code, standard or acceptance criterion, and it states no judgement on the part. Whether the model represents the real part and its use, and what the results mean for it, is for the engineer responsible for the work to decide.",
+      "source": "DECISIONS.md Positioning (a general-purpose analysis tool; never a pass/fail or code-compliance verdict); CLAUDE.md hard rules"
+    },
+    {
+      "id": "softwareVersions",
+      "title": "Software versions",
+      "text": "This run was prepared with ClearFEA {clearfea}. The mesh was made by Gmsh {gmsh} with OpenCASCADE {occt}. The solver input (deck format {deckFormat}) was written by ClearFEA from the setup shown in this report and solved by CalculiX {calculix} with the {solver} equation solver.",
+      "source": "DECISIONS.md Positioning (reports carry software and solver versions); the run's recorded versions (ADR-032) and frozen solver (ADR-063 item 2)"
+    },
+    {
+      "id": "verificationLink",
+      "title": "Verification",
+      "text": "ClearFEA is checked against verification cases with analytical or published reference values, each with a stated tolerance; the cases, their references and tolerances are listed at {verificationUrl}. Those cases are simplified models: they show how closely the software reproduces known answers, not how closely this model represents its part.",
+      "source": "DECISIONS.md Positioning (reports carry a link to verification results); docs/VERIFICATION.md (from M9 a published results page, linked from every report)"
+    }
+  ],
   "notes": [
     {
       "id": "tiedInterfaces",

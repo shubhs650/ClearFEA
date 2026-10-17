@@ -67,7 +67,19 @@ export {
   specRunKind,
   specSolver,
 } from "./estimator";
-export { checkReportNotes, hasTiedBonds, reportNotes, runReportNotes } from "./report";
+export {
+  checkReportNotes,
+  type FilledStatement,
+  frozenRunSolver,
+  hasTiedBonds,
+  NOT_RECORDED,
+  reportNotes,
+  runReportNotes,
+  runReportStatements,
+  STATEMENT_FIELDS,
+  type StatementField,
+  type StatementRun,
+} from "./report";
 export { checkUnitsTable, isUnitSystem, systemUnit, unitsTable } from "./units";
 export { type Validation, validator } from "./validate";
 export { checkMaterialLibrary, materialLibrary } from "./library";
