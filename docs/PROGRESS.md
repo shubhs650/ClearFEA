@@ -42,6 +42,11 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [ ] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found.
 - [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome.
 
+### UI redesign (asked for by Shubham before M9.8; not a PLAN.md task)
+
+- [x] UI stage 1: header, ribbon, icon tree, light and dark theme, view cube, axis triad, display styles, cut plane on the geometry and mesh (ADR-094)
+- [ ] UI stage 2: refresh the user guide's screenshots for the new layout, and further viewer polish found in use
+
 ### M8 Platform
 
 - [x] M8.1 Wallet page: balance, ledger, per-run cost; seeded play-money grant and low-balance refusal (ADR-080)
@@ -166,6 +171,8 @@ Things only the maintainer can do.
 
 Written by the last session for the next one. Replace, do not append.
 
+> UI redesign stage 1 (2026-10-18): ADR-094. New `AppHeader`, `Ribbon`, `theme.ts` in `apps/web/src/layout/` and `ViewCube.tsx` in `viewer/`; `ModelView` gained `onCamera`, `fitView`, `setDisplayStyle` and, in the interactive viewer only, a cap and plane outline with a cut. The ribbon reuses App's existing handlers, so nothing it does is new behaviour. The tests' ModelView mocks gained the three new methods; unit tests that looked for the save state and unit system in the tree now look in the header. Watch for name clashes when adding ribbon buttons: Playwright's role queries match substrings, so a ribbon button must not contain a name the E-tests ask for (for example "Run", "Generate mesh", "Reset view", "Start setup"). The user guide's text is updated; its screenshots still show the old layout (stage 2).
+>
 > M9.1 (2026-10-17): ADR-093. A model at every solver's element limit now runs on `make dev`: `cd verification && uv run --project ../worker --locked python -m harness.limits` (against :8787; `--out DIR`, case keys such as `pastix-2` to pick) runs the M2.11 block at each limit and prints the table below. Two things broke and are fixed: job uploads over 200 MiB were refused (both iterative solvers' 10-node limit write a 250 MB `results.frd`; the modal 10-node limit about 1 GB), now streamed and capped at 5 GiB; and after an upload of about 1 GB, wrangler dev drops the next request, so the worker now retries a transfer twice on a 5xx or a lost connection (wrangler's own proxy retries GETs, not PUTs). Surprising: Gmsh cannot mesh the block between 136,092 and 144,794 elements, nor between 440,406 and about 461,400, so the PaStiX 10-node and the 461,000 limits were run at 96 percent. The time estimate was 1.3 to 2.2 times the measured time on every limit (iterative scaling 10-node most), the safe side; the solver's peak memory was within 3 percent of the estimate above 2 GiB and within 7 percent below. The sandbox kept 1.4 GiB free at worst (the modal 10-node run, 10.3 GiB solver peak). Viewer screenshots of the 1.1-million-element run (results, cut plane) and of the modal run are in the project's `m9.1/` folder; drawing speed on the laptop is M9.2's.
 >
 > | Limit | Elements | Nodes | Estimated s | Run s | Est. GiB | Solver peak GiB |
@@ -391,6 +398,10 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 ## Log
 
 Newest first. One entry per session: date, what was done, what was learned.
+
+### 2026-10-18
+
+- UI redesign stage 1 (ADR-094): header, ribbon, icon tree, light and dark theme, floating viewer tools with a view cube and axis triad, display styles, and a cut plane that sections the geometry and mesh as well as results. Learned: a checkbox drawn as a tool must lie over the whole tool (opacity 0) so Playwright's click lands on it.
 
 ### 2026-10-17
 

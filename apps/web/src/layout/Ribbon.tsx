@@ -382,7 +382,7 @@ export function Ribbon(props: RibbonProps) {
               <Command
                 icon={Play}
                 label="Solve"
-                title={props.solve.disabled ?? "Solve on the small machine with the stop limit at 3 × the estimate"}
+                title={props.solve.disabled ?? "Solve on the recommended machine size with the stop limit at 3 × the estimate"}
                 disabled={props.solve.disabled !== null}
                 primary
                 onClick={props.solve.run}
