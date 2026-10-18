@@ -63,6 +63,11 @@ vi.mock("../src/viewer/ModelView", () => ({
     }
     setCamera() {}
     resetView() {}
+    fitView() {}
+    setDisplayStyle() {}
+    onCamera() {
+      return () => {};
+    }
     dispose() {}
   },
 }));
@@ -204,6 +209,8 @@ function saves() {
 }
 
 const tree = () => within(screen.getByRole("navigation", { name: "Simulation tree" }));
+// The save state and the unit system sit in the header since the UI redesign (ADR-094).
+const header = () => within(screen.getByRole("banner"));
 const settings = () => within(screen.getByRole("complementary", { name: "Settings" }));
 
 beforeEach(() => {
@@ -276,7 +283,7 @@ describe("setup tree", () => {
       },
     ]);
     expect(sent.at(-1)?.bodies).toEqual([{ tag: 1, material: "material-1" }]);
-    expect(await tree().findByText("All changes saved.")).toBeTruthy();
+    expect(await header().findByText("All changes saved.")).toBeTruthy();
   });
 
   it("keeps an out-of-range Poisson's ratio out of the spec and says why", async () => {
@@ -828,7 +835,7 @@ describe("setup tree", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Materials, incomplete" }));
     fireEvent.click(settings().getByRole("button", { name: "Add an empty material" }));
-    expect(await tree().findByText("Not saved: The setup cannot be saved: something.")).toBeTruthy();
+    expect(await header().findByText("Not saved: The setup cannot be saved: something.")).toBeTruthy();
   });
 });
 
@@ -1674,7 +1681,7 @@ describe("run", () => {
 });
 
 describe("unit system", () => {
-  const unitSystem = () => tree().getByLabelText("Unit system") as HTMLSelectElement;
+  const unitSystem = () => header().getByLabelText("Unit system") as HTMLSelectElement;
 
   function patches() {
     const sent: unknown[] = [];
@@ -1813,7 +1820,7 @@ describe("unit system", () => {
     render(<App />);
     await waitFor(() => expect(unitSystem().value).toBe("metric-mm"));
     fireEvent.change(unitSystem(), { target: { value: "us-in" } });
-    expect(await tree().findByText("The unit system was not changed: 'us-in' is not a unit system.")).toBeTruthy();
+    expect(await header().findByText("The unit system was not changed: 'us-in' is not a unit system.")).toBeTruthy();
     expect(unitSystem().value).toBe("metric-mm");
   });
 });

@@ -15,10 +15,15 @@
 // section between the undeformed shape and the shape drawn, through the opposite one, in the
 // vertex shader, so a frame moves nothing on the CPU. For report figures (M7.2, ADR-011) it can
 // draw arrows (a load's direction), frame the model from a chosen direction and hand over the
-// picture with where its markers and axes fall, to be finished on a 2D canvas.
+// picture with where its markers and axes fall, to be finished on a 2D canvas. The interactive
+// viewer (UI redesign, ADR-094) also draws on a transparent canvas over a gradient, tells
+// listeners where the camera points (the view cube and axis triad), offers display styles, and
+// with a cut plane fills the cut with a cap and outlines the plane, so a geometry or mesh can be
+// sectioned before it is solved.
 
 import {
   AmbientLight,
+  BackSide,
   Box3,
   BufferAttribute,
   BufferGeometry,
@@ -28,6 +33,8 @@ import {
   DataTexture,
   DirectionalLight,
   DoubleSide,
+  HemisphereLight,
+  LineLoop,
   LineBasicMaterial,
   LineSegments,
   Group,
@@ -79,7 +86,16 @@ const COLOURS = {
   elementEdge: new Color("#343a40"),
   edge: new Color("#212529"),
   arrow: new Color("#c92a2a"),
+  cap: new Color("#d9822b"),
+  plane: new Color("#2563eb"),
 };
+
+/** How the interactive viewer draws the model (UI redesign): shaded with its outlines or element
+ * edges, shaded alone, see-through, or its lines alone with hidden lines removed. */
+export type DisplayStyle = "shadedEdges" | "shaded" | "transparent" | "hiddenLines";
+
+/** Which way the camera looks, as its right, up and back unit vectors in world axes. */
+export type CameraBasis = { right: [number, number, number]; up: [number, number, number]; back: [number, number, number] };
 
 /** Lines drawn over the faces: the face outlines of a geometry, or every element edge of a mesh. */
 export type Edges = "outlines" | "elements";
@@ -204,6 +220,14 @@ export class ModelView {
   private swing: Float32Array | null = null;
   private swingFrame = 0;
   private arrows: Group[] = [];
+  /** Whether this is the interactive viewer rather than a report figure's scene. */
+  private readonly interactive: boolean;
+  private style: DisplayStyle = "shadedEdges";
+  /** Back faces drawn in one colour where the cut plane opens the model (interactive only). */
+  private cap: Mesh<BufferGeometry, MeshBasicMaterial> | null = null;
+  /** The cut plane's outline and faint fill (interactive only). */
+  private planeShown: Group | null = null;
+  private readonly cameraListeners = new Set<(basis: CameraBasis) => void>();
 
   /** Throws if the browser cannot create a WebGL context. */
   constructor(
@@ -211,15 +235,24 @@ export class ModelView {
     private readonly events: ModelViewEvents,
     options: ModelViewOptions = {},
   ) {
-    this.renderer = new WebGLRenderer({ antialias: true });
+    this.interactive = options.background === undefined;
+    // The interactive viewer draws over the gradient behind its canvas; a figure on its colour.
+    this.renderer = new WebGLRenderer({ antialias: true, alpha: this.interactive, preserveDrawingBuffer: false });
     this.renderer.setPixelRatio(options.pixelRatio ?? window.devicePixelRatio);
-    this.renderer.setClearColor(options.background === undefined ? COLOURS.background : new Color(options.background));
+    if (this.interactive) this.renderer.setClearColor(COLOURS.background, 0);
+    else this.renderer.setClearColor(new Color(options.background));
     container.appendChild(this.renderer.domElement);
     this.markerLayer = document.createElement("div");
     this.markerLayer.className = "viewer-markers";
     container.appendChild(this.markerLayer);
 
-    this.scene.add(new AmbientLight(0xffffff, 1.2));
+    if (this.interactive) {
+      // Sky and ground light give the interactive model some depth; figures keep the flat light.
+      this.scene.add(new AmbientLight(0xffffff, 0.8));
+      this.scene.add(new HemisphereLight(0xffffff, 0x8a94a6, 0.9));
+    } else {
+      this.scene.add(new AmbientLight(0xffffff, 1.2));
+    }
     // The key light follows the camera, so the side the user looks at is always lit.
     const key = new DirectionalLight(0xffffff, 1.8);
     key.position.set(0.5, 1, 1);
@@ -292,6 +325,7 @@ export class ModelView {
 
     this.edgesKind = edges;
     this.drawOutlines();
+    this.applyStyle();
     this.paintAll();
     if (keepView) this.requestRender();
     else this.resetView();
@@ -317,6 +351,28 @@ export class ModelView {
     this.controls.minDistance = radius / 50;
     this.controls.maxDistance = distance * 20;
     this.controls.update();
+    this.requestRender();
+  }
+
+  /** Frames the whole model, or the faces left shown, keeping the direction the camera looks from. */
+  fitView(): void {
+    const from = this.camera.position.clone().sub(this.controls.target);
+    if (from.lengthSq() === 0) this.resetView();
+    else this.resetView([from.x, from.y, from.z]);
+  }
+
+  /** Calls `listener` with the camera's direction after every redraw, and once now; returns a
+   * function that stops it (the view cube and axis triad follow the camera this way). */
+  onCamera(listener: (basis: CameraBasis) => void): () => void {
+    this.cameraListeners.add(listener);
+    listener(this.basis());
+    return () => this.cameraListeners.delete(listener);
+  }
+
+  /** Draws the model shaded with its lines, shaded alone, see-through, or as lines alone. */
+  setDisplayStyle(style: DisplayStyle): void {
+    this.style = style;
+    this.applyStyle();
     this.requestRender();
   }
 
@@ -455,6 +511,7 @@ export class ModelView {
       };
       this.section = new Mesh(geometry, material);
       this.scene.add(this.section);
+      if (this.interactive) this.drawCap(cut.plane);
     }
     this.requestRender();
   }
@@ -547,6 +604,7 @@ export class ModelView {
     this.controls.dispose();
     this.clearModel();
     this.bands?.dispose();
+    this.cameraListeners.clear();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.markerLayer.remove();
@@ -650,6 +708,7 @@ export class ModelView {
     const colour = this.edgesKind === "elements" ? COLOURS.elementEdge : COLOURS.outline;
     this.outlines = new LineSegments(lines, this.clipped(new LineBasicMaterial({ color: colour }), false, true));
     this.scene.add(this.outlines);
+    this.outlines.visible = this.style !== "shaded";
   }
 
   /** The sphere around the shown faces' vertices (the whole model when none is hidden). */
@@ -691,6 +750,88 @@ export class ModelView {
       this.section.material.dispose();
     }
     this.section = null;
+    if (this.cap) {
+      // The cap shares the surface's geometry, which setMesh disposes.
+      this.scene.remove(this.cap);
+      this.cap.material.dispose();
+    }
+    this.cap = null;
+    if (this.planeShown) {
+      this.scene.remove(this.planeShown);
+      for (const part of this.planeShown.children) {
+        if (!(part instanceof Mesh || part instanceof LineLoop)) continue;
+        part.geometry.dispose();
+        (part.material as Material).dispose();
+      }
+    }
+    this.planeShown = null;
+  }
+
+  /**
+   * Fills the opening the cut plane makes in the model with the back faces seen through it, in one
+   * colour, and outlines the plane: a closed body then reads as solid where it is cut, before
+   * the section (results only) is drawn over it.
+   */
+  private drawCap(plane: Plane): void {
+    const surface = this.surface;
+    if (!surface) return;
+    const material = this.clipped(new MeshBasicMaterial({ color: COLOURS.cap, side: BackSide }), true, true);
+    this.cap = new Mesh(surface.geometry, material);
+    this.scene.add(this.cap);
+    const sphere = surface.geometry.boundingSphere;
+    if (!sphere) return;
+    // A square on the plane around the model, a little larger than it.
+    const normal = new Vector3(...plane.normal);
+    const size = sphere.radius * 1.25;
+    const centre = sphere.center.clone().addScaledVector(normal, plane.offset - normal.dot(sphere.center));
+    const along = Math.abs(normal.y) > 0.9 ? new Vector3(1, 0, 0) : new Vector3(0, 1, 0);
+    const u = new Vector3().crossVectors(normal, along).normalize().multiplyScalar(size);
+    const v = new Vector3().crossVectors(normal, u).normalize().multiplyScalar(size);
+    const corners = [
+      centre.clone().add(u).add(v),
+      centre.clone().sub(u).add(v),
+      centre.clone().sub(u).sub(v),
+      centre.clone().add(u).sub(v),
+    ];
+    const outline = new BufferGeometry().setFromPoints(corners);
+    const fill = new BufferGeometry().setFromPoints(corners);
+    fill.setIndex([0, 1, 2, 0, 2, 3]);
+    const group = new Group();
+    group.add(new LineLoop(outline, new LineBasicMaterial({ color: COLOURS.plane, transparent: true, opacity: 0.6 })));
+    group.add(
+      new Mesh(
+        fill,
+        new MeshBasicMaterial({ color: COLOURS.plane, transparent: true, opacity: 0.06, side: DoubleSide, depthWrite: false }),
+      ),
+    );
+    this.planeShown = group;
+    this.scene.add(group);
+  }
+
+  /** Puts the display style on the surface and its lines. */
+  private applyStyle(): void {
+    const surface = this.surface;
+    if (surface) {
+      const material = surface.material;
+      const transparent = this.style === "transparent";
+      material.transparent = transparent;
+      material.opacity = transparent ? 0.35 : 1;
+      material.depthWrite = !transparent;
+      // Lines alone: the faces still hide the lines behind them, but draw no colour.
+      material.colorWrite = this.style !== "hiddenLines";
+      material.needsUpdate = true;
+    }
+    if (this.outlines) this.outlines.visible = this.style !== "shaded";
+  }
+
+  /** The camera's right, up and back directions in world axes. */
+  private basis(): CameraBasis {
+    const e = this.camera.matrixWorld.elements;
+    return {
+      right: [e[0] ?? 1, e[1] ?? 0, e[2] ?? 0],
+      up: [e[4] ?? 0, e[5] ?? 1, e[6] ?? 0],
+      back: [e[8] ?? 0, e[9] ?? 0, e[10] ?? 1],
+    };
   }
 
   private clearArrows(): void {
@@ -742,6 +883,10 @@ export class ModelView {
       this.frame = 0;
       this.renderer.render(this.scene, this.camera);
       this.placeMarkers();
+      if (this.cameraListeners.size > 0) {
+        const basis = this.basis();
+        for (const listener of this.cameraListeners) listener(basis);
+      }
     });
   }
 

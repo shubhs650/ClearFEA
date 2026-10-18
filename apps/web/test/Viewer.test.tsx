@@ -80,6 +80,11 @@ vi.mock("../src/viewer/ModelView", () => ({
       this.record.cameras.push(camera);
     }
     resetView() {}
+    fitView() {}
+    setDisplayStyle() {}
+    onCamera() {
+      return () => {};
+    }
     dispose() {
       this.record.disposed = true;
     }

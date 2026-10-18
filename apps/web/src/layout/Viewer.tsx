@@ -17,7 +17,9 @@
 // (M6.2, ADR-071) shows the shape of one mode, coloured by its relative displacement and drawn
 // deformed with its largest displacement at a tenth of the model's size, and can swing it.
 // Through a share link (M8.7, ADR-083) it draws a run's results read-only, with the run's files
-// read through the link instead of the owner's routes.
+// read through the link instead of the owner's routes. Since the UI redesign (ADR-094) the
+// controls float over the model: a view cube and axis triad, a toolbar with display styles, and
+// a cut plane that sections the geometry and mesh too (filled with a cap) as well as results.
 
 import type {
   Deformation as DeformationName,
@@ -33,6 +35,16 @@ import type {
   ViewSettings,
 } from "@clearfea/spec";
 import { bodyLabels as labelBodies } from "@clearfea/spec";
+import {
+  Boxes,
+  Crosshair,
+  Eye,
+  Layers3,
+  Maximize,
+  Paintbrush,
+  Scissors,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchDisplayMesh, fetchTopology } from "../api/geometries";
 import { fetchMeshDisplay } from "../api/meshes";
@@ -42,7 +54,8 @@ import { useViews } from "../setup/useViews";
 import { fromSi } from "../units/convert";
 import { useSystemUnit } from "../units/system";
 import { type DisplayMesh, DisplayMeshError, parseDisplayMesh } from "../viewer/displayMesh";
-import { type Marker, ModelView } from "../viewer/ModelView";
+import { type DisplayStyle, type Marker, ModelView } from "../viewer/ModelView";
+import { AxisTriad, type CameraSubscribe, ViewCube } from "../viewer/ViewCube";
 import {
   type ResultField,
   autoScale,
@@ -596,20 +609,69 @@ export function boxOf(mesh: VolumeMesh): { lo: number[]; hi: number[] } {
   return { lo, hi };
 }
 
+/** The box around a display mesh's vertices, in metres: where a cut plane through the geometry
+ * or mesh lies (the run's volume mesh decides for results). */
+export function boxOfPositions(positions: Float32Array): { lo: number[]; hi: number[] } {
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < positions.length; i++) {
+    const v = positions[i] ?? 0;
+    const axis = i % 3;
+    if (v < (lo[axis] ?? v)) lo[axis] = v;
+    if (v > (hi[axis] ?? v)) hi[axis] = v;
+  }
+  return { lo, hi };
+}
+
+const DISPLAY_STYLES: { style: DisplayStyle; label: string }[] = [
+  { style: "shadedEdges", label: "Shaded with edges" },
+  { style: "shaded", label: "Shaded" },
+  { style: "transparent", label: "See-through" },
+  { style: "hiddenLines", label: "Hidden lines" },
+];
+
+/** The display styles, one radio each (UI redesign). */
+function StylePanel({ style, onChange }: { style: DisplayStyle; onChange: (next: DisplayStyle) => void }) {
+  return (
+    <section className="viewer-panel viewer-styles" aria-label="Display style">
+      <div className="viewer-panel-title">Display style</div>
+      {DISPLAY_STYLES.map((option) => (
+        <label key={option.style} className="viewer-option">
+          <input
+            type="radio"
+            name="display-style"
+            checked={style === option.style}
+            onChange={() => onChange(option.style)}
+          />
+          {option.label}
+        </label>
+      ))}
+    </section>
+  );
+}
+
 function CutPanel({
   setting,
   onChange,
+  onClose,
   where,
   status,
 }: {
   setting: CutSetting;
   onChange: (next: CutSetting) => void;
+  onClose: () => void;
   /** The plane's position along its axis, in display units. */
   where: string | null;
   status: string;
 }) {
   return (
-    <section className="viewer-cut" aria-label="Cut plane">
+    <section className="viewer-panel viewer-cut" aria-label="Cut plane">
+      <div className="viewer-panel-title">
+        Section
+        <button type="button" className="viewer-panel-close" title="Remove the cut plane" aria-label="Remove the cut plane" onClick={onClose}>
+          <X size={14} aria-hidden="true" />
+        </button>
+      </div>
       <div className="viewer-cut-row">
         <span>Across</span>
         {AXES.map((name, axis) => (
@@ -668,6 +730,7 @@ function BodiesPanel({
   const shownCount = bodies.length - hidden.size;
   return (
     <section className="viewer-panel viewer-bodies" aria-label="Bodies">
+      <div className="viewer-panel-title">Bodies</div>
       <ul>
         {bodies.map((tag) => {
           const shown = !hidden.has(tag);
@@ -722,6 +785,7 @@ function ViewsPanel({
   const trimmed = name.trim();
   return (
     <section className="viewer-panel viewer-views" aria-label="Saved views">
+      <div className="viewer-panel-title">Saved views</div>
       {list.kind === "loading" && <span className="viewer-hint">Loading the saved views…</span>}
       {list.kind === "failed" && <span className="form-problem">{list.problem}</span>}
       {list.kind === "ok" && list.views.length === 0 && (
@@ -816,7 +880,10 @@ export function Viewer({
   const [cutSetting, setCutSetting] = useState<CutSetting | null>(null);
   /** Hidden bodies of the geometry shown (M3.6). */
   const [hiddenBodies, setHiddenBodies] = useState<ReadonlySet<number>>(new Set());
-  const [panel, setPanel] = useState<"bodies" | "views" | null>(null);
+  const [panel, setPanel] = useState<"bodies" | "views" | "style" | null>(null);
+  const [style, setStyle] = useState<DisplayStyle>("shadedEdges");
+  // Set once the scene exists, so the view cube and triad can follow its camera.
+  const [subscribe, setSubscribe] = useState<CameraSubscribe | null>(null);
   // Loaded when the panel opens, so opening a simulation asks nothing more of the API.
   const views = useViews(panel === "views" ? simulationId : null, onSignedOut);
   const areaUnit = useSystemUnit("area");
@@ -845,9 +912,11 @@ export function Viewer({
       return;
     }
     view.current = created;
+    setSubscribe(() => (listener: Parameters<CameraSubscribe>[0]) => created.onCamera(listener));
     return () => {
       created.dispose();
       view.current = null;
+      setSubscribe(null);
     };
   }, []);
 
@@ -1040,6 +1109,25 @@ export function Viewer({
     view.current?.setMarkers(markersOf(contour, probes, extremes));
   }, [model, contour, probes, extremes]);
 
+  // A cut plane through the geometry or mesh (UI redesign): no values, just the cap that fills
+  // the opening, placed across the display mesh's box. After setMesh, which clears it.
+  const surfaceBox = useMemo(() => (model === null ? null : boxOfPositions(model.mesh.positions)), [model]);
+  const surfacePlane = useMemo(
+    () => (cutSetting === null || surfaceBox === null || model?.results ? null : planeOf(cutSetting, surfaceBox)),
+    [cutSetting, surfaceBox, model],
+  );
+  useEffect(() => {
+    if (!model || model.results) return;
+    view.current?.setCut(
+      surfacePlane === null
+        ? null
+        : { plane: surfacePlane, positions: new Float32Array(0), indices: new Uint32Array(0), coordinates: new Float32Array(0) },
+    );
+  }, [model, surfacePlane]);
+  useEffect(() => {
+    view.current?.setDisplayStyle(style);
+  }, [style]);
+
   // Edges are drawn over the geometry itself, never over a mesh or results; setMesh clears them.
   // Edges of hidden bodies only are left out with them (M3.6).
   const allEdges = pickEdges && model !== null && model.analysis === null && model.results === null ? model.edges : null;
@@ -1071,6 +1159,11 @@ export function Viewer({
     const onKey = (event: KeyboardEvent) => {
       const now = latest.current;
       if (event.key === "Escape" && (now.pickEdges ? now.edgeSelection : now.selection).size > 0) clear();
+      // F frames the model, as in most CAD tools; not while the user types in a field.
+      const typing = event.target instanceof HTMLElement && event.target.closest("input, select, textarea") !== null;
+      if (!typing && !event.ctrlKey && !event.metaKey && !event.altKey && (event.key === "f" || event.key === "F")) {
+        view.current?.fitView();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -1147,12 +1240,18 @@ export function Viewer({
   const picking = edges !== null ? { one: "edge", many: "edges" } : { one: "face", many: "faces" };
   const sorted = [...(edges !== null ? edgeSelection : selection)].sort((a, b) => a - b);
 
+  const sectionWhere = (box: { lo: number[]; hi: number[] } | null, at: typeof plane, unit: string) =>
+    at === null || box === null || cutSetting === null
+      ? null
+      : `${AXES[cutSetting.axis]} = ${shortNumber(fromSi(at.offset * (at.normal[cutSetting.axis] ?? 1), unit, "length"))} ${unit}`;
+  const toggle = (which: "bodies" | "views" | "style") => setPanel(panel === which ? null : which);
+
   return (
     <main className="pane pane-viewer" aria-label="3D viewer">
       <div className="viewer-canvas" ref={canvasHost} hidden={!shown} />
       {message !== null && (
         <p
-          className={load.kind === "failed" || typeof contour === "string" ? "form-problem" : "pane-empty"}
+          className={`viewer-message ${load.kind === "failed" || typeof contour === "string" ? "form-problem" : "pane-empty"}`}
           role={load.kind === "failed" || typeof contour === "string" ? "alert" : undefined}
         >
           {message}
@@ -1160,110 +1259,150 @@ export function Viewer({
       )}
       {shown && (
         <>
-          <div className="viewer-hover" aria-live="polite">
-            {hovered !== null ? describe(hovered) : ""}
-          </div>
-          {model?.analysis && (
-            <div className="viewer-mesh">
-              Mesh: {count(model.analysis.elementCount)} elements, {count(model.analysis.nodeCount)} nodes
+          <div className="viewer-chips">
+            <div className="viewer-hover" aria-live="polite">
+              {hovered !== null ? describe(hovered) : ""}
             </div>
-          )}
-          {legend && <Legend contour={legend} />}
-          <div className="viewer-toolbar">
-            {legend && (
-              <label>
-                <input type="checkbox" checked={extremes} onChange={(event) => setExtremes(event.target.checked)} />
-                Min and max
-              </label>
+            {model?.analysis && (
+              <div className="viewer-mesh">
+                Mesh: {count(model.analysis.elementCount)} elements, {count(model.analysis.nodeCount)} nodes
+              </div>
             )}
+          </div>
+          {legend && <Legend contour={legend} />}
+          <ViewCube
+            subscribe={subscribe}
+            onLookFrom={(from) => view.current?.resetView(from)}
+            onIsometric={() => view.current?.resetView()}
+          />
+          <AxisTriad subscribe={subscribe} />
+          <div className="viewer-toolbar" role="toolbar" aria-label="View tools" aria-orientation="vertical">
+            <button type="button" className="tool" title="Isometric view of the whole model (F frames it from where you look)" onClick={() => view.current?.resetView()}>
+              <Maximize size={18} aria-hidden="true" />
+              <span className="tool-label">Reset view</span>
+            </button>
+            <button
+              type="button"
+              className="tool"
+              aria-pressed={panel === "style"}
+              title="Shaded, see-through or lines alone"
+              onClick={() => toggle("style")}
+            >
+              <Paintbrush size={18} aria-hidden="true" />
+              <span className="tool-label">Style</span>
+            </button>
+            <label className="tool tool-toggle" title="Cut the model with a plane and look inside">
+              <input
+                type="checkbox"
+                className="tool-check"
+                checked={cutSetting !== null}
+                onChange={(event) => setCutSetting(event.target.checked ? { axis: 0, at: 0.5, flipped: false } : null)}
+              />
+              <Scissors size={18} aria-hidden="true" />
+              <span className="tool-label">Cut plane</span>
+            </label>
             {legend && (
-              <label>
+              <label className="tool tool-toggle" title="Mark the smallest and largest value">
                 <input
                   type="checkbox"
-                  checked={cutSetting !== null}
-                  onChange={(event) => setCutSetting(event.target.checked ? { axis: 0, at: 0.5, flipped: false } : null)}
+                  className="tool-check"
+                  checked={extremes}
+                  onChange={(event) => setExtremes(event.target.checked)}
                 />
-                Cut plane
+                <Crosshair size={18} aria-hidden="true" />
+                <span className="tool-label">Min and max</span>
               </label>
             )}
             {bodyList !== null && (
               <button
                 type="button"
+                className="tool"
                 aria-pressed={panel === "bodies"}
-                onClick={() => setPanel(panel === "bodies" ? null : "bodies")}
+                title="Show or hide bodies"
+                onClick={() => toggle("bodies")}
               >
-                Bodies{hiddenBodies.size > 0 ? ` (${bodyList.length - hiddenBodies.size} of ${bodyList.length})` : ""}
+                <Boxes size={18} aria-hidden="true" />
+                <span className="tool-label">
+                  Bodies{hiddenBodies.size > 0 ? ` (${bodyList.length - hiddenBodies.size} of ${bodyList.length})` : ""}
+                </span>
               </button>
             )}
             {simulationId !== null && (
               <button
                 type="button"
+                className="tool"
                 aria-pressed={panel === "views"}
-                onClick={() => setPanel(panel === "views" ? null : "views")}
+                title="Save the camera, hidden bodies and result display, and go back to them"
+                onClick={() => toggle("views")}
               >
-                Views
+                <Eye size={18} aria-hidden="true" />
+                <span className="tool-label">Views</span>
               </button>
             )}
-            <button type="button" onClick={() => view.current?.resetView()}>
-              Reset view
-            </button>
           </div>
           <div className="viewer-panels">
-          {panel === "bodies" && bodyList !== null && (
-            <BodiesPanel bodies={bodyList} labels={model?.bodyLabels ?? new Map()} hidden={hiddenBodies} onChange={setHiddenBodies} />
-          )}
-          {panel === "views" && simulationId !== null && (
-            <ViewsPanel list={views.list} onApply={applyView} onSave={saveView} onDelete={deleteView} />
-          )}
-          {legend && cutSetting !== null && (
-            <CutPanel
-              setting={cutSetting}
-              onChange={setCutSetting}
-              where={
-                plane === null || volumeBox === null
-                  ? null
-                  : `${AXES[cutSetting.axis]} = ${shortNumber(
-                      fromSi(plane.offset * (plane.normal[cutSetting.axis] ?? 1), units?.length ?? lengthUnit, "length"),
-                    )} ${units?.length ?? lengthUnit}`
-              }
-              status={
-                volume?.problem
-                  ? volume.problem
-                  : section === null || legend.cut === null || sectionShape === null
-                    ? "Loading the mesh and the values inside it…"
-                    : section.triangles.length === 0
-                      ? "The plane misses the model. Move it with the slider."
-                      : `Cuts ${count(section.elementsCut)} elements.`
-              }
-            />
-          )}
+            {panel === "style" && <StylePanel style={style} onChange={setStyle} />}
+            {panel === "bodies" && bodyList !== null && (
+              <BodiesPanel bodies={bodyList} labels={model?.bodyLabels ?? new Map()} hidden={hiddenBodies} onChange={setHiddenBodies} />
+            )}
+            {panel === "views" && simulationId !== null && (
+              <ViewsPanel list={views.list} onApply={applyView} onSave={saveView} onDelete={deleteView} />
+            )}
+            {cutSetting !== null && (
+              <CutPanel
+                setting={cutSetting}
+                onChange={setCutSetting}
+                onClose={() => setCutSetting(null)}
+                where={
+                  legend
+                    ? sectionWhere(volumeBox, plane, units?.length ?? lengthUnit)
+                    : sectionWhere(surfaceBox, surfacePlane, lengthUnit)
+                }
+                status={
+                  !legend
+                    ? "Faces inside can be picked through the cut. Results show their values on it."
+                    : volume?.problem
+                      ? volume.problem
+                      : section === null || legend.cut === null || sectionShape === null
+                        ? "Loading the mesh and the values inside it…"
+                        : section.triangles.length === 0
+                          ? "The plane misses the model. Move it with the slider."
+                          : `Cuts ${count(section.elementsCut)} elements.`
+                }
+              />
+            )}
           </div>
-          {legend && model && (
-            <Probes
-              contour={legend}
-              probes={probes}
-              positions={model.mesh.positions}
-              lengthUnit={units?.length ?? lengthUnit}
-              onClear={() => setProbes([])}
-            />
-          )}
-          {!legend && (
-            <section className="viewer-selection" aria-label={`Selected ${picking.many}`}>
-              {sorted.length === 0 ? (
-                <span className="viewer-hint">Click {picking.one === "edge" ? "an edge" : "a face"} to select it. Drag to orbit, scroll to zoom.</span>
-              ) : (
-                <>
-                  <span>
-                    {sorted.length === 1 ? `1 ${picking.one} selected` : `${sorted.length} ${picking.many} selected`}:{" "}
-                    {sorted.join(", ")}
+          <div className="viewer-footer">
+            {legend && model && (
+              <Probes
+                contour={legend}
+                probes={probes}
+                positions={model.mesh.positions}
+                lengthUnit={units?.length ?? lengthUnit}
+                onClear={() => setProbes([])}
+              />
+            )}
+            {!legend && (
+              <section className="viewer-selection" aria-label={`Selected ${picking.many}`}>
+                {sorted.length === 0 ? (
+                  <span className="viewer-hint">
+                    Click {picking.one === "edge" ? "an edge" : "a face"} to select it. Drag to orbit, scroll to zoom.
                   </span>
-                  <button type="button" onClick={clear}>
-                    Clear
-                  </button>
-                </>
-              )}
-            </section>
-          )}
+                ) : (
+                  <>
+                    <Layers3 size={14} aria-hidden="true" />
+                    <span>
+                      {sorted.length === 1 ? `1 ${picking.one} selected` : `${sorted.length} ${picking.many} selected`}:{" "}
+                      {sorted.join(", ")}
+                    </span>
+                    <button type="button" onClick={clear}>
+                      Clear
+                    </button>
+                  </>
+                )}
+              </section>
+            )}
+          </div>
         </>
       )}
     </main>

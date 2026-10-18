@@ -149,7 +149,7 @@ function DisplayUnits({
 }
 
 /** The headings of the quantity list, in order. */
-const QUANTITY_GROUPS: readonly QuantityGroup[] = [
+export const QUANTITY_GROUPS: readonly QuantityGroup[] = [
   "Displacement",
   "Stress",
   "Strain",
@@ -373,7 +373,7 @@ export type ResultChoice = { quantity: Quantity; deformation: Deformation; mode:
 /** A modal run's mode shape has no true scale (M6.2). */
 const MODE_DEFORMATIONS: readonly Deformation[] = ["auto", "undeformed"];
 
-const DEFORMATIONS: Record<Deformation, string> = {
+export const DEFORMATIONS: Record<Deformation, string> = {
   auto: "Deformed, exaggerated to be seen",
   true: "Deformed, true scale",
   undeformed: "Undeformed",
