@@ -893,14 +893,33 @@ export class ModelView {
     });
   }
 
-  /** Moves each marker's element over its vertex as drawn now; hides it behind the camera. */
+  /** Moves each marker's element over its vertex as drawn now; hides it behind the camera.
+   * A label that would overlap one placed before it moves below or above its dot instead, so
+   * the minimum and maximum stay readable where they lie close together. */
   private placeMarkers(): void {
+    const placed: { left: number; top: number; right: number; bottom: number }[] = [];
     for (const { marker, element } of this.markers) {
       const at = this.markerAt(marker);
       element.hidden = at === null;
       if (at === null) continue;
       element.style.left = `${at.x}px`;
       element.style.top = `${at.y}px`;
+      const label = element.firstElementChild;
+      if (!(label instanceof HTMLElement)) continue;
+      const width = label.offsetWidth;
+      const height = label.offsetHeight;
+      const offsets = [-24, 8, -24 - (height + 4), 8 + height + 4];
+      let top = offsets[0] ?? -24;
+      for (const offset of offsets) {
+        const box = { left: at.x + 9, top: at.y + offset, right: at.x + 9 + width, bottom: at.y + offset + height };
+        const clash = placed.some(
+          (other) => box.left < other.right && other.left < box.right && box.top < other.bottom && other.top < box.bottom,
+        );
+        top = offset;
+        if (!clash) break;
+      }
+      label.style.top = `${top}px`;
+      placed.push({ left: at.x + 9, top: at.y + top, right: at.x + 9 + width, bottom: at.y + top + height });
     }
   }
 
