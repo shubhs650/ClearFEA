@@ -7,6 +7,7 @@ import {
   type LocalMeshScope,
   type LocalMeshSize,
   DEFAULT_SOLVER,
+  DEFAULT_STOP_MULTIPLIER,
   elementLimitProblem,
   preRunProblems,
   specRunKind,
@@ -20,9 +21,12 @@ import { fetchSession, signOut } from "./api/session";
 import { WalletPage } from "./billing/WalletPage";
 import { GeometryPanel } from "./geometry/GeometryPanel";
 import { TestJobs } from "./jobs/TestJobs";
+import { AppHeader } from "./layout/AppHeader";
+import { Ribbon } from "./layout/Ribbon";
 import { SettingsPanel } from "./layout/SettingsPanel";
 import { SimulationTree } from "./layout/SimulationTree";
 import { StatusBar } from "./layout/StatusBar";
+import { useTheme } from "./layout/theme";
 import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { BodiesPanel, BodyPanel } from "./setup/BodyPanels";
@@ -32,7 +36,7 @@ import { MaterialChooser } from "./setup/MaterialLibrary";
 import { LocalSizePanel, MeshPanel } from "./setup/MeshPanel";
 import { useDisplayUnits } from "./setup/displayUnits";
 import { ReportPanel } from "./setup/ReportPanel";
-import { type ResultChoice, type RunBlocker, RunPanel } from "./setup/RunPanel";
+import { DEFORMATIONS, QUANTITY_GROUPS, type ResultChoice, type RunBlocker, RunPanel } from "./setup/RunPanel";
 import { useEstimate } from "./setup/useEstimate";
 import {
   addLoad,
@@ -57,7 +61,15 @@ import { useMesh } from "./setup/useMesh";
 import { useRun } from "./setup/useRun";
 import { useSimulation } from "./setup/useSimulation";
 import { UnitSystemField } from "./units/QuantityInput";
-import { runChoice } from "./viewer/resultFields";
+import type { Deformation } from "./layout/Viewer";
+import {
+  isModalRun,
+  isThermalRun,
+  QUANTITIES,
+  type Quantity,
+  runChoice,
+  runQuantities,
+} from "./viewer/resultFields";
 import { UNIT_SYSTEMS, UnitSystemProvider } from "./units/system";
 import { useProject } from "./units/useProject";
 
@@ -77,8 +89,9 @@ function groupOf(spec: SimulationSpec, id: string): Group | null {
 }
 
 /**
- * Sign-in form until a user is signed in, then the layout shell: tree on the left,
- * viewer in the centre, settings on the right, status bar along the bottom.
+ * Sign-in form until a user is signed in, then the layout shell: the header and ribbon across
+ * the top (UI redesign, ADR-094), tree on the left, viewer in the centre, settings on the right,
+ * status bar along the bottom.
  */
 export function App() {
   const [session, setSession] = useState<SessionState>({ kind: "checking" });
@@ -91,6 +104,10 @@ export function App() {
   const [geometryRefresh, setGeometryRefresh] = useState(0);
   // The wallet page (M8.1), drawn over the workbench so the workbench keeps its state.
   const [walletOpen, setWalletOpen] = useState(false);
+  const [theme, setTheme] = useTheme();
+  // The side panels can be folded away to give the viewer the whole width.
+  const [treeShown, setTreeShown] = useState(true);
+  const [settingsShown, setSettingsShown] = useState(true);
   const [resultChoice, setResultChoice] = useState<ResultChoice>({
     quantity: "vonMises",
     deformation: "auto",
@@ -449,6 +466,60 @@ export function App() {
     return null;
   }
 
+  /** Why the mesh cannot be generated from the ribbon now, or null when it can. */
+  function generateBlocker(): string | null {
+    if (spec === null) return "Start the setup first.";
+    if (spec.mesh.size === null) return "Enter the global size under Mesh first.";
+    if (simulation.save.kind !== "saved") return "Wait until all changes are saved.";
+    if (meshes.requesting || mesh?.status === "meshing") return "The mesh is being made.";
+    return null;
+  }
+
+  const solving = run?.status === "solving";
+
+  /** Shows the run's results with another contour or shape, opening the run if it is not open. */
+  function showResult(next: Partial<ResultChoice>) {
+    setResultChoice((was) => ({ ...was, ...next }));
+    if (selected !== "run") select("run");
+  }
+
+  const resultControls =
+    run?.status === "succeeded" && !isModalRun(run) ? (
+      <>
+        <label className="ribbon-field">
+          <span>Contour</span>
+          <select value={shownChoice.quantity} onChange={(event) => showResult({ quantity: event.target.value as Quantity })}>
+            {QUANTITY_GROUPS.filter((group) => runQuantities(run).some((q) => QUANTITIES[q].group === group)).map((group) => (
+              <optgroup key={group} label={group}>
+                {runQuantities(run)
+                  .filter((q) => QUANTITIES[q].group === group)
+                  .map((q) => (
+                    <option key={q} value={q}>
+                      {QUANTITIES[q].label}
+                    </option>
+                  ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        {!isThermalRun(run) && (
+          <label className="ribbon-field">
+            <span>Deformation</span>
+            <select
+              value={shownChoice.deformation}
+              onChange={(event) => showResult({ deformation: event.target.value as Deformation })}
+            >
+              {(Object.keys(DEFORMATIONS) as Deformation[]).map((d) => (
+                <option key={d} value={d}>
+                  {DEFORMATIONS[d]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </>
+    ) : null;
+
   if (session.kind !== "signedIn") {
     return (
       <div className="signin-page">
@@ -469,8 +540,11 @@ export function App() {
 
   return (
     <UnitSystemProvider value={unitSystem}>
-    <div className="shell">
-      <SimulationTree
+    <div className={`shell${treeShown ? "" : " shell-no-tree"}${settingsShown ? "" : " shell-no-settings"}`}>
+      <AppHeader
+        geometry={geometry}
+        setup={setup}
+        save={simulation.save}
         units={
           <UnitSystemField
             value={unitSystem}
@@ -480,11 +554,49 @@ export function App() {
             problem={project.problem}
           />
         }
+        theme={theme}
+        onTheme={setTheme}
+        treeShown={treeShown}
+        settingsShown={settingsShown}
+        onToggleTree={() => setTreeShown((was) => !was)}
+        onToggleSettings={() => setSettingsShown((was) => !was)}
+      />
+      <Ribbon
+        selected={showGeometry ? "geometry" : selected}
+        open={spec !== null}
+        analysis={spec?.analysis ?? null}
+        multiBody={(spec?.bodies.length ?? 0) > 1}
+        hasResults={run?.status === "succeeded"}
+        onOpen={(item) => {
+          select(item);
+          setSettingsShown(true);
+        }}
+        onAddMaterial={() => add("materials")}
+        onAddSupport={(type) => add("supports", type)}
+        onAddLoad={(type) => add("loads", type)}
+        onAddLocal={addLocal}
+        generate={{
+          run: () => {
+            select("mesh");
+            void meshes.generate();
+          },
+          disabled: generateBlocker(),
+        }}
+        solve={{
+          run: () => {
+            select("run");
+            void runs.start(undefined, DEFAULT_STOP_MULTIPLIER);
+          },
+          disabled: solving ? "The simulation is solving." : runs.requesting ? "Starting the run…" : runBlockers()[0]?.message ?? null,
+        }}
+        cancel={solving ? () => void runs.cancel() : null}
+        results={resultControls}
+      />
+      <SimulationTree
         geometry={geometry}
         setup={setup}
         bodyLabels={bodyLabels}
         statuses={statuses}
-        save={simulation.save}
         selected={showGeometry ? "geometry" : selected}
         onSelect={select}
         onStart={start}

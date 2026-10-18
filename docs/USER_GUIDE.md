@@ -50,13 +50,13 @@ Only STEP files (`.step`, `.stp`) with solid bodies are taken. Surfaces, shells 
 
 ## 3. The workbench
 
-Choose **Start setup**. The workbench has three columns:
+Choose **Start setup**. Across the top are the header (the file, whether it is saved, the unit system and a light or dark theme) and the **ribbon**, whose tabs Model, Setup, Mesh, Solve and Results hold the main commands: a click on **Fixed** or **Pressure** under Setup, for example, adds that support or load on the faces selected in the viewer. The tab follows the item open in the tree. Below them are three columns:
 
-- **Simulation tree** on the left: Geometry, Analysis, Bodies, Materials, Supports, Loads, Mesh, Run and Report. A green dot means the item is complete; an orange ring means something is missing. Hover over an item to see what.
-- **Viewer** in the middle. Drag to orbit, scroll to zoom, **Reset view** to go back. Hover over a face to see its number, type and area; click it to select it. Click again to unselect, or use **Clear** at the bottom.
+- **Model tree** on the left: Geometry, Analysis, Bodies, Materials, Supports, Loads, Mesh, Run and Report. A green dot means the item is complete; an orange ring means something is missing. Hover over an item to see what.
+- **Viewer** in the middle. Drag to orbit, right-drag to pan, scroll to zoom; press F to frame the model, choose **Reset view** for the isometric view, or click a face of the view cube at the top right to look from the front, top or a side. The tools under the cube pick a display **Style** (shaded, see-through or hidden lines), a **Cut plane**, which bodies are shown and saved **Views**. Hover over a face to see its number, type and area; click it to select it. Click again to unselect, or use **Clear** at the bottom.
 - **Settings** on the right, for the item picked in the tree.
 
-Every change is saved by itself a moment after you make it; "All changes saved." under the tree says when it is. The **Unit system** under the tree picks the units offered first and used for results (see [Units](#12-units)). The workbench shows your most recent upload; uploading another file starts a new setup for it.
+Every change is saved by itself a moment after you make it; "All changes saved." in the header says when it is. The **Unit system** in the header picks the units offered first and used for results (see [Units](#12-units)). The workbench shows your most recent upload; uploading another file starts a new setup for it.
 
 ## 4. Analysis type and material
 
@@ -125,11 +125,11 @@ When the run has finished, the viewer shows the von Mises stress on the deformed
 
 ![Von Mises stress on the whole plate](images/guide/10-von-mises.png)
 
-For the tutorial the largest von Mises stress is about 183 MPa at the side of the hole, 1 percent above the 182 MPa plane-stress hand value, as expected for mid-thickness with a Poisson's ratio of 0.3. Zoom in to see it. Click anywhere on the model to probe the value at the nearest node; the probes are listed at the bottom right and cleared with **Clear probes**.
+For the tutorial the largest von Mises stress is about 183 MPa at the side of the hole, 1 percent above the 182 MPa plane-stress hand value, as expected for mid-thickness with a Poisson's ratio of 0.3. Zoom in to see it. Click anywhere on the model to probe the value at the nearest node; the probes are listed at the bottom of the viewer and cleared with **Clear probes**.
 
 ![The peak at the side of the hole, and a probe](images/guide/11-hole-and-probe.png)
 
-What you can change in the panel:
+What you can change in the panel (the quantity and shape are also under the ribbon's Results tab, as **Contour** and **Deformation**):
 
 - **Quantity:** displacement and its components, von Mises stress, principal stresses, stress and strain components, and the safety factor against yield. Thermal runs add temperature and heat flux.
 - **Shape:** deformed (exaggerated so it can be seen, with the scale in the legend), true scale, or undeformed.
@@ -139,7 +139,7 @@ What you can change in the panel:
 
 ![Reactions, applied loads and the balance](images/guide/12-reactions.png)
 
-**Cut plane.** Tick **Cut plane** above the viewer to cut the model across x, y or z and move the plane with the slider. The section shows the values inside the part.
+**Cut plane.** Choose **Cut plane** beside the viewer to cut the model across x, y or z and move the plane with the slider. On results the section shows the values inside the part; on the geometry or mesh the cut is filled in orange, and faces inside (a bore, say) can be picked through it.
 
 ![A cut through the hole](images/guide/13-cut-plane.png)
 
@@ -147,7 +147,7 @@ What you can change in the panel:
 
 ![Safety factor against yield](images/guide/14-safety-factor.png)
 
-**Views.** Choose **Views** above the viewer, name the current view and **Save view**. A saved view keeps the camera, the quantity, the shape, the cut plane and hidden bodies, and can be picked for the report. Here, save the whole-plate von Mises view as "Whole plate".
+**Views.** Choose **Views** beside the viewer, name the current view and **Save view**. A saved view keeps the camera, the quantity, the shape, the cut plane and hidden bodies, and can be picked for the report. Here, save the whole-plate von Mises view as "Whole plate".
 
 **Export.** "Results at every node (CSV)" and "Reactions and loads (CSV)" are in the units shown; "Mesh and results (VTK)" opens in ParaView with every field in SI units.
 
@@ -193,7 +193,7 @@ The verification cases in [docs/VERIFICATION.md](VERIFICATION.md) show each load
 
 ## 12. Units
 
-Every value has its own unit list, so you can enter a pressure in MPa next to a force in lbf; the value keeps the unit it was typed in. The **Unit system** under the tree (metric with mm, SI with m, or US with inches) sets the units offered first for new values and the units results are shown in. In the results you can change the units of each kind of quantity under **Units shown** without running again. The report has its own unit system, chosen in the report options. Inside, everything is stored and solved in SI units.
+Every value has its own unit list, so you can enter a pressure in MPa next to a force in lbf; the value keeps the unit it was typed in. The **Unit system** in the header (metric with mm, SI with m, or US with inches) sets the units offered first for new values and the units results are shown in. In the results you can change the units of each kind of quantity under **Units shown** without running again. The report has its own unit system, chosen in the report options. Inside, everything is stored and solved in SI units.
 
 ## 13. When something does not work
 

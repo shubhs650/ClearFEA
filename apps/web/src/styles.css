@@ -1,19 +1,72 @@
 /* SPDX-License-Identifier: AGPL-3.0-or-later */
 
+/* Design tokens (UI redesign, ADR-094). Every colour below is one of these, so the dark theme
+   only redefines them. */
 :root {
-  --bg: #f4f5f7;
+  --bg: #eef1f5;
   --pane: #ffffff;
-  --viewer: #e9ecef;
-  --border: #d5d9de;
-  --text: #1f2328;
+  --pane-2: #f6f8fa;
+  --viewer: #e6eaef;
+  --border: #e1e5eb;
+  --border-strong: #cdd4dd;
+  --text: #111827;
   --muted: #667085;
-  --ok: #2f9e44;
-  --warn: #e8590c;
-  --error: #c92a2a;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #e8efff;
+  --accent-text: #1d4ed8;
+  --on-accent: #ffffff;
+  --ok: #16a34a;
+  --warn: #ea580c;
+  --error: #dc2626;
+  --header-bg: #0b1220;
+  --header-text: #e5e7eb;
+  --header-muted: #94a3b8;
+  --header-hover: rgb(255 255 255 / 8%);
+  --viewport-top: #f8fafc;
+  --viewport-bottom: #c4cedb;
+  --glass: rgb(255 255 255 / 84%);
+  --glass-border: rgb(15 23 42 / 10%);
+  --input-bg: #ffffff;
+  --row-hover: #f1f4f8;
+  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 6px 16px rgb(16 24 40 / 10%);
+  --radius: 8px;
+  --focus: 0 0 0 3px rgb(37 99 235 / 28%);
+  color-scheme: light;
+  font-family: Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   font-size: 13px;
+  line-height: 1.4;
   color: var(--text);
   background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0a0f1a;
+  --pane: #111827;
+  --pane-2: #0d1422;
+  --viewer: #0f172a;
+  --border: #1f2937;
+  --border-strong: #334155;
+  --text: #e5e9f0;
+  --muted: #8d99ad;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-soft: rgb(59 130 246 / 16%);
+  --accent-text: #93c5fd;
+  --ok: #22c55e;
+  --warn: #fb923c;
+  --error: #f87171;
+  --header-bg: #050912;
+  --viewport-top: #334155;
+  --viewport-bottom: #0b111c;
+  --glass: rgb(17 24 39 / 84%);
+  --glass-border: rgb(255 255 255 / 10%);
+  --input-bg: #0b1220;
+  --row-hover: #172033;
+  --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 20px rgb(0 0 0 / 35%);
+  --focus: 0 0 0 3px rgb(59 130 246 / 40%);
+  color-scheme: dark;
 }
 
 * {
@@ -27,17 +80,36 @@ body,
   margin: 0;
 }
 
-/* Desktop only: the minimum supported width is a laptop screen. */
+body {
+  background: var(--bg);
+}
+
+/* Desktop only: the minimum supported width is a laptop screen. The header and ribbon span the
+   top; tree, viewer and settings share the middle; the status bar runs along the bottom. */
 .shell {
   display: grid;
-  grid-template-columns: 260px 1fr 320px;
-  grid-template-rows: 1fr 28px;
+  grid-template-columns: 272px minmax(0, 1fr) 360px;
+  grid-template-rows: 48px auto minmax(0, 1fr) 28px;
   grid-template-areas:
+    "header header header"
+    "ribbon ribbon ribbon"
     "tree viewer settings"
     "status status status";
   height: 100vh;
   min-width: 1024px;
   min-height: 600px;
+}
+
+.shell-no-tree {
+  grid-template-columns: 0 minmax(0, 1fr) 360px;
+}
+
+.shell-no-settings {
+  grid-template-columns: 272px minmax(0, 1fr) 0;
+}
+
+.shell-no-tree.shell-no-settings {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
 }
 
 .pane {
@@ -48,41 +120,65 @@ body,
 .pane-tree {
   grid-area: tree;
   border-right: 1px solid var(--border);
-  padding: 8px 12px;
-}
-
-.pane-viewer {
-  grid-area: viewer;
-  background: var(--viewer);
+  padding: 12px 10px;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
 }
 
 .pane-settings {
   grid-area: settings;
   border-left: 1px solid var(--border);
-  padding: 8px 12px;
+  padding: 14px 16px 24px;
+}
+
+.shell-no-tree .pane-tree,
+.shell-no-settings .pane-settings {
+  display: none;
 }
 
 .pane-status {
   grid-area: status;
   border-top: 1px solid var(--border);
+  background: var(--pane-2);
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
   white-space: nowrap;
   overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .pane-title {
+  align-self: stretch;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin: 0 0 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pane-tree > .pane-title {
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: 650;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
-  margin: 0 0 8px;
+  border-bottom: none;
+  padding: 0 6px;
+  margin-bottom: 6px;
+}
+
+.pane-subtitle {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 16px 0 6px;
 }
 
 .pane-empty {
@@ -99,6 +195,7 @@ body,
 
 .status-ok {
   background: var(--ok);
+  box-shadow: 0 0 0 3px rgb(22 163 74 / 18%);
 }
 
 .status-degraded {
@@ -110,7 +207,6 @@ body,
 }
 
 .status-problem {
-  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -119,22 +215,57 @@ body,
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--muted);
+  gap: 10px;
 }
 
+/* Buttons: neutral by default; the first button of a settings panel is its main action. */
 button {
   font: inherit;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
   background: var(--pane);
   color: var(--text);
   cursor: pointer;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s,
+    color 0.12s;
+}
+
+button:hover:not(:disabled) {
+  background: var(--row-hover);
+  border-color: var(--muted);
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
 }
 
 button:disabled {
   cursor: default;
+  color: var(--muted);
+  opacity: 0.65;
+}
+
+.setup-panel > button {
+  align-self: flex-start;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+  padding: 6px 16px;
+}
+
+.setup-panel > button:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.setup-panel > button:disabled {
+  background: var(--border-strong);
+  border-color: var(--border-strong);
   color: var(--muted);
 }
 
@@ -142,61 +273,112 @@ button:disabled {
   border: none;
   padding: 0;
   background: none;
-  color: var(--text);
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+.link-button:hover:not(:disabled) {
+  background: none;
   text-decoration: underline;
 }
 
-/* Sign-in page: the form in the middle, the status bar along the bottom. */
-.signin-page {
-  display: grid;
-  grid-template-rows: 1fr 28px;
-  grid-template-areas:
-    "main"
-    "status";
-  height: 100vh;
-  min-width: 1024px;
-  min-height: 600px;
+/* Fields */
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
 }
 
-.signin {
-  grid-area: main;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.field input,
+.field select,
+select,
+input[type="text"],
+input[type="number"],
+input[type="password"],
+input:not([type]) {
+  padding: 5px 8px;
+  min-height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--input-bg);
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
 }
 
-.signin-form {
-  width: 300px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 24px;
-  background: var(--pane);
+.field input:focus,
+select:focus,
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus,
+input:not([type]):focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus);
+}
+
+.field input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
+.field > label,
+.field > span:first-child,
+fieldset > legend {
+  font-weight: 550;
+}
+
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  accent-color: var(--accent);
+}
+
+/* A file input dressed as a button; the input itself stays focusable for keyboards. */
+.file-button {
+  position: relative;
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.file-button:focus-within {
+  box-shadow: var(--focus);
+}
+
+.run-log pre {
+  margin: 6px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px;
+  font-family: ui-monospace, "Cascadia Code", SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre;
+  background: var(--pane-2);
   border: 1px solid var(--border);
   border-radius: 6px;
 }
 
-.signin-title {
-  font-size: 18px;
-  margin: 0 0 4px;
-}
-
-.signin-hint {
-  color: var(--muted);
-  margin: 0;
+.bond[aria-current="true"] {
+  background: var(--accent-soft);
 }
 
 .field {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.field input {
-  font: inherit;
-  padding: 5px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
 }
 
 .form-problem {
@@ -293,178 +475,12 @@ button:disabled {
   gap: 8px;
 }
 
-.field select {
-  font: inherit;
-  padding: 4px 6px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-
-/* A file input dressed as a button; the input itself stays focusable for keyboards. */
-.file-button {
-  position: relative;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--pane);
-  cursor: pointer;
-}
-
-.file-button input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.file-button:focus-within {
-  outline: 2px solid var(--text);
-}
-
-/* Viewer (M1.3): the canvas fills the pane; hover text, toolbar and selection float on it. */
-.pane-viewer {
-  position: relative;
-  overflow: hidden;
-}
-
-.viewer-canvas {
-  position: absolute;
-  inset: 0;
-}
-
-.viewer-canvas canvas {
-  display: block;
-}
-
-.pane-viewer > .form-problem {
-  max-width: 480px;
-  margin: 0 24px;
-}
-
-.viewer-hover {
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  color: var(--muted);
-  pointer-events: none;
-}
-
-.viewer-toolbar {
-  position: absolute;
-  top: 8px;
-  right: 12px;
-}
-
-.viewer-mesh {
-  position: absolute;
-  top: 28px;
-  left: 12px;
-  pointer-events: none;
-}
-
-.viewer-selection {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.viewer-hint {
-  color: var(--muted);
-}
-
-/* Simulation tree (M1.5): one row per item with its status mark. */
-.tree {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.tree-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 3px 6px;
-  border: none;
-  border-radius: 4px;
-  background: none;
-  text-align: left;
-}
-
-.tree-row:hover {
-  background: var(--bg);
-}
-
-.tree-row[aria-current="true"] {
-  background: var(--viewer);
-  font-weight: 600;
-}
-
-.tree-depth-1 {
-  padding-left: 26px;
-}
-
-.tree-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mark {
-  flex: none;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-}
-
-.mark-complete {
-  background: var(--ok);
-}
-
-.mark-incomplete {
-  border: 2px solid var(--warn);
-}
-
-.mark-error {
-  background: var(--error);
-}
-
-.tree-note {
-  margin: 12px 6px 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-/* The project's unit system, under the tree, set apart from the setup items. */
-.tree-units {
-  border-top: 1px solid var(--border);
-  padding-top: 10px;
-  align-items: stretch;
-}
-
-.tree-units select {
-  width: 100%;
-}
-
 /* Settings panels for setup items. */
 .setup-panel {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 12px;
-}
-
-.setup-panel > button {
-  align-self: flex-start;
 }
 
 .setup-notes {
@@ -500,10 +516,6 @@ button:disabled {
 
 .field-problem {
   color: var(--error);
-}
-
-.field input[aria-invalid="true"] {
-  border-color: var(--error);
 }
 
 .quantity {
@@ -569,10 +581,6 @@ button:disabled {
   border-bottom: 1px solid var(--border);
 }
 
-.bond[aria-current="true"] {
-  background: #e7f0fb;
-}
-
 .bond-removed .link-button,
 .bond-removed .bond-facts {
   color: var(--muted);
@@ -616,69 +624,6 @@ button:disabled {
 
 .setup-remove {
   color: var(--error);
-}
-
-/* The run's solver log (M1.8). */
-/* The run record (M1.10). */
-.pane-subtitle {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--muted);
-  margin: 12px 0 6px;
-}
-
-.run-log pre {
-  margin: 6px 0 0;
-  max-height: 320px;
-  overflow: auto;
-  padding: 6px;
-  font-size: 11px;
-  line-height: 1.35;
-  white-space: pre;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-}
-
-.viewer-legend {
-  position: absolute;
-  left: 12px;
-  bottom: 12px;
-  padding: 8px 10px;
-  background: rgb(255 255 255 / 85%);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.viewer-legend-title {
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.viewer-legend ol {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.viewer-legend li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  line-height: 18px;
-}
-
-.viewer-legend-swatch {
-  display: inline-block;
-  width: 18px;
-  height: 14px;
-}
-
-.viewer-legend-note {
-  margin-top: 4px;
-  color: var(--muted);
 }
 
 .result-choice {
@@ -771,198 +716,6 @@ fieldset.field {
 /* The Mesh panel's note that its mesh was reused (M2.10). */
 .mesh-reused {
   margin: 0 0 8px;
-}
-
-/* Min/max markers and probes on the result view (M3.3): a dot at the node with its label
-   beside it, drawn over the canvas. */
-.viewer-markers {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.viewer-marker {
-  position: absolute;
-  width: 0;
-  height: 0;
-}
-
-.viewer-marker::before {
-  content: "";
-  position: absolute;
-  left: -4px;
-  top: -4px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  border: 1px solid #fff;
-  background: #212529;
-}
-
-.viewer-marker span {
-  position: absolute;
-  left: 7px;
-  top: -20px;
-  padding: 1px 5px;
-  white-space: nowrap;
-  font-size: 12px;
-  background: rgb(255 255 255 / 90%);
-  border: 1px solid #212529;
-  border-radius: 3px;
-}
-
-.viewer-marker-max::before {
-  background: #c92a2a;
-}
-
-.viewer-marker-max span {
-  border-color: #c92a2a;
-}
-
-.viewer-marker-min::before {
-  background: #1864ab;
-}
-
-.viewer-marker-min span {
-  border-color: #1864ab;
-}
-
-.viewer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.viewer-toolbar label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.viewer-probes {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  max-width: 50%;
-  max-height: 40%;
-  overflow: auto;
-  padding: 8px 10px;
-  background: rgb(255 255 255 / 85%);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 12px;
-}
-
-.viewer-probes ol {
-  list-style: none;
-  margin: 0 0 6px;
-  padding: 0;
-  line-height: 18px;
-}
-
-/* Panels under the viewer's toolbar: bodies and saved views (M3.6), and the cut plane (M3.4). */
-.viewer-panels {
-  position: absolute;
-  top: 40px;
-  right: 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  max-height: calc(100% - 52px);
-  overflow: auto;
-  pointer-events: none;
-}
-
-.viewer-panels > * {
-  pointer-events: auto;
-}
-
-.viewer-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  background: rgb(255 255 255 / 85%);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 12px;
-  min-width: 220px;
-  max-width: 280px;
-}
-
-.viewer-panel ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.viewer-bodies label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.viewer-views li,
-.viewer-views-save {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.viewer-views .viewer-view-name {
-  flex: 1;
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.viewer-views-save input {
-  flex: 1;
-  min-width: 0;
-}
-
-.viewer-views-note {
-  color: var(--muted, #495057);
-}
-
-.viewer-cut {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  background: rgb(255 255 255 / 85%);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  min-width: 220px;
-}
-
-.viewer-cut-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.viewer-cut-row label {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.viewer-cut-row input[type="range"] {
-  flex: 1;
-}
-
-.viewer-cut-status {
-  color: var(--muted, #495057);
 }
 
 /* A material property against temperature (M5.5): a small table of temperature and value. */
@@ -1077,14 +830,6 @@ fieldset.field {
   border: 1px solid var(--border);
 }
 
-/* The wallet page (M8.1): over the tree, viewer and settings, above the status bar. */
-.wallet-page {
-  grid-row: 1;
-  grid-column: 1 / -1;
-  z-index: 10;
-  padding: 16px 24px;
-}
-
 .wallet-header {
   display: flex;
   align-items: center;
@@ -1180,4 +925,1017 @@ fieldset.field {
 .shared-name {
   font-weight: 600;
   margin: 0 0 8px;
+}
+
+/* The header (UI redesign): brand, the open file and its save state, units and theme. */
+.app-header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--header-bg);
+  color: var(--header-text);
+  min-width: 0;
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-right: 8px;
+}
+
+.app-name {
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  font-weight: 500;
+}
+
+.app-name strong {
+  font-weight: 750;
+  background: linear-gradient(90deg, #38bdf8, #60a5fa);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.app-document {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+  padding-left: 10px;
+  border-left: 1px solid rgb(255 255 255 / 12%);
+}
+
+.app-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.app-save {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--header-muted);
+  background: rgb(255 255 255 / 6%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.app-save-saved svg {
+  color: #4ade80;
+}
+
+.app-save-invalid,
+.app-save-failed {
+  color: #fecaca;
+  background: rgb(220 38 38 / 25%);
+}
+
+.app-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* The unit system sits in the header on one line: its label, the list and no hint. */
+.app-units .unit-system {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--header-muted);
+  font-size: 12px;
+}
+
+.app-units .unit-system > label {
+  font-weight: 500;
+}
+
+.app-units .unit-system select {
+  min-height: 28px;
+  padding: 3px 8px;
+  background: rgb(255 255 255 / 8%);
+  border-color: rgb(255 255 255 / 14%);
+  color: var(--header-text);
+  color-scheme: dark;
+}
+
+.app-units .unit-system .field-hint {
+  display: none;
+}
+
+.app-units .unit-system .field-problem {
+  max-width: 220px;
+  color: #fecaca;
+}
+
+.header-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--header-muted);
+}
+
+.header-icon:hover:not(:disabled) {
+  background: var(--header-hover);
+  color: var(--header-text);
+}
+
+.header-icon[aria-pressed="false"] {
+  opacity: 0.6;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The ribbon (UI redesign): tabs, then the active tab's groups of large commands. */
+.ribbon {
+  grid-area: ribbon;
+  background: var(--pane);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgb(16 24 40 / 5%);
+  position: relative;
+  z-index: 2;
+}
+
+.ribbon-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 10px;
+  background: var(--pane-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.ribbon-tab {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 7px 14px 6px;
+  font-weight: 550;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+
+.ribbon-tab:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+}
+
+.ribbon-tab[aria-selected="true"] {
+  color: var(--accent-text);
+  border-bottom-color: var(--accent);
+  background: var(--pane);
+}
+
+.ribbon-panel {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 6px 8px 2px;
+  min-height: 88px;
+  overflow-x: auto;
+}
+
+.ribbon-group {
+  margin: 0;
+  min-width: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px;
+  border-right: 1px solid var(--border);
+}
+
+.ribbon-group-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  flex: 1;
+}
+
+.ribbon-group-label {
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--muted);
+  padding: 2px 0 3px;
+  letter-spacing: 0.02em;
+}
+
+.ribbon-command {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 62px;
+  max-width: 92px;
+  padding: 6px 6px 4px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 11.5px;
+  line-height: 1.15;
+  text-align: center;
+  color: var(--text);
+}
+
+.ribbon-command svg {
+  color: var(--accent-text);
+}
+
+.ribbon-command:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+.ribbon-command[aria-current="true"] {
+  background: var(--accent-soft);
+  border-color: rgb(37 99 235 / 30%);
+}
+
+.ribbon-command:disabled svg {
+  color: var(--muted);
+}
+
+.ribbon-primary svg {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-radius: 6px;
+  padding: 3px;
+  box-sizing: content-box;
+  width: 18px;
+  height: 18px;
+}
+
+.ribbon-primary:disabled svg {
+  background: var(--border-strong);
+  color: var(--muted);
+}
+
+.ribbon-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.ribbon-field select {
+  min-width: 190px;
+  color: var(--text);
+}
+
+.ribbon-note {
+  align-self: center;
+  margin: 0 12px;
+  color: var(--muted);
+  max-width: 420px;
+}
+
+/* The model tree: one row per item with its icon and status mark. */
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree .tree {
+  margin-left: 15px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  margin: 1px 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  color: var(--text);
+}
+
+.tree-row:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+
+.tree-row[aria-current="true"] {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.tree-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.tree-row[aria-current="true"] .tree-icon {
+  color: var(--accent-text);
+}
+
+.tree-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.mark-complete {
+  background: var(--ok);
+}
+
+.mark-incomplete {
+  border: 2px solid var(--warn);
+}
+
+.mark-error {
+  background: var(--error);
+  box-shadow: 0 0 0 3px rgb(220 38 38 / 18%);
+}
+
+.tree-note {
+  margin: 12px 6px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.tree-note > button {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+/* The viewer: a gradient behind a transparent canvas, the controls floating on glass cards. */
+.pane-viewer {
+  grid-area: viewer;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, var(--viewport-top) 0%, var(--viewport-bottom) 100%);
+}
+
+.viewer-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.viewer-canvas canvas {
+  display: block;
+}
+
+.viewer-message {
+  max-width: 480px;
+  margin: 0 24px;
+  padding: 14px 18px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.viewer-chips {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+  max-width: calc(100% - 220px);
+}
+
+.viewer-hover,
+.viewer-mesh {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.viewer-hover:empty {
+  display: none;
+}
+
+.viewer-mesh {
+  color: var(--muted);
+}
+
+.viewer-hint {
+  color: var(--muted);
+}
+
+/* The legend: a vertical colour bar under the chips. */
+.viewer-legend {
+  position: absolute;
+  left: 12px;
+  top: 80px;
+  padding: 10px 12px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  max-width: 260px;
+}
+
+.viewer-legend-title {
+  font-weight: 650;
+  margin-bottom: 6px;
+}
+
+.viewer-legend ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.viewer-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 19px;
+}
+
+.viewer-legend-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 19px;
+}
+
+.viewer-legend li:first-child .viewer-legend-swatch {
+  border-radius: 4px 4px 0 0;
+}
+
+.viewer-legend li:last-child .viewer-legend-swatch {
+  border-radius: 0 0 4px 4px;
+}
+
+.viewer-legend-note {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+/* The view cube, top right, with the isometric button under it. */
+.view-cube {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+  --cube-size: 66px;
+  --cube-half: 33px;
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.view-cube-stage {
+  width: var(--cube-size);
+  height: var(--cube-size);
+  perspective: 420px;
+}
+
+.view-cube-body {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+
+.view-cube-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  backface-visibility: hidden;
+  background: rgb(248 250 252 / 92%);
+  border: 1px solid #94a3b8;
+  border-radius: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #475569;
+}
+
+.view-cube-face:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.view-cube-home {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow);
+  color: var(--muted);
+}
+
+.axis-triad {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: 84px;
+  height: 84px;
+  pointer-events: none;
+}
+
+.axis-triad-origin {
+  fill: var(--muted);
+}
+
+.axis-triad text {
+  font-family: inherit;
+}
+
+/* The floating tool column on the right, under the view cube. */
+.viewer-toolbar {
+  position: absolute;
+  top: 132px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
+
+.tool {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 66px;
+  padding: 7px 4px 6px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font-size: 10.5px;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tool:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.tool[aria-pressed="true"],
+.tool-toggle:has(.tool-check:checked) {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tool-toggle:has(.tool-check:focus-visible) {
+  box-shadow: var(--focus);
+}
+
+/* The checkbox covers its tool, so a click anywhere on the tool lands on it. */
+.tool-check {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.tool-label {
+  white-space: normal;
+}
+
+/* Cards beside the tool column: display style, bodies, saved views and the cut plane. */
+.viewer-panels {
+  position: absolute;
+  top: 132px;
+  right: 94px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-height: calc(100% - 144px);
+  overflow: auto;
+  pointer-events: none;
+}
+
+.viewer-panels > * {
+  pointer-events: auto;
+}
+
+.viewer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+  min-width: 240px;
+  max-width: 300px;
+}
+
+.viewer-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.viewer-panel-close {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+}
+
+.viewer-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.viewer-option,
+.viewer-bodies label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viewer-views li,
+.viewer-views-save {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.viewer-views .viewer-view-name {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-views-save input {
+  flex: 1;
+  min-width: 0;
+}
+
+.viewer-views-note {
+  color: var(--muted);
+}
+
+.viewer-cut {
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-cut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.viewer-cut-row label {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.viewer-cut-row input[type="range"] {
+  flex: 1;
+}
+
+.viewer-cut-status {
+  color: var(--muted);
+}
+
+/* Along the bottom: the selection or the probes. */
+.viewer-footer {
+  position: absolute;
+  left: 104px;
+  right: 104px;
+  bottom: 12px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.viewer-footer > * {
+  pointer-events: auto;
+}
+
+.viewer-selection,
+.viewer-probes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 8px 6px 14px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.viewer-selection:has(.viewer-hint),
+.viewer-probes:has(.viewer-hint) {
+  padding-right: 14px;
+}
+
+.viewer-selection > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.viewer-selection button,
+.viewer-probes button {
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+.viewer-probes {
+  border-radius: var(--radius);
+  align-items: flex-end;
+  max-height: 40vh;
+  overflow: auto;
+  white-space: normal;
+}
+
+.viewer-probes ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  line-height: 19px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Min/max markers and probes on the result view (M3.3): a dot at the node with its label
+   beside it, drawn over the canvas. */
+.viewer-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.viewer-marker {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.viewer-marker::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #1f2937;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 35%);
+}
+
+.viewer-marker span {
+  position: absolute;
+  left: 9px;
+  top: -24px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  background: #1f2937;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 25%);
+}
+
+.viewer-marker-max::before,
+.viewer-marker-max span {
+  background: #dc2626;
+}
+
+.viewer-marker-min::before,
+.viewer-marker-min span {
+  background: #1d4ed8;
+}
+
+/* The sign-in page: a dark backdrop with the form on a card. */
+.signin-page {
+  display: grid;
+  grid-template-rows: 1fr 28px;
+  grid-template-areas:
+    "main"
+    "status";
+  height: 100vh;
+  min-width: 1024px;
+  min-height: 600px;
+  background:
+    radial-gradient(1200px 600px at 15% 10%, rgb(56 189 248 / 22%), transparent 60%),
+    radial-gradient(900px 600px at 90% 90%, rgb(37 99 235 / 28%), transparent 60%),
+    linear-gradient(160deg, #0b1220, #111b30);
+}
+
+.signin {
+  grid-area: main;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.signin-form {
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px;
+  background: var(--pane);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 20px 50px rgb(0 0 0 / 35%);
+}
+
+.signin-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  margin: 0 0 2px;
+}
+
+.signin-tagline {
+  margin: -8px 0 4px;
+  color: var(--muted);
+}
+
+.signin-form button[type="submit"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+  padding: 8px 14px;
+}
+
+.signin-form button[type="submit"]:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.signin-hint {
+  color: var(--muted);
+  margin: 0;
+}
+
+.signin-page .pane-status {
+  background: transparent;
+  border-top-color: rgb(255 255 255 / 8%);
+  color: #94a3b8;
+}
+
+/* The wallet page (M8.1): over the tree, viewer and settings, under the header and ribbon. */
+.wallet-page {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  z-index: 10;
+  padding: 20px 28px;
+}
+
+.wallet-totals {
+  padding: 16px 20px;
+  background: var(--pane-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* Settings: cards for grouped fields, tables with quiet headers. */
+.pane-settings .setup-panel {
+  gap: 14px;
+}
+
+.pane-settings fieldset.field,
+.setup-components,
+.setup-bodies {
+  border-color: var(--border);
+  border-radius: var(--radius);
+  background: var(--pane-2);
+}
+
+.setup-notes-incomplete,
+.setup-notes-error {
+  padding: 8px 10px 8px 26px;
+  border-radius: var(--radius);
+}
+
+.setup-notes-incomplete {
+  background: rgb(234 88 12 / 8%);
+}
+
+.setup-notes-error {
+  background: rgb(220 38 38 / 8%);
+}
+
+details > summary {
+  cursor: pointer;
+  font-weight: 550;
+}
+
+.mesh-histogram-bar {
+  background: var(--accent);
 }

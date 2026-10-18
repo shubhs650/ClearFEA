@@ -26,6 +26,11 @@ vi.mock("../src/viewer/ModelView", () => ({
     }
     setCamera() {}
     resetView() {}
+    fitView() {}
+    setDisplayStyle() {}
+    onCamera() {
+      return () => {};
+    }
     dispose() {}
   },
 }));

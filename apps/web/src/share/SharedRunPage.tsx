@@ -7,6 +7,7 @@
 import { analysisKinds, type SharedRunResponse } from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSharedRun, sharedSource } from "../api/shareLinks";
+import { Logo } from "../layout/AppHeader";
 import { StatusBar } from "../layout/StatusBar";
 import { Viewer } from "../layout/Viewer";
 import { useDisplayUnits } from "../setup/displayUnits";
@@ -52,7 +53,10 @@ export function SharedRunPage({ token }: { token: string }) {
       <div className="signin-page">
         <main className="signin" aria-label="Shared run">
           <div className="signin-form">
-          <h1 className="signin-title">ClearFEA</h1>
+          <h1 className="signin-title">
+            <Logo size={32} />
+            ClearFEA
+          </h1>
           {state.kind === "loading" ? (
             <p role="status">Opening the shared run…</p>
           ) : (
@@ -73,6 +77,18 @@ export function SharedRunPage({ token }: { token: string }) {
   return (
     <UnitSystemProvider value={system}>
       <div className="shell">
+        <header className="app-header">
+          <div className="app-brand">
+            <Logo />
+            <span className="app-name">
+              Clear<strong>FEA</strong>
+            </span>
+          </div>
+          <div className="app-document">
+            <span className="app-file">{simulationName}</span>
+            <span className="app-save">Read-only shared run</span>
+          </div>
+        </header>
         <nav className="pane pane-tree" aria-label="Shared run">
           <h2 className="pane-title">Shared run</h2>
           <p className="shared-name">{simulationName}</p>

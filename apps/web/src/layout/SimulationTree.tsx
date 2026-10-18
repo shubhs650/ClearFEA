@@ -3,11 +3,29 @@
 // and loads with their items, then the mesh (M1.6) with its local sizes (M2.8), the run (M1.8) and the report (M7.1).
 // A steady-state thermal analysis has no supports, so their group is left out unless the setup still lists some to delete.
 // Each row carries a complete / incomplete / error mark; selecting a row opens its settings.
+// Since the UI redesign (ADR-094) each row has an icon for its kind of item.
 
 import { type GeometryStatus, type GeometryView, isModal, isThermal, type SimulationSpec } from "@clearfea/spec";
+import {
+  Activity,
+  Anchor,
+  Box,
+  Boxes,
+  FileBox,
+  FileText,
+  Grid3x3,
+  Layers,
+  Link2,
+  type LucideIcon,
+  Palette,
+  Play,
+  Scan,
+  Zap,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { bodyItem, type Group, type ItemStatus, type Mark } from "../setup/spec";
-import type { SaveState, Setup } from "../setup/useSimulation";
+import type { Setup } from "../setup/useSimulation";
+import { LOAD_ICONS, SUPPORT_ICONS } from "./Ribbon";
 
 const markLabels: Record<Mark, string> = {
   complete: "complete",
@@ -30,6 +48,7 @@ function Row({
   selected,
   onSelect,
   depth = 0,
+  icon: Icon,
 }: {
   id: string;
   label: string;
@@ -37,6 +56,7 @@ function Row({
   selected: string;
   onSelect: (id: string) => void;
   depth?: number;
+  icon: LucideIcon;
 }) {
   const mark = status?.mark ?? "incomplete";
   return (
@@ -48,29 +68,17 @@ function Row({
       title={status?.notes.join(" ")}
       onClick={() => onSelect(id)}
     >
-      <span className={`mark mark-${mark}`} aria-hidden="true" />
+      <Icon className="tree-icon" size={15} strokeWidth={1.8} aria-hidden="true" />
       <span className="tree-label">{label}</span>
+      <span className={`mark mark-${mark}`} aria-hidden="true" />
     </button>
   );
 }
 
-function saveText(save: SaveState): string {
-  switch (save.kind) {
-    case "saved":
-      return "All changes saved.";
-    case "saving":
-      return "Saving…";
-    case "invalid":
-      return `Not saved: ${save.problems.join(" ")}`;
-    case "failed":
-      return `Not saved: ${save.problem}`;
-  }
-}
-
-const groups: { group: Group; label: string }[] = [
-  { group: "materials", label: "Materials" },
-  { group: "supports", label: "Supports" },
-  { group: "loads", label: "Loads" },
+const groups: { group: Group; label: string; icon: LucideIcon }[] = [
+  { group: "materials", label: "Materials", icon: Layers },
+  { group: "supports", label: "Supports", icon: Anchor },
+  { group: "loads", label: "Loads", icon: Zap },
 ];
 
 /**
@@ -89,7 +97,6 @@ export function SimulationTree({
   geometry,
   setup,
   statuses,
-  save,
   selected,
   onSelect,
   onStart,
@@ -101,13 +108,12 @@ export function SimulationTree({
   geometry: GeometryView | null;
   setup: Setup;
   statuses: ReadonlyMap<string, ItemStatus>;
-  save: SaveState;
   selected: string;
   onSelect: (id: string) => void;
   onStart: () => void;
   starting: boolean;
   startProblem?: string;
-  /** The project's unit system choice, shown under the tree. */
+  /** Shown under the tree. */
   units?: ReactNode;
   /** What each body is called (M4.1): its part name, or "Body <tag>". */
   bodyLabels?: ReadonlyMap<number, string>;
@@ -118,24 +124,25 @@ export function SimulationTree({
   };
   return (
     <nav className="pane pane-tree" aria-label="Simulation tree">
-      <h2 className="pane-title">Simulation</h2>
+      <h2 className="pane-title">Model tree</h2>
       <ul className="tree">
         <li>
-          <Row id="geometry" label="Geometry" status={geometryStatus} selected={selected} onSelect={onSelect} />
+          <Row id="geometry" label="Geometry" icon={FileBox} status={geometryStatus} selected={selected} onSelect={onSelect} />
         </li>
         {setup.kind === "open" && (
           <li>
-            <Row id="analysis" label="Analysis" status={statuses.get("analysis")} selected={selected} onSelect={onSelect} />
+            <Row id="analysis" label="Analysis" icon={Activity} status={statuses.get("analysis")} selected={selected} onSelect={onSelect} />
           </li>
         )}
         {setup.kind === "open" && (
           <li>
-            <Row id="bodies" label="Bodies" status={statuses.get("bodies")} selected={selected} onSelect={onSelect} />
+            <Row id="bodies" label="Bodies" icon={Boxes} status={statuses.get("bodies")} selected={selected} onSelect={onSelect} />
             <ul className="tree">
               {setup.spec.bodies.map((body) => (
                 <li key={body.tag}>
                   <Row
                     id={bodyItem(body.tag)}
+                    icon={Box}
                     label={bodyLabels?.get(body.tag) ?? `Body ${body.tag}`}
                     status={statuses.get(bodyItem(body.tag))}
                     selected={selected}
@@ -149,22 +156,29 @@ export function SimulationTree({
         )}
         {setup.kind === "open" && setup.spec.bodies.length > 1 && (
           <li>
-            <Row id="bonds" label="Bonds" status={statuses.get("bonds")} selected={selected} onSelect={onSelect} />
+            <Row id="bonds" label="Bonds" icon={Link2} status={statuses.get("bonds")} selected={selected} onSelect={onSelect} />
           </li>
         )}
         {setup.kind === "open" &&
-          shownGroups(setup.spec).map(({ group, label }) => {
+          shownGroups(setup.spec).map(({ group, label, icon }) => {
             const items =
               group === "materials" ? setup.spec.materials : group === "supports" ? setup.spec.supports : setup.spec.loads;
             return (
               <li key={group}>
-                <Row id={group} label={label} status={statuses.get(group)} selected={selected} onSelect={onSelect} />
+                <Row id={group} label={label} icon={icon} status={statuses.get(group)} selected={selected} onSelect={onSelect} />
                 {items.length > 0 && (
                   <ul className="tree">
                     {items.map((item) => (
                       <li key={item.id}>
                         <Row
                           id={item.id}
+                          icon={
+                            group === "materials" || !("type" in item)
+                              ? Palette
+                              : group === "supports"
+                                ? (SUPPORT_ICONS[item.type as keyof typeof SUPPORT_ICONS] ?? Anchor)
+                                : (LOAD_ICONS[item.type as keyof typeof LOAD_ICONS] ?? Zap)
+                          }
                           label={item.name}
                           status={statuses.get(item.id)}
                           selected={selected}
@@ -180,13 +194,14 @@ export function SimulationTree({
           })}
         {setup.kind === "open" && (
           <li>
-            <Row id="mesh" label="Mesh" status={statuses.get("mesh")} selected={selected} onSelect={onSelect} />
+            <Row id="mesh" label="Mesh" icon={Grid3x3} status={statuses.get("mesh")} selected={selected} onSelect={onSelect} />
             {(setup.spec.mesh.local ?? []).length > 0 && (
               <ul className="tree">
                 {(setup.spec.mesh.local ?? []).map((item) => (
                   <li key={item.id}>
                     <Row
                       id={item.id}
+                      icon={Scan}
                       label={item.name}
                       status={statuses.get(item.id)}
                       selected={selected}
@@ -201,12 +216,12 @@ export function SimulationTree({
         )}
         {setup.kind === "open" && (
           <li>
-            <Row id="run" label="Run" status={statuses.get("run")} selected={selected} onSelect={onSelect} />
+            <Row id="run" label="Run" icon={Play} status={statuses.get("run")} selected={selected} onSelect={onSelect} />
           </li>
         )}
         {setup.kind === "open" && (
           <li>
-            <Row id="report" label="Report" status={statuses.get("report")} selected={selected} onSelect={onSelect} />
+            <Row id="report" label="Report" icon={FileText} status={statuses.get("report")} selected={selected} onSelect={onSelect} />
           </li>
         )}
       </ul>
@@ -231,14 +246,6 @@ export function SimulationTree({
             </p>
           )}
         </div>
-      )}
-      {setup.kind === "open" && (
-        <p
-          className={`tree-note tree-save ${save.kind === "invalid" || save.kind === "failed" ? "form-problem" : "field-hint"}`}
-          role={save.kind === "invalid" || save.kind === "failed" ? "alert" : "status"}
-        >
-          {saveText(save)}
-        </p>
       )}
       {units && <div className="tree-note tree-units">{units}</div>}
     </nav>

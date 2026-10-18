@@ -2,6 +2,7 @@
 import type { SessionUser } from "@clearfea/spec";
 import { type FormEvent, useState } from "react";
 import { signIn } from "../api/session";
+import { Logo } from "../layout/AppHeader";
 
 /** Sign-in form for the Phase 0 seeded test users (ADR-022). */
 export function SignIn({
@@ -28,7 +29,11 @@ export function SignIn({
   return (
     <main className="signin" aria-label="Sign in">
       <form className="signin-form" onSubmit={submit}>
-        <h1 className="signin-title">ClearFEA</h1>
+        <h1 className="signin-title">
+          <Logo size={32} />
+          ClearFEA
+        </h1>
+        <p className="signin-tagline">Open finite element analysis on CalculiX</p>
         <label className="field">
           <span>Login</span>
           <input
