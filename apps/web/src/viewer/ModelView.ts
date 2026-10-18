@@ -778,6 +778,7 @@ export class ModelView {
     const material = this.clipped(new MeshBasicMaterial({ color: COLOURS.cap, side: BackSide }), true, true);
     this.cap = new Mesh(surface.geometry, material);
     this.scene.add(this.cap);
+    this.applyStyle();
     const sphere = surface.geometry.boundingSphere;
     if (!sphere) return;
     // A square on the plane around the model, a little larger than it.
@@ -822,6 +823,8 @@ export class ModelView {
       material.needsUpdate = true;
     }
     if (this.outlines) this.outlines.visible = this.style !== "shaded";
+    // The cap shows the cut as solid; seen through or as lines alone there is nothing solid.
+    if (this.cap) this.cap.visible = this.style === "shadedEdges" || this.style === "shaded";
   }
 
   /** The camera's right, up and back directions in world axes. */
