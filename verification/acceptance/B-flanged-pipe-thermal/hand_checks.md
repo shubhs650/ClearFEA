@@ -11,7 +11,7 @@ Units: mm, MPa, °C; stresses are in the pipe's cylindrical axes (radial r, hoop
 | 2 | Reaction balance closes | Closes: the supports' net force is 0.01 N, 2.5e-7 percent of their nodal forces; heat in equals heat out to 1e-7 percent |
 | 3 | Through-wall stress away from the flange against closed-form values | Temperatures within 0.02 K; σθ and σz within 1.6 MPa (1 percent) at both surfaces and inside the wall |
 | 5 | FreeCAD FEM within 5 percent on a matching mesh | Within 1 percent everywhere compared, at 10 mm and 6 mm (below) |
-| 6 | A report fit for a reviewer | For the maintainer to judge: Word and PDF in the project's `m9.6/` folder |
+| 6 | A report fit for a reviewer | Met (the maintainer approved case B, 2026-10-18); Word and PDF in the project's `m9.6/` folder |
 
 ## The runs
 
@@ -224,7 +224,7 @@ Reading it:
 ## 6. The report
 
 The report of the 6 mm run, made through the UI (Word and PDF, 11 pages, in the project's
-`m9.6/` folder), is for the maintainer to judge. Two things a reviewer may ask about, both
+`m9.6/` folder), was approved by the maintainer on 2026-10-18. Two things a reviewer may ask about, both
 outside M9.6:
 
 - Its "Simulation" row reads "Static structural", the name every new simulation gets
@@ -235,7 +235,6 @@ outside M9.6:
 ## Open
 
 - Check 1 on the laptop (M9.2).
-- Check 6: the maintainer's judgement of the report.
 
 ## How to rerun
 
