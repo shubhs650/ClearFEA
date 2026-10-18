@@ -282,6 +282,15 @@ button:disabled {
   text-decoration: underline;
 }
 
+a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
 /* Fields */
 input,
 select,
