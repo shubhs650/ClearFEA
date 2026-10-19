@@ -57,10 +57,10 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await expect(sizes.getByText("Default, always on")).toBeVisible();
     const large = sizes.getByRole("checkbox", { name: "large" });
     await expect(large).not.toBeChecked();
-    await large.check();
+    await large.click(); // the box follows the API's answer, so not check(), which wants it at once
     await expect(large).toBeChecked();
     await sizes.screenshot({ path: `${OUT}/e08-machine-sizes.png` });
-    await large.uncheck();
+    await large.click();
     await expect(large).not.toBeChecked();
 
     await admin.getByRole("button", { name: "Remove colleague.one@example.com" }).click();
