@@ -317,7 +317,7 @@ As decided in ADR-095. Setup steps for the maintainer are in `DEPLOYMENT.md`.
 
 1. The fast tier (`make test`).
 2. Worker image, only when `worker/` or `packages/spec/` changed: build, push to ECR tagged with the commit, register new revisions of both task definitions. Starts after this use the new image; running jobs finish on theirs.
-3. Site and API: build the web app, apply D1 migrations (`--remote`), copy secrets from GitHub to the Worker, `wrangler deploy`.
+3. Site and API: build the web app, write the production configuration from `wrangler.jsonc` (`deploy:config`, ADR-096), apply D1 migrations (`deploy:migrate`), copy secrets from GitHub to the Worker, `wrangler deploy` (`deploy`).
 4. Check that `https://clearfea.triyalabs.com/api/health` reports the new commit.
 
 GitHub authenticates to AWS with an OIDC role and to Cloudflare with an API token. A job-protocol change stays compatible with the previous API or worker for one deploy. Rollback is a redeploy of an earlier commit from the workflow's manual run; D1 Time Travel restores data.

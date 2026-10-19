@@ -10,7 +10,9 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    // Lets the tests import scripts/productionConfig.mjs, typed from its JSDoc.
+    "allowJs": true
   },
   "include": ["src", "test", "vitest.config.ts"]
 }

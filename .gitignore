@@ -24,6 +24,8 @@ spooles.out
 .env.*
 !.env.example
 .dev.vars
+# Written at deploy time with the production database id (apps/api/scripts/production-config.mjs)
+wrangler.production.json
 
 # Test output
 coverage/

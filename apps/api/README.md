@@ -21,7 +21,21 @@ pnpm --filter @clearfea/api typecheck
 | `src/jobs/files.ts` | Which files each job type reads and writes, and their transfer URLs (ADR-005) |
 | `seed/` | Local test users; passwords are in the file. Never applied to a remote database |
 | `scripts/hash-password.mjs` | Prints a password hash for the seed file |
+| `scripts/production-config.mjs` | Writes `wrangler.production.json` for the live site (ADR-096) |
 | `test/` | Tests; migrations are applied before each file |
+
+## Production
+
+The live site (ADR-095, ADR-096) is one Worker named `clearfea` on `clearfea.triyalabs.com` that serves the built web app and this API. The deploy workflow runs, from the repository root:
+
+```
+pnpm --filter @clearfea/web build
+CLOUDFLARE_D1_DATABASE_ID=<id> CLEARFEA_COMMIT=<sha> pnpm --filter @clearfea/api deploy:config   # writes wrangler.production.json
+pnpm --filter @clearfea/api deploy:migrate   # D1 migrations on the production database
+pnpm --filter @clearfea/api deploy           # wrangler deploy; secrets are set separately
+```
+
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` must be in the environment for the last two. `/api/health` then reports `commit`. To try the production configuration locally, run `wrangler d1 migrations apply DB --local --config wrangler.production.json` and `wrangler dev --config wrangler.production.json` after `deploy:config` with any id.
 
 Local secrets live in `.dev.vars` (git-ignored); copy `.dev.vars.example` to start. `SELF_HOSTED=true` there turns on self-hosting mode: the wallet is informational and never refuses a run or mesh (ADR-084).
 
@@ -29,7 +43,7 @@ Routes so far:
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/health` | State of the database and file storage |
+| `GET /api/health` | State of the database and file storage, and the deployed commit |
 | `POST /api/session` | Sign in with login and password; sets the session cookie |
 | `GET /api/session` | The signed-in user, or 401 |
 | `DELETE /api/session` | Sign out (clears the cookie) |
