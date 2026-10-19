@@ -48,7 +48,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M10.1 Production Worker on one origin with the custom domain (ADR-096; first deploy waits for M10.2 and the maintainer's Cloudflare setup)
 - [x] M10.2 Deploy workflow for the site and API (`.github/workflows/deploy.yml`; first live run waits on the Cloudflare setup)
 - [ ] M10.3 Google sign-in with Better Auth, allowlist and admin page
-- [ ] M10.4 Landing page
+- [x] M10.4 Landing page at `/` (`apps/web/src/landing/`; light and dark, phone widths)
 - [ ] M10.5 Job files through presigned R2 URLs; streamed STEP uploads
 - [ ] M10.6 Worker cloud mode: size, idle exit, cloud size list
 - [ ] M10.7 AWS stack template and the launcher in the API
@@ -187,6 +187,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M10.4 landing page (2026-10-19): `apps/web/src/landing/` renders `/` (main.tsx no longer rewrites `/` to `/app`). Every sign-in button is a plain link to `/app`, which shows the sign-in; M10.3 owns that screen. The page asks `GET /api/session` once and shows "Open the workbench" to a signed-in visitor. It reads "Sign in with Google" in every mode, `make dev` included, where `/app` shows the password form; if M10.3 exposes the auth mode, switch the label on it. Its verification numbers live in `src/landing/content.ts` and `test/landing.test.tsx` checks each against `docs/VERIFICATION_RESULTS.md`, so rebuilding that page (ADR-092) fails the fast tier until they are updated. The screenshots in `apps/web/public/landing/` are the UI redesign's (2026-10-18); retake them when the workbench changes look. The guides now open `http://localhost:5173/app`.
 
 > M10.2 deploy workflow (2026-10-19): `.github/workflows/deploy.yml` runs on every push to main (skipped until the `CLOUDFLARE_ACCOUNT_ID` variable exists) and by hand: the fast tier (fast.yml, now also `workflow_call`), then a settings check that names any missing Cloudflare secret or variable and stops, `wrangler whoami`, the web build, M10.1's `deploy:config` (writes `wrangler.production.json` with the D1 id and `CLEARFEA_COMMIT`, ADR-096), `deploy:migrate`, `deploy:worker --secrets-file` (only the secrets that are set; code and secrets in one version), and a five-minute wait for `/api/health` to report status ok and that commit. Checked with a `--dry-run` deploy on M10.1's branch. Not yet run live: it needs DEPLOYMENT.md section 1. M10.8 adds its image job before the `site` job.
 
@@ -424,6 +426,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-19
 
+- M10.4: landing page at `/` (what ClearFEA does, how it works, the analyses, results, verification numbers, open source, closed beta and sign-in), light and dark, desktop and phone widths; a unit test ties its verification numbers to `docs/VERIFICATION_RESULTS.md`. Checked with `make test`, `make e2e` and screenshots at 1440 and 390 px.
 - M10.2: deploy workflow added (`deploy.yml`); checked with actionlint, a `deploy:worker --dry-run` on M10.1's production configuration, and `make test`. Learned: wrangler 4 `deploy --secrets-file` uploads secrets with the version, so a deploy never runs new code without its secrets and needs no separate `secret bulk`.
 - M10.1 production Worker (ADR-096): `apps/api/scripts/production-config.mjs` writes `wrangler.production.json` from `wrangler.jsonc` with the custom domain, the web app as static assets on the same origin and the production D1 id; `deploy:config`, `deploy:migrate` and `deploy:worker` scripts for M10.2's workflow; the workbench moved to `/app`, `/` opens it there until M10.4, unknown addresses get a not-found page; `/api/health` reports `commit`. Checked with `wrangler deploy --dry-run` and the production configuration served locally (`/`, `/app`, `/share/<token>`, assets, `/api/*`, `/internal/*`). Learned: wrangler 4.149 reads JSONC configuration for scripts through `experimental_readRawConfig`.
 - Live closed beta planned (ADR-095): Shubham decided to put ClearFEA live at `clearfea.triyalabs.com` for two or three invited colleagues instead of asking them to self-host. M10 added to PLAN.md, ARCHITECTURE.md section 11 and `docs/DEPLOYMENT.md` written; Shubham approved M10 the same day. Learned: Cloudflare's 10 ms CPU limit on the Workers free plan and its 100 MB request body limit decide two things, the Paid plan and presigned R2 URLs for job files.

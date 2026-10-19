@@ -53,7 +53,7 @@ make dev       # API on :8787, web app on http://localhost:5173, worker in Docke
 make test      # fast test tier: generated-code check, unit tests, type checks, lint
 ```
 
-Open http://localhost:5173 and sign in as a local test user: `alice` / `alice-local` or `bob` / `bob-local`. The [user guide](docs/USER_GUIDE.md) walks through a first model; [self-hosting](docs/SELF_HOSTING.md) covers machine requirements, Windows, the self-hosting mode and backups. The first `make dev` builds the worker image, which takes a few minutes. Behind a TLS-intercepting proxy, pass its CA bundle: `make dev BUILD_CA=/path/to/ca-bundle.crt`.
+Open http://localhost:5173/app and sign in as a local test user: `alice` / `alice-local` or `bob` / `bob-local`. The [user guide](docs/USER_GUIDE.md) walks through a first model; [self-hosting](docs/SELF_HOSTING.md) covers machine requirements, Windows, the self-hosting mode and backups. The first `make dev` builds the worker image, which takes a few minutes. Behind a TLS-intercepting proxy, pass its CA bundle: `make dev BUILD_CA=/path/to/ca-bundle.crt`.
 
 ## Licence
 
