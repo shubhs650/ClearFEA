@@ -21,9 +21,10 @@ const BASE = {
   r2_buckets: [{ binding: "FILES", bucket_name: "clearfea-files" }],
 };
 const ID = "1a2b3c4d-1a2b-1a2b-1a2b-1a2b3c4d5e6f";
+const ACCOUNT = "0123456789abcdef0123456789abcdef";
 
 describe("productionConfig", () => {
-  const config = productionConfig(BASE, { databaseId: ID, commit: "abc1234" });
+  const config = productionConfig(BASE, { databaseId: ID, accountId: ACCOUNT, commit: "abc1234" });
 
   it("serves the site and the API from one Worker on the custom domain only", () => {
     expect(config.name).toBe("clearfea");
@@ -48,23 +49,31 @@ describe("productionConfig", () => {
     expect(config).not.toHaveProperty("$schema");
   });
 
-  it("reports the deployed commit, signs in with Google only, returning to the site's own address, and runs jobs on cloud machines", () => {
+  it("reports the deployed commit, signs in with Google only, runs jobs on cloud machines and names the account and bucket presigned URLs use", () => {
     expect(config.vars).toEqual({
       CLEARFEA_COMMIT: "abc1234",
       AUTH_MODE: "google",
       BETTER_AUTH_URL: "https://clearfea.triyalabs.com",
       MACHINES: "cloud",
+      R2_ACCOUNT_ID: ACCOUNT,
+      R2_BUCKET: "clearfea-files",
     });
   });
 
+  it("refuses a missing or malformed account id", () => {
+    for (const accountId of [undefined, "", "my-account"]) {
+      expect(() => productionConfig(BASE, { databaseId: ID, accountId, commit: "abc1234" })).toThrow(/section 1\.5/);
+    }
+  });
+
   it("refuses a missing or malformed database id", () => {
-    expect(() => productionConfig(BASE, { databaseId: undefined, commit: "abc1234" })).toThrow(
+    expect(() => productionConfig(BASE, { databaseId: undefined, accountId: ACCOUNT, commit: "abc1234" })).toThrow(
       /CLOUDFLARE_D1_DATABASE_ID/,
     );
-    expect(() => productionConfig(BASE, { databaseId: "clearfea", commit: "abc1234" })).toThrow(/section 1\.4/);
+    expect(() => productionConfig(BASE, { databaseId: "clearfea", accountId: ACCOUNT, commit: "abc1234" })).toThrow(/section 1\.4/);
   });
 
   it("refuses to deploy without a commit", () => {
-    expect(() => productionConfig(BASE, { databaseId: ID, commit: " " })).toThrow(/CLEARFEA_COMMIT/);
+    expect(() => productionConfig(BASE, { databaseId: ID, accountId: ACCOUNT, commit: " " })).toThrow(/CLEARFEA_COMMIT/);
   });
 });

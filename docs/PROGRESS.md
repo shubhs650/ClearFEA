@@ -49,7 +49,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M10.2 Deploy workflow for the site and API (`.github/workflows/deploy.yml`; first live run waits on the Cloudflare setup)
 - [x] M10.3 Google sign-in with Better Auth, allowlist and admin page (ADR-097; first live sign-in waits for the maintainer's Google client, DEPLOYMENT.md section 2)
 - [x] M10.4 Landing page at `/` (`apps/web/src/landing/`; light and dark, phone widths)
-- [ ] M10.5 Job files through presigned R2 URLs; streamed STEP uploads
+- [x] M10.5 Job files through presigned R2 URLs; streamed STEP uploads (ADR-098; first live use waits for the R2 token, DEPLOYMENT.md section 1.7)
 - [x] M10.6 Worker cloud mode: size, idle exit, maximum lifetime, cloud size list (ADR-099; takes effect on AWS with M10.7)
 - [ ] M10.7 AWS stack template and the launcher in the API
 - [ ] M10.8 Deploy workflow for the worker image
@@ -187,6 +187,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M10.5 presigned R2 URLs (2026-10-19): ADR-098. `apps/api/src/jobs/presign.ts` signs SigV4 query-string URLs (path style, region `auto`, unsigned payload); `transfers()` in `jobs/files.ts` uses them when `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` and `R2_BUCKET` are set, else the pass-through routes as before. The production configuration now needs `CLOUDFLARE_ACCOUNT_ID` (the deploy job already has it) and writes `R2_ACCOUNT_ID` and `R2_BUCKET`. Validity: stop limit plus 1 h, or 24 h without one, at most 7 days. `POST /api/geometries` streams the STEP body to R2 and now answers 411 without `Content-Length`. Not yet tried against real R2: that needs the maintainer's R2 token (DEPLOYMENT.md section 1.7); the first live solve is the check, and M10.9's live verification run covers it. Errors from R2 reach the job log as S3's XML body. The worker did not change, so M10.6 can change its loop freely.
 
 > M10.6 worker cloud mode (2026-10-19): ADR-099. The worker reads `CLEARFEA_MACHINE_SIZE` (a `machine_sizes` name, `medium` for standard, `large`), `CLEARFEA_IDLE_EXIT_SECONDS` and `CLEARFEA_MAX_LIFETIME_SECONDS` (`worker/clearfea_worker/config.py`); `run_forever` returns `idle` or `lifetime` and the process exits 0. The claim sends `machineSize` (optional in `ClaimRequest`) and `claimJob` takes only that size's jobs, the default size also the unsized import and report jobs; an unknown size is a 400. Migration 0023 adds `machine_sizes.cloud` (`medium` on, `large` off, others null). `MACHINES=cloud`, set by the production configuration, limits estimates and runs to the sizes that are on; the admin page's new Machine sizes card switches large (never the default) through `PUT /api/admin/machine-sizes/:name`. For M10.7: start a task per size with those three variables (600 and 43200 s), count a job's size as `COALESCE(machine_size, default size)`, and start large only when `machine_sizes.cloud = 'on'`. Locally nothing changes: no size is sent and every size is offered.
 
@@ -430,6 +432,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-19
 
+- M10.5: job files through presigned R2 URLs in production, pass-through routes kept for `make dev`, STEP uploads streamed to R2 (ADR-098). Checked with the API tests (AWS's published signature and botocore's R2 URLs matched exactly, a STEP file sent in pieces, a short body), a 150 MiB round trip through the worker's client against a local S3 server (SeaweedFS 3.80) that refused expired, wrongly signed and wrong-method URLs, `make test`, `make verify` (full tier) and `make e2e`.
 - M10.6: worker cloud mode (ADR-099): machine size from the environment, claims only its size's jobs, exits after 10 idle minutes and claims nothing new after 12 hours up; cloud size list with standard on and large off, switched on the admin page. Checked with worker, API and web tests, `make verify` (full) and `make e2e` (E-08 extended).
 - M10.4: landing page at `/` (what ClearFEA does, how it works, the analyses, results, verification numbers, open source, closed beta and sign-in), light and dark, desktop and phone widths; a unit test ties its verification numbers to `docs/VERIFICATION_RESULTS.md`. Checked with `make test`, `make e2e` and screenshots at 1440 and 390 px.
 - M10.3: Google sign-in with Better Auth behind an admin-managed allowlist, admin page, ADR-097. Checked with the API tests (the OAuth flow end to end with Google's token endpoint stubbed, refusals, removal, the isolation sweep's new admin area), web tests, `make test`, `make e2e` and a `wrangler deploy --dry-run` (445 KiB gzipped). Learned: Better Auth 1.7 talks to D1 itself and passes an `APIError` thrown in a database hook through to the error redirect as `?error=<code>`, so a refusal needs no custom route; it needs only `nodejs_als`, not `nodejs_compat`.

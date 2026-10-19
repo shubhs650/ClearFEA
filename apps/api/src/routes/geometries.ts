@@ -28,8 +28,8 @@ export const geometries = new Hono<SessionEnv>();
 geometries.use("*", requireUser);
 
 /**
- * Largest STEP file accepted. Cloudflare Workers refuse request bodies above 100 MB, so in
- * the cloud larger files must go straight to storage (ARCHITECTURE.md section 8).
+ * Largest STEP file accepted: Cloudflare refuses request bodies above 100 MB on the site's plan
+ * (ADR-095 item 4). The file is streamed to storage, so the Worker's memory is no limit.
  */
 export const MAX_STEP_BYTES = 100 * 1000 * 1000;
 
@@ -66,6 +66,47 @@ function fileName(raw: string | undefined): string | null {
   return name.length > 0 && name.length <= 255 ? name : null;
 }
 
+/** The first chunks of a body, at least ``bytes`` long unless the body is shorter. */
+async function readStart(reader: ReadableStreamDefaultReader<Uint8Array>, bytes: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  while (length < bytes) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    length += value.byteLength;
+  }
+  const start = new Uint8Array(length);
+  let at = 0;
+  for (const chunk of chunks) {
+    start.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return start;
+}
+
+/** The whole body again: the chunks already read, then the rest from the reader. */
+function rejoined(start: Uint8Array, reader: ReadableStreamDefaultReader<Uint8Array>): ReadableStream<Uint8Array> {
+  let first = true;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (first) {
+        first = false;
+        if (start.byteLength > 0) {
+          controller.enqueue(start);
+          return;
+        }
+      }
+      const { done, value } = await reader.read();
+      if (done) controller.close();
+      else controller.enqueue(value);
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+}
+
 function looksLikeStep(head: Uint8Array): boolean {
   const text = new TextDecoder().decode(head).replace(/^[﻿\s]+/, "");
   return text.startsWith("ISO-10303-21");
@@ -85,11 +126,18 @@ geometries.post("/", async (c) => {
     return c.json({ error: "Give the file's name in ?name=, for example ?name=bracket.step." }, 400);
   }
   const declared = Number(c.req.header("Content-Length") ?? Number.NaN);
-  const tooLarge = `The file is larger than ${MAX_STEP_BYTES / 1e6} MB, the most ClearFEA accepts.`;
-  if (declared > MAX_STEP_BYTES) return c.json({ error: tooLarge }, 413);
-  const content = new Uint8Array(await c.req.arrayBuffer());
-  if (content.byteLength > MAX_STEP_BYTES) return c.json({ error: tooLarge }, 413);
-  if (!looksLikeStep(content.subarray(0, 64))) {
+  if (!(Number.isInteger(declared) && declared >= 0)) {
+    return c.json({ error: "Send the file's size in bytes as Content-Length." }, 411);
+  }
+  if (declared > MAX_STEP_BYTES) {
+    return c.json({ error: `The file is larger than ${MAX_STEP_BYTES / 1e6} MB, the most ClearFEA accepts.` }, 413);
+  }
+  // Streamed to storage, not read into memory: a Worker has 128 MB (ADR-095 item 4). Only the
+  // first bytes are read here, to check that this is a STEP file before anything is stored.
+  const reader = (c.req.raw.body ?? new ReadableStream<Uint8Array>()).getReader();
+  const start = await readStart(reader, 64);
+  if (!looksLikeStep(start.subarray(0, 64))) {
+    await reader.cancel();
     return c.json(
       {
         error:
@@ -99,11 +147,20 @@ geometries.post("/", async (c) => {
     );
   }
   const id = crypto.randomUUID();
-  await c.env.FILES.put(geometryKey(c.var.userId, id, "model.step"), content);
+  const key = geometryKey(c.var.userId, id, "model.step");
+  try {
+    await c.env.FILES.put(key, rejoined(start, reader).pipeThrough(new FixedLengthStream(declared)));
+  } catch {
+    await c.env.FILES.delete(key);
+    return c.json(
+      { error: "The upload ended before the whole file arrived, or was longer than its Content-Length. Upload it again." },
+      400,
+    );
+  }
   const { geometry } = await createGeometry(c.env.DB, c.var.userId, {
     id,
     name,
-    sizeBytes: content.byteLength,
+    sizeBytes: declared,
   });
   return c.json({ geometry: view(geometry) } satisfies GeometryResponse, 201);
 });

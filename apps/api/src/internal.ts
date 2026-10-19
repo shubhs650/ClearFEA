@@ -95,7 +95,7 @@ internal.post("/jobs/claim", async (c) => {
   if (job === null) return c.body(null, 204);
   const origin = new URL(c.req.url).origin;
   return c.json({
-    job: { ...payload(job), params: job.params, transfers: transfers(job, workerId, origin) },
+    job: { ...payload(job), params: job.params, transfers: await transfers(job, workerId, origin, c.env) },
   } satisfies ClaimResponse);
 });
 
