@@ -63,7 +63,7 @@ async function saved(page: Page): Promise<void> {
 }
 
 async function signIn(page: Page, login: string, password: string): Promise<void> {
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByLabel("Login").fill(login);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();

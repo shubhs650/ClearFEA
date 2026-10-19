@@ -10,6 +10,7 @@ describe("GET /api/health", () => {
       status: "ok",
       database: "ok",
       storage: "ok",
+      commit: "development",
     });
   });
 

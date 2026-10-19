@@ -6,7 +6,7 @@ import { App } from "../src/App";
 type Reply = { status: number; body?: unknown } | Error;
 type Routes = Record<string, Reply | (() => Reply)>;
 
-const healthy = { status: 200, body: { status: "ok", database: "ok", storage: "ok" } };
+const healthy = { status: 200, body: { status: "ok", database: "ok", storage: "ok", commit: "development" } };
 const alice = { id: "a", login: "alice", name: "Alice (test user)" };
 const signedIn = { status: 200, body: { user: alice } };
 const signedOut = { status: 401, body: { error: "You are not signed in." } };
@@ -168,7 +168,7 @@ describe("status bar", () => {
   it("shows the API's own fix when it is degraded", async () => {
     const problem = "The database has no tables yet. Run the migration and restart the API.";
     serve({
-      "GET /api/health": { status: 503, body: { status: "degraded", database: problem, storage: "ok" } },
+      "GET /api/health": { status: 503, body: { status: "degraded", database: problem, storage: "ok", commit: "development" } },
       "GET /api/session": signedOut,
     });
     render(<App />);

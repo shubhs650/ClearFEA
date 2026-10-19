@@ -10,7 +10,7 @@ import {
 
 describe("generated validators", () => {
   it("accept a valid health response and refuse a malformed one", () => {
-    expect(validateHealthResponse({ status: "ok", database: "ok", storage: "ok" }).ok).toBe(true);
+    expect(validateHealthResponse({ status: "ok", database: "ok", storage: "ok", commit: "development" }).ok).toBe(true);
     const bad = validateHealthResponse({ status: "fine", database: "ok" });
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.errors.join(" ")).toMatch(/storage/);
