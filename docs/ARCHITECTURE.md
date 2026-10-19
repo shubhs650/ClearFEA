@@ -23,14 +23,17 @@ ClearFEA has three parts that talk only over HTTPS.
 
 The same three parts run on localhost in Phase 0 and in the cloud in Phase 1. Only configuration differs.
 
-| Part | Phase 0 (localhost) | Phase 1 (cloud beta) |
+| Part | Phase 0 (localhost) | Live closed beta (M10, ADR-095) |
 | --- | --- | --- |
-| Frontend | Vite dev server | Cloudflare Pages or Workers static assets |
-| API | `wrangler dev` (local Workers runtime) | Cloudflare Workers |
+| Frontend | Vite dev server | Static assets of the API's Worker, same origin, at `clearfea.triyalabs.com` |
+| API | `wrangler dev` (local Workers runtime) | Cloudflare Workers (Paid plan) |
 | Database | Local D1 (SQLite file) | Cloudflare D1 |
-| File storage | Local R2 emulation | Cloudflare R2 |
-| Job worker | One long-running Docker container that polls | One fresh AWS machine per job running the same image |
-| Light jobs (import, report) | Same container | Fast-start path, for example AWS Lambda with the same image |
+| File storage | Local R2 emulation | Cloudflare R2; the worker moves files through presigned R2 URLs |
+| Sign-in | Seeded password users (ADR-022) | Better Auth, Google only, admin-managed allowlist |
+| Job worker | One long-running Docker container that polls | AWS ECS Fargate tasks running the same image, started by the API when work is queued and stopped after 10 idle minutes |
+| Light jobs (import, report) | Same container | Same machines (a fast path such as AWS Lambda is not decided) |
+
+The live set-up is described in section 11 and the maintainer's steps in `DEPLOYMENT.md`.
 
 ## 2. Repository layout
 
@@ -259,7 +262,7 @@ Hono on Cloudflare Workers, TypeScript.
 - **Live updates:** the browser polls job status and log every couple of seconds while a job is active. No websockets at the gate.
 - **Constraints to respect:** Workers have short CPU limits and request-size limits and cannot run native binaries. Large files therefore move directly between the worker container (or browser) and R2 in the cloud, never through a Worker request body.
 
-Authentication in Phase 0 is a seeded user table and a signed session cookie. The session layer is an interface so that real authentication replaces it in Phase 1 without touching routes.
+Authentication in Phase 0 is a seeded user table and a signed session cookie. The session layer is an interface so that real authentication replaces it without touching routes: on the live closed beta Better Auth with Google sign-in sits behind the same `requireUser` (section 11, ADR-095), and the seeded login remains for development and tests.
 
 ## 9. Frontend
 
@@ -277,22 +280,59 @@ Design direction: quiet and dense enough for engineering work, with the viewer t
 ## 10. Security and privacy
 
 - STEP files are untrusted input to a large native parser. The worker container runs as a non-root user, with no network access except the API and storage endpoints, and with CPU, memory and time limits.
-- One job per machine in the cloud, so one user's data never shares a machine with another's.
+- One job at a time per machine in the cloud, each in its own working folder deleted when the job ends. On the closed beta a machine stays 10 minutes after its last job and may take the next user's job (ADR-095 item 7); a fresh machine per job remains the design for a public beta.
 - The worker holds no long-lived storage credentials; transfer URLs are scoped to one job and expire.
 - Share links carry a random token; only its hash is stored. Since M8.7 (ADR-083) a succeeded run has at most one; it opens the run's results read-only at `/share/<token>` (served by `/api/shared/:token`), never the owner's other records, and a revoked token answers like an unknown one.
 - Automated tests prove that user A cannot read, list or modify user B's records or files through any route.
 - Secrets come from environment configuration and are never committed.
 
-## 11. Phase 1 notes
+## 11. Live closed beta (M10)
 
-Not built in Phase 0, but the design must not block them.
+As decided in ADR-095. Setup steps for the maintainer are in `DEPLOYMENT.md`.
 
-- **Machine launch.** When a metered job is queued, a launcher starts one machine of the requested size with the worker image and the job id; the machine claims that job, runs it and terminates. Candidates: AWS Batch, ECS on EC2, or direct instance launch. Decide in Phase 1 from cost and start-up time.
-- **Fast path for light jobs.** Import and report jobs need to start in seconds. Candidate: AWS Lambda running the same container image.
-- **Spot tier.** The job model already supports retry after a lost machine, which is what a spot tier needs.
-- **Real authentication, email, payments** replace the Phase 0 stand-ins behind their interfaces.
+```
+ Browser                        Cloudflare: clearfea.triyalabs.com        AWS, one region
++------------------+  HTTPS  +----------------------------------+      +--------------------------+
+| landing    /     | <-----> | Worker "clearfea"                |      | ECS cluster on Fargate   |
+| workbench  /app  |         |  static assets (web app)         | ---> | standard: 4 vCPU, 16 GB  |
+| share /share/... |         |  Hono API /api, /internal        | Run  | large: 8 vCPU, 32 GB     |
++------------------+         |  Better Auth /api/auth (Google)  | Task |   (defined, off)         |
+                             |  scheduled handler, each minute  |      | worker image from ECR    |
+                             |  D1: records, allowlist, starts  | <--- | claim, heartbeat, done   |
+                             |  R2: files                       | <--> | presigned R2 URLs        |
+                             +----------------------------------+      +--------------------------+
+```
 
-## 12. Known risks
+**Request routing.** The Worker's static assets hold the built web app: `/` is the landing page, `/app` the workbench, `/share/<token>` a shared run; `/api/*` and `/internal/*` run the Worker first. Unknown app paths fall back to the app's page.
+
+**Sign-in.** Better Auth handles `/api/auth/*` with Google as its only provider and D1 for its user, session, account and verification tables. A database hook refuses a user or session whose verified email is neither `ADMIN_EMAIL` nor on the `beta_allowlist` table. `requireUser` reads the Better Auth session and finds or creates the matching ClearFEA user (with the credit grant on creation). The admin page (`/app/admin`, admin only) adds and removes allowlist rows and lists users with their machine time this month. `AUTH_MODE=local` keeps the seeded password login for `make dev`, `make verify` and `make e2e`; a verification account for live checks signs in with a secret token (M10.9).
+
+**Starting machines.** Queuing a job calls the launcher. If no worker of the job's size has claimed or sent a heartbeat in the last 60 seconds and no start is pending, it calls ECS `RunTask` for that size's task definition family (the newest revision), in the stack's public subnets with a public IP, and records the start (`worker_starts`: size, task ARN, requested at, first seen). The scheduled handler, every minute, starts a machine again for jobs still queued after three minutes, and fails a queued job as a platform fault (`no_machine`, not charged) after three starts in a row produced no worker. Large starts only when the large size is switched on. The monthly machine-hours cap (`settings`) stops new starts and refuses new runs with a plain message once reached; machine hours are counted from each worker's first and last contact.
+
+**The worker on Fargate.** Same image and code as on localhost, with `CLEARFEA_API_URL=https://clearfea.triyalabs.com`, the worker token from AWS Systems Manager, `CLEARFEA_MACHINE_SIZE` (standard or large) and `CLEARFEA_IDLE_EXIT_SECONDS=600`. It claims only jobs for its size (import, mesh and report count as standard), runs one at a time, and exits when it has been idle that long or reaches its maximum lifetime; ECS then stops the task and billing stops. Its role has no AWS permissions; it holds only the worker token and the per-job presigned URLs. Ephemeral storage is raised to 50 GiB for raw output.
+
+**Files.** In production `transfers()` returns presigned R2 S3 URLs (GET for inputs, PUT for outputs, up to 5 GiB each), signed with an R2 API token and valid until the job's stop limit plus a margin, at most 7 days. Browser uploads (STEP files up to 100 MB, report figures, logos) stream through the Worker into R2; downloads stream out of R2 through the Worker.
+
+**Deploying.** `.github/workflows/deploy.yml` runs on every push to main, one run at a time:
+
+1. The fast tier (`make test`).
+2. Worker image, only when `worker/` or `packages/spec/` changed: build, push to ECR tagged with the commit, register new revisions of both task definitions. Starts after this use the new image; running jobs finish on theirs.
+3. Site and API: build the web app, apply D1 migrations (`--remote`), copy secrets from GitHub to the Worker, `wrangler deploy`.
+4. Check that `https://clearfea.triyalabs.com/api/health` reports the new commit.
+
+GitHub authenticates to AWS with an OIDC role and to Cloudflare with an API token. A job-protocol change stays compatible with the previous API or worker for one deploy. Rollback is a redeploy of an earlier commit from the workflow's manual run; D1 Time Travel restores data.
+
+**Costs (closed beta, us-east-1 on-demand, October 2026).** Workers Paid $5 a month; D1 and R2 within the included amounts. Fargate standard about $0.233 an hour of machine time (4 × $0.04048 + 16 × $0.004445), large about $0.466; 20 to 60 machine hours a month is about $5 to $14. ECR storage for ten 2 GB images about $2, logs and public IPv4 time a few cents. No NAT gateway, load balancer or always-on server.
+
+## 12. Later
+
+Not built for the closed beta; the design must not block them.
+
+- **Public beta machines.** A fresh machine per job again, a spot tier (the job model would need a retry after a lost machine), benchmarked limits for large and bigger sizes, and a fast path for light jobs (AWS Lambda running the same image).
+- **Staging and previews.** A staging copy of the Worker and D1, and preview URLs for pull requests.
+- **Email, payments** replace the remaining stand-ins behind their interfaces.
+
+## 13. Known risks
 
 | Risk | Mitigation |
 | --- | --- |
@@ -302,4 +342,6 @@ Not built in Phase 0, but the design must not block them.
 | Tied interfaces give poor stresses near bonds | Stated in the report: a run that ties bonds carries the note in `packages/spec/report-notes.json`, with the measured figures, shown under its results and printed by the report (M4.5, ADR-062); verification cases V-11 and V-12 compare bonded bodies with single-body references |
 | Remote-load coupling behaves differently from expectation | Dedicated verification cases for force and moment equilibrium and stress distribution |
 | Real-world STEP files fail to import or mesh | Collect failing files as test cases (with permission); clear error messages; the beta exists to find these |
-| Local R2 and D1 emulation differ from production | Keep storage and database access behind thin interfaces; deploy a staging copy early in Phase 1 |
+| Local R2 and D1 emulation differ from production | Keep storage and database access behind thin interfaces; the live verification run (M10.9) checks the real services |
+| A merge breaks the live site for the beta users | The fast tier runs before every deploy; the health check after it; redeploy an earlier commit to roll back; protocol changes stay compatible for one deploy |
+| Solver machines left running or a runaway bill | Workers exit after 10 idle minutes and a maximum lifetime; monthly machine-hours cap; AWS Budgets alarm |
