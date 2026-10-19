@@ -9,6 +9,8 @@ import { type MeshFile, meshKey } from "../db/meshes";
 import { figureKey, logoKey } from "../db/report";
 import { reportKey } from "../db/reports";
 import { type RunFile, runKey } from "../db/runs";
+import type { Env } from "../env";
+import { presignUrl, type R2Signer } from "./presign";
 
 export interface JobFile {
   name: string;
@@ -71,17 +73,49 @@ export function jobFiles(job: Job): JobFile[] {
   return [];
 }
 
+/** How long a presigned URL stays valid past the job's stop limit: uploads come after the solve. */
+export const PRESIGN_MARGIN_SECONDS = 60 * 60;
+
+/** Validity for a job with no stop limit (import, mesh, report): longer than any of them runs. */
+export const PRESIGN_DEFAULT_SECONDS = 24 * 60 * 60;
+
+/** The signer for presigned R2 URLs, or null when the API is not configured for them (`make dev`). */
+export function r2Signer(env: Env): R2Signer | null {
+  const { R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_ACCOUNT_ID, R2_BUCKET } = env;
+  if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ACCOUNT_ID || !R2_BUCKET) return null;
+  return {
+    accessKeyId: R2_ACCESS_KEY_ID,
+    secretAccessKey: R2_SECRET_ACCESS_KEY,
+    endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    bucket: R2_BUCKET,
+    region: "auto",
+  };
+}
+
+/** Seconds a claimed job's presigned URLs stay valid: its stop limit plus the margin (ADR-098). */
+export function presignSeconds(job: Job): number {
+  return job.stopAfterSeconds === null ? PRESIGN_DEFAULT_SECONDS : job.stopAfterSeconds + PRESIGN_MARGIN_SECONDS;
+}
+
 /**
- * Transfer URLs for a claimed job. In Phase 0 they point at the API's own pass-through
- * routes, which check the worker token and that this worker holds the job; in the cloud
- * they become presigned R2 URLs and the worker code does not change.
+ * Transfer URLs for a claimed job. In production they are presigned R2 URLs, so files of up
+ * to 5 GiB go straight between the worker and R2, past Cloudflare's 100 MB request limit
+ * (ADR-095 item 4). Without R2 credentials, as under `make dev`, they point at the API's own
+ * pass-through routes, which check the worker token and that this worker holds the job. The
+ * worker only follows the URLs, so it works with either.
  */
-export function transfers(job: Job, workerId: string, origin: string): Transfer[] {
-  return jobFiles(job).map((file) => ({
-    name: file.name,
-    direction: file.direction,
-    url: `${origin}/internal/jobs/${encodeURIComponent(job.id)}/files/${encodeURIComponent(
-      file.name,
-    )}?worker=${encodeURIComponent(workerId)}`,
-  }));
+export async function transfers(job: Job, workerId: string, origin: string, env: Env): Promise<Transfer[]> {
+  const signer = r2Signer(env);
+  return Promise.all(
+    jobFiles(job).map(async (file) => ({
+      name: file.name,
+      direction: file.direction,
+      url:
+        signer === null
+          ? `${origin}/internal/jobs/${encodeURIComponent(job.id)}/files/${encodeURIComponent(
+              file.name,
+            )}?worker=${encodeURIComponent(workerId)}`
+          : await presignUrl(signer, file.direction === "upload" ? "PUT" : "GET", file.key, presignSeconds(job)),
+    })),
+  );
 }

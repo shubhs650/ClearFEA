@@ -10,22 +10,31 @@ export const PRODUCTION_DOMAIN = "clearfea.triyalabs.com";
 export const PRODUCTION_WORKER = "clearfea";
 
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const ACCOUNT = /^[0-9a-f]{32}$/;
 
 /**
  * The production configuration: the base configuration with its development-only keys removed,
  * the production D1 database, the built web app served as static assets on the same origin, and
- * the deployed commit for /api/health.
+ * the deployed commit for /api/health, and the account and bucket that job files' presigned R2
+ * URLs name (M10.5, ADR-098).
  *
  * @param {Record<string, unknown>} base wrangler.jsonc as written
- * @param {{ databaseId: string | undefined, commit: string | undefined }} production
+ * @param {{ databaseId: string | undefined, accountId: string | undefined, commit: string | undefined }} production
  * @returns {Record<string, unknown>}
  */
-export function productionConfig(base, { databaseId, commit }) {
+export function productionConfig(base, { databaseId, accountId, commit }) {
   const id = databaseId?.trim().toLowerCase() ?? "";
   if (!ID.test(id)) {
     throw new Error(
       "CLOUDFLARE_D1_DATABASE_ID must be the production database's id, like 1a2b3c4d-1a2b-1a2b-1a2b-1a2b3c4d5e6f. " +
         "Copy it from Cloudflare, D1, clearfea (docs/DEPLOYMENT.md section 1.4).",
+    );
+  }
+  const account = accountId?.trim().toLowerCase() ?? "";
+  if (!ACCOUNT.test(account)) {
+    throw new Error(
+      "CLOUDFLARE_ACCOUNT_ID must be the Cloudflare account id, 32 letters and digits. " +
+        "Copy it from the Cloudflare dashboard (docs/DEPLOYMENT.md section 1.5).",
     );
   }
   if (!commit?.trim()) {
@@ -34,6 +43,11 @@ export function productionConfig(base, { databaseId, commit }) {
   const databases = /** @type {Record<string, unknown>[]} */ (base.d1_databases ?? []);
   if (databases.length !== 1) {
     throw new Error(`wrangler.jsonc should bind one D1 database, not ${databases.length}.`);
+  }
+  const buckets = /** @type {{ binding?: string, bucket_name?: string }[]} */ (base.r2_buckets ?? []);
+  const files = buckets.find((b) => b.binding === "FILES");
+  if (buckets.length !== 1 || !files?.bucket_name) {
+    throw new Error("wrangler.jsonc should bind one R2 bucket, as FILES.");
   }
 
   // $schema points into node_modules relative to wrangler.jsonc; dev only applies to wrangler dev.
@@ -54,7 +68,7 @@ export function productionConfig(base, { databaseId, commit }) {
     },
     d1_databases: [{ ...databases[0], database_id: id }],
     // Variables in this file replace the Worker's variables at each deploy; secrets are kept.
-    vars: { CLEARFEA_COMMIT: commit.trim() },
+    vars: { CLEARFEA_COMMIT: commit.trim(), R2_ACCOUNT_ID: account, R2_BUCKET: files.bucket_name },
     observability: { enabled: true },
   };
 }
