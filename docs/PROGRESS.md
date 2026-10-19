@@ -428,7 +428,6 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 - Re-measure `steps.json` inside the worker container, including the job's downloads and uploads (ADR-081 item 5), so the estimator is fitted to what the platform bills; and a shape term for slender parts (ADR-049 item 3).
 - A modal run's export (CSV of frequencies, VTK with every mode shape) and its modal participation factors and effective masses, which the `.dat` file holds after the eigenvalues (ADR-071 item 2).
 - A spec saved through the API without `bonds` reads as changed against its own run, whose frozen spec has `bonds: []`, so the run record says "The setup has changed since this run" (found staging the M8 close screenshots; the web app always sends `bonds`). Normalise the spec on save, or compare with defaults filled in.
-- Keep a unit system picked before the project has loaded (`apps/web/src/units/useProject.ts` draws the loaded system over it right after sign-in; found by E-02, which waits for the load).
 
 - List bodies by name in the "Local size on bodies" panel (it shows "Body 2", "Body 3"; `BodiesField` in `apps/web/src/setup/fields.tsx`; found in M9.5).
 - Widen the Run panel's reaction and balance values: on a 1440-pixel window they wrap a few characters to a line (found in M9.3, see the guide's reactions screenshot).
@@ -440,6 +439,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-19
 
+- M10.10 follow-up: the maintainer's first manual Deploy failed in the fast tier on the flaky Setup.test.tsx "puts the system back and says why when the API refuses the change". Cause: the project's unit system, loading after a refused change, cleared the refusal and drew over the choice (the parked E-02 item). `useProject` now keeps a system chosen before the project has loaded; a new test holds the load back and fails without the fix. Learned: a deploy reruns the fast tier, so a flaky test now blocks going live.
 - M10.10 follow-up: the import, mesh, run and report panels say "Starting a solver machine" while the user's queued job waits for one on the live site, from `GET /api/jobs/machine-wait` (ADR-103).
 - M10.10: the user guide written for the live site, an admin guide for running the beta, and the tutorial plate served by the site for one-click download (ADR-102). Learned: Workers static assets honour a `_headers` file in the web app's `public/`, which is how a file is made to download rather than open as text.
 - M10.8: the Deploy workflow's Solver image job: builds and pushes the worker image only when no image of its `worker/` + `packages/spec/` source exists, then registers machine definition revisions pinned to its digest before the site deploys (ADR-101). Checked with actionlint, shellcheck, script tests against a stand-in AWS CLI and `make test`. Learned: tagging by the source's tree ids makes first deploys, reruns and rollbacks from a tag all work without diffing against the previous push.
