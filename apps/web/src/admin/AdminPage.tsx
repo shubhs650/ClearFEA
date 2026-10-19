@@ -216,7 +216,10 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
               When the limit is reached no machine is started and new runs and meshes are refused until the 1st.
               Set it to 0 to pause the solver; the site stays up.
             </p>
-            <table className="wallet-table" aria-label="Machine starts">
+            {state.admin.solverMachines.starts.length === 0 ? (
+              <p className="pane-empty">No machine started yet.</p>
+            ) : (
+              <table className="wallet-table" aria-label="Machine starts">
               <thead>
                 <tr>
                   <th>Asked for (UTC)</th>
@@ -233,8 +236,8 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
                   </tr>
                 ))}
               </tbody>
-            </table>
-            {state.admin.solverMachines.starts.length === 0 && <p className="pane-empty">No machine started yet.</p>}
+              </table>
+            )}
           </section>
         </div>
       )}
