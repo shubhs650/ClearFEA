@@ -49,7 +49,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M10.2 Deploy workflow for the site and API (`.github/workflows/deploy.yml`; first live run waits on the Cloudflare setup)
 - [x] M10.3 Google sign-in with Better Auth, allowlist and admin page (ADR-097; first live sign-in waits for the maintainer's Google client, DEPLOYMENT.md section 2)
 - [x] M10.4 Landing page at `/` (`apps/web/src/landing/`; light and dark, phone widths)
-- [ ] M10.5 Job files through presigned R2 URLs; streamed STEP uploads
+- [x] M10.5 Job files through presigned R2 URLs; streamed STEP uploads (ADR-098; first live use waits for the R2 token, DEPLOYMENT.md section 1.7)
 - [ ] M10.6 Worker cloud mode: size, idle exit, cloud size list
 - [ ] M10.7 AWS stack template and the launcher in the API
 - [ ] M10.8 Deploy workflow for the worker image
@@ -187,6 +187,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M10.5 presigned R2 URLs (2026-10-19): ADR-098. `apps/api/src/jobs/presign.ts` signs SigV4 query-string URLs (path style, region `auto`, unsigned payload); `transfers()` in `jobs/files.ts` uses them when `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` and `R2_BUCKET` are set, else the pass-through routes as before. The production configuration now needs `CLOUDFLARE_ACCOUNT_ID` (the deploy job already has it) and writes `R2_ACCOUNT_ID` and `R2_BUCKET`. Validity: stop limit plus 1 h, or 24 h without one, at most 7 days. `POST /api/geometries` streams the STEP body to R2 and now answers 411 without `Content-Length`. Not yet tried against real R2: that needs the maintainer's R2 token (DEPLOYMENT.md section 1.7); the first live solve is the check, and M10.9's live verification run covers it. Errors from R2 reach the job log as S3's XML body. The worker did not change, so M10.6 can change its loop freely.
 
 > M10.3 Google sign-in (2026-10-19): ADR-097. Better Auth 1.7.10 in `apps/api/src/session/google.ts`, on D1 directly, mounted at `/api/auth/*` only when `AUTH_MODE=google` (the production configuration sets it and `BETTER_AUTH_URL`); the Worker gained the `nodejs_als` flag. Migration 0022 adds Google's columns to `users`, the three `auth_` tables, `allowed_emails` and the `signup_grant_micro_credits` setting. Admin routes `/api/admin*`, admin page `apps/web/src/admin/AdminPage.tsx` from the status bar. Locally the seed gives alice and bob `@clearfea.test` addresses and `ADMIN_EMAIL=alice@clearfea.test` makes alice the admin (`infra/dev.sh` adds the line to an older `.dev.vars`; `infra/stack.sh` refuses to start without it). `test/googleSignIn.test.ts` runs the whole OAuth flow with Google's token endpoint answered in the test (Better Auth reads the code flow's ID token without checking its signature, as OIDC allows over TLS). Not yet tried against real Google: that needs the maintainer's OAuth client and secrets (DEPLOYMENT.md sections 2 and 3); the first live sign-in is the check. The web app's "API did not answer" messages no longer name `pnpm` or port 8787 in a production build. The landing page (M10.4) can link to `/app`, which shows Sign in with Google when signed out, or call `startGoogleSignIn()` from `apps/web/src/api/session.ts`.
 
@@ -428,6 +430,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-19
 
+- M10.5: job files through presigned R2 URLs in production, pass-through routes kept for `make dev`, STEP uploads streamed to R2 (ADR-098). Checked with the API tests (AWS's published signature and botocore's R2 URLs matched exactly, a STEP file sent in pieces, a short body), a 150 MiB round trip through the worker's client against a local S3 server (SeaweedFS 3.80) that refused expired, wrongly signed and wrong-method URLs, `make test`, `make verify` (full tier) and `make e2e`.
 - M10.4: landing page at `/` (what ClearFEA does, how it works, the analyses, results, verification numbers, open source, closed beta and sign-in), light and dark, desktop and phone widths; a unit test ties its verification numbers to `docs/VERIFICATION_RESULTS.md`. Checked with `make test`, `make e2e` and screenshots at 1440 and 390 px.
 - M10.3: Google sign-in with Better Auth behind an admin-managed allowlist, admin page, ADR-097. Checked with the API tests (the OAuth flow end to end with Google's token endpoint stubbed, refusals, removal, the isolation sweep's new admin area), web tests, `make test`, `make e2e` and a `wrangler deploy --dry-run` (445 KiB gzipped). Learned: Better Auth 1.7 talks to D1 itself and passes an `APIError` thrown in a database hook through to the error redirect as `?error=<code>`, so a refusal needs no custom route; it needs only `nodejs_als`, not `nodejs_compat`.
 - M10.2: deploy workflow added (`deploy.yml`); checked with actionlint, a `deploy:worker --dry-run` on M10.1's production configuration, and `make test`. Learned: wrangler 4 `deploy --secrets-file` uploads secrets with the version, so a deploy never runs new code without its secrets and needs no separate `secret bulk`.

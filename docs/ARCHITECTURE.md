@@ -311,7 +311,7 @@ As decided in ADR-095. Setup steps for the maintainer are in `DEPLOYMENT.md`.
 
 **The worker on Fargate.** Same image and code as on localhost, with `CLEARFEA_API_URL=https://clearfea.triyalabs.com`, the worker token from AWS Systems Manager, `CLEARFEA_MACHINE_SIZE` (standard or large) and `CLEARFEA_IDLE_EXIT_SECONDS=600`. It claims only jobs for its size (import, mesh and report count as standard), runs one at a time, and exits when it has been idle that long or reaches its maximum lifetime; ECS then stops the task and billing stops. Its role has no AWS permissions; it holds only the worker token and the per-job presigned URLs. Ephemeral storage is raised to 50 GiB for raw output.
 
-**Files.** In production `transfers()` returns presigned R2 S3 URLs (GET for inputs, PUT for outputs, up to 5 GiB each), signed with an R2 API token and valid until the job's stop limit plus a margin, at most 7 days. Browser uploads (STEP files up to 100 MB, report figures, logos) stream through the Worker into R2; downloads stream out of R2 through the Worker.
+**Files.** In production `transfers()` returns presigned R2 S3 URLs (GET for inputs, PUT for outputs, up to 5 GiB each), signed with an R2 API token inside the API (`apps/api/src/jobs/presign.ts`) and valid until the job's stop limit plus an hour, or 24 hours for a job with no stop limit, at most 7 days (ADR-098). Without the R2 token, as under `make dev`, the claim returns the pass-through routes instead. Browser uploads (STEP files up to 100 MB, report figures, logos) stream through the Worker into R2; downloads stream out of R2 through the Worker.
 
 **Deploying.** `.github/workflows/deploy.yml` runs on every push to main, one run at a time:
 
