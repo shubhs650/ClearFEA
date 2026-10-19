@@ -24,6 +24,8 @@ stack_checks() {
   fi
   grep -q '^SESSION_SECRET=' apps/api/.dev.vars ||
     die "apps/api/.dev.vars has no SESSION_SECRET line. Run 'make dev' once, or copy it from .dev.vars.example."
+  grep -q '^ADMIN_EMAIL=alice@clearfea.test$' apps/api/.dev.vars ||
+    die "apps/api/.dev.vars does not make alice the admin, which the tests expect. Run 'make dev' once, or add ADMIN_EMAIL=alice@clearfea.test."
   worker_token=$(sed -n 's/^WORKER_TOKEN=//p' apps/api/.dev.vars | tail -n 1)
   [ -n "$worker_token" ] || die "apps/api/.dev.vars has no WORKER_TOKEN line. Copy it from apps/api/.dev.vars.example."
 }

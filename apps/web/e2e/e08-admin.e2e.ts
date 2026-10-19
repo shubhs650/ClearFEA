@@ -1,0 +1,72 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// E-08 (docs/VERIFICATION.md): sign-in and the admin page of the live closed beta (M10.3,
+// ADR-097). The stack signs in locally; the live site's sign-in screen is shown by answering
+// /api/session/options as the live site does, and its refusal by the address Google's callback
+// returns to. Alice, the admin here, invites an address, sees it listed and removes it; bob sees
+// no Admin and the admin routes answer him as unknown addresses. Real Google sign-in is checked
+// on the live site, with the maintainer's OAuth client.
+import { expect, type Page, test } from "@playwright/test";
+
+const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
+
+async function signIn(page: Page, login: string, password: string): Promise<void> {
+  await page.goto("/app");
+  await page.getByLabel("Login").fill(login);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+}
+
+test("E-08: the live sign-in screen, a refused address, and the admin page", async ({ page, browser }) => {
+  await test.step("the live site offers only Sign in with Google", async () => {
+    await page.route("/api/session/options", (route) => route.fulfill({ json: { signIn: "google" } }));
+    await page.goto("/app");
+    await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+    await expect(page.getByLabel("Password")).toHaveCount(0);
+    await expect(page.getByText("ClearFEA is in a closed beta.")).toBeVisible();
+    await page.screenshot({ path: `${OUT}/e08-google-sign-in.png` });
+  });
+
+  await test.step("an address that is not invited is told so, and the code leaves the address bar", async () => {
+    await page.goto("/app?error=NOT_INVITED&error_description=x");
+    await expect(page.getByRole("alert")).toContainText("not invited to the ClearFEA closed beta");
+    await expect(page).toHaveURL(/\/app$/);
+    await page.screenshot({ path: `${OUT}/e08-not-invited.png` });
+    await page.unroute("/api/session/options");
+  });
+
+  await test.step("alice, the admin, invites an address and removes it", async () => {
+    await signIn(page, "alice", "alice-local");
+    const status = page.getByRole("contentinfo", { name: "Status" });
+    await status.getByRole("button", { name: "Admin" }).click();
+    const admin = page.getByRole("region", { name: "Admin" });
+    await expect(admin.getByText("alice@clearfea.test")).toHaveCount(2);
+    await admin.getByLabel("Email address").fill("  Colleague.One@Example.com ");
+    await admin.getByRole("button", { name: "Add" }).click();
+    await expect(admin.getByText("colleague.one@example.com")).toBeVisible();
+    await admin.getByLabel("Email address").fill("colleague.two@example.com");
+    await admin.getByRole("button", { name: "Add" }).click();
+    await expect(admin.getByText("colleague.two@example.com")).toBeVisible();
+    await expect(admin.getByRole("table", { name: "Users" }).getByText("Bob (test user)")).toBeVisible();
+    await page.screenshot({ path: `${OUT}/e08-admin.png` });
+
+    await admin.getByRole("button", { name: "Remove colleague.one@example.com" }).click();
+    await expect(admin.getByText("colleague.one@example.com")).toHaveCount(0);
+    await admin.getByRole("button", { name: "Remove colleague.two@example.com" }).click();
+    await expect(admin.getByText("Nobody else is invited yet.")).toBeVisible();
+    await admin.getByRole("button", { name: "Back to the workbench" }).click();
+    await expect(admin).toHaveCount(0);
+  });
+
+  await test.step("bob sees no Admin, and the admin routes do not exist for him", async () => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const bob = await context.newPage();
+    await signIn(bob, "bob", "bob-local");
+    const status = bob.getByRole("contentinfo", { name: "Status" });
+    await expect(status.getByRole("button", { name: "Sign out" })).toBeVisible();
+    await expect(status.getByRole("button", { name: "Admin" })).toHaveCount(0);
+    expect((await bob.request.get("/api/admin")).status()).toBe(404);
+    const add = await bob.request.post("/api/admin/allowed", { data: { email: "bob.friend@example.com" } });
+    expect(add.status()).toBe(404);
+    await context.close();
+  });
+});

@@ -10,6 +10,20 @@ export interface Env {
   SESSION_SECRET?: string;
   /** "true" turns on self-hosting mode: the wallet is informational and never refuses (ADR-084). */
   SELF_HOSTED?: string;
+  /**
+   * How people sign in (M10.3, ADR-097): "local" (the default) for the seeded password logins of
+   * `make dev`, `make verify` and `make e2e`; "google" on the live site, where the password login is refused.
+   */
+  AUTH_MODE?: string;
+  /** Signs Better Auth's sessions and OAuth state in "google" mode. Changing it signs everyone out. */
+  BETTER_AUTH_SECRET?: string;
+  /** The site's own address in "google" mode, from which Google's redirect address is formed. */
+  BETTER_AUTH_URL?: string;
+  /** The Google OAuth client (docs/DEPLOYMENT.md section 2.3). */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  /** The admin's email address: always allowed to sign in, and the only one to see the admin page. */
+  ADMIN_EMAIL?: string;
   /** The git commit a production deploy was made from, written by scripts/production-config.mjs (ADR-095). */
   CLEARFEA_COMMIT?: string;
 }

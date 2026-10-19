@@ -4,13 +4,13 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 type Session = Annotated[Any, Field(title="Session")]
 """
-Wire shapes of the session routes (docs/ARCHITECTURE.md section 8, ADR-022). Each message is a definition under $defs.
+Wire shapes of the session routes (docs/ARCHITECTURE.md section 8, ADR-022, ADR-097). Each message is a definition under $defs.
 """
 
 
@@ -35,6 +35,10 @@ class SessionUser(BaseModel):
     id: str
     login: str
     name: str
+    admin: bool
+    """
+    True for the admin (ADMIN_EMAIL), who sees the admin page (M10.3).
+    """
 
 
 class SessionResponse(BaseModel):
@@ -47,3 +51,15 @@ class SessionResponse(BaseModel):
         populate_by_name=True,
     )
     user: SessionUser
+
+
+class SignInOptions(BaseModel):
+    """
+    Answer to GET /api/session/options: how this site signs people in (AUTH_MODE, ADR-097). "password" for the seeded local test users, "google" for Google sign-in on the live site.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    sign_in: Annotated[Literal["password", "google"], Field(alias="signIn")]

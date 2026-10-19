@@ -7,7 +7,7 @@ type Reply = { status: number; body?: unknown } | Error;
 type Routes = Record<string, Reply | (() => Reply)>;
 
 const healthy = { status: 200, body: { status: "ok", database: "ok", storage: "ok", commit: "development" } };
-const alice = { id: "a", login: "alice", name: "Alice (test user)" };
+const alice = { id: "a", login: "alice", name: "Alice (test user)", admin: false };
 const signedIn = { status: 200, body: { user: alice } };
 const signedOut = { status: 401, body: { error: "You are not signed in." } };
 const noGeometries = { status: 200, body: { geometries: [] } };
@@ -28,8 +28,12 @@ function job(status: string) {
   };
 }
 
-/** Answers fetch calls by "METHOD /path"; anything not listed is a test error. */
-function serve(routes: Routes) {
+/**
+ * Answers fetch calls by "METHOD /path"; anything not listed is a test error. The sign-in screen
+ * asks how to sign in; it is the password form unless a test says otherwise.
+ */
+function serve(listed: Routes) {
+  const routes: Routes = { "GET /api/session/options": { status: 200, body: { signIn: "password" } }, ...listed };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const key = `${init?.method ?? "GET"} ${String(input)}`;
     const route = routes[key];
@@ -105,6 +109,118 @@ describe("sign-in", () => {
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
     expect(await screen.findByRole("main", { name: "Sign in" })).toBeTruthy();
+  });
+});
+
+describe("Google sign-in (M10.3)", () => {
+  const google = { status: 200, body: { signIn: "google" } };
+
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("offers only Sign in with Google on the live site, and goes to Google", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, href: window.location.href, assign });
+    const fetchMock = serve({
+      "GET /api/health": healthy,
+      "GET /api/session": signedOut,
+      "GET /api/session/options": google,
+      "POST /api/auth/sign-in/social": {
+        status: 200,
+        body: { url: "https://accounts.google.com/o/oauth2/v2/auth?state=s", redirect: true },
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in with Google" }));
+    expect(screen.queryByLabelText("Password")).toBeNull();
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("https://accounts.google.com/o/oauth2/v2/auth?state=s"));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/sign-in/social",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ provider: "google", callbackURL: "/app", errorCallbackURL: "/app" }),
+      }),
+    );
+  });
+
+  it("says why Google sign-in was refused, and takes the code out of the address", async () => {
+    window.history.replaceState(null, "", "/app?error=NOT_INVITED&error_description=x");
+    serve({ "GET /api/health": healthy, "GET /api/session": signedOut, "GET /api/session/options": google });
+    render(<App />);
+    expect((await screen.findByRole("alert")).textContent).toContain("not invited to the ClearFEA closed beta");
+    expect(window.location.search).toBe("");
+  });
+
+  it("does not repeat an unexpected error text from the address", async () => {
+    window.history.replaceState(null, "", "/app?error=Call%20this%20number");
+    serve({ "GET /api/health": healthy, "GET /api/session": signedOut, "GET /api/session/options": google });
+    render(<App />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Google sign-in did not finish.");
+    expect(alert.textContent).not.toContain("number");
+  });
+});
+
+describe("admin page (M10.3)", () => {
+  const admin = { status: 200, body: { user: { ...alice, admin: true } } };
+  const view = (allowed: string[]) => ({
+    status: 200,
+    body: {
+      adminEmail: "alice@clearfea.test",
+      allowed: allowed.map((email) => ({ email, addedAt: "2026-10-19T06:00:00.000Z" })),
+      users: [
+        {
+          id: "a",
+          name: "Alice (test user)",
+          email: "alice@clearfea.test",
+          createdAt: "2026-10-19T05:00:00.000Z",
+          lastSignIn: null,
+          machineSecondsThisMonth: 3900,
+          allowed: true,
+        },
+      ],
+    },
+  });
+
+  it("is offered to the admin only", async () => {
+    serve({
+      "GET /api/health": healthy,
+      "GET /api/session": signedIn,
+      "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
+    });
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "Sign out" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Admin" })).toBeNull();
+  });
+
+  it("adds and removes an allowed address", async () => {
+    const fetchMock = serve({
+      "GET /api/health": healthy,
+      "GET /api/session": admin,
+      "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
+      "GET /api/admin": view([]),
+      "POST /api/admin/allowed": view(["colleague@gmail.com"]),
+      "DELETE /api/admin/allowed/colleague%40gmail.com": view([]),
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    const page = await screen.findByRole("region", { name: "Admin" });
+    expect(await within(page).findByText("Nobody else is invited yet.")).toBeTruthy();
+    expect(within(page).getByText("1 h 05 min")).toBeTruthy();
+    fireEvent.change(within(page).getByLabelText("Email address"), { target: { value: "colleague@gmail.com" } });
+    fireEvent.click(within(page).getByRole("button", { name: "Add" }));
+    expect(await within(page).findByText("colleague@gmail.com")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/allowed",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ email: "colleague@gmail.com" }) }),
+    );
+    fireEvent.click(within(page).getByRole("button", { name: "Remove colleague@gmail.com" }));
+    expect(await within(page).findByText("Nobody else is invited yet.")).toBeTruthy();
+    fireEvent.click(within(page).getByRole("button", { name: "Back to the workbench" }));
+    expect(screen.queryByRole("region", { name: "Admin" })).toBeNull();
   });
 });
 

@@ -227,7 +227,7 @@ After this, you never need to run it by hand: every merge to `main` runs it.
 ### 6.2 Sign in as admin
 
 1. On the landing page, **Sign in with Google**, with your admin Gmail.
-2. The header shows **Admin**. Open it.
+2. The bar along the bottom of the workbench shows **Admin** next to **Wallet**. Open it.
 
 ### 6.3 Invite a colleague
 
@@ -235,7 +235,9 @@ After this, you never need to run it by hand: every merge to `main` runs it.
 2. Check the same address is a **Test user** on the Google consent screen (2.2 step 7).
 3. Send them the link `https://clearfea.triyalabs.com` and the user guide's tutorial. They sign in with Google; there is nothing to install.
 
-To remove someone, delete their address on the admin page. They are signed out at their next sign-in, and their projects stay in the database.
+To remove someone, select **Remove** next to their address on the admin page. They are signed out at once and cannot sign in again; their projects stay in the database. Adding the address again lets them back in to the same account.
+
+If someone sees "This Google account is not invited", the address they chose on Google's screen is not on the list: check for a second Google account, or add the exact address they used.
 
 ## 7. Day to day
 

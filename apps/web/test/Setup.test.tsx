@@ -182,7 +182,7 @@ const ESTIMATE: RunEstimate = {
 function routes(simulations: SimulationView[], extra: Record<string, Route> = {}): Record<string, Route> {
   return {
     "GET /api/health": { status: 200, json: { status: "ok", database: "ok", storage: "ok", commit: "development" } },
-    "GET /api/session": { status: 200, json: { user: { id: "a", login: "alice", name: "Alice" } } },
+    "GET /api/session": { status: 200, json: { user: { id: "a", login: "alice", name: "Alice", admin: false } } },
     "GET /api/jobs": { status: 200, json: { jobs: [] } },
     "GET /api/geometries": { status: 200, json: { geometries: [geometry()] } },
     "GET /api/geometries/g1/display": { status: 200, bytes: display },

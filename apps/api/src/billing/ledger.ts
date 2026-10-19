@@ -2,8 +2,9 @@
 // The ledger (docs/ARCHITECTURE.md sections 4 and 6, ADR-033): append-only entries with the
 // owner's running balance. Nothing here updates or deletes an entry. Reads are owner-scoped;
 // a charge is written for a job the worker holds, in the same batch that completes the job.
-// Play-money grants (M8.1, ADR-080) are written by the seed, never by a route; storage charges
-// (M8.6, ADR-086) by the daily storage sweep (db/storage.ts).
+// Play-money grants (M8.1, ADR-080) are written by the seed for the test users and, on the live
+// site, at a user's first Google sign-in (M10.3, `grantStatement`), never by a route; storage
+// charges (M8.6, ADR-086) by the daily storage sweep (db/storage.ts).
 
 import type { LedgerReason, LedgerRun, LedgerStorage, WalletEntry, WalletView } from "@clearfea/spec";
 
@@ -49,6 +50,25 @@ export function chargeStatement(
          FROM jobs WHERE jobs.id = ? AND jobs.claimed_by = ? AND jobs.status IN ${activeStatuses}`,
     )
     .bind(-cost, cost, jobId, workerId);
+}
+
+/**
+ * The statement that gives a new user the sign-up grant (the `signup_grant_micro_credits`
+ * setting), once: a user who already has a grant gets nothing.
+ */
+export function grantStatement(db: D1Database, userId: string): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO ledger_entries (owner_id, amount, balance, reason)
+       SELECT ?1, g.value,
+              COALESCE((SELECT l.balance FROM ledger_entries l
+                         WHERE l.owner_id = ?1 ORDER BY l.seq DESC LIMIT 1), 0) + g.value,
+              'grant'
+         FROM settings g
+        WHERE g.name = 'signup_grant_micro_credits'
+          AND NOT EXISTS (SELECT 1 FROM ledger_entries WHERE owner_id = ?1 AND reason = 'grant')`,
+    )
+    .bind(userId);
 }
 
 /** The user's ledger entries, oldest first. */

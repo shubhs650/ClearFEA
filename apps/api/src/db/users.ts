@@ -8,22 +8,28 @@ export interface User {
   name: string;
 }
 
-export async function getUser(db: D1Database, userId: string): Promise<User | null> {
+/** A user and their email address (null for the seeded test users unless the seed gives one). */
+export type UserWithEmail = User & { email: string | null };
+
+export async function getUser(db: D1Database, userId: string): Promise<UserWithEmail | null> {
   return db
-    .prepare("SELECT id, login, name FROM users WHERE id = ?")
+    .prepare("SELECT id, login, name, email FROM users WHERE id = ?")
     .bind(userId)
-    .first<User>();
+    .first<UserWithEmail>();
 }
 
 /** The user with this login and their password hash, for checking a sign-in. */
 export async function findCredentials(
   db: D1Database,
   login: string,
-): Promise<{ user: User; passwordHash: string | null } | null> {
+): Promise<{ user: UserWithEmail; passwordHash: string | null } | null> {
   const row = await db
-    .prepare("SELECT id, login, name, password_hash FROM users WHERE login = ?")
+    .prepare("SELECT id, login, name, email, password_hash FROM users WHERE login = ?")
     .bind(login)
-    .first<User & { password_hash: string | null }>();
+    .first<UserWithEmail & { password_hash: string | null }>();
   if (row === null) return null;
-  return { user: { id: row.id, login: row.login, name: row.name }, passwordHash: row.password_hash };
+  return {
+    user: { id: row.id, login: row.login, name: row.name, email: row.email },
+    passwordHash: row.password_hash,
+  };
 }

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@clearfea/spec": "workspace:*",
+    "better-auth": "1.7.10",
     "hono": "4.13.13"
   },
   "devDependencies": {
