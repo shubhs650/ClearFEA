@@ -6,7 +6,7 @@ import schema from "../../schemas/admin.schema.json";
 import { validator } from "../validate";
 
 /**
- * Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, and the users. Only the admin reaches them. Each message is a definition under $defs.
+ * Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, and the cloud machine sizes (M10.6). Only the admin reaches them. Each message is a definition under $defs.
  */
 export interface Admin {
   [k: string]: unknown;
@@ -51,6 +51,25 @@ export interface AdminUser {
   allowed: boolean;
 }
 /**
+ * A machine size the live site can run on AWS (M10.6, ADR-099).
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "CloudMachineSize".
+ */
+export interface CloudMachineSize {
+  name: string;
+  cores: number;
+  memoryBytes: number;
+  /**
+   * Switched on: runs on the live site may choose it.
+   */
+  enabled: boolean;
+  /**
+   * The default size, which runs every import, mesh and report job and cannot be switched off.
+   */
+  default: boolean;
+}
+/**
  * Answer to GET /api/admin and to adding or removing an address.
  *
  * This interface was referenced by `Admin`'s JSON-Schema
@@ -63,6 +82,20 @@ export interface AdminResponse {
   adminEmail: string;
   allowed: AllowedEmail[];
   users: AdminUser[];
+  /**
+   * Where jobs run: cloud machines (the live site, MACHINES=cloud) or the local worker, which simulates every size and ignores the cloud size list.
+   */
+  machines: "cloud" | "local";
+  cloudSizes: CloudMachineSize[];
+}
+/**
+ * Body of PUT /api/admin/machine-sizes/{name}.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "SwitchCloudSizeRequest".
+ */
+export interface SwitchCloudSizeRequest {
+  enabled: boolean;
 }
 /**
  * Body of POST /api/admin/allowed.
@@ -76,5 +109,7 @@ export interface AddAllowedRequest {
 
 export const validateAllowedEmail = validator<AllowedEmail>(schema, "AllowedEmail");
 export const validateAdminUser = validator<AdminUser>(schema, "AdminUser");
+export const validateCloudMachineSize = validator<CloudMachineSize>(schema, "CloudMachineSize");
 export const validateAdminResponse = validator<AdminResponse>(schema, "AdminResponse");
+export const validateSwitchCloudSizeRequest = validator<SwitchCloudSizeRequest>(schema, "SwitchCloudSizeRequest");
 export const validateAddAllowedRequest = validator<AddAllowedRequest>(schema, "AddAllowedRequest");

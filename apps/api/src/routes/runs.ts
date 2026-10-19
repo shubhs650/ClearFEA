@@ -25,7 +25,7 @@ import { balanceOf } from "../billing/ledger";
 import { runFundsProblem } from "../billing/wallet";
 import { readBody } from "../body";
 import { readJobLog } from "../db/jobs";
-import { listMachineSizes } from "../db/machines";
+import { cloudMachines, listMachineSizes } from "../db/machines";
 import { getMesh, meshKey } from "../db/meshes";
 import {
   cancelRun,
@@ -373,7 +373,7 @@ runs.post("/:id/rerun", async (c) => {
   const kind = specRunKind(run.spec);
   const cannot = runSolverProblem(solver, kind) ?? elementLimitProblem(solver, mesh.order, mesh.elementCount, kind);
   if (cannot !== null) return c.json({ error: cannot }, 409);
-  const estimate = estimateRun(mesh.nodeCount, mesh.order, await listMachineSizes(c.env.DB), solver, kind);
+  const estimate = estimateRun(mesh.nodeCount, mesh.order, await listMachineSizes(c.env.DB, cloudMachines(c.env)), solver, kind);
   const size = (run.machine === null ? undefined : runSize(estimate, run.machine.size)) ?? runSize(estimate);
   if (size === undefined) throw new Error("No machine sizes are configured.");
   const noFunds = selfHosted(c.env)

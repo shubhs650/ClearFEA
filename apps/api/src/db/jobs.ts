@@ -181,16 +181,27 @@ export async function listJobs(db: D1Database, userId: string, limit = 20): Prom
 /**
  * Marks the oldest queued job of one of the given types as claimed by this
  * worker and returns it, or null when nothing is queued. A single UPDATE
- * statement, so two workers can never claim the same job.
+ * statement, so two workers can never claim the same job. A worker that names
+ * its machine size (M10.6, ADR-099) gets only jobs queued for that size, and the
+ * default size's worker also gets the jobs that have no size (import, report).
  */
 export async function claimJob(
   db: D1Database,
   workerId: string,
   types: readonly JobType[],
   software: WorkerSoftware | null = null,
+  machineSize: string | null = null,
 ): Promise<Job | null> {
   if (types.length === 0) return null;
   const placeholders = types.map(() => "?").join(", ");
+  const forSize =
+    machineSize === null
+      ? { sql: "", values: [] }
+      : {
+          sql: `AND (machine_size = ? OR (machine_size IS NULL
+                     AND ? = (SELECT name FROM machine_sizes WHERE is_default = 1)))`,
+          values: [machineSize, machineSize],
+        };
   const row = await db
     .prepare(
       `UPDATE jobs
@@ -198,13 +209,13 @@ export async function claimJob(
              software = ?
        WHERE id = (
          SELECT id FROM jobs
-          WHERE status = 'queued' AND type IN (${placeholders})
+          WHERE status = 'queued' AND type IN (${placeholders}) ${forSize.sql}
           ORDER BY created_at, id
           LIMIT 1
        )
        RETURNING *`,
     )
-    .bind(workerId, software === null ? null : JSON.stringify(software), ...types)
+    .bind(workerId, software === null ? null : JSON.stringify(software), ...types, ...forSize.values)
     .first<JobRow>();
   return row === null ? null : toJob(row);
 }

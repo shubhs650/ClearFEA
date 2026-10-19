@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The admin page (M10.3, ADR-097): who may sign in with Google, and who has. Only the admin
+// The admin page (M10.3, ADR-097): who may sign in with Google, and who has, and which cloud
+// machine sizes are switched on (M10.6, ADR-099). Only the admin
 // (ADMIN_EMAIL) sees it. Drawn over the workbench like the wallet page, which stays as it was.
 
 import type { AdminResponse } from "@clearfea/spec";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { addAllowed, fetchAdmin, removeAllowed } from "../api/admin";
+import { addAllowed, fetchAdmin, removeAllowed, switchCloudSize } from "../api/admin";
 import type { ApiResult } from "../api/request";
 
 type AdminState = { kind: "loading" } | { kind: "loaded"; admin: AdminResponse } | { kind: "problem"; problem: string };
@@ -46,6 +47,12 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
   async function remove(address: string) {
     setBusy(true);
     show(await removeAllowed(address), true);
+    setBusy(false);
+  }
+
+  async function switchSize(name: string, enabled: boolean) {
+    setBusy(true);
+    show(await switchCloudSize(name, enabled), true);
     setBusy(false);
   }
 
@@ -142,6 +149,33 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
                 ))}
               </tbody>
             </table>
+          </section>
+          <section className="admin-card" aria-label="Machine sizes">
+            <h3 className="wallet-subtitle">Machine sizes</h3>
+            <p className="wallet-note">
+              {state.admin.machines === "cloud"
+                ? "Runs can choose the sizes switched on here. Switch a size on only after it is switched on in the AWS stack too (docs/DEPLOYMENT.md section 7.3); until it is benchmarked, a larger size keeps the 16 GB element limits."
+                : "Jobs here run on the local worker, which simulates every size, so this list changes nothing on this server. It decides which sizes the live site offers."}
+            </p>
+            <ul className="admin-allowed">
+              {state.admin.cloudSizes.map((size) => (
+                <li key={size.name}>
+                  <label className="admin-size">
+                    <input
+                      type="checkbox"
+                      checked={size.enabled}
+                      disabled={busy || size.default}
+                      onChange={(event) => switchSize(size.name, event.target.checked)}
+                    />
+                    <span className="admin-email">{size.name}</span>
+                  </label>
+                  <span className="admin-when">
+                    {size.cores} vCPU, {Math.round(size.memoryBytes / 2 ** 30)} GB
+                  </span>
+                  {size.default && <span className="admin-tag">Default, always on</span>}
+                </li>
+              ))}
+            </ul>
           </section>
         </div>
       )}

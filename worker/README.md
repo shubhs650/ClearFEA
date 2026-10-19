@@ -29,6 +29,9 @@ uv run python -m clearfea_worker check   # print CalculiX and Gmsh versions, loa
 | `CLEARFEA_WORKER_ID` | host name | Name recorded on claimed jobs |
 | `CLEARFEA_POLL_SECONDS` | `2` | Pause when no job is queued or the API is unreachable |
 | `CLEARFEA_HEARTBEAT_SECONDS` | `5` | Interval between heartbeats while a job runs |
+| `CLEARFEA_MACHINE_SIZE` | (none) | The machine size this worker runs on, a `machine_sizes` name such as `medium` or `large`: it claims only that size's jobs, and the default size also the unsized ones (M10.6, ADR-099). Unset, as locally, claims every size's jobs |
+| `CLEARFEA_IDLE_EXIT_SECONDS` | (none) | Exit after this long without a job, counted from start-up or the end of the last job; `600` on AWS. Unset never exits on its own |
+| `CLEARFEA_MAX_LIFETIME_SECONDS` | (none) | Claim no new job once up this long, so the worker exits after the job it holds; `43200` on AWS |
 
 ## Image
 

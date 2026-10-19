@@ -62,13 +62,16 @@ class ApiClient:
         worker_id: str,
         timeout: float = 30.0,
         software: WorkerSoftware | None = None,
+        machine_size: str | None = None,
     ) -> None:
-        """``software`` is sent with every claim, so the API records what ran each job."""
+        """``software`` is sent with every claim, so the API records what ran each job.
+        ``machine_size`` limits claims to that size's jobs (M10.6); None claims any size's."""
         self._base_url = base_url.rstrip("/")
         self._token = token
         self._worker_id = worker_id
         self._timeout = timeout
         self._software = software
+        self._machine_size = machine_size
 
     def _headers(self, url: str) -> dict[str, str]:
         """The worker token goes only to the API's own internal routes, never elsewhere."""
@@ -166,7 +169,9 @@ class ApiClient:
             ) from None
 
     def claim(self, job_types: list[JobType]) -> ClaimedJob | None:
-        extra = {} if self._software is None else {"software": self._software}
+        extra: dict[str, Any] = {} if self._software is None else {"software": self._software}
+        if self._machine_size is not None:
+            extra["machine_size"] = self._machine_size
         request = ClaimRequest(worker_id=self._worker_id, job_types=job_types, **extra)
         status, body = self._post("/jobs/claim", request)
         if status == 204 or body is None:

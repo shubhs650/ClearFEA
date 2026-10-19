@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 
@@ -164,7 +164,7 @@ describe("Google sign-in (M10.3)", () => {
 
 describe("admin page (M10.3)", () => {
   const admin = { status: 200, body: { user: { ...alice, admin: true } } };
-  const view = (allowed: string[]) => ({
+  const view = (allowed: string[], largeOn = false) => ({
     status: 200,
     body: {
       adminEmail: "alice@clearfea.test",
@@ -179,6 +179,11 @@ describe("admin page (M10.3)", () => {
           machineSecondsThisMonth: 3900,
           allowed: true,
         },
+      ],
+      machines: "cloud",
+      cloudSizes: [
+        { name: "medium", cores: 4, memoryBytes: 17179869184, enabled: true, default: true },
+        { name: "large", cores: 8, memoryBytes: 34359738368, enabled: largeOn, default: false },
       ],
     },
   });
@@ -221,6 +226,31 @@ describe("admin page (M10.3)", () => {
     expect(await within(page).findByText("Nobody else is invited yet.")).toBeTruthy();
     fireEvent.click(within(page).getByRole("button", { name: "Back to the workbench" }));
     expect(screen.queryByRole("region", { name: "Admin" })).toBeNull();
+  });
+
+  it("switches the large machine size on, and keeps the default size on (M10.6)", async () => {
+    const fetchMock = serve({
+      "GET /api/health": healthy,
+      "GET /api/session": admin,
+      "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
+      "GET /api/admin": view([]),
+      "PUT /api/admin/machine-sizes/large": view([], true),
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    const sizes = await screen.findByRole("region", { name: "Machine sizes" });
+    const medium = within(sizes).getByRole("checkbox", { name: "medium" }) as HTMLInputElement;
+    const large = within(sizes).getByRole("checkbox", { name: "large" }) as HTMLInputElement;
+    expect(medium.checked && medium.disabled).toBe(true);
+    expect(within(sizes).getByText("8 vCPU, 32 GB")).toBeTruthy();
+    expect(large.checked).toBe(false);
+    fireEvent.click(large);
+    await waitFor(() => expect(large.checked).toBe(true));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/machine-sizes/large",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ enabled: true }) }),
+    );
   });
 });
 

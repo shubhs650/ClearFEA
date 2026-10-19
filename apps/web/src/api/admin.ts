@@ -15,3 +15,7 @@ export function addAllowed(email: string): Promise<ApiResult<AdminResponse>> {
 export function removeAllowed(email: string): Promise<ApiResult<AdminResponse>> {
   return apiRequest("DELETE", `/api/admin/allowed/${encodeURIComponent(email)}`, validateAdminResponse);
 }
+
+export function switchCloudSize(name: string, enabled: boolean): Promise<ApiResult<AdminResponse>> {
+  return apiRequest("PUT", `/api/admin/machine-sizes/${encodeURIComponent(name)}`, validateAdminResponse, { enabled });
+}

@@ -99,6 +99,12 @@ class ClaimRequest(BaseModel):
     worker_id: Annotated[WorkerId, Field(alias="workerId")]
     job_types: Annotated[list[JobType], Field(alias="jobTypes")]
     software: WorkerSoftware | None = None
+    machine_size: Annotated[
+        str | None, Field(alias="machineSize", pattern="^[a-z0-9][a-z0-9-]{0,31}$")
+    ] = None
+    """
+    The machine size the worker runs on (M10.6, ADR-099), from CLEARFEA_MACHINE_SIZE: it is given only that size's jobs, and the default size's also takes the jobs that have no size (import, report). Left out by a local worker, which takes every size's jobs.
+    """
 
 
 class ClaimResponse(BaseModel):

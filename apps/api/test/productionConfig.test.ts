@@ -49,11 +49,12 @@ describe("productionConfig", () => {
     expect(config).not.toHaveProperty("$schema");
   });
 
-  it("reports the deployed commit, signs in with Google only and names the account and bucket presigned URLs use", () => {
+  it("reports the deployed commit, signs in with Google only, runs jobs on cloud machines and names the account and bucket presigned URLs use", () => {
     expect(config.vars).toEqual({
       CLEARFEA_COMMIT: "abc1234",
       AUTH_MODE: "google",
       BETTER_AUTH_URL: "https://clearfea.triyalabs.com",
+      MACHINES: "cloud",
       R2_ACCOUNT_ID: ACCOUNT,
       R2_BUCKET: "clearfea-files",
     });
