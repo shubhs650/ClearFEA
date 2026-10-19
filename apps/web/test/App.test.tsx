@@ -176,6 +176,7 @@ describe("admin page (M10.3)", () => {
           email: "alice@clearfea.test",
           createdAt: "2026-10-19T05:00:00.000Z",
           lastSignIn: null,
+          machineSecondsThisMonth: 3900,
           allowed: true,
         },
       ],
@@ -208,6 +209,7 @@ describe("admin page (M10.3)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
     const page = await screen.findByRole("region", { name: "Admin" });
     expect(await within(page).findByText("Nobody else is invited yet.")).toBeTruthy();
+    expect(within(page).getByText("1 h 05 min")).toBeTruthy();
     fireEvent.change(within(page).getByLabelText("Email address"), { target: { value: "colleague@gmail.com" } });
     fireEvent.click(within(page).getByRole("button", { name: "Add" }));
     expect(await within(page).findByText("colleague@gmail.com")).toBeTruthy();

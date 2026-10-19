@@ -9,8 +9,11 @@ export type HealthState =
   | { kind: "degraded"; problems: string[] }
   | { kind: "unreachable"; problems: string[] };
 
-const startApi =
-  "Start it with `pnpm --filter @clearfea/api dev` and reload this page.";
+// On the live site there is nothing for the user to start (M10.3); locally the API is `pnpm dev`.
+const startApi = import.meta.env.DEV
+  ? "Start it with `pnpm --filter @clearfea/api dev` and reload this page."
+  : "Check your internet connection and reload this page in a minute.";
+const noAnswer = import.meta.env.DEV ? "The API did not answer on port 8787" : "ClearFEA's server did not answer";
 
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthState> {
   let response: Response;
@@ -26,7 +29,7 @@ export async function fetchHealth(signal?: AbortSignal): Promise<HealthState> {
     // The Vite proxy answers with an empty 5xx when nothing listens on port 8787.
     return {
       kind: "unreachable",
-      problems: [`The API did not answer on port 8787 (HTTP ${response.status}). ${startApi}`],
+      problems: [`${noAnswer} (HTTP ${response.status}). ${startApi}`],
     };
   }
 

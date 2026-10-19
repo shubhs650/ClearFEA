@@ -45,6 +45,10 @@ class AdminUser(BaseModel):
     """
     When their latest Google session started, or null.
     """
+    machine_seconds_this_month: Annotated[int, Field(alias="machineSecondsThisMonth", ge=0)]
+    """
+    Billed machine seconds of their jobs that finished this calendar month (UTC).
+    """
     allowed: bool
     """
     True when their address may sign in now: the admin's, or on the allowlist.

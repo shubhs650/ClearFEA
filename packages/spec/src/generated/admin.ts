@@ -42,6 +42,10 @@ export interface AdminUser {
    */
   lastSignIn: string | null;
   /**
+   * Billed machine seconds of their jobs that finished this calendar month (UTC).
+   */
+  machineSecondsThisMonth: number;
+  /**
    * True when their address may sign in now: the admin's, or on the allowlist.
    */
   allowed: boolean;

@@ -47,7 +47,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 
 - [x] M10.1 Production Worker on one origin with the custom domain (ADR-096; first deploy waits for M10.2 and the maintainer's Cloudflare setup)
 - [x] M10.2 Deploy workflow for the site and API (`.github/workflows/deploy.yml`; first live run waits on the Cloudflare setup)
-- [ ] M10.3 Google sign-in with Better Auth, allowlist and admin page
+- [x] M10.3 Google sign-in with Better Auth, allowlist and admin page (ADR-097; first live sign-in waits for the maintainer's Google client, DEPLOYMENT.md section 2)
 - [ ] M10.4 Landing page
 - [ ] M10.5 Job files through presigned R2 URLs; streamed STEP uploads
 - [ ] M10.6 Worker cloud mode: size, idle exit, cloud size list
@@ -187,6 +187,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M10.3 Google sign-in (2026-10-19): ADR-097. Better Auth 1.7.10 in `apps/api/src/session/google.ts`, on D1 directly, mounted at `/api/auth/*` only when `AUTH_MODE=google` (the production configuration sets it and `BETTER_AUTH_URL`); the Worker gained the `nodejs_als` flag. Migration 0022 adds Google's columns to `users`, the three `auth_` tables, `allowed_emails` and the `signup_grant_micro_credits` setting. Admin routes `/api/admin*`, admin page `apps/web/src/admin/AdminPage.tsx` from the status bar. Locally the seed gives alice and bob `@clearfea.test` addresses and `ADMIN_EMAIL=alice@clearfea.test` makes alice the admin (`infra/dev.sh` adds the line to an older `.dev.vars`; `infra/stack.sh` refuses to start without it). `test/googleSignIn.test.ts` runs the whole OAuth flow with Google's token endpoint answered in the test (Better Auth reads the code flow's ID token without checking its signature, as OIDC allows over TLS). Not yet tried against real Google: that needs the maintainer's OAuth client and secrets (DEPLOYMENT.md sections 2 and 3); the first live sign-in is the check. The web app's "API did not answer" messages no longer name `pnpm` or port 8787 in a production build. The landing page (M10.4) can link to `/app`, which shows Sign in with Google when signed out, or call `startGoogleSignIn()` from `apps/web/src/api/session.ts`.
 
 > M10.2 deploy workflow (2026-10-19): `.github/workflows/deploy.yml` runs on every push to main (skipped until the `CLOUDFLARE_ACCOUNT_ID` variable exists) and by hand: the fast tier (fast.yml, now also `workflow_call`), then a settings check that names any missing Cloudflare secret or variable and stops, `wrangler whoami`, the web build, M10.1's `deploy:config` (writes `wrangler.production.json` with the D1 id and `CLEARFEA_COMMIT`, ADR-096), `deploy:migrate`, `deploy:worker --secrets-file` (only the secrets that are set; code and secrets in one version), and a five-minute wait for `/api/health` to report status ok and that commit. Checked with a `--dry-run` deploy on M10.1's branch. Not yet run live: it needs DEPLOYMENT.md section 1. M10.8 adds its image job before the `site` job.
 
@@ -423,6 +425,8 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-19
+
+- M10.3: Google sign-in with Better Auth behind an admin-managed allowlist, admin page, ADR-097. Checked with the API tests (the OAuth flow end to end with Google's token endpoint stubbed, refusals, removal, the isolation sweep's new admin area), web tests, `make test`, `make e2e` and a `wrangler deploy --dry-run` (445 KiB gzipped). Learned: Better Auth 1.7 talks to D1 itself and passes an `APIError` thrown in a database hook through to the error redirect as `?error=<code>`, so a refusal needs no custom route; it needs only `nodejs_als`, not `nodejs_compat`.
 
 - M10.2: deploy workflow added (`deploy.yml`); checked with actionlint, a `deploy:worker --dry-run` on M10.1's production configuration, and `make test`. Learned: wrangler 4 `deploy --secrets-file` uploads secrets with the version, so a deploy never runs new code without its secrets and needs no separate `secret bulk`.
 - M10.1 production Worker (ADR-096): `apps/api/scripts/production-config.mjs` writes `wrangler.production.json` from `wrangler.jsonc` with the custom domain, the web app as static assets on the same origin and the production D1 id; `deploy:config`, `deploy:migrate` and `deploy:worker` scripts for M10.2's workflow; the workbench moved to `/app`, `/` opens it there until M10.4, unknown addresses get a not-found page; `/api/health` reports `commit`. Checked with `wrangler deploy --dry-run` and the production configuration served locally (`/`, `/app`, `/share/<token>`, assets, `/api/*`, `/internal/*`). Learned: wrangler 4.149 reads JSONC configuration for scripts through `experimental_readRawConfig`.

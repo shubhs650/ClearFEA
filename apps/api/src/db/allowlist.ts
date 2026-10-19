@@ -59,14 +59,19 @@ export interface UserSummary {
   createdAt: string;
   /** When their latest session started, or null if they never signed in with Google. */
   lastSignIn: string | null;
+  /** Billed machine seconds of their jobs that finished this calendar month (UTC). */
+  machineSecondsThisMonth: number;
 }
 
-/** Every user, newest first, with when they last signed in with Google. */
+/** Every user, newest first, with when they last signed in with Google and their machine time this month. */
 export async function listUsers(db: D1Database): Promise<UserSummary[]> {
   const { results } = await db
     .prepare(
       `SELECT u.id, u.name, u.email, u.created_at AS createdAt,
-              (SELECT MAX(s.created_at) FROM auth_sessions s WHERE s.user_id = u.id) AS lastSignIn
+              (SELECT MAX(s.created_at) FROM auth_sessions s WHERE s.user_id = u.id) AS lastSignIn,
+              (SELECT COALESCE(SUM(j.billed_seconds), 0) FROM jobs j
+                WHERE j.owner_id = u.id AND j.finished_at >= strftime('%Y-%m-01T00:00:00.000Z', 'now'))
+                AS machineSecondsThisMonth
          FROM users u ORDER BY u.created_at DESC, u.id`,
     )
     .all<UserSummary>();

@@ -125,6 +125,7 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
                   <th>Email</th>
                   <th>First signed in (UTC)</th>
                   <th>Last signed in (UTC)</th>
+                  <th className="wallet-number">Machine time this month</th>
                   <th>Can sign in</th>
                 </tr>
               </thead>
@@ -135,6 +136,7 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
                     <td>{user.email ?? "none (local test user)"}</td>
                     <td>{utc(user.createdAt)}</td>
                     <td>{user.lastSignIn === null ? "" : utc(user.lastSignIn)}</td>
+                    <td className="wallet-number">{hours(user.machineSecondsThisMonth)}</td>
                     <td>{user.allowed ? "Yes" : "No"}</td>
                   </tr>
                 ))}
@@ -145,6 +147,12 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
       )}
     </section>
   );
+}
+
+/** Machine time in hours and minutes, such as "1 h 05 min". */
+function hours(seconds: number): string {
+  const minutes = Math.round(seconds / 60);
+  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`;
 }
 
 /** An API timestamp as a fixed, unambiguous UTC time, as the wallet writes it. */

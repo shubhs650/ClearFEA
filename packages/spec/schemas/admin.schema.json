@@ -15,7 +15,7 @@
     "AdminUser": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "email", "createdAt", "lastSignIn", "allowed"],
+      "required": ["id", "name", "email", "createdAt", "lastSignIn", "machineSecondsThisMonth", "allowed"],
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
@@ -27,6 +27,11 @@
         "lastSignIn": {
           "type": ["string", "null"],
           "description": "When their latest Google session started, or null."
+        },
+        "machineSecondsThisMonth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Billed machine seconds of their jobs that finished this calendar month (UTC)."
         },
         "allowed": {
           "type": "boolean",

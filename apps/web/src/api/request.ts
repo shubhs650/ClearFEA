@@ -9,8 +9,10 @@ export type ApiResult<T> =
   | { kind: "signedOut"; problem: string }
   | { kind: "error"; problem: string };
 
-const unreachable =
-  "The API did not answer. Start it with `pnpm --filter @clearfea/api dev` and try again.";
+// On the live site there is nothing for the user to start (M10.3); locally the API is `pnpm dev`.
+const unreachable = import.meta.env.DEV
+  ? "The API did not answer. Start it with `pnpm --filter @clearfea/api dev` and try again."
+  : "ClearFEA's server did not answer. Check your internet connection and try again in a minute.";
 
 export function apiRequest<T>(
   method: string,
