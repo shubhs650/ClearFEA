@@ -255,3 +255,49 @@ def test_tag_names_the_worker_and_spec_source() -> None:
         ["sha256sum"], input=f"{trees[0]} {trees[1]}\n", capture_output=True, text=True, check=True
     ).stdout
     assert tag == "src-" + digest[:20]
+
+
+def test_the_names_and_permissions_match_the_aws_stack() -> None:
+    from tests.test_aws_template import _template
+
+    template = _template()
+    resources = template["Resources"]
+    families = {
+        resource["Properties"]["Family"]
+        for resource in resources.values()
+        if resource["Type"] == "AWS::ECS::TaskDefinition"
+    }
+    script = SCRIPT.read_text(encoding="utf-8")
+    assert "FAMILIES=(clearfea-standard clearfea-large)" in script
+    assert families == {"clearfea-standard", "clearfea-large"}
+    assert "WorkerRepositoryUri" in template["Outputs"]
+    for resource in resources.values():
+        if resource["Type"] == "AWS::ECS::TaskDefinition":
+            [container] = resource["Properties"]["ContainerDefinitions"]
+            assert container["Name"] == "worker"
+    [policy] = resources["DeployRole"]["Properties"]["Policies"]
+    granted = set()
+    for statement in policy["PolicyDocument"]["Statement"]:
+        actions = statement["Action"]
+        granted.update([actions] if isinstance(actions, str) else actions)
+    used = {
+        "cloudformation:DescribeStacks",
+        "ecr:GetAuthorizationToken",
+        "ecr:DescribeImages",
+        "ecr:BatchGetImage",
+        "ecr:PutImage",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:BatchCheckLayerAvailability",
+        "ecs:DescribeTaskDefinition",
+        "ecs:RegisterTaskDefinition",
+        "iam:PassRole",
+    }
+    assert used <= granted
+    workflow = (REPO / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+    assert "STACK_NAME: clearfea" in workflow
+    subjects = resources["DeployRole"]["Properties"]["AssumeRolePolicyDocument"]["Statement"][0][
+        "Condition"
+    ]["StringLike"]["token.actions.githubusercontent.com:sub"]
+    assert {"Sub": "repo:${GitHubRepository}:environment:production"} in subjects
