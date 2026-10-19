@@ -43,6 +43,9 @@ import "./landing.css";
 /** Who is looking: unknown until /api/session answers, then signed in or not. */
 type Visitor = "unknown" | "signed-in" | "signed-out";
 
+/** How /app signs people in: "google" on the live site, a password form under `make dev` (M10.3). */
+type SignInMode = "google" | "password";
+
 function useVisitor(): Visitor {
   const [visitor, setVisitor] = useState<Visitor>("unknown");
   useEffect(() => {
@@ -55,6 +58,27 @@ function useVisitor(): Visitor {
     };
   }, []);
   return visitor;
+}
+
+/** The sign-in mode from GET /api/session/options; any failure or other answer is the password form. */
+function useSignInMode(): SignInMode {
+  const [mode, setMode] = useState<SignInMode>("password");
+  useEffect(() => {
+    let current = true;
+    fetch("/api/session/options", { credentials: "same-origin" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: unknown) => {
+        const google = typeof body === "object" && body !== null && (body as { signIn?: unknown }).signIn === "google";
+        if (current && google) setMode("google");
+      })
+      .catch(() => {
+        // Not answered: the label stays the plain "Sign in", which is right in either mode.
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
+  return mode;
 }
 
 /** Google's "G", drawn in its own colours as Google's sign-in button guidelines ask. */
@@ -82,7 +106,7 @@ function GoogleMark() {
 }
 
 /** The way in: "Open the workbench" for a signed-in visitor, otherwise the sign-in. */
-function SignInLink({ visitor, size }: { visitor: Visitor; size: "small" | "large" }) {
+function SignInLink({ visitor, mode, size }: { visitor: Visitor; mode: SignInMode; size: "small" | "large" }) {
   const className = `landing-button landing-button-primary landing-button-${size}`;
   if (visitor === "signed-in") {
     return (
@@ -94,8 +118,8 @@ function SignInLink({ visitor, size }: { visitor: Visitor; size: "small" | "larg
   }
   return (
     <a className={className} href={WORKBENCH_PATH}>
-      {size === "large" && <GoogleMark />}
-      {size === "large" ? "Sign in with Google" : "Sign in"}
+      {size === "large" && mode === "google" && <GoogleMark />}
+      {size === "large" && mode === "google" ? "Sign in with Google" : "Sign in"}
     </a>
   );
 }
@@ -219,6 +243,7 @@ const RESULT_FEATURES = [
 
 export function LandingPage() {
   const visitor = useVisitor();
+  const mode = useSignInMode();
   const [theme, setTheme] = useTheme();
   const summary = VERIFICATION_SUMMARY;
 
@@ -249,7 +274,7 @@ export function LandingPage() {
             >
               {theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
             </button>
-            <SignInLink visitor={visitor} size="small" />
+            <SignInLink visitor={visitor} mode={mode} size="small" />
           </div>
         </div>
       </header>
@@ -270,7 +295,7 @@ export function LandingPage() {
               full report. Nothing to install, and every number traceable to the solver input that produced it.
             </p>
             <div className="landing-hero-actions">
-              <SignInLink visitor={visitor} size="large" />
+              <SignInLink visitor={visitor} mode={mode} size="large" />
               <a className="landing-button landing-button-ghost landing-button-large" href="#verification">
                 See the verification results
                 <ArrowRight size={18} aria-hidden="true" />
@@ -278,7 +303,7 @@ export function LandingPage() {
             </div>
             <p className="landing-hero-note">
               <Lock size={14} aria-hidden="true" />
-              For invited engineers. Sign in with the Google account your invitation was sent to.
+              For invited engineers. Sign in with the account your invitation was sent to.
             </p>
             <Screenshot
               hero
@@ -522,7 +547,7 @@ export function LandingPage() {
                 </ul>
               </div>
               <div className="landing-beta-action">
-                <SignInLink visitor={visitor} size="large" />
+                <SignInLink visitor={visitor} mode={mode} size="large" />
                 <p>Not invited yet? Ask the person who told you about ClearFEA.</p>
               </div>
             </div>

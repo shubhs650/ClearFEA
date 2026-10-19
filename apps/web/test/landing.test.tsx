@@ -24,6 +24,8 @@ function serve(routes: Record<string, Reply>) {
   );
 }
 
+const google = { status: 200, json: { signIn: "google" } };
+const password = { status: 200, json: { signIn: "password" } };
 const signedOut = { status: 401, json: { error: "You are not signed in." } };
 const signedIn = { status: 200, json: { user: { id: "u1", login: "alice", name: "Alice" } } };
 
@@ -33,8 +35,8 @@ afterEach(() => {
 });
 
 describe("the landing page", () => {
-  it("sends a signed-out visitor to the workbench's sign-in", async () => {
-    serve({ "GET /api/session": signedOut });
+  it("sends a signed-out visitor to the workbench's Google sign-in", async () => {
+    serve({ "GET /api/session": signedOut, "GET /api/session/options": google });
     render(<LandingPage />);
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Finite element analysis, in your browser");
     const signIns = await screen.findAllByRole("link", { name: "Sign in with Google" });
@@ -44,15 +46,22 @@ describe("the landing page", () => {
     }
   });
 
+  it("says just Sign in where the workbench signs in with a password", async () => {
+    serve({ "GET /api/session": signedOut, "GET /api/session/options": password });
+    render(<LandingPage />);
+    await waitFor(() => expect(screen.getAllByRole("link", { name: "Sign in" }).length).toBe(3));
+    expect(screen.queryByRole("link", { name: "Sign in with Google" })).toBeNull();
+  });
+
   it("offers a signed-in visitor the workbench instead", async () => {
-    serve({ "GET /api/session": signedIn });
+    serve({ "GET /api/session": signedIn, "GET /api/session/options": google });
     render(<LandingPage />);
     await waitFor(() => expect(screen.getAllByRole("link", { name: "Open the workbench" }).length).toBe(3));
     expect(screen.queryByRole("link", { name: "Sign in with Google" })).toBeNull();
   });
 
   it("states no verdict, only numbers", () => {
-    serve({ "GET /api/session": signedOut });
+    serve({ "GET /api/session": signedOut, "GET /api/session/options": google });
     const { container } = render(<LandingPage />);
     expect(container.textContent).not.toMatch(/\b(PASS|FAIL|passed|failed|compliant)\b/i);
   });
