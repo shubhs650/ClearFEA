@@ -7,6 +7,7 @@ const BASE = {
   name: "clearfea-api",
   main: "src/index.ts",
   compatibility_date: "2026-10-01",
+  compatibility_flags: ["nodejs_als"],
   dev: { port: 8787 },
   d1_databases: [
     {
@@ -40,6 +41,7 @@ describe("productionConfig", () => {
   it("keeps the code, compatibility date, bindings and cron triggers the tests run against", () => {
     expect(config.main).toBe(BASE.main);
     expect(config.compatibility_date).toBe(BASE.compatibility_date);
+    expect(config.compatibility_flags).toEqual(BASE.compatibility_flags);
     expect(config.triggers).toEqual(BASE.triggers);
     expect(config.r2_buckets).toEqual(BASE.r2_buckets);
     expect(config.d1_databases).toEqual([{ ...BASE.d1_databases[0], database_id: ID }]);
@@ -47,8 +49,14 @@ describe("productionConfig", () => {
     expect(config).not.toHaveProperty("$schema");
   });
 
-  it("reports the deployed commit and names the account and bucket presigned URLs use", () => {
-    expect(config.vars).toEqual({ CLEARFEA_COMMIT: "abc1234", R2_ACCOUNT_ID: ACCOUNT, R2_BUCKET: "clearfea-files" });
+  it("reports the deployed commit, signs in with Google only and names the account and bucket presigned URLs use", () => {
+    expect(config.vars).toEqual({
+      CLEARFEA_COMMIT: "abc1234",
+      AUTH_MODE: "google",
+      BETTER_AUTH_URL: "https://clearfea.triyalabs.com",
+      R2_ACCOUNT_ID: ACCOUNT,
+      R2_BUCKET: "clearfea-files",
+    });
   });
 
   it("refuses a missing or malformed account id", () => {

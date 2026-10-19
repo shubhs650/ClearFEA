@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Session",
-  "description": "Wire shapes of the session routes (docs/ARCHITECTURE.md section 8, ADR-022). Each message is a definition under $defs.",
+  "description": "Wire shapes of the session routes (docs/ARCHITECTURE.md section 8, ADR-022, ADR-097). Each message is a definition under $defs.",
   "$defs": {
     "LoginRequest": {
       "description": "Body of POST /api/session.",
@@ -16,11 +16,15 @@
     "SessionUser": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "login", "name"],
+      "required": ["id", "login", "name", "admin"],
       "properties": {
         "id": { "type": "string" },
         "login": { "type": "string" },
-        "name": { "type": "string" }
+        "name": { "type": "string" },
+        "admin": {
+          "type": "boolean",
+          "description": "True for the admin (ADMIN_EMAIL), who sees the admin page (M10.3)."
+        }
       }
     },
     "SessionResponse": {
@@ -29,6 +33,13 @@
       "additionalProperties": false,
       "required": ["user"],
       "properties": { "user": { "$ref": "#/$defs/SessionUser" } }
+    },
+    "SignInOptions": {
+      "description": "Answer to GET /api/session/options: how this site signs people in (AUTH_MODE, ADR-097). \"password\" for the seeded local test users, \"google\" for Google sign-in on the live site.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signIn"],
+      "properties": { "signIn": { "enum": ["password", "google"] } }
     }
   }
 }

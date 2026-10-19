@@ -6,3 +6,7 @@ SESSION_SECRET=local-dev-session-secret-change-me
 # Self-hosting mode (ADR-084): the wallet is informational. Jobs are still metered and shown in the
 # wallet, but a run or mesh is never refused for its balance. Uncomment to turn it on.
 # SELF_HOSTED=true
+# Sign-in (M10.3, ADR-097). AUTH_MODE=local (the default) uses the seeded test logins above. The
+# admin sees the admin page; the seed gives alice this address. The live site sets
+# AUTH_MODE=google with BETTER_AUTH_SECRET, BETTER_AUTH_URL, GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
+ADMIN_EMAIL=alice@clearfea.test

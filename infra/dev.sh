@@ -35,6 +35,12 @@ if ! grep -q '^SESSION_SECRET=' apps/api/.dev.vars; then
   printf 'SESSION_SECRET=%s\n' "$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')" >> apps/api/.dev.vars
   say "Added a SESSION_SECRET line to apps/api/.dev.vars."
 fi
+# .dev.vars made before M10.3 names no admin (ADR-097); make the seeded alice the admin.
+if ! grep -q '^ADMIN_EMAIL=' apps/api/.dev.vars; then
+  [ -z "$(tail -c 1 apps/api/.dev.vars)" ] || echo >> apps/api/.dev.vars
+  echo 'ADMIN_EMAIL=alice@clearfea.test' >> apps/api/.dev.vars
+  say "Added ADMIN_EMAIL=alice@clearfea.test to apps/api/.dev.vars."
+fi
 # The worker must send the token the API expects (ADR-016), so take it from one place.
 worker_token=$(sed -n 's/^WORKER_TOKEN=//p' apps/api/.dev.vars | tail -n 1)
 [ -n "$worker_token" ] || die "apps/api/.dev.vars has no WORKER_TOKEN line. Copy it from apps/api/.dev.vars.example."

@@ -68,7 +68,15 @@ export function productionConfig(base, { databaseId, accountId, commit }) {
     },
     d1_databases: [{ ...databases[0], database_id: id }],
     // Variables in this file replace the Worker's variables at each deploy; secrets are kept.
-    vars: { CLEARFEA_COMMIT: commit.trim(), R2_ACCOUNT_ID: account, R2_BUCKET: files.bucket_name },
+    // The live site signs in with Google only (M10.3, ADR-097); Google returns to this address.
+    // Job files' presigned URLs name the account and bucket (M10.5, ADR-098).
+    vars: {
+      CLEARFEA_COMMIT: commit.trim(),
+      AUTH_MODE: "google",
+      BETTER_AUTH_URL: `https://${PRODUCTION_DOMAIN}`,
+      R2_ACCOUNT_ID: account,
+      R2_BUCKET: files.bucket_name,
+    },
     observability: { enabled: true },
   };
 }

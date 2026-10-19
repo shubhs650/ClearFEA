@@ -27,7 +27,7 @@ function serve(routes: Record<string, Reply>) {
 const google = { status: 200, json: { signIn: "google" } };
 const password = { status: 200, json: { signIn: "password" } };
 const signedOut = { status: 401, json: { error: "You are not signed in." } };
-const signedIn = { status: 200, json: { user: { id: "u1", login: "alice", name: "Alice" } } };
+const signedIn = { status: 200, json: { user: { id: "u1", login: "alice", name: "Alice", admin: false } } };
 
 afterEach(() => {
   cleanup();
