@@ -4,6 +4,7 @@ import shutil
 import threading
 import urllib.error
 import urllib.request
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -157,6 +158,58 @@ def test_run_forever_keeps_polling_and_stops_cleanly() -> None:
         assert not thread.is_alive()
         assert api.jobs["j1"]["status"] == "succeeded"
         assert api.jobs["j2"]["status"] == "succeeded"
+
+
+class _Clock:
+    """A clock the test moves: each reading advances it by `step` seconds."""
+
+    def __init__(self, step: float) -> None:
+        self.now = 0.0
+        self.step = step
+
+    def __call__(self) -> float:
+        self.now += self.step
+        return self.now
+
+
+def test_claims_name_the_machine_size_when_one_is_set() -> None:
+    with FakeApi() as api:
+        ApiClient(api.url, "t", "w1", machine_size="large").claim(["noop"])
+        assert api.calls[0][1]["machineSize"] == "large"
+        client_for(settings_for(api)).claim(["noop"])
+        assert "machineSize" not in api.calls[1][1]
+
+
+def test_exits_after_the_idle_time_without_a_job() -> None:
+    with FakeApi() as api:
+        settings = replace(settings_for(api), idle_exit_seconds=600, machine_size="medium")
+        clock = _Clock(step=100)
+        assert run_forever(settings, clock=clock) == "idle"
+        claims = [c for c in api.calls if c[0] == "/internal/jobs/claim"]
+        assert 4 <= len(claims) <= 6
+        assert all(c[1]["machineSize"] == "medium" for c in claims)
+
+
+def test_the_idle_time_counts_from_the_last_job() -> None:
+    with FakeApi() as api:
+        settings = replace(settings_for(api), idle_exit_seconds=600)
+        api.enqueue("j1")
+        clock = _Clock(step=100)
+        assert run_forever(settings, clock=clock) == "idle"
+        assert api.jobs["j1"]["status"] == "succeeded"
+        # The job came at the first poll; the idle time started again after it.
+        assert clock.now >= 700
+
+
+def test_takes_no_new_job_past_its_maximum_lifetime() -> None:
+    with FakeApi() as api:
+        settings = replace(settings_for(api), max_lifetime_seconds=250)
+        for job in ("j1", "j2", "j3", "j4"):
+            api.enqueue(job)
+        assert run_forever(settings, clock=_Clock(step=100)) == "lifetime"
+        done = [j for j in ("j1", "j2", "j3", "j4") if api.jobs[j]["status"] == "succeeded"]
+        assert done == ["j1"]
+        assert api.jobs["j2"]["status"] == "queued"
 
 
 def test_fake_api_refuses_bodies_outside_the_schema() -> None:

@@ -161,22 +161,58 @@ def run_forever(
     handlers: dict[str, Handler] = HANDLERS,
     stop: threading.Event | None = None,
     client_factory: Callable[[Settings], ApiClient] | None = None,
-) -> None:
-    """Polls for jobs until `stop` is set. API errors are logged and retried after a pause."""
+    clock: Callable[[], float] = time.monotonic,
+) -> str:
+    """Polls for jobs until `stop` is set, the worker has been idle for
+    `settings.idle_exit_seconds`, or it has been up for `settings.max_lifetime_seconds` (checked
+    between jobs, so a job it holds always finishes). API errors are logged and retried after a
+    pause; they count as idle time, so a worker that cannot reach the API exits too. Returns why
+    it stopped: "stopped", "idle" or "lifetime"."""
     stop = stop or threading.Event()
     client = (client_factory or _default_client)(settings)
-    log.info("Worker %s polling %s for %s", settings.worker_id, settings.api_url, sorted(handlers))
+    size = settings.machine_size or "any size"
+    log.info(
+        "Worker %s polling %s for %s on %s",
+        settings.worker_id,
+        settings.api_url,
+        sorted(handlers),
+        size,
+    )
+    started = last_job = clock()
     while not stop.is_set():
+        now = clock()
+        lifetime = settings.max_lifetime_seconds
+        if lifetime is not None and now - started >= lifetime:
+            up = now - started
+            log.info(
+                "Worker %s has been up %.0f s, its maximum lifetime; exiting",
+                settings.worker_id,
+                up,
+            )
+            return "lifetime"
+        idle = settings.idle_exit_seconds
+        if idle is not None and now - last_job >= idle:
+            log.info("Worker %s had no job for %.0f s; exiting", settings.worker_id, now - last_job)
+            return "idle"
         try:
             claimed = run_once(client, settings, handlers)
         except ApiError as error:
             log.warning("%s", error)
             claimed = False
-        if not claimed:
+        if claimed:
+            last_job = clock()
+        else:
             stop.wait(settings.poll_seconds)
+    return "stopped"
 
 
 def _default_client(settings: Settings) -> ApiClient:
     software = worker_software()
     log.info("Worker software: %s", software.model_dump_json(by_alias=True))
-    return ApiClient(settings.api_url, settings.worker_token, settings.worker_id, software=software)
+    return ApiClient(
+        settings.api_url,
+        settings.worker_token,
+        settings.worker_id,
+        software=software,
+        machine_size=settings.machine_size,
+    )

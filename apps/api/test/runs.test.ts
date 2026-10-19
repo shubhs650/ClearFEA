@@ -1448,3 +1448,51 @@ describe("estimates (ADR-049)", () => {
     expect(((await response.json()) as { error: string }).error).toContain("CreateRunRequest");
   });
 });
+
+describe("on cloud machines (M10.6, ADR-099)", () => {
+  // The same app with MACHINES=cloud, as the live site's configuration sets it.
+  async function cloudCall(method: string, path: string, json?: unknown): Promise<Response> {
+    const headers: Record<string, string> = { Cookie: alice };
+    if (json !== undefined) headers["Content-Type"] = "application/json";
+    const body = json === undefined ? undefined : JSON.stringify(json);
+    return app.request(`http://localhost${path}`, { method, headers, body }, { ...env, MACHINES: "cloud" });
+  }
+
+  async function offered(id: string): Promise<string[]> {
+    const body = validateEstimateResponse(await (await cloudCall("GET", `/api/simulations/${id}/estimate`)).json());
+    if (!body.ok) throw new Error(body.errors.join(" "));
+    return body.value.estimate.sizes.map((s) => s.size);
+  }
+
+  it("offers only the cloud sizes switched on, and says when a size asked for is off", async () => {
+    const id = await meshed();
+    expect(await offered(id)).toEqual(["medium"]);
+    const refused = await cloudCall("POST", `/api/simulations/${id}/runs`, { machineSize: "large" });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual({
+      error: "The large machine size is switched off on this site. Choose one of: medium.",
+    });
+    const unknown = await cloudCall("POST", `/api/simulations/${id}/runs`, { machineSize: "huge" });
+    expect(((await unknown.json()) as { error: string }).error).toBe(
+      "There is no machine size called huge. Choose one of: medium.",
+    );
+
+    await env.DB.prepare("UPDATE machine_sizes SET cloud = 'on' WHERE name = 'large'").run();
+    try {
+      expect(await offered(id)).toEqual(["medium", "large"]);
+      const started = await cloudCall("POST", `/api/simulations/${id}/runs`, { machineSize: "large" });
+      expect(started.status).toBe(201);
+      const job = await env.DB.prepare("SELECT machine_size FROM jobs WHERE type = 'solve'").first<{ machine_size: string }>();
+      expect(job?.machine_size).toBe("large");
+    } finally {
+      await env.DB.prepare("UPDATE machine_sizes SET cloud = 'off' WHERE name = 'large'").run();
+    }
+  });
+
+  it("still offers every size to the local worker", async () => {
+    const id = await meshed();
+    const body = validateEstimateResponse(await (await call("GET", `/api/simulations/${id}/estimate`, { cookie: alice })).json());
+    if (!body.ok) throw new Error(body.errors.join(" "));
+    expect(body.value.estimate.sizes.map((s) => s.size)).toEqual(["small", "medium", "large", "xlarge"]);
+  });
+});

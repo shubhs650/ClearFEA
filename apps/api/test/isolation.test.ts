@@ -363,6 +363,7 @@ const ROUTES: Record<string, Route> = {
   "GET /api/admin": { area: "admin" },
   "POST /api/admin/allowed": { area: "admin" },
   "DELETE /api/admin/allowed/:email": { area: "admin" },
+  "PUT /api/admin/machine-sizes/:name": { area: "admin" },
 
   "POST /api/jobs": { area: "account" },
   "GET /api/jobs": { area: "account" },
@@ -504,12 +505,14 @@ const ADMIN_CALLS: Record<string, Request> = {
   "GET /api/admin": { path: "/api/admin" },
   "POST /api/admin/allowed": { path: "/api/admin/allowed", json: { email: "invited@example.com" } },
   "DELETE /api/admin/allowed/:email": { path: "/api/admin/allowed/invited%40example.com" },
+  "PUT /api/admin/machine-sizes/:name": { path: "/api/admin/machine-sizes/large", json: { enabled: false } },
 };
 
-/** The allowlist as it stands, to show a refused call changed nothing. */
+/** The allowlist and the cloud size list as they stand, to show a refused call changed nothing. */
 async function allowlistSnapshot(): Promise<string> {
   const { results } = await env.DB.prepare("SELECT * FROM allowed_emails ORDER BY email").all();
-  return JSON.stringify(results);
+  const sizes = await env.DB.prepare("SELECT name, cloud FROM machine_sizes ORDER BY name").all();
+  return JSON.stringify([results, sizes.results]);
 }
 
 /** The routes the app serves, as "METHOD /path", without middleware entries. */

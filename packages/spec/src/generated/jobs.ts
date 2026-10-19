@@ -102,6 +102,10 @@ export interface ClaimRequest {
   workerId: WorkerId;
   jobTypes: JobType[];
   software?: WorkerSoftware;
+  /**
+   * The machine size the worker runs on (M10.6, ADR-099), from CLEARFEA_MACHINE_SIZE: it is given only that size's jobs, and the default size's also takes the jobs that have no size (import, report). Left out by a local worker, which takes every size's jobs.
+   */
+  machineSize?: string;
 }
 /**
  * Answer to a claim when a job was claimed (HTTP 200). No job to claim is HTTP 204 with no body.

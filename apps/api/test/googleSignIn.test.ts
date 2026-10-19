@@ -203,6 +203,34 @@ describe("Google sign-in", () => {
     expect((await sessionUser(admin)).status).toBe(200);
   });
 
+  it("lets the admin switch the large machine size on and off, but never the default size (M10.6)", async () => {
+    const { jar: admin } = await signInWithGoogle({ sub: "g-admin", email: ADMIN });
+    const sizes = async (response: Response) => {
+      const view = validateAdminResponse(await response.json());
+      if (!view.ok) throw new Error(view.errors.join(" "));
+      return view.value.cloudSizes.map((s) => [s.name, s.cores, s.enabled, s.default]);
+    };
+    expect(await sizes(await call("GET", "/api/admin", { jar: admin }))).toEqual([
+      ["medium", 4, true, true],
+      ["large", 8, false, false],
+    ]);
+    const on = await call("PUT", "/api/admin/machine-sizes/large", { jar: admin, json: { enabled: true } });
+    expect(await sizes(on)).toEqual([
+      ["medium", 4, true, true],
+      ["large", 8, true, false],
+    ]);
+    const off = await call("PUT", "/api/admin/machine-sizes/large", { jar: admin, json: { enabled: false } });
+    expect((await sizes(off))[1]).toEqual(["large", 8, false, false]);
+
+    const medium = await call("PUT", "/api/admin/machine-sizes/medium", { jar: admin, json: { enabled: false } });
+    expect(medium.status).toBe(400);
+    expect(((await medium.json()) as { error: string }).error).toContain("stays on");
+    const small = await call("PUT", "/api/admin/machine-sizes/small", { jar: admin, json: { enabled: true } });
+    expect(small.status).toBe(404);
+    const row = await env.DB.prepare("SELECT cloud FROM machine_sizes WHERE name = 'small'").first<{ cloud: string | null }>();
+    expect(row?.cloud).toBeNull();
+  });
+
   it("gives a returning user their same account and no second grant", async () => {
     const first = await signInWithGoogle({ sub: "g-admin", email: ADMIN });
     const second = await signInWithGoogle({ sub: "g-admin", email: ADMIN });

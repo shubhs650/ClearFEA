@@ -55,7 +55,13 @@ export function productionConfig(base, { databaseId, commit }) {
     d1_databases: [{ ...databases[0], database_id: id }],
     // Variables in this file replace the Worker's variables at each deploy; secrets are kept.
     // The live site signs in with Google only (M10.3, ADR-097); Google returns to this address.
-    vars: { CLEARFEA_COMMIT: commit.trim(), AUTH_MODE: "google", BETTER_AUTH_URL: `https://${PRODUCTION_DOMAIN}` },
+    // Jobs run on AWS machines, so runs are offered only the cloud sizes switched on (M10.6).
+    vars: {
+      CLEARFEA_COMMIT: commit.trim(),
+      AUTH_MODE: "google",
+      BETTER_AUTH_URL: `https://${PRODUCTION_DOMAIN}`,
+      MACHINES: "cloud",
+    },
     observability: { enabled: true },
   };
 }

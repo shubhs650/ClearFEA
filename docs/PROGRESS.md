@@ -50,7 +50,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M10.3 Google sign-in with Better Auth, allowlist and admin page (ADR-097; first live sign-in waits for the maintainer's Google client, DEPLOYMENT.md section 2)
 - [x] M10.4 Landing page at `/` (`apps/web/src/landing/`; light and dark, phone widths)
 - [ ] M10.5 Job files through presigned R2 URLs; streamed STEP uploads
-- [ ] M10.6 Worker cloud mode: size, idle exit, cloud size list
+- [x] M10.6 Worker cloud mode: size, idle exit, maximum lifetime, cloud size list (ADR-099; takes effect on AWS with M10.7)
 - [ ] M10.7 AWS stack template and the launcher in the API
 - [ ] M10.8 Deploy workflow for the worker image
 - [ ] M10.9 Live checks: verification account, quick tier against the live site, cases A and B and the limit models on the live standard machine
@@ -187,6 +187,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M10.6 worker cloud mode (2026-10-19): ADR-099. The worker reads `CLEARFEA_MACHINE_SIZE` (a `machine_sizes` name, `medium` for standard, `large`), `CLEARFEA_IDLE_EXIT_SECONDS` and `CLEARFEA_MAX_LIFETIME_SECONDS` (`worker/clearfea_worker/config.py`); `run_forever` returns `idle` or `lifetime` and the process exits 0. The claim sends `machineSize` (optional in `ClaimRequest`) and `claimJob` takes only that size's jobs, the default size also the unsized import and report jobs; an unknown size is a 400. Migration 0023 adds `machine_sizes.cloud` (`medium` on, `large` off, others null). `MACHINES=cloud`, set by the production configuration, limits estimates and runs to the sizes that are on; the admin page's new Machine sizes card switches large (never the default) through `PUT /api/admin/machine-sizes/:name`. For M10.7: start a task per size with those three variables (600 and 43200 s), count a job's size as `COALESCE(machine_size, default size)`, and start large only when `machine_sizes.cloud = 'on'`. Locally nothing changes: no size is sent and every size is offered.
 
 > M10.3 Google sign-in (2026-10-19): ADR-097. Better Auth 1.7.10 in `apps/api/src/session/google.ts`, on D1 directly, mounted at `/api/auth/*` only when `AUTH_MODE=google` (the production configuration sets it and `BETTER_AUTH_URL`); the Worker gained the `nodejs_als` flag. Migration 0022 adds Google's columns to `users`, the three `auth_` tables, `allowed_emails` and the `signup_grant_micro_credits` setting. Admin routes `/api/admin*`, admin page `apps/web/src/admin/AdminPage.tsx` from the status bar. Locally the seed gives alice and bob `@clearfea.test` addresses and `ADMIN_EMAIL=alice@clearfea.test` makes alice the admin (`infra/dev.sh` adds the line to an older `.dev.vars`; `infra/stack.sh` refuses to start without it). `test/googleSignIn.test.ts` runs the whole OAuth flow with Google's token endpoint answered in the test (Better Auth reads the code flow's ID token without checking its signature, as OIDC allows over TLS). Not yet tried against real Google: that needs the maintainer's OAuth client and secrets (DEPLOYMENT.md sections 2 and 3); the first live sign-in is the check. The web app's "API did not answer" messages no longer name `pnpm` or port 8787 in a production build. The landing page (M10.4) can link to `/app`, which shows Sign in with Google when signed out, or call `startGoogleSignIn()` from `apps/web/src/api/session.ts`.
 
@@ -428,6 +430,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-19
 
+- M10.6: worker cloud mode (ADR-099): machine size from the environment, claims only its size's jobs, exits after 10 idle minutes and claims nothing new after 12 hours up; cloud size list with standard on and large off, switched on the admin page. Checked with worker, API and web tests, `make verify` (full) and `make e2e` (E-08 extended).
 - M10.4: landing page at `/` (what ClearFEA does, how it works, the analyses, results, verification numbers, open source, closed beta and sign-in), light and dark, desktop and phone widths; a unit test ties its verification numbers to `docs/VERIFICATION_RESULTS.md`. Checked with `make test`, `make e2e` and screenshots at 1440 and 390 px.
 - M10.3: Google sign-in with Better Auth behind an admin-managed allowlist, admin page, ADR-097. Checked with the API tests (the OAuth flow end to end with Google's token endpoint stubbed, refusals, removal, the isolation sweep's new admin area), web tests, `make test`, `make e2e` and a `wrangler deploy --dry-run` (445 KiB gzipped). Learned: Better Auth 1.7 talks to D1 itself and passes an `APIError` thrown in a database hook through to the error redirect as `?error=<code>`, so a refusal needs no custom route; it needs only `nodejs_als`, not `nodejs_compat`.
 - M10.2: deploy workflow added (`deploy.yml`); checked with actionlint, a `deploy:worker --dry-run` on M10.1's production configuration, and `make test`. Learned: wrangler 4 `deploy --secrets-file` uploads secrets with the version, so a deploy never runs new code without its secrets and needs no separate `secret bulk`.

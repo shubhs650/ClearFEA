@@ -46,7 +46,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if getattr(args, "once", False):
-        client = ApiClient(settings.api_url, settings.worker_token, settings.worker_id)
+        client = ApiClient(
+            settings.api_url,
+            settings.worker_token,
+            settings.worker_id,
+            machine_size=settings.machine_size,
+        )
         try:
             run_once(client, settings, HANDLERS)
         except ApiError as error:

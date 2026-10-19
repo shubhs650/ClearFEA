@@ -1988,6 +1988,14 @@ fieldset.field {
   margin-right: auto;
 }
 
+.admin-size {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-right: auto;
+  cursor: pointer;
+}
+
 .admin-tag,
 .admin-when {
   color: var(--muted);
