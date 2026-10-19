@@ -90,8 +90,11 @@ app.route("/api/wallet", wallet);
 app.route("/api/storage", storage);
 app.route("/internal", internal);
 
-/** The cron trigger that runs each minute (wrangler.jsonc); any other runs the daily sweep. */
-export const EVERY_MINUTE = "* * * * *";
+/**
+ * The cron trigger that runs each minute (wrangler.jsonc); any other runs the daily sweep. Not
+ * exported: workerd takes every named export of the main module as a handler.
+ */
+const EVERY_MINUTE = "* * * * *";
 
 /**
  * The cron triggers in wrangler.jsonc. Each minute: fail jobs whose worker is lost (M8.4), which

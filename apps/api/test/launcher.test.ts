@@ -343,6 +343,14 @@ describe("ensureMachines", () => {
     expect((await getJob(env.DB, "alice", capped.id))?.failureCause).toBe("machine_hours_cap");
   });
 
+  it("leaves the main module exporting only handlers, which workerd requires to start", async () => {
+    const main = await import("../src/index");
+    for (const [name, value] of Object.entries(main)) {
+      const handler = value as { fetch?: unknown } | undefined;
+      expect([name, typeof value === "function" || typeof handler?.fetch === "function"]).toEqual([name, true]);
+    }
+  });
+
   it("runs from the scheduled handler each minute", async () => {
     const { createScheduledController } = await import("cloudflare:test");
     const handler = (await import("../src/index")).default;
