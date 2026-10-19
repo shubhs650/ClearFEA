@@ -25,7 +25,7 @@ export interface Env {
   /** The admin's email address: always allowed to sign in, and the only one to see the admin page. */
   ADMIN_EMAIL?: string;
   /**
-   * Where jobs run (M10.6, ADR-098): "cloud" on the live site, where runs are offered only the
+   * Where jobs run (M10.6, ADR-099): "cloud" on the live site, where runs are offered only the
    * cloud sizes switched on; unset (or "local") for the local worker, which simulates every size.
    */
   MACHINES?: string;

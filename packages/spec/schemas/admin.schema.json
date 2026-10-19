@@ -40,7 +40,7 @@
       }
     },
     "CloudMachineSize": {
-      "description": "A machine size the live site can run on AWS (M10.6, ADR-098).",
+      "description": "A machine size the live site can run on AWS (M10.6, ADR-099).",
       "type": "object",
       "additionalProperties": false,
       "required": ["name", "cores", "memoryBytes", "enabled", "default"],

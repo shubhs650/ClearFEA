@@ -19,7 +19,7 @@ class Settings:
     worker_id: str
     poll_seconds: float = 2.0
     heartbeat_seconds: float = 5.0
-    #: The machine size this worker runs on, a name from the API's machine_sizes (M10.6, ADR-098).
+    #: The machine size this worker runs on, a name from the API's machine_sizes (M10.6, ADR-099).
     #: It claims only that size's jobs. None, the local default, claims every size's jobs.
     machine_size: str | None = None
     #: Exits after this long without a job (ADR-095 item 7). None keeps polling for ever.

@@ -51,7 +51,7 @@ export interface AdminUser {
   allowed: boolean;
 }
 /**
- * A machine size the live site can run on AWS (M10.6, ADR-098).
+ * A machine size the live site can run on AWS (M10.6, ADR-099).
  *
  * This interface was referenced by `Admin`'s JSON-Schema
  * via the `definition` "CloudMachineSize".

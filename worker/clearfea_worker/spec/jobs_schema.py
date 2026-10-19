@@ -103,7 +103,7 @@ class ClaimRequest(BaseModel):
         str | None, Field(alias="machineSize", pattern="^[a-z0-9][a-z0-9-]{0,31}$")
     ] = None
     """
-    The machine size the worker runs on (M10.6, ADR-098), from CLEARFEA_MACHINE_SIZE: it is given only that size's jobs, and the default size's also takes the jobs that have no size (import, report). Left out by a local worker, which takes every size's jobs.
+    The machine size the worker runs on (M10.6, ADR-099), from CLEARFEA_MACHINE_SIZE: it is given only that size's jobs, and the default size's also takes the jobs that have no size (import, report). Left out by a local worker, which takes every size's jobs.
     """
 
 

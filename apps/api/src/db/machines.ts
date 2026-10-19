@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Machine sizes (ADR-033, ADR-049): configuration, the same for every user, so not owner-scoped.
-// The cloud size list (M10.6, ADR-098) says which of them the live site runs on AWS.
+// The cloud size list (M10.6, ADR-099) says which of them the live site runs on AWS.
 
 import type { CloudMachineSize } from "@clearfea/spec";
 import type { MachineSize } from "../billing/estimate";

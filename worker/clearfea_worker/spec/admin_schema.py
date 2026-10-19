@@ -57,7 +57,7 @@ class AdminUser(BaseModel):
 
 class CloudMachineSize(BaseModel):
     """
-    A machine size the live site can run on AWS (M10.6, ADR-098).
+    A machine size the live site can run on AWS (M10.6, ADR-099).
     """
 
     model_config = ConfigDict(

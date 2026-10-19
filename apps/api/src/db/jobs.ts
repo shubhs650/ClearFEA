@@ -182,7 +182,7 @@ export async function listJobs(db: D1Database, userId: string, limit = 20): Prom
  * Marks the oldest queued job of one of the given types as claimed by this
  * worker and returns it, or null when nothing is queued. A single UPDATE
  * statement, so two workers can never claim the same job. A worker that names
- * its machine size (M10.6, ADR-098) gets only jobs queued for that size, and the
+ * its machine size (M10.6, ADR-099) gets only jobs queued for that size, and the
  * default size's worker also gets the jobs that have no size (import, report).
  */
 export async function claimJob(

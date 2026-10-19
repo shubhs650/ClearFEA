@@ -1449,7 +1449,7 @@ describe("estimates (ADR-049)", () => {
   });
 });
 
-describe("on cloud machines (M10.6, ADR-098)", () => {
+describe("on cloud machines (M10.6, ADR-099)", () => {
   // The same app with MACHINES=cloud, as the live site's configuration sets it.
   async function cloudCall(method: string, path: string, json?: unknown): Promise<Response> {
     const headers: Record<string, string> = { Cookie: alice };

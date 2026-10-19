@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The admin page (M10.3, ADR-097): who may sign in with Google, and who has, and which cloud
-// machine sizes are switched on (M10.6, ADR-098). Only the admin
+// machine sizes are switched on (M10.6, ADR-099). Only the admin
 // (ADMIN_EMAIL) sees it. Drawn over the workbench like the wallet page, which stays as it was.
 
 import type { AdminResponse } from "@clearfea/spec";

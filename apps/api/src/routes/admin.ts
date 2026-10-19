@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The admin page's routes (M10.3, ADR-097): the allowlist of Google addresses that may sign in,
-// the users, and the cloud machine sizes switched on (M10.6, ADR-098). Only the admin (ADMIN_EMAIL) reaches them; to anyone else they answer as if
+// the users, and the cloud machine sizes switched on (M10.6, ADR-099). Only the admin (ADMIN_EMAIL) reaches them; to anyone else they answer as if
 // they did not exist. Shapes: packages/spec/schemas/admin.schema.json.
 
 import { type AdminResponse, validateAddAllowedRequest, validateSwitchCloudSizeRequest } from "@clearfea/spec";
