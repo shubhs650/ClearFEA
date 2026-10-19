@@ -73,12 +73,25 @@ jobs:
           fi
 
       - name: Configure AWS credentials
+        id: aws
         if: steps.settings.outputs.ready == 'true'
         uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: clearfea-deploy-${{ github.run_id }}
+
+      # When AWS refuses the role, show who GitHub says this run is, so it can be compared with
+      # the role's trust policy (DEPLOYMENT.md section 8). Prints the token's claims, never the token.
+      - name: Show the identity AWS was given
+        if: failure() && steps.aws.outcome == 'failure'
+        run: |
+          token=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          payload=$(printf '%s' "$token" | cut -d. -f2 | tr '_-' '/+')
+          while [ $(( ${#payload} % 4 )) -ne 0 ]; do payload="$payload="; done
+          printf '%s' "$payload" | base64 -d | jq '{sub, aud, iss, repository, environment, ref}'
+          echo "::error::AWS refused this identity. The deploy role's trust policy must allow the sub above (DEPLOYMENT.md section 8)."
 
       - name: Find the image store
         id: stack
