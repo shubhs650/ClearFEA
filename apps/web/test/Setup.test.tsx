@@ -146,7 +146,7 @@ function simulation(spec: SimulationSpec = emptySpec): SimulationView {
 }
 
 type Reply = { status: number; json?: unknown; bytes?: ArrayBuffer };
-type Route = Reply | ((init?: RequestInit) => Reply);
+type Route = Reply | ((init?: RequestInit) => Reply | Promise<Reply>);
 
 /** Answers fetch calls by "METHOD /path"; anything not listed is a test error. */
 function serve(routes: Record<string, Route>) {
@@ -154,7 +154,7 @@ function serve(routes: Record<string, Route>) {
     const key = `${init?.method ?? "GET"} ${String(input)}`;
     const route = routes[key];
     if (route === undefined) throw new Error(`Unexpected request ${key}`);
-    const reply = typeof route === "function" ? route(init) : route;
+    const reply = typeof route === "function" ? await route(init) : route;
     const body = reply.bytes ?? (reply.json === undefined ? null : JSON.stringify(reply.json));
     return new Response(body, { status: reply.status });
   });
@@ -1821,6 +1821,27 @@ describe("unit system", () => {
     await waitFor(() => expect(unitSystem().value).toBe("metric-mm"));
     fireEvent.change(unitSystem(), { target: { value: "us-in" } });
     expect(await header().findByText("The unit system was not changed: 'us-in' is not a unit system.")).toBeTruthy();
+    expect(unitSystem().value).toBe("metric-mm");
+  });
+
+  it("keeps a system chosen before the project has loaded, and the reason it was refused", async () => {
+    let loadProject: (reply: Reply) => void = () => {};
+    const project = new Promise<Reply>((resolve) => {
+      loadProject = resolve;
+    });
+    serve(
+      routes([simulation()], {
+        "GET /api/project": () => project,
+        "PATCH /api/project": { status: 400, json: { error: "'us-in' is not a unit system." } },
+      }),
+    );
+    render(<App />);
+    fireEvent.change(await waitFor(() => unitSystem()), { target: { value: "us-in" } });
+    const refused = "The unit system was not changed: 'us-in' is not a unit system.";
+    expect(await header().findByText(refused)).toBeTruthy();
+    loadProject({ status: 200, json: { project: { id: "p1", name: "My project", unitSystem: "si" } } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(header().getByText(refused)).toBeTruthy();
     expect(unitSystem().value).toBe("metric-mm");
   });
 });
