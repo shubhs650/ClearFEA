@@ -27,3 +27,31 @@ def test_missing_token_says_where_to_find_it() -> None:
 def test_rejects_a_non_positive_interval() -> None:
     with pytest.raises(ConfigError, match="CLEARFEA_POLL_SECONDS"):
         load_settings({"CLEARFEA_WORKER_TOKEN": "x", "CLEARFEA_POLL_SECONDS": "0"})
+
+
+def test_reads_the_cloud_machine_settings() -> None:
+    settings = load_settings(
+        {
+            "CLEARFEA_WORKER_TOKEN": "x",
+            "CLEARFEA_MACHINE_SIZE": "large",
+            "CLEARFEA_IDLE_EXIT_SECONDS": "600",
+            "CLEARFEA_MAX_LIFETIME_SECONDS": "43200",
+        }
+    )
+    assert settings.machine_size == "large"
+    assert settings.idle_exit_seconds == 600
+    assert settings.max_lifetime_seconds == 43200
+
+
+def test_a_local_worker_takes_any_size_and_never_exits_on_its_own() -> None:
+    settings = load_settings({"CLEARFEA_WORKER_TOKEN": "x", "CLEARFEA_MACHINE_SIZE": ""})
+    assert settings.machine_size is None
+    assert settings.idle_exit_seconds is None
+    assert settings.max_lifetime_seconds is None
+
+
+def test_rejects_a_malformed_machine_size_or_idle_time() -> None:
+    with pytest.raises(ConfigError, match="CLEARFEA_MACHINE_SIZE"):
+        load_settings({"CLEARFEA_WORKER_TOKEN": "x", "CLEARFEA_MACHINE_SIZE": "Large Machine"})
+    with pytest.raises(ConfigError, match="CLEARFEA_IDLE_EXIT_SECONDS"):
+        load_settings({"CLEARFEA_WORKER_TOKEN": "x", "CLEARFEA_IDLE_EXIT_SECONDS": "-1"})

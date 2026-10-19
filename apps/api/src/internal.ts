@@ -29,6 +29,7 @@ import {
   type Job,
   recordHeartbeat,
 } from "./db/jobs";
+import { machineSizeExists } from "./db/machines";
 import { getRun } from "./db/runs";
 import type { Env } from "./env";
 import { jobFiles, transfers } from "./jobs/files";
@@ -83,7 +84,14 @@ internal.post("/jobs/claim", async (c) => {
   // Jobs whose worker is lost, this one's included (it asks only when it holds none), are failed
   // first, so a restarted or dead worker never leaves a run solving (M8.4).
   await sweepLostJobs(c.env, workerId);
-  const job = await claimJob(c.env.DB, workerId, body.value.jobTypes, body.value.software ?? null);
+  const { machineSize } = body.value;
+  if (machineSize !== undefined && !(await machineSizeExists(c.env.DB, machineSize))) {
+    return c.json(
+      { error: `There is no machine size called ${machineSize}. Set CLEARFEA_MACHINE_SIZE to one in machine_sizes.` },
+      400,
+    );
+  }
+  const job = await claimJob(c.env.DB, workerId, body.value.jobTypes, body.value.software ?? null, machineSize ?? null);
   if (job === null) return c.body(null, 204);
   const origin = new URL(c.req.url).origin;
   return c.json({

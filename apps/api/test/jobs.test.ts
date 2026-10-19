@@ -73,6 +73,32 @@ describe("internal job routes", () => {
     expect(job?.finishedAt).not.toBeNull();
   });
 
+  it("gives a worker that names its machine size only that size's jobs, and the default size the unsized ones (M10.6)", async () => {
+    const claimOn = (machineSize: string) => post("/jobs/claim", { workerId: "w1", jobTypes: ["noop"], machineSize });
+    const unsized = await createJob(env.DB, "alice", "noop");
+    const forLarge = await createJob(env.DB, "bob", "noop");
+    await env.DB.prepare("UPDATE jobs SET machine_size = 'large' WHERE id = ?").bind(forLarge.id).run();
+
+    expect((await claimOn("small")).status).toBe(204);
+    const medium = await claimOn("medium");
+    expect(((await medium.json()) as { job: { id: string } }).job.id).toBe(unsized.id);
+    expect((await claimOn("medium")).status).toBe(204);
+    const large = await claimOn("large");
+    expect(((await large.json()) as { job: { id: string } }).job.id).toBe(forLarge.id);
+
+    const unknown = await claimOn("huge");
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({
+      error: "There is no machine size called huge. Set CLEARFEA_MACHINE_SIZE to one in machine_sizes.",
+    });
+  });
+
+  it("gives a worker that names no size every size's jobs, as before", async () => {
+    const forLarge = await createJob(env.DB, "bob", "noop");
+    await env.DB.prepare("UPDATE jobs SET machine_size = 'large' WHERE id = ?").bind(forLarge.id).run();
+    expect((await claim()).status).toBe(200);
+  });
+
   it("hands each job to one worker only, oldest first", async () => {
     const first = await createJob(env.DB, "alice", "noop");
     const second = await createJob(env.DB, "bob", "noop");

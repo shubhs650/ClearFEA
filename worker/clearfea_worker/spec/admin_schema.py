@@ -4,13 +4,13 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 type Admin = Annotated[Any, Field(title="Admin")]
 """
-Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, and the users. Only the admin reaches them. Each message is a definition under $defs.
+Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, and the cloud machine sizes (M10.6). Only the admin reaches them. Each message is a definition under $defs.
 """
 
 
@@ -55,6 +55,28 @@ class AdminUser(BaseModel):
     """
 
 
+class CloudMachineSize(BaseModel):
+    """
+    A machine size the live site can run on AWS (M10.6, ADR-098).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    name: str
+    cores: Annotated[int, Field(ge=1)]
+    memory_bytes: Annotated[int, Field(alias="memoryBytes", ge=0)]
+    enabled: bool
+    """
+    Switched on: runs on the live site may choose it.
+    """
+    default: bool
+    """
+    The default size, which runs every import, mesh and report job and cannot be switched off.
+    """
+
+
 class AdminResponse(BaseModel):
     """
     Answer to GET /api/admin and to adding or removing an address.
@@ -70,6 +92,23 @@ class AdminResponse(BaseModel):
     """
     allowed: list[AllowedEmail]
     users: list[AdminUser]
+    machines: Literal["cloud", "local"]
+    """
+    Where jobs run: cloud machines (the live site, MACHINES=cloud) or the local worker, which simulates every size and ignores the cloud size list.
+    """
+    cloud_sizes: Annotated[list[CloudMachineSize], Field(alias="cloudSizes")]
+
+
+class SwitchCloudSizeRequest(BaseModel):
+    """
+    Body of PUT /api/admin/machine-sizes/{name}.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    enabled: bool
 
 
 class AddAllowedRequest(BaseModel):

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Admin",
-  "description": "Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, and the users. Only the admin reaches them. Each message is a definition under $defs.",
+  "description": "Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, and the cloud machine sizes (M10.6). Only the admin reaches them. Each message is a definition under $defs.",
   "$defs": {
     "AllowedEmail": {
       "type": "object",
@@ -39,19 +39,47 @@
         }
       }
     },
+    "CloudMachineSize": {
+      "description": "A machine size the live site can run on AWS (M10.6, ADR-098).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "cores", "memoryBytes", "enabled", "default"],
+      "properties": {
+        "name": { "type": "string" },
+        "cores": { "type": "integer", "minimum": 1 },
+        "memoryBytes": { "type": "integer", "minimum": 0 },
+        "enabled": { "type": "boolean", "description": "Switched on: runs on the live site may choose it." },
+        "default": {
+          "type": "boolean",
+          "description": "The default size, which runs every import, mesh and report job and cannot be switched off."
+        }
+      }
+    },
     "AdminResponse": {
       "description": "Answer to GET /api/admin and to adding or removing an address.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["adminEmail", "allowed", "users"],
+      "required": ["adminEmail", "allowed", "users", "machines", "cloudSizes"],
       "properties": {
         "adminEmail": {
           "type": "string",
           "description": "The admin's address from the API's configuration (ADMIN_EMAIL), lower case."
         },
         "allowed": { "type": "array", "items": { "$ref": "#/$defs/AllowedEmail" } },
-        "users": { "type": "array", "items": { "$ref": "#/$defs/AdminUser" } }
+        "users": { "type": "array", "items": { "$ref": "#/$defs/AdminUser" } },
+        "machines": {
+          "enum": ["cloud", "local"],
+          "description": "Where jobs run: cloud machines (the live site, MACHINES=cloud) or the local worker, which simulates every size and ignores the cloud size list."
+        },
+        "cloudSizes": { "type": "array", "items": { "$ref": "#/$defs/CloudMachineSize" } }
       }
+    },
+    "SwitchCloudSizeRequest": {
+      "description": "Body of PUT /api/admin/machine-sizes/{name}.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": { "enabled": { "type": "boolean" } }
     },
     "AddAllowedRequest": {
       "description": "Body of POST /api/admin/allowed.",

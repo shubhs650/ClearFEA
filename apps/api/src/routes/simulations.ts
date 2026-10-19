@@ -66,7 +66,7 @@ import {
   meshSettingsHash,
   simulationMesh,
 } from "../db/meshes";
-import { listMachineSizes } from "../db/machines";
+import { cloudMachines, listMachineSizes, machineSizeExists } from "../db/machines";
 import { createRun, listRuns } from "../db/runs";
 import {
   createSimulation,
@@ -295,9 +295,9 @@ async function runnableMesh(
  * The estimate for a ready mesh with a solver on every machine size (M2.12, ADR-049, ADR-063),
  * for a run of `kind` (M6.3); the solver must be one that solves such a run.
  */
-async function meshEstimate(db: D1Database, mesh: Mesh, solver: Solver, kind: RunKind): Promise<RunEstimate> {
+async function meshEstimate(env: Env, mesh: Mesh, solver: Solver, kind: RunKind): Promise<RunEstimate> {
   if (mesh.nodeCount === null) throw new Error("A ready mesh has no node count.");
-  return estimateRun(mesh.nodeCount, mesh.order, await listMachineSizes(db), solver, kind);
+  return estimateRun(mesh.nodeCount, mesh.order, await listMachineSizes(env.DB, cloudMachines(env)), solver, kind);
 }
 
 /**
@@ -334,7 +334,7 @@ simulations.get("/:id/estimate", async (c) => {
   });
   const cannot = runSolverProblem(solver, kind);
   if (cannot !== null) return c.json({ error: cannot }, 409);
-  return c.json({ estimate: await meshEstimate(c.env.DB, found.mesh, solver, kind) } satisfies EstimateResponse);
+  return c.json({ estimate: await meshEstimate(c.env, found.mesh, solver, kind) } satisfies EstimateResponse);
 });
 
 /**
@@ -380,11 +380,15 @@ simulations.post("/:id/runs", async (c) => {
   if (cannot !== null) return c.json({ error: cannot }, 409);
   const tooLarge = elementLimitProblem(solver, mesh.order, mesh.elementCount, kind);
   if (tooLarge !== null) return c.json({ error: tooLarge }, 409);
-  const estimate = await meshEstimate(c.env.DB, mesh, solver, kind);
+  const estimate = await meshEstimate(c.env, mesh, solver, kind);
   const size = runSize(estimate, request.machineSize);
   if (size === undefined) {
     const names = estimate.sizes.map((s) => s.size).join(", ");
-    return c.json({ error: `There is no machine size called ${request.machineSize}. Choose one of: ${names}.` }, 400);
+    const off = request.machineSize !== undefined && (await machineSizeExists(c.env.DB, request.machineSize));
+    const which = off
+      ? `The ${request.machineSize} machine size is switched off on this site.`
+      : `There is no machine size called ${request.machineSize}.`;
+    return c.json({ error: `${which} Choose one of: ${names}.` }, 400);
   }
   const [latest] = await listRuns(c.env.DB, c.var.userId, simulation.id, 1);
   if (latest?.status === "solving") {
