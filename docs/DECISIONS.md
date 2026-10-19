@@ -1209,7 +1209,7 @@ Shubham asked for a modern, professional interface before the M9.8 trial ("no ri
 6. **Icons** come from `lucide-react` (ISC licence, pinned 0.576.0), the only new dependency.
 
 ### ADR-095: Phase 0 goes live as an invite-only closed beta at clearfea.triyalabs.com: Cloudflare for the site, API, database and files, AWS Fargate on demand for the job worker
-2026-10-19 · Proposed. The move to a hosted closed beta is Shubham's own decision (2026-10-19); the architecture below and the mapping of the gate items await his review.
+2026-10-19 · Accepted. The move to a hosted closed beta is Shubham's own decision; he approved milestone M10 on this plan on 2026-10-19 ("Yes I approve M10"), leaving the defaults offered with it: AWS region `ap-south-1` (Mumbai), threads merge their own green pull requests (which now deploys them), and the gate mapping of item 12. Details pending his review.
 
 Shubham ran the prototype on Windows and found WSL and Docker too much to ask of his colleagues, mechanical engineers with no coding background who test in spare moments. He decided to put ClearFEA live for two or three invited colleagues (a closed beta), develop it from their feedback, and only later open a public beta. His stack: the domain `clearfea.triyalabs.com` on Cloudflare, Cloudflare Workers, D1 and R2, Better Auth with Google sign-in for an admin-managed Gmail allowlist, a polished landing page, and the solver on AWS compute that costs nothing while idle, with a 4 vCPU / 16 GB standard size and an 8 vCPU / 32 GB large size ready to switch on. Choices:
 
