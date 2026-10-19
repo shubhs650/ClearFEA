@@ -34,6 +34,7 @@ No fluids, no nonlinear analysis, no shells or beams, no geometry editing. The f
 | --- | --- |
 | [docs/USER_GUIDE.md](docs/USER_GUIDE.md) | User guide: the main flow, with a tutorial model |
 | [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) | Running ClearFEA on your own machine |
+| [docs/ADMIN_GUIDE.md](docs/ADMIN_GUIDE.md) | Running the live closed beta: invitations, credits, machine sizes, costs |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Setting up the live closed beta on Cloudflare, AWS and Google (ADR-095) |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Product decisions, scope and non-goals |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design and technology choices |

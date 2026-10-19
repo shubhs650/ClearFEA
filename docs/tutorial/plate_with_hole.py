@@ -6,7 +6,9 @@
 The plate is 300 mm long along x, 100 mm wide along y and 5 mm thick along z, with a 10 mm hole
 through its centre. x runs from 0 to 300 mm, y from 0 to 100 mm and z from 0 to 5 mm, so the
 hole's axis is the line x = 150 mm, y = 50 mm. It is the whole plate of verification case V-03,
-which models one eighth of it. No STEP file is kept in the repository.
+which models one eighth of it. Its output is kept as
+apps/web/public/tutorial/plate-with-hole.step, which the site serves for the guide (ADR-102);
+worker/tests/test_tutorial_model.py checks that the two agree.
 """
 
 import sys
