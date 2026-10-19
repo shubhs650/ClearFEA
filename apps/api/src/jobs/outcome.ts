@@ -55,8 +55,14 @@ function usedTime(billedSeconds: number): string {
   return `${Math.floor(billedSeconds / 60)} min ${billedSeconds % 60} s`;
 }
 
+/** The API's cause code for a queued job no solver machine could be started for (M10.7, ADR-100). */
+export const NO_MACHINE = "no_machine";
+
+/** The API's cause code for a queued job left when the monthly machine-hours cap was reached (M10.7). */
+export const MACHINE_HOURS_CAP = "machine_hours_cap";
+
 /** Causes the API itself explains, whoever pays: its message replaces the generic fault text. */
-const EXPLAINED_BY_API = [OUT_OF_MEMORY, WORKER_LOST];
+const EXPLAINED_BY_API = [OUT_OF_MEMORY, WORKER_LOST, NO_MACHINE, MACHINE_HOURS_CAP];
 
 /**
  * What the owner is told about a failed job: the worker's message when it is their fault, and

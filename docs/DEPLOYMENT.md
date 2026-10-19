@@ -142,7 +142,7 @@ openssl rand -base64 32
 | GitHub secret | What it is |
 | --- | --- |
 | `BETTER_AUTH_SECRET` | Signs sign-in sessions. Changing it signs everyone out. |
-| `WORKER_TOKEN` | The key solver machines use to talk to the API. The deploy stores it in AWS for the machines too. |
+| `WORKER_TOKEN` | The key solver machines use to talk to the API. The API hands it to each machine when it starts it, so it is never stored in AWS. |
 
 ## 4. AWS (for task M10.7)
 
@@ -179,10 +179,15 @@ Do this once the M10.7 pull request is merged.
 
 5. **Next** → leave the options as they are → **Next** → at the bottom tick **I acknowledge that AWS CloudFormation might create IAM resources with custom names** → **Submit**.
 6. Wait until the stack status reads **CREATE_COMPLETE** (a few minutes; press the refresh button).
-7. Open the **Outputs** tab. In GitHub, add the **variable** `AWS_DEPLOY_ROLE_ARN` with the value of `DeployRoleArn`. The other outputs (cluster, subnets, security group, task definition names) are read by the deploy workflow from the stack, so you do not copy them.
-8. Check your email for **AWS Notification - Subscription Confirmation** and click **Confirm subscription**, or the cost alarms will not reach you.
+7. Open the **Outputs** tab. In GitHub, add the **variable** `AWS_DEPLOY_ROLE_ARN` with the value of `DeployRoleArn`. You do not copy the other outputs: the stack also writes how to start a machine (cluster, subnets, security group) into a setting named `/clearfea/launch`, which the API reads by itself.
 
-What the stack creates: a small network with public subnets and no NAT gateway (which would cost about $32 a month on its own), the image store (ECR, keeps the last ten images), the ECS cluster, the two machine definitions (standard 4 vCPU / 16 GB, large 8 vCPU / 32 GB), a log group kept for 14 days, the budget alarm, the role GitHub deploys with, and the `clearfea-launcher` user, which can only start those two machine definitions.
+The budget alarm emails `AlertEmail` directly when the month's spending is forecast to pass 80% of `MonthlyBudgetUsd` and when it has passed it; there is no subscription to confirm.
+
+If the stack fails with "Provider with url https://token.actions.githubusercontent.com already exists", the account already trusts GitHub from earlier work: create the stack again with `CreateGitHubOidcProvider` set to `false`.
+
+What the stack creates: a small network with public subnets and no NAT gateway (which would cost about $32 a month on its own), the image store (ECR, keeps the last ten images), the ECS cluster, the machine definitions (standard 4 vCPU / 16 GB; large 8 vCPU / 32 GB only with `LargeSizeEnabled`), a log group kept for 14 days, the `/clearfea/launch` setting, the budget alarm, the role GitHub deploys with, and the `clearfea-launcher` user, which can only start those machine definitions and read that setting. Nothing in it costs money while no machine runs, apart from the stored images (about $0.10 per GB a month).
+
+The first machine can start only once the deploy workflow has put the worker image in the image store (task M10.8). Until then a job waits for about 20 minutes while three starts fail, then fails saying no machine came up; nothing is charged.
 
 ### 4.4 Create the launcher's access key
 
@@ -192,6 +197,7 @@ The API needs a key to start solver machines. The stack created a user that can 
 2. Use case: **Application running outside AWS** → **Next** → description `Cloudflare Worker` → **Create access key**.
 3. Copy the **Access key** and the **Secret access key** (shown once).
 4. In GitHub, add the **secrets** `AWS_LAUNCHER_ACCESS_KEY_ID` and `AWS_LAUNCHER_SECRET_ACCESS_KEY`.
+5. Run the deploy once more (section 6.1) so the API gets the key. The admin page's **Solver machines** card then says machines start on AWS; before that it says they cannot be started yet and names what is missing.
 
 ## 5. GitHub: the full list
 
@@ -266,7 +272,7 @@ Until the large machine is benchmarked it keeps the 16 GB element limits, so it 
 
 - AWS → **Billing and Cost Management** → **Bills** (this month so far) or **Cost Explorer** (by service: Fargate is "Elastic Container Service").
 - Cloudflare → **Manage account** → **Billing**.
-- ClearFEA admin page → machine hours this month, against the monthly cap.
+- ClearFEA admin page → **Solver machines**: machine hours used this month against the monthly limit, and the latest machines started with how each went.
 
 ### 7.5 Make sure nothing is left running
 
@@ -274,7 +280,7 @@ AWS → **Elastic Container Service** → **Clusters** → `clearfea` → **Task
 
 ### 7.6 Pause or shut down
 
-- **Pause the solver**: admin page → set the monthly machine-hours cap to 0. No machine starts; the site stays up.
+- **Pause the solver**: admin page → **Solver machines** → set the monthly limit to 0. No machine starts and new runs are refused; the site stays up. Set it back (for example to 60) to resume.
 - **Shut AWS down completely**: CloudFormation → `clearfea` → **Delete**. The image store must be emptied first (ECR → `clearfea-worker` → select all images → **Delete**).
 - **Take the site down**: Cloudflare → **Compute (Workers)** → `clearfea` → **Settings** → **Domains & Routes** → remove `clearfea.triyalabs.com`.
 
@@ -288,7 +294,9 @@ AWS → **Elastic Container Service** → **Clusters** → `clearfea` → **Task
 | Google says "Error 400: redirect_uri_mismatch" | The redirect URI in 2.3 differs from the site's | It must be exactly `https://clearfea.triyalabs.com/api/auth/callback/google` |
 | Google says "Access blocked: ClearFEA has not completed the Google verification process" | The account is not a test user | Add it under Test users (2.2 step 7) |
 | ClearFEA says the address is not invited | Not on the allowlist | Add it on the admin page (6.3) |
-| A job sits at "Waiting for a machine" for more than 5 minutes | AWS launcher key wrong, stack missing, or the monthly cap reached | The job's message says which; check 4.4 and the admin page's cap |
+| A job fails saying the solver machines of this site are not set up | The launcher key or `AWS_REGION` is missing | The admin page's **Solver machines** card names what is missing; add it (4.2, 4.4) and deploy again |
+| A job fails saying 3 solver machines were started and none came up | AWS refused the starts, or the machines could not start | The admin page lists each start with AWS's reason. "AccessDenied": the key is not the `clearfea-launcher` one, or the stack is in another region than `AWS_REGION`. "ParameterNotFound": the stack is missing. A start that says nothing and never runs: the worker image is not in the image store yet (M10.8), or see the machine's log in AWS → CloudWatch → Log groups → `/clearfea/worker` |
+| Runs are refused with "used its ... machine hours for this month" | The monthly limit was reached | Raise it on the admin page, or wait for the 1st |
 | A cost alarm email | AWS spending passed `MonthlyBudgetUsd` | Check 7.5 for machines left running; tell a thread |
 
 ## 9. This Claude project's environment

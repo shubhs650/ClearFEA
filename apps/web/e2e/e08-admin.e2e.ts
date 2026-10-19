@@ -63,6 +63,18 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await large.click();
     await expect(large).not.toBeChecked();
 
+    // Solver machines (M10.7): locally nothing is started; the monthly limit is set and restored.
+    const machines = admin.getByRole("region", { name: "Solver machines" });
+    await expect(machines.getByText("Jobs here run on the local worker")).toBeVisible();
+    await expect(machines.getByText("No machine started yet.")).toBeVisible();
+    await machines.getByLabel("Monthly limit in hours").fill("45");
+    await machines.getByRole("button", { name: "Set limit" }).click();
+    await expect(machines.getByText("of 45 h used this month")).toBeVisible();
+    await machines.screenshot({ path: `${OUT}/e08-solver-machines.png` });
+    await machines.getByLabel("Monthly limit in hours").fill("60");
+    await machines.getByRole("button", { name: "Set limit" }).click();
+    await expect(machines.getByText("of 60 h used this month")).toBeVisible();
+
     await admin.getByRole("button", { name: "Remove colleague.one@example.com" }).click();
     await expect(admin.getByText("colleague.one@example.com")).toHaveCount(0);
     await admin.getByRole("button", { name: "Remove colleague.two@example.com" }).click();
@@ -83,6 +95,8 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     expect(add.status()).toBe(404);
     const size = await bob.request.put("/api/admin/machine-sizes/large", { data: { enabled: true } });
     expect(size.status()).toBe(404);
+    const cap = await bob.request.put("/api/admin/machine-hours-cap", { data: { hours: 0 } });
+    expect(cap.status()).toBe(404);
     await context.close();
   });
 });

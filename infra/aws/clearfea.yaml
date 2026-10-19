@@ -1,0 +1,402 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# ClearFEA's AWS stack for the live closed beta (M10.7, ADR-095 items 5 to 10, ADR-100).
+# The maintainer creates it once by uploading this file in the CloudFormation console
+# (docs/DEPLOYMENT.md section 4.3) and updates it the same way. It holds everything the solver
+# machines need and nothing that runs while no one is working:
+#
+#   - a small network with two public subnets and no NAT gateway (which alone costs ~$32/month);
+#     machines get a public address, and nothing can connect to them
+#   - the image store for the worker image (ECR), keeping the last ten images
+#   - the ECS cluster and the machine definitions: standard (4 vCPU, 16 GB, machine size
+#     "medium") and large (8 vCPU, 32 GB, "large"), the latter only with LargeSizeEnabled
+#   - the solver's log group, kept 14 days
+#   - /clearfea/launch, the parameter that tells the API how to start a machine
+#   - the clearfea-launcher user, which can only start the two machine definitions and read
+#     that parameter; the API holds its access key (section 4.4)
+#   - the role GitHub's deploy workflow assumes over OIDC (no stored AWS keys), for the worker
+#     image and new machine definitions (M10.8)
+#   - a monthly budget that emails the admin
+#
+# Nothing here bills by the hour while idle: Fargate charges per second only while a machine
+# runs, and the API starts machines only when work is queued (ADR-095 item 6).
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ClearFEA solver machines on demand (ECS Fargate), image store, launcher user, deploy role and budget alarm.
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Description: Email address for the monthly budget alarm.
+    AllowedPattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+    ConstraintDescription: Must be an email address.
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 25
+    MinValue: 1
+    Description: Monthly AWS spending in US dollars at which the alarm emails you (at 80% forecast and 100% actual).
+  GitHubRepository:
+    Type: String
+    Default: shubhs650/ClearFEA
+    AllowedPattern: "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    Description: The repository whose deploy workflow may push worker images and register machine definitions (owner/name).
+  ApiUrl:
+    Type: String
+    Default: https://clearfea.triyalabs.com
+    AllowedPattern: "^https://[^/\\s]+$"
+    Description: The site the solver machines report to, without a trailing slash.
+  LargeSizeEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Define the large machine (8 vCPU, 32 GB). Switch it on in the ClearFEA admin page too (DEPLOYMENT.md section 7.3).
+  CreateGitHubOidcProvider:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Set to false only if this AWS account already has the token.actions.githubusercontent.com identity provider.
+
+Conditions:
+  Large: !Equals [!Ref LargeSizeEnabled, "true"]
+  NewOidcProvider: !Equals [!Ref CreateGitHubOidcProvider, "true"]
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: Costs }
+        Parameters: [AlertEmail, MonthlyBudgetUsd]
+      - Label: { default: Site and deploys }
+        Parameters: [ApiUrl, GitHubRepository, CreateGitHubOidcProvider]
+      - Label: { default: Machine sizes }
+        Parameters: [LargeSizeEnabled]
+
+Resources:
+  # Network: public subnets in two zones, so a start goes ahead when one zone has no capacity.
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: clearfea }]
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: [{ Key: Name, Value: clearfea }]
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: clearfea-public }]
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: clearfea-a }]
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.1.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: clearfea-b }]
+  SubnetARoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref PublicRouteTable
+  SubnetBRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref PublicRouteTable
+  # No inbound rules: machines only call out, to the API, R2 and the image store.
+  MachineSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ClearFEA solver machines, outbound only
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          Description: The API, R2 and the image store over HTTPS
+      Tags: [{ Key: Name, Value: clearfea-machines }]
+
+  # The worker image. Images are about 2 GB; the last ten are kept for rollback.
+  WorkerRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: clearfea-worker
+      ImageTagMutability: MUTABLE
+      ImageScanningConfiguration: { ScanOnPush: true }
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {"rules": [{"rulePriority": 1, "description": "Keep the last ten images",
+            "selection": {"tagStatus": "any", "countType": "imageCountMoreThan", "countNumber": 10},
+            "action": {"type": "expire"}}]}
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: clearfea
+      ClusterSettings:
+        # Container Insights bills per metric; the solver log is enough for the beta.
+        - Name: containerInsights
+          Value: disabled
+
+  WorkerLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /clearfea/worker
+      RetentionInDays: 14
+
+  # Pulls the image and writes the log; the worker itself gets no AWS permissions at all.
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: clearfea-machine-execution
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ecs-tasks.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  # Machine definitions (ADR-095 item 5, ADR-099). The image tag "latest" is a placeholder for
+  # the first start; the deploy workflow (M10.8) registers revisions with each commit's image,
+  # and the API always starts the newest revision of a family. The worker token is not here: the
+  # API passes it, with the machine's worker id, when it starts the machine (ADR-100).
+  StandardTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: clearfea-standard
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: "4096"
+      Memory: "16384"
+      EphemeralStorage: { SizeInGiB: 50 }
+      RuntimePlatform: { OperatingSystemFamily: LINUX, CpuArchitecture: X86_64 }
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: worker
+          Image: !Sub "${WorkerRepository.RepositoryUri}:latest"
+          Essential: true
+          StopTimeout: 120
+          Environment:
+            - { Name: CLEARFEA_API_URL, Value: !Ref ApiUrl }
+            - { Name: CLEARFEA_MACHINE_SIZE, Value: medium }
+            - { Name: CLEARFEA_IDLE_EXIT_SECONDS, Value: "600" }
+            - { Name: CLEARFEA_MAX_LIFETIME_SECONDS, Value: "43200" }
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref WorkerLogs
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: standard
+  LargeTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Condition: Large
+    Properties:
+      Family: clearfea-large
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: "8192"
+      Memory: "32768"
+      EphemeralStorage: { SizeInGiB: 50 }
+      RuntimePlatform: { OperatingSystemFamily: LINUX, CpuArchitecture: X86_64 }
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: worker
+          Image: !Sub "${WorkerRepository.RepositoryUri}:latest"
+          Essential: true
+          StopTimeout: 120
+          Environment:
+            - { Name: CLEARFEA_API_URL, Value: !Ref ApiUrl }
+            - { Name: CLEARFEA_MACHINE_SIZE, Value: large }
+            - { Name: CLEARFEA_IDLE_EXIT_SECONDS, Value: "600" }
+            - { Name: CLEARFEA_MAX_LIFETIME_SECONDS, Value: "43200" }
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref WorkerLogs
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: large
+
+  # What the API reads before it starts a machine (apps/api/src/launcher/aws.ts).
+  LaunchParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /clearfea/launch
+      Type: String
+      Description: How the ClearFEA API starts solver machines (written by the clearfea stack).
+      Value: !Sub
+        - '{"cluster":"${Cluster}","subnets":["${SubnetA}","${SubnetB}"],"securityGroup":"${MachineSecurityGroup}","taskDefinitions":{"medium":"clearfea-standard"${LargeEntry}}}'
+        - LargeEntry: !If [Large, ',"large":"clearfea-large"', ""]
+
+  # The API's key (DEPLOYMENT.md section 4.4): start the two machine definitions in this
+  # cluster, hand them their execution role, and read the launch parameter. Nothing else.
+  LauncherUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: clearfea-launcher
+      Policies:
+        - PolicyName: start-solver-machines
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: StartMachines
+                Effect: Allow
+                Action: ecs:RunTask
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/clearfea-standard:*
+                  - !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task-definition/clearfea-large:*
+                Condition:
+                  ArnEquals:
+                    ecs:cluster: !GetAtt Cluster.Arn
+              - Sid: HandMachinesTheirRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt ExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ecs-tasks.amazonaws.com
+              - Sid: ReadLaunchSettings
+                Effect: Allow
+                Action: ssm:GetParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/clearfea/launch
+
+  # GitHub Actions signs in to AWS with OIDC: no AWS keys are stored for deploys (ADR-095 item 9).
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: NewOidcProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: clearfea-github-deploy
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              # The deploy job runs in the production environment; main and tags are for runs
+              # without one (a manual rollback from a tag, DEPLOYMENT.md section 7.2).
+              StringLike:
+                token.actions.githubusercontent.com:sub:
+                  - !Sub repo:${GitHubRepository}:environment:production
+                  - !Sub repo:${GitHubRepository}:ref:refs/heads/main
+                  - !Sub repo:${GitHubRepository}:ref:refs/tags/*
+      Policies:
+        - PolicyName: deploy-worker-image
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: SignInToImageStore
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: PushWorkerImage
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeImages
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !GetAtt WorkerRepository.Arn
+              # Task definition registration has no resource-level permissions in IAM.
+              - Sid: RegisterMachineDefinitions
+                Effect: Allow
+                Action:
+                  - ecs:DescribeTaskDefinition
+                  - ecs:RegisterTaskDefinition
+                Resource: "*"
+              - Sid: HandMachinesTheirRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt ExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ecs-tasks.amazonaws.com
+              - Sid: ReadThisStack
+                Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource: !Ref AWS::StackId
+
+  # Emails the admin when the month's spending is forecast to pass 80% of the budget, and when
+  # it has passed it. Budgets emails directly; there is no subscription to confirm.
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: clearfea-monthly
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - { SubscriptionType: EMAIL, Address: !Ref AlertEmail }
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - { SubscriptionType: EMAIL, Address: !Ref AlertEmail }
+
+Outputs:
+  DeployRoleArn:
+    Description: Copy into the GitHub variable AWS_DEPLOY_ROLE_ARN (DEPLOYMENT.md section 4.3).
+    Value: !GetAtt DeployRole.Arn
+  LauncherUserName:
+    Description: Create this user's access key for the API (DEPLOYMENT.md section 4.4).
+    Value: !Ref LauncherUser
+  WorkerRepositoryUri:
+    Description: Where the deploy workflow pushes the worker image.
+    Value: !GetAtt WorkerRepository.RepositoryUri
+  ClusterName:
+    Value: !Ref Cluster
+  StandardTaskDefinitionFamily:
+    Value: clearfea-standard
+  LargeTaskDefinitionFamily:
+    Condition: Large
+    Value: clearfea-large
+  ExecutionRoleArn:
+    Description: The machines' execution role, which new machine definition revisions name.
+    Value: !GetAtt ExecutionRole.Arn

@@ -2002,6 +2002,12 @@ fieldset.field {
   font-size: 12px;
 }
 
+/* Solver machines (M10.7): hours used this month against the cap. */
+.admin-hours {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
 /* Settings: cards for grouped fields, tables with quiet headers. */
 .pane-settings .setup-panel {
   gap: 14px;

@@ -25,6 +25,7 @@ import { balanceOf } from "../billing/ledger";
 import { runFundsProblem } from "../billing/wallet";
 import { readBody } from "../body";
 import { readJobLog } from "../db/jobs";
+import { machineRefusal } from "../launcher";
 import { cloudMachines, listMachineSizes } from "../db/machines";
 import { getMesh, meshKey } from "../db/meshes";
 import {
@@ -380,6 +381,9 @@ runs.post("/:id/rerun", async (c) => {
     ? null
     : runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size);
   if (noFunds !== null) return c.json({ error: noFunds }, 409);
+  // On the live site, no machine may be startable or the month's machine hours used up (M10.7).
+  const noMachine = await machineRefusal(c.env);
+  if (noMachine !== null) return c.json({ error: noMachine }, 409);
   const multiplier = run.stopLimit?.multiplier ?? DEFAULT_STOP_MULTIPLIER;
   const created = await createRun(c.env.DB, c.var.userId, {
     simulationId: run.simulationId,

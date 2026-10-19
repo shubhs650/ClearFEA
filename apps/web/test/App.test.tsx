@@ -164,7 +164,7 @@ describe("Google sign-in (M10.3)", () => {
 
 describe("admin page (M10.3)", () => {
   const admin = { status: 200, body: { user: { ...alice, admin: true } } };
-  const view = (allowed: string[], largeOn = false) => ({
+  const view = (allowed: string[], largeOn = false, hoursCap = 60) => ({
     status: 200,
     body: {
       adminEmail: "alice@clearfea.test",
@@ -185,6 +185,21 @@ describe("admin page (M10.3)", () => {
         { name: "medium", cores: 4, memoryBytes: 17179869184, enabled: true, default: true },
         { name: "large", cores: 8, memoryBytes: 34359738368, enabled: largeOn, default: false },
       ],
+      solverMachines: {
+        launcher: "ready",
+        problem: null,
+        hoursThisMonth: 2.25,
+        hoursCap,
+        starts: [
+          { size: "medium", requestedAt: "2026-10-19T07:00:00.000Z", state: "running", problem: null },
+          {
+            size: "medium",
+            requestedAt: "2026-10-19T06:00:00.000Z",
+            state: "failed",
+            problem: "AWS refused RunTask: AccessDeniedException: not authorized",
+          },
+        ],
+      },
     },
   });
 
@@ -250,6 +265,31 @@ describe("admin page (M10.3)", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/admin/machine-sizes/large",
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ enabled: true }) }),
+    );
+  });
+
+  it("shows the solver machines and sets the monthly hours limit (M10.7)", async () => {
+    const fetchMock = serve({
+      "GET /api/health": healthy,
+      "GET /api/session": admin,
+      "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
+      "GET /api/admin": view([]),
+      "PUT /api/admin/machine-hours-cap": view([], false, 0),
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    const machines = await screen.findByRole("region", { name: "Solver machines" });
+    expect(within(machines).getByText(/of 60 h used this month/)).toBeTruthy();
+    expect(within(machines).getByText("2.3 h")).toBeTruthy();
+    expect(within(machines).getByText("Running")).toBeTruthy();
+    expect(within(machines).getByText("Did not start: AWS refused RunTask: AccessDeniedException: not authorized")).toBeTruthy();
+    fireEvent.change(within(machines).getByLabelText("Monthly limit in hours"), { target: { value: "0" } });
+    fireEvent.click(within(machines).getByRole("button", { name: "Set limit" }));
+    expect(await within(machines).findByText(/of 0 h used this month/)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/machine-hours-cap",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ hours: 0 }) }),
     );
   });
 });
