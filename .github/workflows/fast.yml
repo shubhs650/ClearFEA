@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Fast tier: generated-code drift check, lint, type checks, unit and snapshot tests (`make test`).
-# Runs on every pull request; keep it under five minutes. DCO sign-off is checked by the DCO GitHub App.
+# Runs on every pull request, and from deploy.yml before every deploy; keep it under five minutes. DCO sign-off is checked by the DCO GitHub App.
 name: Fast tier
 
 on:
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
