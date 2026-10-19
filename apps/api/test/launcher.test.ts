@@ -348,7 +348,7 @@ describe("ensureMachines", () => {
     const handler = (await import("../src/index")).default;
     await createJob(env.DB, "alice", "noop");
     // The test environment has no AWS key, so on cloud machines the queued job fails at once.
-    await handler.scheduled(createScheduledController({ scheduledTime: Date.now(), cron: "* * * * *" }), { ...env, MACHINES: "cloud" }, {} as ExecutionContext);
+    await handler.scheduled(createScheduledController({ scheduledTime: Date.now(), cron: "* * * * *" }), { ...env, MACHINES: "cloud" });
     const { results } = await env.DB.prepare("SELECT failure_cause FROM jobs").all<{ failure_cause: string }>();
     expect(results).toEqual([{ failure_cause: "no_machine" }]);
   });

@@ -50,7 +50,7 @@ app.get("/api/health", async (c) => {
 app.use("/api/*", async (c, next) => {
   await next();
   if (c.req.method === "GET" || c.res.status >= 400 || !cloudMachines(c.env)) return;
-  let context: ExecutionContext;
+  let context: typeof c.executionCtx;
   try {
     context = c.executionCtx;
   } catch {
