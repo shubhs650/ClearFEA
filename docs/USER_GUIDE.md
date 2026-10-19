@@ -38,7 +38,7 @@ On Linux this needs Gmsh's system libraries (see [Self-hosting, Linux](SELF_HOST
 
 ## 2. Sign in and upload the geometry
 
-Open http://localhost:5173 and sign in as `alice`, password `alice-local`.
+Open http://localhost:5173/app and sign in as `alice`, password `alice-local`.
 
 Under **Geometry** on the right, choose **Upload a STEP file** and pick `plate-with-hole.step`. The file is imported on the server, which takes a few seconds; the model then appears in the viewer.
 
