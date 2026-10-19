@@ -49,7 +49,7 @@ The first `make dev` builds the worker image, including CalculiX with the PaStiX
 [dev] Ready: open http://localhost:5173 (API on http://localhost:8787).
 ```
 
-Open http://localhost:5173 and sign in as `alice` with password `alice-local` (a second account, `bob` / `bob-local`, is there to check that users cannot see each other's work). Each account starts with 100 play-money credits.
+Open http://localhost:5173/app and sign in as `alice` with password `alice-local` (a second account, `bob` / `bob-local`, is there to check that users cannot see each other's work). Each account starts with 100 play-money credits.
 
 To stop, press Ctrl-C in the terminal. Your projects, runs and files stay on disk for the next `make dev`.
 
@@ -72,7 +72,7 @@ The helper scripts that write the tutorial model and the test models use Gmsh on
 
    and run `wsl --shutdown` from PowerShell before starting again. Leave a few gigabytes for Windows and the browser.
 4. Open the Ubuntu terminal and do everything from there: install Node, pnpm, uv, git and make inside WSL, clone the repository into the WSL file system (for example `~/ClearFEA`, not `/mnt/c/...`, which is much slower), then `make install` and `make dev`.
-5. Open http://localhost:5173 in your Windows browser.
+5. Open http://localhost:5173/app in your Windows browser.
 
 `make dev` sees that Docker Desktop is in use and lets the worker reach the API through `host.docker.internal`.
 
