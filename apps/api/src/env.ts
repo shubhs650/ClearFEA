@@ -48,4 +48,9 @@ export interface Env {
   AWS_REGION?: string;
   AWS_LAUNCHER_ACCESS_KEY_ID?: string;
   AWS_LAUNCHER_SECRET_ACCESS_KEY?: string;
+  /**
+   * The verification account's secret (M10.9, ADR-104): with it, POST /api/session/verification signs
+   * the live checks in as that one account. Unset (or shorter than 32 characters) turns the route off.
+   */
+  VERIFY_TOKEN?: string;
 }

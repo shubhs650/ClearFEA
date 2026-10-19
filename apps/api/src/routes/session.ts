@@ -19,6 +19,17 @@ import {
 } from "../session";
 import { googleAuth } from "../session/google";
 import { verifyPassword } from "../session/password";
+import {
+  ensureVerificationUser,
+  MAX_FAILURES_PER_HOUR,
+  recentFailures,
+  recordFailure,
+  startVerificationSession,
+  tokenMatches,
+  VERIFICATION_COOKIE,
+  VERIFICATION_USER_ID,
+  verificationToken,
+} from "../session/verification";
 
 export const session = new Hono<SessionEnv>();
 
@@ -54,6 +65,26 @@ session.post("/", async (c) => {
   return c.json({ user: sessionUser(found.user, c.env.ADMIN_EMAIL) } satisfies SessionResponse);
 });
 
+// The live checks' sign-in (M10.9, ADR-104): `Authorization: Bearer <VERIFY_TOKEN>` signs in the one
+// verification account. Answers 404, as if the route did not exist, unless the token is configured.
+session.post("/verification", async (c) => {
+  const wanted = verificationToken(c.env);
+  if (wanted === null) return c.json({ error: "Not found." }, 404);
+  if ((await recentFailures(c.env.DB)) >= MAX_FAILURES_PER_HOUR) {
+    return c.json({ error: "Too many wrong verification tokens in the last hour. Try again later." }, 429);
+  }
+  const given = /^Bearer (.+)$/.exec(c.req.header("Authorization") ?? "")?.[1]?.trim() ?? "";
+  if (!(await tokenMatches(given, wanted))) {
+    await recordFailure(c.env.DB);
+    return c.json({ error: "The verification token is wrong." }, 401);
+  }
+  await ensureVerificationUser(c.env.DB);
+  await startVerificationSession(c, wanted);
+  const user = await getUser(c.env.DB, VERIFICATION_USER_ID);
+  if (user === null) return c.json({ error: "The verification account could not be created." }, 500);
+  return c.json({ user: sessionUser(user, c.env.ADMIN_EMAIL) } satisfies SessionResponse);
+});
+
 session.get("/", async (c) => {
   const problem = configurationProblem(c.env);
   if (problem !== null) return c.json({ error: problem }, 503);
@@ -69,6 +100,7 @@ session.delete("/", async (c) => {
     const ended = await googleAuth(c.env).api.signOut({ headers: c.req.raw.headers, asResponse: true });
     const headers = new Headers();
     for (const cookie of ended.headers.getSetCookie()) headers.append("Set-Cookie", cookie);
+    headers.append("Set-Cookie", `${VERIFICATION_COOKIE}=; Path=/; Max-Age=0`);
     return new Response(null, { status: 204, headers });
   }
   endSession(c);

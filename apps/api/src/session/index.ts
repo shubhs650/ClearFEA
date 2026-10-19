@@ -11,6 +11,7 @@ import { getUser } from "../db/users";
 import type { Env } from "../env";
 import { googleAuth, googleSettings } from "./google";
 import { issueToken, readToken } from "./token";
+import { VERIFICATION_COOKIE, verificationUserId } from "./verification";
 
 export type SessionVariables = { userId: string };
 export type SessionEnv = { Bindings: Env; Variables: SessionVariables };
@@ -66,13 +67,17 @@ export async function startSession(c: Context, secret: string, userId: string): 
 
 export function endSession(c: Context): void {
   deleteCookie(c, SESSION_COOKIE, { path: "/" });
+  deleteCookie(c, VERIFICATION_COOKIE, { path: "/" });
 }
 
 /**
  * The signed-in user's id, or null. Call only when `configurationProblem` is null. A local
- * session does not check that the user still exists; a Google session is a database row.
+ * session does not check that the user still exists; a Google session is a database row. In
+ * either mode the verification account's own cookie also counts (ADR-104).
  */
 export async function sessionUserId(c: Context<SessionEnv>): Promise<string | null> {
+  const verification = await verificationUserId(c);
+  if (verification !== null) return verification;
   if (authMode(c.env) === "google") {
     const found = await googleAuth(c.env).api.getSession({ headers: c.req.raw.headers });
     return found?.user.id ?? null;

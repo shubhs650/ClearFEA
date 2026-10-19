@@ -356,6 +356,8 @@ const ROUTES: Record<string, Route> = {
   "GET /api/session": { area: "public" },
   "DELETE /api/session": { area: "public" },
   "GET /api/session/options": { area: "public" },
+  // Off without VERIFY_TOKEN; signs in only the verification account (ADR-104, verificationSignIn.test.ts).
+  "POST /api/session/verification": { area: "public" },
   // Better Auth's routes, answered only in "google" mode (googleSignIn.test.ts).
   "GET /api/auth/*": { area: "public" },
   "POST /api/auth/*": { area: "public" },

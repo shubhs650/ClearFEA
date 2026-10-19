@@ -230,7 +230,7 @@ jobs:
       - name: Apply database migrations
         run: pnpm run deploy:migrate
 
-      # Only the secrets that are set are sent; ones added later (M10.3, M10.5, M10.7) arrive with
+      # Only the secrets that are set are sent; ones added later (M10.3, M10.5, M10.7, M10.9) arrive with
       # the next deploy. Uploaded with the code, so a version never runs without its secrets.
       - name: Collect the Worker secrets
         env:
@@ -242,6 +242,7 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_LAUNCHER_ACCESS_KEY_ID: ${{ secrets.AWS_LAUNCHER_ACCESS_KEY_ID }}
           AWS_LAUNCHER_SECRET_ACCESS_KEY: ${{ secrets.AWS_LAUNCHER_SECRET_ACCESS_KEY }}
+          VERIFY_TOKEN: ${{ secrets.VERIFY_TOKEN }}
           ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
           AWS_REGION: ${{ vars.AWS_REGION }}
         run: |
@@ -249,7 +250,7 @@ jobs:
           jq -n 'env | with_entries(select(.value != "" and (.key | IN(
             "WORKER_TOKEN", "BETTER_AUTH_SECRET", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
             "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "AWS_LAUNCHER_ACCESS_KEY_ID",
-            "AWS_LAUNCHER_SECRET_ACCESS_KEY", "ADMIN_EMAIL", "AWS_REGION"))))' \
+            "AWS_LAUNCHER_SECRET_ACCESS_KEY", "VERIFY_TOKEN", "ADMIN_EMAIL", "AWS_REGION"))))' \
             > "$RUNNER_TEMP/worker-secrets.json"
           echo "Secrets to upload: $(jq -r 'keys | join(", ")' "$RUNNER_TEMP/worker-secrets.json")"
 
