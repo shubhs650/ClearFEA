@@ -70,6 +70,23 @@ describe("geometry panel", () => {
     expect(init?.headers).toEqual({ "Content-Type": "application/octet-stream" });
   });
 
+  it("says a solver machine is starting while the import waits for one on the live site", async () => {
+    let starting = true;
+    serve({
+      "GET /api/geometries": { status: 200, body: { geometries: [geometry({ status: "importing" })] } },
+      "GET /api/jobs/machine-wait": () => ({ status: 200, body: { machineStarting: starting } }),
+    });
+    render(<GeometryPanel onSignedOut={() => {}} />);
+    const note = await screen.findByRole("status", { name: "Solver machine" });
+    expect(note.textContent).toContain("Starting a solver machine. After a break this takes 1 to 3 minutes");
+    starting = false;
+    cleanup();
+    render(<GeometryPanel onSignedOut={() => {}} />);
+    expect(await screen.findByText("Importing")).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole("status", { name: "Solver machine" })).toBeNull();
+  });
+
   it("shows the detected unit with the size it gives, and confirms it", async () => {
     const fetchMock = serve({
       "GET /api/geometries": { status: 200, body: { geometries: [geometry()] } },

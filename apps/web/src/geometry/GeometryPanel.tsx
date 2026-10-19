@@ -6,6 +6,7 @@ import { type GeometryStatus, type GeometryView, unitsTable } from "@clearfea/sp
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { confirmUnit, getGeometry, listGeometries, uploadGeometry } from "../api/geometries";
 import type { ApiResult } from "../api/request";
+import { MachineStartNote } from "../jobs/MachineStartNote";
 import { fromSi } from "../units/convert";
 
 /** How often the geometry is refreshed while it is importing (docs/ARCHITECTURE.md section 8). */
@@ -171,6 +172,7 @@ export function GeometryPanel({
           )}
         </dl>
       )}
+      <MachineStartNote waiting={importing} />
       {geometry?.status === "failed" && geometry.problem && (
         <p className="form-problem" role="alert">
           {geometry.problem}

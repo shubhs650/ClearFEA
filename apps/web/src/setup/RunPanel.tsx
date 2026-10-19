@@ -58,6 +58,7 @@ import { Fragment, useEffect, useState } from "react";
 import { runFileUrl } from "../api/runs";
 import { credits } from "../billing/credits";
 import { duration, memory } from "../billing/estimate";
+import { MachineStartNote } from "../jobs/MachineStartNote";
 import type { Deformation } from "../layout/Viewer";
 import { fromSi } from "../units/convert";
 import { useUnitSystem } from "../units/system";
@@ -738,6 +739,7 @@ function RunningJob({
       <p role="status" aria-label="Run stage">
         {stage}
       </p>
+      <MachineStartNote waiting={!cancelling && (run.stage === "queued" || run.stage === null)} />
       {!waiting && (
         <dl className="geometry-facts">
           <dt>Elapsed</dt>

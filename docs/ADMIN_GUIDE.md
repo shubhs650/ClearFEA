@@ -117,7 +117,7 @@ Gate item 8 is met when two or three engineers complete the tutorial case unaide
 | "This Google account is not invited" | The address they picked on Google's screen is not on the allowed list. Ask which address it was; add that one (section 1) or have them pick the invited one. |
 | "Access blocked: ClearFEA has not completed the Google verification process" | The address is not a test user on Google's side: section 1, step 2. |
 | Google warns that it has not verified the app | Normal while the Google client is in Testing: they choose **Continue**. |
-| The import or run waits a few minutes | A machine is starting (1 to 3 minutes). If it waits more than about 7 minutes, look at **Solver machines** on the admin page: each start shows AWS's answer. |
+| The import or run waits a few minutes on "Starting a solver machine" | A machine is starting (1 to 3 minutes). If it waits more than about 7 minutes, look at **Solver machines** on the admin page: each start shows AWS's answer. |
 | A job failed saying no solver machine came up | Three starts failed; the admin page lists why. DEPLOYMENT.md section 8 has the causes. |
 | Runs are refused for machine hours | The monthly limit was reached: raise it (section 6). |
 | Runs are refused for their balance | Their credits ran out: section 4. |

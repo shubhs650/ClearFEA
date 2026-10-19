@@ -10,8 +10,10 @@ import {
   type MachineState,
   machineHours,
   machineRefusal,
+  machineStarting,
   planMachines,
   solverMachines,
+  waitsForMachine,
 } from "../src/launcher";
 import { LAUNCH_PARAMETER } from "../src/launcher/aws";
 import { signRequest } from "../src/launcher/sigv4";
@@ -228,6 +230,19 @@ function claim(workerId: string, machineSize = "medium"): Promise<Response> {
   });
 }
 
+describe("waitsForMachine", () => {
+  it("is true while no machine of a queued job's size is alive, or one of it is starting", () => {
+    const idle = start({ requestedAt: at(900), firstSeenAt: at(800), lastSeenAt: at(10) });
+    expect(waitsForMachine(["medium"], state({ starts: [] }))).toBe(true);
+    expect(waitsForMachine(["medium"], state({ starts: [start({ requestedAt: at(100) })] }))).toBe(true);
+    expect(waitsForMachine(["medium"], state({ starts: [idle] }))).toBe(false);
+    expect(waitsForMachine(["large"], state({ starts: [idle] }))).toBe(true);
+    const gone = start({ requestedAt: at(900), firstSeenAt: at(800), lastSeenAt: at(120) });
+    expect(waitsForMachine(["medium"], state({ starts: [gone] }))).toBe(true);
+    expect(waitsForMachine([], state())).toBe(false);
+  });
+});
+
 describe("ensureMachines", () => {
   beforeEach(async () => {
     await env.DB.batch([
@@ -341,6 +356,21 @@ describe("ensureMachines", () => {
     await ensureMachines(cloud(), aws.fetcher);
     expect(aws.requests).toEqual([]);
     expect((await getJob(env.DB, "alice", capped.id))?.failureCause).toBe("machine_hours_cap");
+  });
+
+  it("tells a user whose queued job waits for a machine, and nobody else, until a machine takes it", async () => {
+    expect(await machineStarting(cloud(), "alice")).toBe(false);
+    const queued = await createJob(env.DB, "alice", "noop");
+    expect(await machineStarting(env, "alice")).toBe(false);
+    expect(await machineStarting(cloud(), "alice")).toBe(true);
+    expect(await machineStarting(cloud(), "bob")).toBe(false);
+
+    await ensureMachines(cloud(), fakeAws().fetcher);
+    expect(await machineStarting(cloud(), "alice")).toBe(true);
+    const row = await env.DB.prepare("SELECT id FROM worker_starts").first<{ id: string }>();
+    expect((await claim(`aws-${row?.id}`)).status).toBe(200);
+    expect((await getJob(env.DB, "alice", queued.id))?.status).toBe("claimed");
+    expect(await machineStarting(cloud(), "alice")).toBe(false);
   });
 
   it("leaves the main module exporting only handlers, which workerd requires to start", async () => {

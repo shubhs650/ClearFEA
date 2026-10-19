@@ -9,6 +9,7 @@ import type { ReportFigure, ReportOptions, RunReport, RunView, SavedView } from 
 import { useEffect, useState } from "react";
 import { figurePath, listFigures } from "../api/figures";
 import { fetchRunReport, makeRunReport, reportFilePath } from "../api/reports";
+import { MachineStartNote } from "../jobs/MachineStartNote";
 import { captureFigures, planFigures } from "../report/figures";
 import { resultUnits } from "./displayUnits";
 
@@ -234,6 +235,7 @@ export function ReportFigures({
       {unsaved && <span className="field-hint">Save the report options first: the report follows the saved ones.</span>}
       {asking && !drawing && <span className="field-hint" role="status">Asking for the report…</span>}
       {latest?.status === "queued" && <span className="field-hint" role="status">The report is waiting for the worker…</span>}
+      <MachineStartNote waiting={latest?.status === "queued"} />
       {latest?.status === "making" && <span className="field-hint" role="status">Making the report…</span>}
       {latest?.status === "failed" && (
         <span className="form-problem" role="alert">
