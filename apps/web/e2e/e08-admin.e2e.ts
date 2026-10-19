@@ -2,7 +2,8 @@
 // E-08 (docs/VERIFICATION.md): sign-in and the admin page of the live closed beta (M10.3,
 // ADR-097). The stack signs in locally; the live site's sign-in screen is shown by answering
 // /api/session/options as the live site does, and its refusal by the address Google's callback
-// returns to. Alice, the admin here, invites an address, sees it listed and removes it; bob sees
+// returns to. Alice, the admin here, invites an address, sees it listed and removes it, and
+// switches the large machine size on and off (M10.6); bob sees
 // no Admin and the admin routes answer him as unknown addresses. Real Google sign-in is checked
 // on the live site, with the maintainer's OAuth client.
 import { expect, type Page, test } from "@playwright/test";
@@ -49,6 +50,19 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await expect(admin.getByRole("table", { name: "Users" }).getByText("Bob (test user)")).toBeVisible();
     await page.screenshot({ path: `${OUT}/e08-admin.png` });
 
+    // The cloud size list (M10.6): standard (medium) always on, large switched on and off again.
+    const sizes = admin.getByRole("region", { name: "Machine sizes" });
+    await expect(sizes.getByRole("checkbox", { name: "medium" })).toBeChecked();
+    await expect(sizes.getByRole("checkbox", { name: "medium" })).toBeDisabled();
+    await expect(sizes.getByText("Default, always on")).toBeVisible();
+    const large = sizes.getByRole("checkbox", { name: "large" });
+    await expect(large).not.toBeChecked();
+    await large.check();
+    await expect(large).toBeChecked();
+    await sizes.screenshot({ path: `${OUT}/e08-machine-sizes.png` });
+    await large.uncheck();
+    await expect(large).not.toBeChecked();
+
     await admin.getByRole("button", { name: "Remove colleague.one@example.com" }).click();
     await expect(admin.getByText("colleague.one@example.com")).toHaveCount(0);
     await admin.getByRole("button", { name: "Remove colleague.two@example.com" }).click();
@@ -67,6 +81,8 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     expect((await bob.request.get("/api/admin")).status()).toBe(404);
     const add = await bob.request.post("/api/admin/allowed", { data: { email: "bob.friend@example.com" } });
     expect(add.status()).toBe(404);
+    const size = await bob.request.put("/api/admin/machine-sizes/large", { data: { enabled: true } });
+    expect(size.status()).toBe(404);
     await context.close();
   });
 });
