@@ -10,3 +10,9 @@ SESSION_SECRET=local-dev-session-secret-change-me
 # admin sees the admin page; the seed gives alice this address. The live site sets
 # AUTH_MODE=google with BETTER_AUTH_SECRET, BETTER_AUTH_URL, GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.
 ADMIN_EMAIL=alice@clearfea.test
+# Presigned R2 URLs for job files (M10.5, ADR-098) are for production only. Leave these unset under
+# make dev: the worker then moves files through the API's own /internal routes.
+# R2_ACCESS_KEY_ID=
+# R2_SECRET_ACCESS_KEY=
+# R2_ACCOUNT_ID=
+# R2_BUCKET=clearfea-files

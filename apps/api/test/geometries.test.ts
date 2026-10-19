@@ -17,9 +17,10 @@ const STEP = "ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;
 function call(
   method: string,
   path: string,
-  options: { json?: unknown; raw?: BodyInit; type?: string; cookie?: string; token?: string } = {},
+  options: { json?: unknown; raw?: BodyInit; type?: string; cookie?: string; token?: string; length?: number } = {},
 ): Promise<Response> {
   const headers: Record<string, string> = {};
+  if (options.length !== undefined) headers["Content-Length"] = String(options.length);
   if (options.json !== undefined) headers["Content-Type"] = "application/json";
   if (options.type) headers["Content-Type"] = options.type;
   if (options.cookie) headers.Cookie = options.cookie;
@@ -152,6 +153,48 @@ describe("uploading a STEP file", () => {
       ["topology.json", "upload"],
       ["display.bin", "upload"],
     ]);
+  });
+
+  it("streams a file sent in pieces to storage whole", async () => {
+    const bytes = new TextEncoder().encode(`${STEP}${"/* padding */\n".repeat(5000)}`);
+    const pieces = [bytes.subarray(0, 5), bytes.subarray(5, 70), bytes.subarray(70, 40000), bytes.subarray(40000)];
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const piece of pieces) controller.enqueue(piece);
+        controller.close();
+      },
+    });
+    const response = await call("POST", "/api/geometries?name=big.step", {
+      raw: body,
+      type: "application/octet-stream",
+      cookie: alice,
+      length: bytes.byteLength,
+    });
+    expect(response.status).toBe(201);
+    const created = (await response.json<{ geometry: GeometryView }>()).geometry;
+    expect(created.sizeBytes).toBe(bytes.byteLength);
+    const stored = await env.FILES.get(`owners/${aliceId}/geometries/${created.id}/model.step`);
+    expect(new Uint8Array((await stored?.arrayBuffer()) ?? new ArrayBuffer(0))).toEqual(bytes);
+  });
+
+  it("stores nothing when the body is shorter than its Content-Length", async () => {
+    const keys = async () => (await env.FILES.list({ prefix: `owners/${aliceId}/geometries/` })).objects.map((o) => o.key);
+    const before = await keys();
+    const response = await call("POST", "/api/geometries?name=cut.step", {
+      raw: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(STEP));
+          controller.close();
+        },
+      }),
+      type: "application/octet-stream",
+      cookie: alice,
+      length: STEP.length + 100,
+    });
+    expect(response.status).toBe(400);
+    expect((await response.json<{ error: string }>()).error).toContain("Upload it again");
+    expect(await keys()).toEqual(before);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM geometries").first<{ n: number }>())?.n).toBe(0);
   });
 
   it("refuses a body that is not a STEP file, or not sent as a file", async () => {

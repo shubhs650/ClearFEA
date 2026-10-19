@@ -32,6 +32,16 @@ export interface Env {
   /** The git commit a production deploy was made from, written by scripts/production-config.mjs (ADR-095). */
   CLEARFEA_COMMIT?: string;
   /**
+   * The R2 API token that signs job files' transfer URLs (M10.5, ADR-098). With these and the account
+   * and bucket below, a claim hands the worker presigned R2 URLs; without them, as under `make dev`,
+   * the API's own pass-through routes.
+   */
+  R2_ACCESS_KEY_ID?: string;
+  R2_SECRET_ACCESS_KEY?: string;
+  /** The Cloudflare account and the FILES bucket's name, written by scripts/productionConfig.mjs. */
+  R2_ACCOUNT_ID?: string;
+  R2_BUCKET?: string;
+  /**
    * The AWS region and the launcher's access key (M10.7, ADR-100; docs/DEPLOYMENT.md section 4),
    * with which the API starts solver machines on Fargate when MACHINES=cloud. Unset locally.
    */

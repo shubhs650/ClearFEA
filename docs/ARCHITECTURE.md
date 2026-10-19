@@ -313,7 +313,7 @@ As decided in ADR-095. Setup steps for the maintainer are in `DEPLOYMENT.md`.
 
 **The cloud size list** (ADR-099). `machine_sizes.cloud` is `on` for `medium` (standard), `off` for `large`, and null for the sizes only the local worker simulates. With `MACHINES=cloud` (the production configuration) estimates and runs offer only the sizes that are on, and a run asking for one that is off is refused saying so; the admin page switches large on and off, never the default size. Locally (`MACHINES` unset) every size is offered as before and the list changes nothing. Its role has no AWS permissions; it holds only the worker token and the per-job presigned URLs. Ephemeral storage is raised to 50 GiB for raw output.
 
-**Files.** In production `transfers()` returns presigned R2 S3 URLs (GET for inputs, PUT for outputs, up to 5 GiB each), signed with an R2 API token and valid until the job's stop limit plus a margin, at most 7 days. Browser uploads (STEP files up to 100 MB, report figures, logos) stream through the Worker into R2; downloads stream out of R2 through the Worker.
+**Files.** In production `transfers()` returns presigned R2 S3 URLs (GET for inputs, PUT for outputs, up to 5 GiB each), signed with an R2 API token inside the API (`apps/api/src/jobs/presign.ts`) and valid until the job's stop limit plus an hour, or 24 hours for a job with no stop limit, at most 7 days (ADR-098). Without the R2 token, as under `make dev`, the claim returns the pass-through routes instead. Browser uploads (STEP files up to 100 MB, report figures, logos) stream through the Worker into R2; downloads stream out of R2 through the Worker.
 
 **Deploying.** `.github/workflows/deploy.yml` runs on every push to main, one run at a time:
 

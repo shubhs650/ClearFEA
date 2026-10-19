@@ -100,6 +100,8 @@ The API uses this to give a solver machine signed links to its files.
 3. **Create API Token**. The next page shows an **Access Key ID** and a **Secret Access Key**, once.
 4. In GitHub, add the **secrets** `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
 
+The deploy names the account and bucket for these links itself (from `CLOUDFLARE_ACCOUNT_ID` and the bucket in `wrangler.jsonc`). Until both secrets are set, solver machines move files through the API instead, which works only for files under 100 MB (ADR-098).
+
 ## 2. Google sign-in (for task M10.3)
 
 ### 2.1 Create a Google Cloud project
