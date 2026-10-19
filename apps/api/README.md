@@ -32,7 +32,7 @@ The live site (ADR-095, ADR-096) is one Worker named `clearfea` on `clearfea.tri
 pnpm --filter @clearfea/web build
 CLOUDFLARE_D1_DATABASE_ID=<id> CLEARFEA_COMMIT=<sha> pnpm --filter @clearfea/api deploy:config   # writes wrangler.production.json
 pnpm --filter @clearfea/api deploy:migrate   # D1 migrations on the production database
-pnpm --filter @clearfea/api deploy           # wrangler deploy; secrets are set separately
+pnpm --filter @clearfea/api deploy:worker    # wrangler deploy; add --secrets-file <file> for the secrets
 ```
 
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` must be in the environment for the last two. `/api/health` then reports `commit`. To try the production configuration locally, run `wrangler d1 migrations apply DB --local --config wrangler.production.json` and `wrangler dev --config wrangler.production.json` after `deploy:config` with any id.
