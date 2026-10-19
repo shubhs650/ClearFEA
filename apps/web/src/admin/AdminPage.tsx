@@ -149,8 +149,9 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
   );
 }
 
-/** Machine time in hours and minutes, such as "1 h 05 min". */
+/** Machine time in hours and minutes, such as "1 h 05 min", or seconds under a minute. */
 function hours(seconds: number): string {
+  if (seconds < 60) return `${seconds} s`;
   const minutes = Math.round(seconds / 60);
   return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`;
 }
