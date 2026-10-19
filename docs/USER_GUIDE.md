@@ -1,8 +1,10 @@
 # ClearFEA user guide
 
-This guide walks through the main flow of ClearFEA with one small model: a steel plate with a hole, pulled at one end. It takes about fifteen minutes and covers every step you need for your own parts: upload a STEP file, set up the analysis, mesh, run, read the results and make a report. The last part says how the other analysis types and assemblies differ.
+This guide walks through the main flow of ClearFEA with one small model: a steel plate with a hole, pulled at one end. It takes about twenty minutes and covers every step you need for your own parts: upload a STEP file, set up the analysis, mesh, run, read the results and make a report. The last part says how the other analysis types and assemblies differ.
 
-It describes the Phase 0 prototype, which runs on your own computer. To install it, see [Self-hosting ClearFEA](SELF_HOSTING.md); for what it will and will not do, see [docs/DECISIONS.md](DECISIONS.md).
+ClearFEA runs at **<https://clearfea.triyalabs.com>**, in a closed beta for invited engineers. There is nothing to install: you need a laptop or desktop with a current Chrome, Edge, Firefox or Safari, a mouse or trackpad, and the Google account you were invited with. The landing page reads well on a phone, but the workbench is made for a larger screen and a mouse.
+
+ClearFEA can also run on your own computer; for that, see [Self-hosting ClearFEA](SELF_HOSTING.md), and sign in as section 2 says at the end. For what ClearFEA will and will not do, see [docs/DECISIONS.md](DECISIONS.md).
 
 ClearFEA is an analysis tool. It gives numbers for the model you set up and never says whether a design is acceptable; that judgement stays with the engineer.
 
@@ -21,26 +23,33 @@ ClearFEA is an analysis tool. It gives numbers for the model you set up and neve
 11. [Other analyses and assemblies](#11-other-analyses-and-assemblies)
 12. [Units](#12-units)
 13. [When something does not work](#13-when-something-does-not-work)
+14. [Feedback during the closed beta](#14-feedback-during-the-closed-beta)
 
 ## 1. The tutorial model
 
 A plate 300 mm long, 100 mm wide and 5 mm thick, with a 10 mm hole through its centre. One end is held fixed and the other is pulled along the plate with 30 kN.
 
-The STEP file is written by a script in this repository (no STEP file is kept in it). From the repository root, after `make install`:
+**Get the model.** Download **[plate-with-hole.step](https://clearfea.triyalabs.com/tutorial/plate-with-hole.step)** (19 KB) and save it where you will find it, for example in Downloads. You can also draw the plate in your own CAD program from the sizes above, with the plate's corner at the origin, and save it as STEP.
 
-```
-uv run --project worker python docs/tutorial/plate_with_hole.py plate-with-hole.step
-```
-
-On Linux this needs Gmsh's system libraries (see [Self-hosting, Linux](SELF_HOSTING.md#linux)).
+Developers can write the same file with the script it comes from, `docs/tutorial/plate_with_hole.py`, from the repository root after `make install`: `uv run --project worker python docs/tutorial/plate_with_hole.py plate-with-hole.step`. A self-hosted ClearFEA serves the file at `/tutorial/plate-with-hole.step` too, for example <http://localhost:5173/tutorial/plate-with-hole.step>.
 
 **What to expect.** Away from the hole the stress is the force over the cross-section: 30,000 N / (100 mm × 5 mm) = 60 MPa. At the sides of the hole it is about three times that: for a hole of a tenth of the plate's width the stress concentration factor on the gross section is 3.03 (Howland; Peterson's chart gives 3.02), so about 182 MPa. With a Poisson's ratio of 0.3 the peak at mid-thickness is a little higher than this plane-stress value. Verification case V-03 checks the same plate to 1 percent.
 
 ## 2. Sign in and upload the geometry
 
-Open http://localhost:5173/app and sign in as `alice`, password `alice-local`.
+Open <https://clearfea.triyalabs.com> and choose **Sign in with Google**, then **Sign in with Google** again on the sign-in card. Google asks which account to use: pick the one you were invited with. The first time, Google says that ClearFEA will see your name and email address, which is all it reads; it may also warn that Google has not verified the app, because ClearFEA is registered with Google in testing for the beta. Choose **Continue**. You then land in the workbench, already signed in the next time you open the site.
 
-Under **Geometry** on the right, choose **Upload a STEP file** and pick `plate-with-hole.step`. The file is imported on the server, which takes a few seconds; the model then appears in the viewer.
+![The sign-in card](images/guide/00-sign-in.png)
+
+If ClearFEA says "This Google account is not invited", you picked another Google account than the one on the invitation (a work account, say). Choose **Sign in with Google** again and pick the invited one, or ask the person who invited you to add the address you use. If Google itself says "Access blocked: ClearFEA has not completed the Google verification process", that address has not been added on Google's side yet; ask the person who invited you.
+
+On a self-hosted ClearFEA, open <http://localhost:5173/app> instead and sign in as `alice`, password `alice-local`.
+
+Each account starts with 100 credits of play money, which is enough for many hours of solving; see [Wallet](#10-share-wallet-and-storage).
+
+Under **Geometry** on the right, choose **Upload a STEP file** and pick `plate-with-hole.step`. The file is imported on the server; the model then appears in the viewer.
+
+**The first job takes a minute or two longer.** On the live site, the import, meshing, solving and report jobs run on a solver machine that is started only when there is work and stops ten minutes after its last job, so nobody pays for an idle machine. The first job you start after a break waits 1 to 3 minutes while a machine starts; the status says "Importing" (or "Waiting for the solver…" for a run) meanwhile. Leave the page open, or come back later: nothing is lost. Jobs after that start at once while you keep working, so the import takes a few seconds and the tutorial run about 20 seconds.
 
 ![The unit read from the STEP file, waiting to be confirmed](images/guide/01-confirm-unit.png)
 
@@ -117,7 +126,7 @@ Choose **Run**. The panel shows the stage, the time so far against the estimate,
 
 ![A run in progress](images/guide/09-running.png)
 
-The tutorial solves in about 20 seconds.
+The tutorial solves in about 20 seconds, once a solver machine is running (see the first job's wait in [section 2](#2-sign-in-and-upload-the-geometry)).
 
 ## 8. Results
 
@@ -206,3 +215,19 @@ Every value has its own unit list, so you can enter a pressure in MPa next to a 
 | The run failed | The run says why and whose fault it was. A model that is not held (a singular matrix), a mesh that fails on the geometry, or running out of memory on a size smaller than recommended is charged; a fault in ClearFEA is not. Open **View solver.log** for CalculiX's own messages. |
 | The run was stopped at its stop limit | Raise the stop limit and run again, or make the mesh coarser. |
 | A face is hard to click | Zoom in with the scroll wheel and orbit until the face looks towards you; the hover text says which face is under the pointer. |
+| "This Google account is not invited" | Sign in again with the Google account you were invited with, or ask the person who invited you to add this one. |
+| Google says "Access blocked: ClearFEA has not completed the Google verification process" | Your address is not yet on Google's list of test users for ClearFEA. Ask the person who invited you to add it. |
+| The import stays at "Importing", or a run at "Waiting for the solver…", for a few minutes | A solver machine is starting, which takes 1 to 3 minutes after a break. Leave it; it carries on even if you close the page. |
+| A job failed saying no solver machine came up, or that the site has used its machine hours for this month | Not your fault, and nothing is charged. Try again later, and tell the person who invited you. |
+
+The live site is updated whenever a change is ready, often more than once a day during the beta. Reload the page now and then to get the newest version; a run that is going carries on unchanged.
+
+## 14. Feedback during the closed beta
+
+ClearFEA is being built from what you find, so every rough edge you report is useful, small ones included. Send it to the person who invited you, by whatever channel you usually use, with:
+
+- **What you were doing**, and what you expected to happen.
+- **What happened instead**, with a screenshot if you can (on Windows press Windows + Shift + S; on a Mac, Cmd + Shift + 4).
+- **A link to the run**, if it is about one: in the Run panel choose **Make a read-only link** and paste it. Whoever opens it sees that run's model, results and record, nothing else of yours.
+
+Also say where the guide or the screens left you unsure what to do next. Do not upload geometry you are not allowed to share: during the beta, the person running it can reach the files stored on it.

@@ -4,6 +4,8 @@ How the maintainer sets up `clearfea.triyalabs.com` (ADR-095, milestone M10). Wr
 
 Self-hosting on your own machine is a different procedure: see `SELF_HOSTING.md`.
 
+Once the site is up, running the beta day to day (inviting, removing, credits, machine sizes, costs, the tutorial trial) is in `ADMIN_GUIDE.md`.
+
 > Status: written at the start of M10, before the code it describes is merged. Each section names the M10 task that needs it. Tasks update this file when they land, so check that the task is ticked in `PROGRESS.md` before doing its section.
 
 ## What you are setting up
@@ -238,6 +240,8 @@ After this, you never need to run it by hand: every merge to `main` runs it.
 2. The bar along the bottom of the workbench shows **Admin** next to **Wallet**. Open it.
 
 ### 6.3 Invite a colleague
+
+`ADMIN_GUIDE.md` section 1 has these steps with a message to send them.
 
 1. Admin page → **Allowed addresses** → type the colleague's Gmail address → **Add**.
 2. Check the same address is a **Test user** on the Google consent screen (2.2 step 7).
