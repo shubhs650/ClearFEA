@@ -219,7 +219,7 @@ Optional: to approve each deploy yourself instead of letting every merge go live
 ### 6.1 Run the first deploy
 
 1. GitHub → the repository → **Actions** → **Deploy** (in the list on the left) → **Run workflow** → branch `main` → **Run workflow**.
-2. Click the run to watch it. Each step turns green. The last step checks that `https://clearfea.triyalabs.com/api/health` answers with the commit just deployed.
+2. Click the run to watch it. It runs the tests first, then the **Site and API** job. Each step turns green. The **Check the deploy settings** step stops the run and names anything from section 5 that is missing. The last step checks that `https://clearfea.triyalabs.com/api/health` answers with the commit just deployed.
 3. Open <https://clearfea.triyalabs.com>. The landing page appears; the first visit can take a minute while the certificate is issued.
 
 After this, you never need to run it by hand: every merge to `main` runs it.
@@ -278,6 +278,7 @@ AWS → **Elastic Container Service** → **Clusters** → `clearfea` → **Task
 
 | What you see | Likely cause | What to do |
 | --- | --- | --- |
+| Deploy fails at "Check the deploy settings" | A secret or variable from section 5 is missing | The error names each missing one and its section; add it and run the deploy again (6.1) |
 | Deploy fails at "Authenticate to Cloudflare" | `CLOUDFLARE_API_TOKEN` missing, mistyped or lacking a permission | Make a new token as in 1.6 and replace the secret |
 | Deploy fails at "Configure AWS credentials" | `AWS_DEPLOY_ROLE_ARN` or `AWS_REGION` missing or wrong | Copy them again from 4.2 and 4.3 |
 | Google says "Error 400: redirect_uri_mismatch" | The redirect URI in 2.3 differs from the site's | It must be exactly `https://clearfea.triyalabs.com/api/auth/callback/google` |
