@@ -1450,12 +1450,20 @@ describe("estimates (ADR-049)", () => {
 });
 
 describe("on cloud machines (M10.6, ADR-099)", () => {
-  // The same app with MACHINES=cloud, as the live site's configuration sets it.
+  // The same app with MACHINES=cloud, as the live site's configuration sets it, with a launcher key
+  // so that runs are not refused for want of one (M10.7). Nothing reaches AWS: app.request runs
+  // without an execution context, so the launcher is not called after the request.
   async function cloudCall(method: string, path: string, json?: unknown): Promise<Response> {
     const headers: Record<string, string> = { Cookie: alice };
     if (json !== undefined) headers["Content-Type"] = "application/json";
     const body = json === undefined ? undefined : JSON.stringify(json);
-    return app.request(`http://localhost${path}`, { method, headers, body }, { ...env, MACHINES: "cloud" });
+    return app.request(`http://localhost${path}`, { method, headers, body }, {
+      ...env,
+      MACHINES: "cloud",
+      AWS_REGION: "ap-south-1",
+      AWS_LAUNCHER_ACCESS_KEY_ID: "AKIDEXAMPLE",
+      AWS_LAUNCHER_SECRET_ACCESS_KEY: "secret",
+    });
   }
 
   async function offered(id: string): Promise<string[]> {

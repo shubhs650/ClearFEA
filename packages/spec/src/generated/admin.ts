@@ -6,7 +6,7 @@ import schema from "../../schemas/admin.schema.json";
 import { validator } from "../validate";
 
 /**
- * Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, and the cloud machine sizes (M10.6). Only the admin reaches them. Each message is a definition under $defs.
+ * Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) and the solver machines started on AWS (M10.7). Only the admin reaches them. Each message is a definition under $defs.
  */
 export interface Admin {
   [k: string]: unknown;
@@ -70,6 +70,55 @@ export interface CloudMachineSize {
   default: boolean;
 }
 /**
+ * One solver machine the API asked AWS to start (M10.7, ADR-100).
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "MachineStart".
+ */
+export interface MachineStart {
+  /**
+   * A machine_sizes name: medium (standard) or large.
+   */
+  size: string;
+  /**
+   * ISO 8601 UTC.
+   */
+  requestedAt: string;
+  /**
+   * starting: asked for, its worker not seen yet; running: its worker made contact in the last minute; ended: its worker was seen and has stopped; failed: AWS refused it or its worker never made contact.
+   */
+  state: "starting" | "running" | "ended" | "failed";
+  /**
+   * Why AWS refused the start, in AWS's words; null otherwise.
+   */
+  problem: string | null;
+}
+/**
+ * The live site's solver machines and their monthly cap (M10.7, ADR-100).
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "SolverMachines".
+ */
+export interface SolverMachines {
+  /**
+   * ready: the API can start machines on AWS; not_set_up: it runs on cloud machines but lacks what starting one needs, which problem names; local: jobs run on the local worker and nothing is started.
+   */
+  launcher: "ready" | "not_set_up" | "local";
+  problem: string | null;
+  /**
+   * Machine hours used this calendar month (UTC), from each start to its worker's last contact.
+   */
+  hoursThisMonth: number;
+  /**
+   * The monthly machine-hours cap; 0 pauses the solver.
+   */
+  hoursCap: number;
+  /**
+   * The latest starts, newest first, at most 10.
+   */
+  starts: MachineStart[];
+}
+/**
  * Answer to GET /api/admin and to adding or removing an address.
  *
  * This interface was referenced by `Admin`'s JSON-Schema
@@ -87,6 +136,7 @@ export interface AdminResponse {
    */
   machines: "cloud" | "local";
   cloudSizes: CloudMachineSize[];
+  solverMachines: SolverMachines;
 }
 /**
  * Body of PUT /api/admin/machine-sizes/{name}.
@@ -96,6 +146,18 @@ export interface AdminResponse {
  */
 export interface SwitchCloudSizeRequest {
   enabled: boolean;
+}
+/**
+ * Body of PUT /api/admin/machine-hours-cap.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "SetMachineHoursCapRequest".
+ */
+export interface SetMachineHoursCapRequest {
+  /**
+   * Machine hours per calendar month (UTC); 744 is one machine for a whole month.
+   */
+  hours: number;
 }
 /**
  * Body of POST /api/admin/allowed.
@@ -110,6 +172,9 @@ export interface AddAllowedRequest {
 export const validateAllowedEmail = validator<AllowedEmail>(schema, "AllowedEmail");
 export const validateAdminUser = validator<AdminUser>(schema, "AdminUser");
 export const validateCloudMachineSize = validator<CloudMachineSize>(schema, "CloudMachineSize");
+export const validateMachineStart = validator<MachineStart>(schema, "MachineStart");
+export const validateSolverMachines = validator<SolverMachines>(schema, "SolverMachines");
 export const validateAdminResponse = validator<AdminResponse>(schema, "AdminResponse");
 export const validateSwitchCloudSizeRequest = validator<SwitchCloudSizeRequest>(schema, "SwitchCloudSizeRequest");
+export const validateSetMachineHoursCapRequest = validator<SetMachineHoursCapRequest>(schema, "SetMachineHoursCapRequest");
 export const validateAddAllowedRequest = validator<AddAllowedRequest>(schema, "AddAllowedRequest");

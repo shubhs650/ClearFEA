@@ -31,4 +31,11 @@ export interface Env {
   MACHINES?: string;
   /** The git commit a production deploy was made from, written by scripts/production-config.mjs (ADR-095). */
   CLEARFEA_COMMIT?: string;
+  /**
+   * The AWS region and the launcher's access key (M10.7, ADR-100; docs/DEPLOYMENT.md section 4),
+   * with which the API starts solver machines on Fargate when MACHINES=cloud. Unset locally.
+   */
+  AWS_REGION?: string;
+  AWS_LAUNCHER_ACCESS_KEY_ID?: string;
+  AWS_LAUNCHER_SECRET_ACCESS_KEY?: string;
 }

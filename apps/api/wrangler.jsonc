@@ -20,9 +20,10 @@
       "migrations_dir": "migrations"
     }
   ],
-  // The daily storage sweep (M8.6, ADR-085): raw output past retention, storage charges.
+  // The daily storage sweep (M8.6, ADR-085): raw output past retention, storage charges. Each
+  // minute: lost jobs, and on the live site solver machines for waiting work (M10.7, ADR-100).
   "triggers": {
-    "crons": ["0 3 * * *"]
+    "crons": ["0 3 * * *", "* * * * *"]
   },
   "r2_buckets": [
     {

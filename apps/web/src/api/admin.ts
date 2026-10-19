@@ -19,3 +19,7 @@ export function removeAllowed(email: string): Promise<ApiResult<AdminResponse>> 
 export function switchCloudSize(name: string, enabled: boolean): Promise<ApiResult<AdminResponse>> {
   return apiRequest("PUT", `/api/admin/machine-sizes/${encodeURIComponent(name)}`, validateAdminResponse, { enabled });
 }
+
+export function setMachineHoursCap(hours: number): Promise<ApiResult<AdminResponse>> {
+  return apiRequest("PUT", "/api/admin/machine-hours-cap", validateAdminResponse, { hours });
+}
