@@ -78,7 +78,7 @@ test("E-03: a model of two bonded bodies from upload to results", async ({ page 
   expect(MODEL, "CLEARFEA_E2E_ASSEMBLY names the STEP file; run the test with `make e2e`").not.toBe("");
 
   await test.step("sign in", async () => {
-    await page.goto("/");
+    await page.goto("/app");
     await page.getByLabel("Login").fill("bob");
     await page.getByLabel("Password").fill("bob-local");
     await page.getByRole("button", { name: "Sign in" }).click();

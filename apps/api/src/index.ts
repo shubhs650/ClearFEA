@@ -34,6 +34,7 @@ app.get("/api/health", async (c) => {
       status: ok ? "ok" : "degraded",
       database: database.ok ? "ok" : database.problem,
       storage: storage.ok ? "ok" : storage.problem,
+      commit: c.env.CLEARFEA_COMMIT || "development",
     } satisfies HealthResponse,
     ok ? 200 : 503,
   );

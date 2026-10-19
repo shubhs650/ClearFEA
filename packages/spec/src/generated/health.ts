@@ -18,6 +18,10 @@ export interface HealthResponse {
    * "ok", or what is wrong with file storage and how to fix it.
    */
   storage: string;
+  /**
+   * The git commit the API was deployed from (CLEARFEA_COMMIT), or "development" when it runs locally. The deploy checks it to know the new version is live.
+   */
+  commit: string;
 }
 
 export const validateHealthResponse = validator<HealthResponse>(schema);

@@ -45,7 +45,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 
 ### M10 Live closed beta
 
-- [ ] M10.1 Production Worker on one origin with the custom domain
+- [x] M10.1 Production Worker on one origin with the custom domain (ADR-096; first deploy waits for M10.2 and the maintainer's Cloudflare setup)
 - [ ] M10.2 Deploy workflow for the site and API
 - [ ] M10.3 Google sign-in with Better Auth, allowlist and admin page
 - [ ] M10.4 Landing page
@@ -396,6 +396,8 @@ Written by the last session for the next one. Replace, do not append.
 
 > Still to watch from the ADR review: browser-captured report figures (ADR-011) mean report generation needs the browser open.
 
+> M10.1 (2026-10-19): the production configuration exists but nothing is deployed; the first deploy is M10.2's workflow run by hand once the maintainer has done DEPLOYMENT.md section 1. Until M10.3 the live site has no `SESSION_SECRET`, so sign-in refuses with the development message about `.dev.vars`, and the API-unreachable message in the status bar still names port 8787 and `pnpm`; M10.3/M10.4 should replace both for production. The cron stays daily; M10.7 changes it to every minute.
+
 ## Parked ideas
 
 Ideas that came up during work and are outside the current milestone. Do not build these without a decision.
@@ -420,6 +422,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-19
 
+- M10.1 production Worker (ADR-096): `apps/api/scripts/production-config.mjs` writes `wrangler.production.json` from `wrangler.jsonc` with the custom domain, the web app as static assets on the same origin and the production D1 id; `deploy:config`, `deploy:migrate` and `deploy:worker` scripts for M10.2's workflow; the workbench moved to `/app`, `/` opens it there until M10.4, unknown addresses get a not-found page; `/api/health` reports `commit`. Checked with `wrangler deploy --dry-run` and the production configuration served locally (`/`, `/app`, `/share/<token>`, assets, `/api/*`, `/internal/*`). Learned: wrangler 4.149 reads JSONC configuration for scripts through `experimental_readRawConfig`.
 - Live closed beta planned (ADR-095): Shubham decided to put ClearFEA live at `clearfea.triyalabs.com` for two or three invited colleagues instead of asking them to self-host. M10 added to PLAN.md, ARCHITECTURE.md section 11 and `docs/DEPLOYMENT.md` written; Shubham approved M10 the same day. Learned: Cloudflare's 10 ms CPU limit on the Workers free plan and its 100 MB request body limit decide two things, the Paid plan and presigned R2 URLs for job files.
 
 ### 2026-10-18

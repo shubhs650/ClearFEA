@@ -10,4 +10,6 @@ export interface Env {
   SESSION_SECRET?: string;
   /** "true" turns on self-hosting mode: the wallet is informational and never refuses (ADR-084). */
   SELF_HOSTED?: string;
+  /** The git commit a production deploy was made from, written by scripts/production-config.mjs (ADR-095). */
+  CLEARFEA_COMMIT?: string;
 }

@@ -9,7 +9,10 @@
     "db:migrate": "wrangler d1 migrations apply DB --local",
     "db:seed": "wrangler d1 execute DB --local --file seed/test-users.sql",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "deploy:config": "node scripts/production-config.mjs",
+    "deploy:migrate": "wrangler d1 migrations apply DB --remote --config wrangler.production.json",
+    "deploy:worker": "wrangler deploy --config wrangler.production.json"
   },
   "dependencies": {
     "@clearfea/spec": "workspace:*",

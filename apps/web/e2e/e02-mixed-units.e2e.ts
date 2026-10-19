@@ -97,7 +97,7 @@ test("E-02: values entered in mixed units", async ({ page }) => {
   const system = page.getByRole("combobox", { name: "Unit system", exact: true });
 
   await test.step("sign in and choose the US unit system", async () => {
-    await page.goto("/");
+    await page.goto("/app");
     await page.getByLabel("Login").fill("alice");
     await page.getByLabel("Password").fill("alice-local");
     // The project's system loads after sign-in; a choice made before it lands would be drawn over.

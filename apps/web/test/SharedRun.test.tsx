@@ -108,7 +108,7 @@ function serve(routes: Record<string, Reply>) {
   return fetchMock;
 }
 
-const HEALTH = { status: 200, json: { status: "ok", database: "ok", storage: "ok" } };
+const HEALTH = { status: 200, json: { status: "ok", database: "ok", storage: "ok", commit: "development" } };
 
 afterEach(() => {
   cleanup();
