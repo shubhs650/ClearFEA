@@ -13,6 +13,7 @@ import {
   type MeshView,
   type SimulationSpec,
 } from "@clearfea/spec";
+import { MachineStartNote } from "../jobs/MachineStartNote";
 import { QuantityInput } from "../units/QuantityInput";
 import { Notes } from "./ItemPanels";
 import { BodiesField, FacesField, TagsField, TextField } from "./fields";
@@ -185,6 +186,7 @@ export function MeshPanel({
           )}
         </div>
       )}
+      <MachineStartNote waiting={meshing} />
     </section>
   );
 }

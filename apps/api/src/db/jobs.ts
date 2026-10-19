@@ -448,6 +448,21 @@ export async function queuedJobs(db: D1Database): Promise<QueuedJob[]> {
 }
 
 /**
+ * The machine sizes the user's queued jobs wait for (M10.10): a job with no size of its own
+ * (import, report) waits for the default size, as in `queuedJobs`.
+ */
+export async function queuedSizes(db: D1Database, userId: string): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT DISTINCT COALESCE(machine_size, (SELECT name FROM machine_sizes WHERE is_default = 1)) AS size
+         FROM jobs WHERE owner_id = ? AND status = 'queued'`,
+    )
+    .bind(userId)
+    .all<{ size: string | null }>();
+  return results.flatMap((row) => (row.size === null ? [] : [row.size]));
+}
+
+/**
  * Fails a job that is still queued, because no machine can run it (M10.7): a fault in ClearFEA,
  * never charged, since it never had a machine. Returns the failed job, or null when a worker
  * claimed it meanwhile.

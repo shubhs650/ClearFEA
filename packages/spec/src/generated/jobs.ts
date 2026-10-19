@@ -249,6 +249,18 @@ export interface JobListResponse {
   jobs: JobView[];
 }
 /**
+ * Answer to GET /api/jobs/machine-wait (M10.10, ADR-103): whether a job of the signed-in user is queued and waiting for a solver machine to start, so the screens can say why it has not started yet.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "MachineWaitResponse".
+ */
+export interface MachineWaitResponse {
+  /**
+   * True on the live site while one of the user's queued jobs has no machine of its size running, or a machine of its size is being started. Always false locally, where the worker is always there.
+   */
+  machineStarting: boolean;
+}
+/**
  * Body of any 4xx or 5xx answer: what is wrong and what to do about it.
  *
  * This interface was referenced by `Jobs`'s JSON-Schema
@@ -285,4 +297,5 @@ export const validateCreateJobRequest = validator<CreateJobRequest>(schema, "Cre
 export const validateJobView = validator<JobView>(schema, "JobView");
 export const validateJobResponse = validator<JobResponse>(schema, "JobResponse");
 export const validateJobListResponse = validator<JobListResponse>(schema, "JobListResponse");
+export const validateMachineWaitResponse = validator<MachineWaitResponse>(schema, "MachineWaitResponse");
 export const validateErrorResponse = validator<ErrorResponse>(schema, "ErrorResponse");

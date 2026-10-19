@@ -7,11 +7,13 @@ import {
   type JobListResponse,
   type JobResponse,
   type JobView,
+  type MachineWaitResponse,
   validateCreateJobRequest,
 } from "@clearfea/spec";
 import { Hono } from "hono";
 import { readBody } from "../body";
 import { createJob, getJob, type Job, listJobs } from "../db/jobs";
+import { machineStarting } from "../launcher";
 import { requireUser, type SessionEnv } from "../session";
 
 export const jobs = new Hono<SessionEnv>();
@@ -49,6 +51,11 @@ jobs.post("/", async (c) => {
 jobs.get("/", async (c) => {
   const list = await listJobs(c.env.DB, c.var.userId);
   return c.json({ jobs: list.map(view) } satisfies JobListResponse);
+});
+
+// Whether a queued job of the user waits for a solver machine to start (M10.10, ADR-103).
+jobs.get("/machine-wait", async (c) => {
+  return c.json({ machineStarting: await machineStarting(c.env, c.var.userId) } satisfies MachineWaitResponse);
 });
 
 jobs.get("/:id", async (c) => {

@@ -49,7 +49,7 @@ Each account starts with 100 credits of play money, which is enough for many hou
 
 Under **Geometry** on the right, choose **Upload a STEP file** and pick `plate-with-hole.step`. The file is imported on the server; the model then appears in the viewer.
 
-**The first job takes a minute or two longer.** On the live site, the import, meshing, solving and report jobs run on a solver machine that is started only when there is work and stops ten minutes after its last job, so nobody pays for an idle machine. The first job you start after a break waits 1 to 3 minutes while a machine starts; the status says "Importing" (or "Waiting for the solver…" for a run) meanwhile. Leave the page open, or come back later: nothing is lost. Jobs after that start at once while you keep working, so the import takes a few seconds and the tutorial run about 20 seconds.
+**The first job takes a minute or two longer.** On the live site, the import, meshing, solving and report jobs run on a solver machine that is started only when there is work and stops ten minutes after its last job, so nobody pays for an idle machine. The first job you start after a break waits 1 to 3 minutes while a machine starts, and the panel says **Starting a solver machine** meanwhile. Leave the page open, or come back later: nothing is lost. Jobs after that start at once while you keep working, so the import takes a few seconds and the tutorial run about 20 seconds.
 
 ![The unit read from the STEP file, waiting to be confirmed](images/guide/01-confirm-unit.png)
 
@@ -217,7 +217,7 @@ Every value has its own unit list, so you can enter a pressure in MPa next to a 
 | A face is hard to click | Zoom in with the scroll wheel and orbit until the face looks towards you; the hover text says which face is under the pointer. |
 | "This Google account is not invited" | Sign in again with the Google account you were invited with, or ask the person who invited you to add this one. |
 | Google says "Access blocked: ClearFEA has not completed the Google verification process" | Your address is not yet on Google's list of test users for ClearFEA. Ask the person who invited you to add it. |
-| The import stays at "Importing", or a run at "Waiting for the solver…", for a few minutes | A solver machine is starting, which takes 1 to 3 minutes after a break. Leave it; it carries on even if you close the page. |
+| "Starting a solver machine" | After a break a machine takes 1 to 3 minutes to start. Leave it; the job starts by itself, even if you close the page. |
 | A job failed saying no solver machine came up, or that the site has used its machine hours for this month | Not your fault, and nothing is charged. Try again later, and tell the person who invited you. |
 
 The live site is updated whenever a change is ready, often more than once a day during the beta. Reload the page now and then to get the newest version; a run that is going carries on unchanged.

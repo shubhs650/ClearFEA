@@ -10,7 +10,7 @@
 
 import type { MachineStart, SolverMachines } from "@clearfea/spec";
 import type { Completion } from "../db/jobs";
-import { failQueuedJob, type QueuedJob, queuedJobs } from "../db/jobs";
+import { failQueuedJob, type QueuedJob, queuedJobs, queuedSizes } from "../db/jobs";
 import { cloudMachines } from "../db/machines";
 import { type MachineSettings, machineSettings } from "../db/settings";
 import {
@@ -281,6 +281,28 @@ export async function ensureMachines(env: Env, fetcher: Fetch = fetch): Promise<
     }
   }
   return plan;
+}
+
+/**
+ * Whether a job queued for one of these sizes is waiting for a machine to start (M10.10,
+ * ADR-103): no machine of the size is alive, or one is being started.
+ */
+export function waitsForMachine(sizes: string[], state: Pick<MachineState, "starts" | "now" | "settings">): boolean {
+  return sizes.some((size) => {
+    const starts = state.starts.filter((start) => start.machineSize === size);
+    return starts.some((start) => pending(start, state)) || !starts.some((start) => alive(start, state.now));
+  });
+}
+
+/**
+ * Whether one of the user's queued jobs waits for a solver machine to start, so the screens can
+ * say why it has not started. Locally, always false: the local worker is always there.
+ */
+export async function machineStarting(env: Env, userId: string): Promise<boolean> {
+  if (!cloudMachines(env)) return false;
+  const sizes = await queuedSizes(env.DB, userId);
+  if (sizes.length === 0) return false;
+  return waitsForMachine(sizes, await readMachineState(env));
 }
 
 /** A start as the admin page shows it. */
