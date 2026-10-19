@@ -18,6 +18,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 | M7 | Report | PDF and Word report |
 | M8 | Platform | Wallet, estimates, stop limit, storage rules, share links, isolation tests |
 | M9 | Gate | Size targets, laptop verification, acceptance cases, outside trial |
+| M10 | Live closed beta | ClearFEA live at clearfea.triyalabs.com for invited engineers; merges deploy themselves (ADR-095) |
 
 ## M0: Bootstrap
 
@@ -165,11 +166,34 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 - [ ] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found.
 - [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome.
 
-**Exit:** all eight gate conditions met.
+**Exit:** all eight gate conditions met. Since ADR-095, M9.2 and M9.8 are done on the live site that M10 puts up (gate items 1 and 4 on the live standard machine, item 8 by the invited colleagues), and M9 closes after them.
+
+## M10: Live closed beta
+
+**Goal:** the prototype runs live at `clearfea.triyalabs.com` for two or three invited engineers, with nothing to install, and every merge to main reaches the site and the solver machines on its own (ADR-095). Added 2026-10-19 by the maintainer's decision to replace self-hosting with a hosted closed beta for the outside trial. M9 stays open: M9.2, M9.8 and M9.9 are done on the live site once M10 has put it there.
+
+The maintainer's setup steps (Cloudflare, Google, AWS, GitHub secrets) are in `DEPLOYMENT.md`; each task says which ones it needs.
+
+- [ ] M10.1 Production Worker: one Worker serves the built web app as static assets and the API on one origin, with the custom domain `clearfea.triyalabs.com`; `/` for the landing page, `/app` for the workbench, `/share/<token>` as now; production D1 and R2; `/api/health` reports the deployed commit. First deploy by hand from the workflow of M10.2. Needs: Cloudflare account ID and deploy token.
+- [ ] M10.2 Deploy workflow for the site and API (`.github/workflows/deploy.yml`): on every push to main, the fast tier, D1 migrations, secrets copied from GitHub to the Worker, `wrangler deploy`, and a health check of the new commit. A CI configuration change, covered by the maintainer's go-ahead for M10.
+- [ ] M10.3 Google sign-in with Better Auth: allowlist table, admin email from configuration, refusal checked at user and session creation, an admin page to add and remove addresses and see users; the seeded password login only under `AUTH_MODE=local`; isolation tests extended to the new routes. Needs: Google OAuth client, `BETTER_AUTH_SECRET`, `ADMIN_EMAIL`.
+- [ ] M10.4 Landing page at `/`: what ClearFEA does, how it works, the analyses, verification results, open source, closed beta notice and Sign in with Google; light and dark; screenshots for review. Polished, not bare.
+- [ ] M10.5 Job files through presigned R2 URLs in production (up to 5 GiB, valid until the stop limit plus a margin); STEP uploads streamed to R2; pass-through routes kept for `make dev`. Needs: R2 API token.
+- [ ] M10.6 Worker cloud mode: machine size from the environment, claims only jobs for its size (light jobs on standard), exits after 10 idle minutes and after a maximum lifetime; cloud size list standard (on) and large (defined, off).
+- [ ] M10.7 AWS: the CloudFormation template (`infra/aws/clearfea.yaml`) and the launcher in the API: `RunTask` when work is queued and no worker of its size is alive, start records, a start retried by the scheduled handler, a job failed as a platform fault after three starts without a worker, the monthly machine-hours cap. Needs: AWS account, stack created, launcher access key.
+- [ ] M10.8 Deploy workflow for the worker: when `worker/` or `packages/spec/` changed, build the image, push it to ECR and register new task definition revisions before the API deploys.
+- [ ] M10.9 Live checks: a verification account that signs in with a secret token, a workflow that runs the quick verification tier against the live site, acceptance cases A and B through the UI on the live standard machine, and a model at each solver's element limit on it (gate items 1 and 4).
+- [ ] M10.10 Beta onboarding: the user guide for the live site (sign-in, no install), an admin guide (inviting, removing, switching on the large size, costs), and the first colleagues invited by the maintainer. Then M9.8 and M9.9.
+
+Order: M10.1, then M10.2; M10.3 to M10.6 after it (M10.3 and M10.4 both change the web app's entry, so in sequence); M10.7 after M10.5 and M10.6; then M10.8, M10.9 and M10.10.
+
+**Verification added:** none. Physics, solver numerics, tolerances and the verification cases are unchanged; M10.9 runs the existing cases through the live site.
+
+**Exit:** an invited colleague signs in with Google at `clearfea.triyalabs.com` and completes the tutorial to a report with nothing installed; an address not on the allowlist is refused; the solver machine stops after its idle time and AWS shows no running task; a merge to main reaches the live site and, for a worker change, the next solver machine without a manual step; the quick verification tier is green against the live site.
 
 ## After Phase 0
 
-Not planned in detail yet. In order: shells, face splitting, stress linearisation, run comparison, geometry revisions, nonlinear milestone. Phase 1 (cloud beta) planning starts when M8 is complete: deployment to Cloudflare, machine launch on AWS, real authentication, guided overlay, email notifications, beta recruitment.
+Not planned in detail yet. In order: shells, face splitting, stress linearisation, run comparison, geometry revisions, nonlinear milestone. Deployment to Cloudflare, machine launch on AWS and real authentication moved into M10 for the closed beta (ADR-095). The public beta (more users, guided overlay, email notifications, recruitment, real payments) is planned after M10.
 
 ## Working method
 

@@ -5,9 +5,9 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** M9 Gate, in progress (started 2026-10-17 under the maintainer's autodrive)
-- **Next task:** M9.2
-- **Blocked on:** nothing
+- **Current milestone:** M9 Gate, in progress (started 2026-10-17 under the maintainer's autodrive); M10 Live closed beta planned (ADR-095, 2026-10-19), waiting for the maintainer's go-ahead
+- **Next task:** M10.1 once the maintainer approves M10; M9.2, M9.8 and M9.9 then run on the live site
+- **Blocked on:** the maintainer's go-ahead for M10 and his setup steps in `docs/DEPLOYMENT.md` (Cloudflare first)
 
 ## Milestones
 
@@ -22,7 +22,8 @@ Current state of the project. Update this file at the end of every working sessi
 | M6 | Modal | Done (phase-end run on main green, [run 38991537033](https://github.com/shubhs650/ClearFEA/actions/runs/38991537033)) | 2026-10-17 |
 | M7 | Report | Done (phase-end run on main green, [run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) | 2026-10-17 |
 | M8 | Platform | Done (phase-end run on main green, [run 39023659289](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289); verify 307 of 307 with the ledger reconciling over 26 cases, E-01 to E-07) | 2026-10-17 |
-| M9 | Gate | In progress | |
+| M9 | Gate | In progress (M9.2, M9.8 and M9.9 move to the live site, ADR-095) | |
+| M10 | Live closed beta | Not started (planned 2026-10-19, ADR-095) | |
 
 Status values: Not started, In progress, Verifying, Done.
 
@@ -41,6 +42,19 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M9.7 Publish the verification results page.
 - [ ] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found.
 - [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome.
+
+### M10 Live closed beta (planned; not started)
+
+- [ ] M10.1 Production Worker on one origin with the custom domain
+- [ ] M10.2 Deploy workflow for the site and API
+- [ ] M10.3 Google sign-in with Better Auth, allowlist and admin page
+- [ ] M10.4 Landing page
+- [ ] M10.5 Job files through presigned R2 URLs; streamed STEP uploads
+- [ ] M10.6 Worker cloud mode: size, idle exit, cloud size list
+- [ ] M10.7 AWS stack template and the launcher in the API
+- [ ] M10.8 Deploy workflow for the worker image
+- [ ] M10.9 Live checks: verification account, quick tier against the live site, cases A and B and the limit models on the live standard machine
+- [ ] M10.10 Beta onboarding: user and admin guides for the live site, first colleagues invited
 
 ### UI redesign (asked for by Shubham before M9.8; not a PLAN.md task)
 
@@ -157,6 +171,8 @@ Things only the maintainer can do.
 - [x] Review the proposed ADRs in `DECISIONS.md` and mark each accepted or changed (all eleven accepted 2026-10-14)
 - [ ] Enable branch protection on `main` (require pull request and passing checks)
 - [ ] Confirm Docker Desktop (or equivalent) runs on the verification laptop
+- [ ] Live closed beta setup, `docs/DEPLOYMENT.md`: Cloudflare Workers Paid, R2, D1, account ID and tokens (section 1); Google OAuth client and admin email (2); two random keys (3); AWS account, region and the `clearfea` stack once M10.7 lands (4); everything into GitHub secrets and variables (5)
+- [ ] Add `clearfea.triyalabs.com` to the Claude project environment's allowed domains (`docs/DEPLOYMENT.md` section 9)
 
 ## Verification status
 
@@ -171,6 +187,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> Live closed beta planning (2026-10-19): ADR-095, PLAN.md M10, ARCHITECTURE.md sections 1 and 11, `docs/DEPLOYMENT.md`. No code changed. Findings that shape M10: the API is already Hono on Workers with D1 and R2, so production is configuration; the worker already follows transfer URLs, so presigned R2 URLs (M10.5) need no worker change; `POST /api/geometries` reads the whole STEP body into memory (Worker memory is 128 MB), so M10.5 streams it; the machine sizes `medium` (4 cores, 16 GiB) and `large` (8, 32 GiB) in migration 0013 are the cloud's standard and large; the worker image is about 2.1 GB, so a machine start is 1 to 3 minutes. Open with the maintainer: the 10-minute idle window (card in the thread, recommended keep), the AWS region, whether threads merge their own PRs once merges deploy, and the gate mapping in ADR-095 item 12. Adding `deploy.yml` changes CI configuration, which the project instructions reserve for him; his M10 go-ahead covers M10.2 and M10.8 only.
 
 > UI redesign stage 1 (2026-10-18): ADR-094. New `AppHeader`, `Ribbon`, `theme.ts` in `apps/web/src/layout/` and `ViewCube.tsx` in `viewer/`; `ModelView` gained `onCamera`, `fitView`, `setDisplayStyle` and, in the interactive viewer only, a cap and plane outline with a cut. The ribbon reuses App's existing handlers, so nothing it does is new behaviour. The tests' ModelView mocks gained the three new methods; unit tests that looked for the save state and unit system in the tree now look in the header. Watch for name clashes when adding ribbon buttons: Playwright's role queries match substrings, so a ribbon button must not contain a name the E-tests ask for (for example "Run", "Generate mesh", "Reset view", "Start setup"). The user guide's text is updated. Stage 2 retook its 19 screenshots by running the tutorial through `make dev` with the M9.3 Playwright script (kept with the pictures in the project's `ui-redesign/guide-shots/` folder; the self-hosted wallet one with `SELF_HOSTED=true`), quantised to 256 colours with Pillow's octree method, since median cut turned the legend's red brown. Stage 3 fixed two things those pictures showed: marker labels that would overlap now move below or above their dot (`placeMarkers` in `ModelView.ts`, tried in order: above, below, further above, further below), and the legend is opaque (`--glass-solid`), since a strong contour colour showed through the see-through panel as a smudge.
 >
@@ -399,6 +417,10 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 ## Log
 
 Newest first. One entry per session: date, what was done, what was learned.
+
+### 2026-10-19
+
+- Live closed beta planned (ADR-095): Shubham decided to put ClearFEA live at `clearfea.triyalabs.com` for two or three invited colleagues instead of asking them to self-host. M10 added to PLAN.md, ARCHITECTURE.md section 11 and `docs/DEPLOYMENT.md` written. Learned: Cloudflare's 10 ms CPU limit on the Workers free plan and its 100 MB request body limit decide two things, the Paid plan and presigned R2 URLs for job files.
 
 ### 2026-10-18
 
