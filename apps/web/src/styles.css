@@ -1895,6 +1895,32 @@ fieldset.field {
   margin: 0;
 }
 
+.signin-beta {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: rgb(37 99 235 / 10%);
+  border: 1px solid rgb(37 99 235 / 25%);
+}
+
+/* Google's sign-in button: white with the "G", as Google's branding guidelines ask. */
+.signin-form .google-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 9px 14px;
+  background: #fff;
+  color: #1f1f1f;
+  border: 1px solid #747775;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.signin-form .google-button:hover:not(:disabled) {
+  background: #f2f6fc;
+}
+
 .signin-page .pane-status {
   background: transparent;
   border-top-color: rgb(255 255 255 / 8%);
@@ -1914,6 +1940,58 @@ fieldset.field {
   background: var(--pane-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+
+/* The admin page (M10.3): the allowlist beside the users. */
+.admin-columns {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.admin-card {
+  padding: 4px 20px 16px;
+  background: var(--pane-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.admin-add {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.admin-add .field {
+  flex: 1;
+}
+
+.admin-allowed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-allowed li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-email {
+  font-weight: 550;
+  margin-right: auto;
+}
+
+.admin-tag,
+.admin-when {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* Settings: cards for grouped fields, tables with quiet headers. */

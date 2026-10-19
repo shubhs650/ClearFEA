@@ -13,6 +13,8 @@ export default defineConfig({
           TEST_SEED: await readD1Migrations("./seed"),
           WORKER_TOKEN: "test-worker-token",
           SESSION_SECRET: "test-session-secret",
+          // The seeded alice is the admin (M10.3); the sign-in mode stays local.
+          ADMIN_EMAIL: "alice@clearfea.test",
         },
       },
     })),

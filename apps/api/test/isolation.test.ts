@@ -308,7 +308,7 @@ function expectNoSecrets(label: string, text: string): void {
   for (const secret of aliceSecrets()) expect(text.includes(secret), `${label} shows ${secret}`).toBe(false);
 }
 
-type Area = "owned" | "account" | "public" | "worker";
+type Area = "owned" | "account" | "public" | "worker" | "admin";
 
 interface Route {
   area: Area;
@@ -348,13 +348,21 @@ const r = (i: Ids) => `/api/runs/${i.runId}`;
  * Every route the app serves, by method and path as Hono lists them. An owned route acts on one
  * record named in its path; an account route acts on the signed-in user's own account; a public
  * route needs no sign-in (the share link's are reached by its token alone); a worker route needs
- * the worker token.
+ * the worker token; an admin route answers the admin (ADMIN_EMAIL, alice in these tests) only.
  */
 const ROUTES: Record<string, Route> = {
   "GET /api/health": { area: "public" },
   "POST /api/session": { area: "public" },
   "GET /api/session": { area: "public" },
   "DELETE /api/session": { area: "public" },
+  "GET /api/session/options": { area: "public" },
+  // Better Auth's routes, answered only in "google" mode (googleSignIn.test.ts).
+  "GET /api/auth/*": { area: "public" },
+  "POST /api/auth/*": { area: "public" },
+
+  "GET /api/admin": { area: "admin" },
+  "POST /api/admin/allowed": { area: "admin" },
+  "DELETE /api/admin/allowed/:email": { area: "admin" },
 
   "POST /api/jobs": { area: "account" },
   "GET /api/jobs": { area: "account" },
@@ -491,6 +499,19 @@ const ACCOUNT_CALLS: Record<string, Request> = {
   "GET /api/storage": { path: "/api/storage" },
 };
 
+/** The admin routes' calls, in an order the admin's own calls at the end can all succeed in. */
+const ADMIN_CALLS: Record<string, Request> = {
+  "GET /api/admin": { path: "/api/admin" },
+  "POST /api/admin/allowed": { path: "/api/admin/allowed", json: { email: "invited@example.com" } },
+  "DELETE /api/admin/allowed/:email": { path: "/api/admin/allowed/invited%40example.com" },
+};
+
+/** The allowlist as it stands, to show a refused call changed nothing. */
+async function allowlistSnapshot(): Promise<string> {
+  const { results } = await env.DB.prepare("SELECT * FROM allowed_emails ORDER BY email").all();
+  return JSON.stringify(results);
+}
+
 /** The routes the app serves, as "METHOD /path", without middleware entries. */
 function servedRoutes(): string[] {
   const served = new Set<string>();
@@ -514,12 +535,13 @@ describe("the isolation sweep", () => {
     expect(Object.keys(ROUTES).filter((key) => !served.includes(key))).toEqual([]);
     for (const [key, route] of routesIn("owned")) expect(route.owned, key).toBeDefined();
     for (const [key] of routesIn("account")) expect(ACCOUNT_CALLS[key], key).toBeDefined();
+    for (const [key] of routesIn("admin")) expect(ADMIN_CALLS[key], key).toBeDefined();
   });
 
-  it("refuses every owned and account route without a sign-in", async () => {
-    for (const [key, route] of [...routesIn("owned"), ...routesIn("account")]) {
+  it("refuses every owned, account and admin route without a sign-in", async () => {
+    for (const [key, route] of [...routesIn("owned"), ...routesIn("account"), ...routesIn("admin")]) {
       const method = key.split(" ")[0] ?? "";
-      const request = route.owned?.(aliceIds()) ?? ACCOUNT_CALLS[key];
+      const request = route.owned?.(aliceIds()) ?? ACCOUNT_CALLS[key] ?? ADMIN_CALLS[key];
       if (request === undefined) throw new Error(key);
       const response = await call(method, request);
       expect(response.status, key).toBe(401);
@@ -611,6 +633,23 @@ describe("bob, signed in", () => {
     }
   });
 
+  it("finds no admin route, and changes nothing through one", async () => {
+    const allowlist = await allowlistSnapshot();
+    const unknown = await call("GET", { path: "/api/admin/no-such-route" }, bob);
+    expect(unknown.status).toBe(404);
+    for (const [key] of routesIn("admin")) {
+      const method = key.split(" ")[0] ?? "";
+      const request = ADMIN_CALLS[key];
+      if (request === undefined) throw new Error(key);
+      const response = await call(method, request, bob);
+      const text = await textOf(response);
+      expect(response.status, `${key}: ${text}`).toBe(404);
+      expect(text, key).toBe(await textOf(unknown.clone()));
+      expectNoSecrets(key, text);
+    }
+    expect(await allowlistSnapshot()).toBe(allowlist);
+  });
+
   it("left every row and file of alice's as it was", async () => {
     expect(await aliceSnapshot()).toBe(before);
   });
@@ -638,6 +677,16 @@ describe("alice, on her own records", () => {
       expect([400, 401, 404, 415], `${key}: ${await textOf(response.clone())}`).not.toContain(response.status);
     }
   }, SWEEP_TIMEOUT_MS);
+
+  it("reaches every admin route bob could not find, as the admin", async () => {
+    for (const [key] of routesIn("admin")) {
+      const method = key.split(" ")[0] ?? "";
+      const request = ADMIN_CALLS[key];
+      if (request === undefined) throw new Error(key);
+      const response = await call(method, request, alice);
+      expect(response.status, `${key}: ${await textOf(response.clone())}`).toBe(200);
+    }
+  });
 });
 
 describe("file keys", () => {

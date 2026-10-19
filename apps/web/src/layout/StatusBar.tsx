@@ -14,7 +14,8 @@ export function StatusBar({
   user,
   onSignOut,
   onWallet,
-}: { user?: SessionUser; onSignOut?: () => void; onWallet?: () => void }) {
+  onAdmin,
+}: { user?: SessionUser; onSignOut?: () => void; onWallet?: () => void; onAdmin?: () => void }) {
   const [health, setHealth] = useState<HealthState>({ kind: "checking" });
 
   useEffect(() => {
@@ -37,6 +38,11 @@ export function StatusBar({
         ))}
       {user && (
         <span className="status-user">
+          {onAdmin && (
+            <button type="button" className="link-button" onClick={onAdmin}>
+              Admin
+            </button>
+          )}
           {onWallet && (
             <button type="button" className="link-button" onClick={onWallet}>
               Wallet

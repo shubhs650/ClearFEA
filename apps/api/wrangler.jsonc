@@ -6,6 +6,8 @@
   "name": "clearfea-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
+  // node:async_hooks for Better Auth's request state (M10.3, ADR-097); nothing else from Node.
+  "compatibility_flags": ["nodejs_als"],
   "dev": {
     "port": 8787
   },

@@ -17,6 +17,7 @@ import {
   specBonds,
 } from "@clearfea/spec";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AdminPage } from "./admin/AdminPage";
 import { fetchSession, signOut } from "./api/session";
 import { WalletPage } from "./billing/WalletPage";
 import { GeometryPanel } from "./geometry/GeometryPanel";
@@ -104,6 +105,8 @@ export function App() {
   const [geometryRefresh, setGeometryRefresh] = useState(0);
   // The wallet page (M8.1), drawn over the workbench so the workbench keeps its state.
   const [walletOpen, setWalletOpen] = useState(false);
+  // The admin page (M10.3), drawn over the workbench the same way, for the admin only.
+  const [adminOpen, setAdminOpen] = useState(false);
   const [theme, setTheme] = useTheme();
   // The side panels can be folded away to give the viewer the whole width.
   const [treeShown, setTreeShown] = useState(true);
@@ -141,6 +144,7 @@ export function App() {
     setSession({ kind: "signedOut", notice });
     setGeometry(null);
     setWalletOpen(false);
+    setAdminOpen(false);
   }, []);
 
   const simulation = useSimulation(geometry, signedOut);
@@ -629,7 +633,23 @@ export function App() {
         {itemPanel}
       </SettingsPanel>
       {walletOpen && <WalletPage onClose={() => setWalletOpen(false)} onSignedOut={signedOut} />}
-      <StatusBar user={session.user} onSignOut={leave} onWallet={() => setWalletOpen(true)} />
+      {adminOpen && <AdminPage onClose={() => setAdminOpen(false)} onSignedOut={signedOut} />}
+      <StatusBar
+        user={session.user}
+        onSignOut={leave}
+        onWallet={() => {
+          setAdminOpen(false);
+          setWalletOpen(true);
+        }}
+        onAdmin={
+          session.user.admin
+            ? () => {
+                setWalletOpen(false);
+                setAdminOpen(true);
+              }
+            : undefined
+        }
+      />
     </div>
     </UnitSystemProvider>
   );

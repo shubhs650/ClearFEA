@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Admin",
+  "description": "Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, and the users. Only the admin reaches them. Each message is a definition under $defs.",
+  "$defs": {
+    "AllowedEmail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["email", "addedAt"],
+      "properties": {
+        "email": { "type": "string", "description": "Lower case." },
+        "addedAt": { "type": "string", "description": "ISO 8601 UTC." }
+      }
+    },
+    "AdminUser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "email", "createdAt", "lastSignIn", "allowed"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": {
+          "type": ["string", "null"],
+          "description": "Null for a seeded local test user without one."
+        },
+        "createdAt": { "type": "string" },
+        "lastSignIn": {
+          "type": ["string", "null"],
+          "description": "When their latest Google session started, or null."
+        },
+        "allowed": {
+          "type": "boolean",
+          "description": "True when their address may sign in now: the admin's, or on the allowlist."
+        }
+      }
+    },
+    "AdminResponse": {
+      "description": "Answer to GET /api/admin and to adding or removing an address.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adminEmail", "allowed", "users"],
+      "properties": {
+        "adminEmail": {
+          "type": "string",
+          "description": "The admin's address from the API's configuration (ADMIN_EMAIL), lower case."
+        },
+        "allowed": { "type": "array", "items": { "$ref": "#/$defs/AllowedEmail" } },
+        "users": { "type": "array", "items": { "$ref": "#/$defs/AdminUser" } }
+      }
+    },
+    "AddAllowedRequest": {
+      "description": "Body of POST /api/admin/allowed.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["email"],
+      "properties": {
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 254,
+          "pattern": "^\\s*[^@\\s]+@[^@\\s]+\\.[^@\\s]+\\s*$"
+        }
+      }
+    }
+  }
+}
