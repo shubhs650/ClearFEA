@@ -187,7 +187,7 @@ If the stack fails with "Provider with url https://token.actions.githubuserconte
 
 What the stack creates: a small network with public subnets and no NAT gateway (which would cost about $32 a month on its own), the image store (ECR, keeps the last ten images), the ECS cluster, the machine definitions (standard 4 vCPU / 16 GB; large 8 vCPU / 32 GB only with `LargeSizeEnabled`), a log group kept for 14 days, the `/clearfea/launch` setting, the budget alarm, the role GitHub deploys with, and the `clearfea-launcher` user, which can only start those machine definitions and read that setting. Nothing in it costs money while no machine runs, apart from the stored images (about $0.10 per GB a month).
 
-The first machine can start only once the deploy workflow has put the worker image in the image store (task M10.8). Until then a job waits for about 20 minutes while three starts fail, then fails saying no machine came up; nothing is charged.
+The first machine can start only once the deploy workflow has put the worker image in the image store. After adding `AWS_REGION` and `AWS_DEPLOY_ROLE_ARN`, run the deploy by hand once (6.1): its **Solver image** job builds the image (about half an hour the first time) and pushes it. Until then a job waits for about 20 minutes while three starts fail, then fails saying no machine came up; nothing is charged.
 
 ### 4.4 Create the launcher's access key
 
@@ -220,14 +220,14 @@ When all sections are done, the repository's **Settings** → **Secrets and vari
 | `AWS_LAUNCHER_ACCESS_KEY_ID` | Secret | 4.4 |
 | `AWS_LAUNCHER_SECRET_ACCESS_KEY` | Secret | 4.4 |
 
-Optional: to approve each deploy yourself instead of letting every merge go live, go to **Settings** → **Environments** → `production` (created by the first deploy) → tick **Required reviewers** and add yourself. Deploys then wait for your click in the Actions tab.
+Optional: to approve each deploy yourself instead of letting every merge go live, go to **Settings** → **Environments** → `production` (created by the first deploy) → tick **Required reviewers** and add yourself. Deploys then wait for your click in the Actions tab, once for the **Solver image** job and once for **Site and API**.
 
 ## 6. First deploy and inviting colleagues
 
 ### 6.1 Run the first deploy
 
 1. GitHub → the repository → **Actions** → **Deploy** (in the list on the left) → **Run workflow** → branch `main` → **Run workflow**.
-2. Click the run to watch it. It runs the tests first, then the **Site and API** job. Each step turns green. The **Check the deploy settings** step stops the run and names anything from section 5 that is missing. The last step checks that `https://clearfea.triyalabs.com/api/health` answers with the commit just deployed.
+2. Click the run to watch it. It runs the tests first, then the **Solver image** job, then the **Site and API** job. Until AWS is set up (section 4), the **Solver image** job shows a warning naming `AWS_REGION` and `AWS_DEPLOY_ROLE_ARN` and builds nothing; the site still deploys. Each step turns green. The **Check the deploy settings** step stops the run and names anything from section 5 that is missing. The last step checks that `https://clearfea.triyalabs.com/api/health` answers with the commit just deployed.
 3. Open <https://clearfea.triyalabs.com>. The landing page appears; the first visit can take a minute while the certificate is issued.
 
 After this, you never need to run it by hand: every merge to `main` runs it.
@@ -291,6 +291,7 @@ AWS → **Elastic Container Service** → **Clusters** → `clearfea` → **Task
 | Deploy fails at "Check the deploy settings" | A secret or variable from section 5 is missing | The error names each missing one and its section; add it and run the deploy again (6.1) |
 | Deploy fails at "Authenticate to Cloudflare" | `CLOUDFLARE_API_TOKEN` missing, mistyped or lacking a permission | Make a new token as in 1.6 and replace the secret |
 | Deploy fails at "Configure AWS credentials" | `AWS_DEPLOY_ROLE_ARN` or `AWS_REGION` missing or wrong | Copy them again from 4.2 and 4.3 |
+| Deploy fails at "Find the image store" or "Register the machine definitions" | The `clearfea` stack is missing, in another region than `AWS_REGION`, or older than the current `clearfea.yaml` | Create or update the stack (4.3) in that region and run the deploy again (6.1). Nothing of the site was deployed in that run |
 | Google says "Error 400: redirect_uri_mismatch" | The redirect URI in 2.3 differs from the site's | It must be exactly `https://clearfea.triyalabs.com/api/auth/callback/google` |
 | Google says "Access blocked: ClearFEA has not completed the Google verification process" | The account is not a test user | Add it under Test users (2.2 step 7) |
 | ClearFEA says the address is not invited | Not on the allowlist | Add it on the admin page (6.3) |

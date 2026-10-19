@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Deploy: every push to main goes live at clearfea.triyalabs.com (ADR-095 item 9, M10.2).
-# The fast tier first; then the production configuration (ADR-096), D1 migrations, the Worker with the built web app and the secrets
-# copied from GitHub, and a health check that the site reports the commit just deployed.
+# The fast tier first; then the solver image on AWS when its source changed (M10.8, ADR-101); then the production
+# configuration (ADR-096), D1 migrations, the Worker with the built web app and the secrets copied from GitHub,
+# and a health check that the site reports the commit just deployed.
 # Run it by hand from the Actions tab for the first deploy, or from an older tag to roll back
 # (docs/DEPLOYMENT.md sections 6.1 and 7.2). Settings come from GitHub repository secrets and
 # variables (DEPLOYMENT.md section 5); none is stored in the repository.
@@ -28,14 +29,137 @@ jobs:
     name: Fast tier
     uses: ./.github/workflows/fast.yml
 
-  # M10.8 adds the worker image job here (build, push to ECR, task definitions), before this one.
+  # The solver image (M10.8, ADR-101): built and pushed to the stack's image store (ECR) only
+  # when no image of this worker/ and packages/spec/ source is there yet, then a new revision of
+  # each machine definition that runs it. The API starts the newest revision, so new machines
+  # take the new image while a machine already running finishes its job on the old one.
+  worker:
+    name: Solver image
+    needs: test
+    # Until AWS is set up (DEPLOYMENT.md section 4), merges skip it; a run started by hand runs
+    # it, names what is missing and goes on to the site, which the first deploy needs.
+    if: github.event_name == 'workflow_dispatch' || vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-24.04
+    # A build without cache compiles CalculiX with PaStiX: about half an hour.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write # GitHub's OIDC token for the deploy role; no AWS keys are stored
+    environment:
+      name: production
+    env:
+      AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: clearfea
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the deploy settings
+        id: settings
+        run: |
+          missing=""
+          [ -n "$AWS_REGION" ] || missing="$missing variable AWS_REGION (section 4.2);"
+          [ -n "$AWS_DEPLOY_ROLE_ARN" ] || missing="$missing variable AWS_DEPLOY_ROLE_ARN (section 4.3);"
+          if [ -z "$missing" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          elif [ -z "$AWS_REGION$AWS_DEPLOY_ROLE_ARN" ]; then
+            echo "::warning::The solver image was not deployed: AWS is not set up yet. Add in GitHub (Settings, Secrets and variables, Actions), as docs/DEPLOYMENT.md says:$missing"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Nothing was deployed. Add in GitHub (Settings, Secrets and variables, Actions), as docs/DEPLOYMENT.md says:$missing"
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        if: steps.settings.outputs.ready == 'true'
+        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: clearfea-deploy-${{ github.run_id }}
+
+      - name: Find the image store
+        id: stack
+        if: steps.settings.outputs.ready == 'true'
+        run: infra/aws/worker-image.sh stack "$STACK_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Look for an image of this source
+        id: image
+        if: steps.settings.outputs.ready == 'true'
+        env:
+          REPOSITORY: ${{ steps.stack.outputs.repository }}
+        run: |
+          tag=$(infra/aws/worker-image.sh tag)
+          digest=$(infra/aws/worker-image.sh find "$REPOSITORY" "$tag")
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          if [ -n "$digest" ]; then
+            echo "$REPOSITORY:$tag is already pushed ($digest): worker/ and packages/spec/ are unchanged, nothing to build."
+          else
+            echo "No image for this source yet: building $REPOSITORY:$tag."
+          fi
+
+      - name: Sign in to the image store
+        if: steps.settings.outputs.ready == 'true' && steps.image.outputs.digest == ''
+        env:
+          REPOSITORY_URI: ${{ steps.stack.outputs.repository_uri }}
+        run: aws ecr get-login-password | docker login --username AWS --password-stdin "${REPOSITORY_URI%%/*}"
+
+      - name: Set up Docker Buildx
+        if: steps.settings.outputs.ready == 'true' && steps.image.outputs.digest == ''
+        uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+
+      # As `make worker-image` builds it, from the same Dockerfile; the commit it was built from
+      # is what the worker reports (ADR-032). The layer cache lives in GitHub's Actions cache.
+      - name: Build and push the image
+        id: build
+        if: steps.settings.outputs.ready == 'true' && steps.image.outputs.digest == ''
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: worker
+          build-contexts: spec=packages/spec
+          build-args: CLEARFEA_COMMIT=${{ github.sha }}
+          tags: ${{ steps.stack.outputs.repository_uri }}:${{ steps.image.outputs.tag }}
+          push: true
+          # One plain image manifest per push, so the image store's keep-ten rule counts images.
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=worker-image
+          cache-to: type=gha,scope=worker-image,mode=max
+
+      # The stack's machine definitions name :latest until the first revision below; keeping
+      # it on the deployed image means a stack update that re-creates one starts this image too.
+      - name: Point latest at the image
+        id: deployed
+        if: steps.settings.outputs.ready == 'true'
+        env:
+          REPOSITORY: ${{ steps.stack.outputs.repository }}
+          REPOSITORY_URI: ${{ steps.stack.outputs.repository_uri }}
+          DIGEST: ${{ steps.image.outputs.digest || steps.build.outputs.digest }}
+        run: |
+          [ -n "$DIGEST" ] || { echo "::error::The image build reported no digest."; exit 1; }
+          infra/aws/worker-image.sh latest "$REPOSITORY" "$DIGEST"
+          echo "image=$REPOSITORY_URI@$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Register the machine definitions
+        if: steps.settings.outputs.ready == 'true'
+        env:
+          IMAGE: ${{ steps.deployed.outputs.image }}
+        run: infra/aws/worker-image.sh register "$IMAGE"
 
   site:
     name: Site and API
-    needs: test
+    # After the solver image, so new machines can serve the new API; when that job is skipped
+    # (AWS not set up) the site still deploys, and when it fails nothing more is deployed.
+    needs: [test, worker]
     # Until the Cloudflare setup is done (DEPLOYMENT.md section 1), merges skip the deploy instead
     # of failing on main; a run started by hand always runs and names what is missing.
-    if: github.event_name == 'workflow_dispatch' || vars.CLOUDFLARE_ACCOUNT_ID != ''
+    if: >-
+      !cancelled() && needs.test.result == 'success'
+      && (needs.worker.result == 'success' || needs.worker.result == 'skipped')
+      && (github.event_name == 'workflow_dispatch' || vars.CLOUDFLARE_ACCOUNT_ID != '')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment:
