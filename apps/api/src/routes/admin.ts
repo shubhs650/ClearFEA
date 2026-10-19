@@ -1,15 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The admin page's routes (M10.3, ADR-097): the allowlist of Google addresses that may sign in,
-// the users, and the cloud machine sizes switched on (M10.6, ADR-099). Only the admin (ADMIN_EMAIL) reaches them; to anyone else they answer as if
+// the users, the cloud machine sizes switched on (M10.6, ADR-099), and the solver machines and
+// their monthly hours cap (M10.7, ADR-100). Only the admin (ADMIN_EMAIL) reaches them; to anyone else they answer as if
 // they did not exist. Shapes: packages/spec/schemas/admin.schema.json.
 
-import { type AdminResponse, validateAddAllowedRequest, validateSwitchCloudSizeRequest } from "@clearfea/spec";
+import {
+  type AdminResponse,
+  validateAddAllowedRequest,
+  validateSetMachineHoursCapRequest,
+  validateSwitchCloudSizeRequest,
+} from "@clearfea/spec";
 import { Hono, type MiddlewareHandler } from "hono";
 import { readBody } from "../body";
 import { addAllowed, isAdminEmail, listAllowed, listUsers, normalEmail, removeAllowed } from "../db/allowlist";
 import { cloudMachines, listCloudSizes, switchCloudSize } from "../db/machines";
+import { setMachineHoursCap } from "../db/settings";
 import { getUser } from "../db/users";
 import type { Env } from "../env";
+import { solverMachines } from "../launcher";
 import { requireUser, type SessionEnv } from "../session";
 
 export const admin = new Hono<SessionEnv>();
@@ -27,7 +35,12 @@ admin.use("*", requireUser, requireAdmin);
 
 async function view(db: D1Database, env: Env): Promise<AdminResponse> {
   const adminEmail = env.ADMIN_EMAIL ?? "";
-  const [allowed, users, cloudSizes] = await Promise.all([listAllowed(db), listUsers(db), listCloudSizes(db)]);
+  const [allowed, users, cloudSizes, machines] = await Promise.all([
+    listAllowed(db),
+    listUsers(db),
+    listCloudSizes(db),
+    solverMachines(env),
+  ]);
   const invited = new Set(allowed.map((a) => a.email));
   return {
     adminEmail: normalEmail(adminEmail),
@@ -38,6 +51,7 @@ async function view(db: D1Database, env: Env): Promise<AdminResponse> {
     })),
     machines: cloudMachines(env) ? "cloud" : "local",
     cloudSizes,
+    solverMachines: machines,
   };
 }
 
@@ -74,5 +88,19 @@ admin.put("/machine-sizes/:name", async (c) => {
       400,
     );
   }
+  return c.json(await view(c.env.DB, c.env));
+});
+
+admin.put("/machine-hours-cap", async (c) => {
+  const body = await readBody(
+    c.req.raw,
+    validateSetMachineHoursCapRequest,
+    "SetMachineHoursCapRequest",
+    "admin.schema.json",
+  );
+  if ("error" in body) {
+    return c.json({ error: "Type a whole number of hours from 0 to 744, such as 60, and try again." }, 400);
+  }
+  await setMachineHoursCap(c.env.DB, body.value.hours);
   return c.json(await view(c.env.DB, c.env));
 });

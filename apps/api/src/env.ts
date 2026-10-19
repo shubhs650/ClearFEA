@@ -41,4 +41,11 @@ export interface Env {
   /** The Cloudflare account and the FILES bucket's name, written by scripts/productionConfig.mjs. */
   R2_ACCOUNT_ID?: string;
   R2_BUCKET?: string;
+  /**
+   * The AWS region and the launcher's access key (M10.7, ADR-100; docs/DEPLOYMENT.md section 4),
+   * with which the API starts solver machines on Fargate when MACHINES=cloud. Unset locally.
+   */
+  AWS_REGION?: string;
+  AWS_LAUNCHER_ACCESS_KEY_ID?: string;
+  AWS_LAUNCHER_SECRET_ACCESS_KEY?: string;
 }

@@ -49,3 +49,41 @@ export async function heartbeatTimeoutSeconds(db: D1Database): Promise<number> {
   if (row === null) throw new Error("The setting heartbeat_timeout_seconds is missing; apply the migrations.");
   return row.value;
 }
+
+/** How solver machines are started on AWS (M10.7, ADR-100). */
+export interface MachineSettings {
+  /** Machine hours per calendar month (UTC) after which nothing more is started; 0 pauses the solver. */
+  hoursCap: number;
+  /** Seconds a start may take to produce a worker before it counts as failed. */
+  startWaitSeconds: number;
+  /** Machines running or starting at once, over all sizes. */
+  maxRunning: number;
+}
+
+const MACHINE_NAMES = {
+  hoursCap: "machine_hours_cap",
+  startWaitSeconds: "machine_start_wait_seconds",
+  maxRunning: "machine_max_running",
+} as const satisfies Record<keyof MachineSettings, string>;
+
+export async function machineSettings(db: D1Database): Promise<MachineSettings> {
+  const { results } = await db
+    .prepare("SELECT name, value FROM settings WHERE name IN (?, ?, ?)")
+    .bind(MACHINE_NAMES.hoursCap, MACHINE_NAMES.startWaitSeconds, MACHINE_NAMES.maxRunning)
+    .all<{ name: string; value: number }>();
+  const value = (name: string) => {
+    const row = results.find((r) => r.name === name);
+    if (row === undefined) throw new Error(`The setting ${name} is missing; apply the migrations.`);
+    return row.value;
+  };
+  return {
+    hoursCap: value(MACHINE_NAMES.hoursCap),
+    startWaitSeconds: value(MACHINE_NAMES.startWaitSeconds),
+    maxRunning: value(MACHINE_NAMES.maxRunning),
+  };
+}
+
+/** Sets the monthly machine-hours cap, from the admin page (DEPLOYMENT.md sections 7.4 and 7.6). */
+export async function setMachineHoursCap(db: D1Database, hours: number): Promise<void> {
+  await db.prepare("UPDATE settings SET value = ? WHERE name = ?").bind(hours, MACHINE_NAMES.hoursCap).run();
+}

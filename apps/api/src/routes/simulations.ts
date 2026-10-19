@@ -66,6 +66,7 @@ import {
   meshSettingsHash,
   simulationMesh,
 } from "../db/meshes";
+import { machineRefusal } from "../launcher";
 import { cloudMachines, listMachineSizes, machineSizeExists } from "../db/machines";
 import { createRun, listRuns } from "../db/runs";
 import {
@@ -258,6 +259,9 @@ simulations.post("/:id/mesh", async (c) => {
   // self-hosted wallet is informational and refuses nothing (ADR-084).
   const noFunds = selfHosted(c.env) ? null : meshFundsProblem(await balanceOf(c.env.DB, c.var.userId));
   if (noFunds !== null) return c.json({ error: noFunds }, 409);
+  // On the live site, no machine may be startable or the month's machine hours used up (M10.7).
+  const noMachine = await machineRefusal(c.env);
+  if (noMachine !== null) return c.json({ error: noMachine }, 409);
   const { mesh } = await createMesh(c.env.DB, c.var.userId, { ...request, simulationId: simulation.id, hash });
   return c.json({ mesh: meshView(mesh), reused: false } satisfies MeshResponse, 201);
 });
@@ -398,6 +402,9 @@ simulations.post("/:id/runs", async (c) => {
     ? null
     : runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size);
   if (noFunds !== null) return c.json({ error: noFunds }, 409);
+  // On the live site, no machine may be startable or the month's machine hours used up (M10.7).
+  const noMachine = await machineRefusal(c.env);
+  if (noMachine !== null) return c.json({ error: noMachine }, 409);
   const multiplier = request.stopMultiplier ?? DEFAULT_STOP_MULTIPLIER;
   const created = await createRun(c.env.DB, c.var.userId, {
     simulationId: simulation.id,

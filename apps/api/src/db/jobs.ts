@@ -421,3 +421,51 @@ export async function readJobLog(
     next: results.length === 0 ? after : (results[results.length - 1]?.seq ?? after),
   };
 }
+
+/** A queued job as the launcher sees it (M10.7): the machine size it needs and when it was queued. */
+export interface QueuedJob {
+  id: string;
+  /** Its machine size, or the default size for a job that has none (import, report). */
+  machineSize: string;
+  createdAt: string;
+}
+
+/**
+ * Every queued job, oldest first, for the launcher, which starts machines for all owners alike
+ * (ADR-100). Only ids, sizes and times: nothing of a user's records leaves this query.
+ */
+export async function queuedJobs(db: D1Database): Promise<QueuedJob[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, created_at,
+              COALESCE(machine_size, (SELECT name FROM machine_sizes WHERE is_default = 1)) AS size
+         FROM jobs WHERE status = 'queued' ORDER BY created_at, id`,
+    )
+    .all<{ id: string; created_at: string; size: string | null }>();
+  return results
+    .filter((row) => row.size !== null)
+    .map((row) => ({ id: row.id, machineSize: row.size as string, createdAt: row.created_at }));
+}
+
+/**
+ * Fails a job that is still queued, because no machine can run it (M10.7): a fault in ClearFEA,
+ * never charged, since it never had a machine. Returns the failed job, or null when a worker
+ * claimed it meanwhile.
+ */
+export async function failQueuedJob(
+  db: D1Database,
+  jobId: string,
+  completion: Extract<Completion, { status: "failed" }>,
+): Promise<Job | null> {
+  const row = await db
+    .prepare(
+      `UPDATE jobs
+          SET status = 'failed', failure_category = ?, failure_cause = ?, failure_message = ?,
+              finished_at = ${NOW}, billable_ms = 0
+        WHERE id = ? AND status = 'queued'
+        RETURNING *`,
+    )
+    .bind(completion.failureCategory, completion.failureCause, completion.failureMessage, jobId)
+    .first<JobRow>();
+  return row === null ? null : toJob(row);
+}

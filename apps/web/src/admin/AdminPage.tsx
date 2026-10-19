@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The admin page (M10.3, ADR-097): who may sign in with Google, and who has, and which cloud
-// machine sizes are switched on (M10.6, ADR-099). Only the admin
+// machine sizes are switched on (M10.6, ADR-099), and the solver machines with their monthly
+// hours cap (M10.7, ADR-100). Only the admin
 // (ADMIN_EMAIL) sees it. Drawn over the workbench like the wallet page, which stays as it was.
 
-import type { AdminResponse } from "@clearfea/spec";
+import type { AdminResponse, MachineStart, SolverMachines } from "@clearfea/spec";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { addAllowed, fetchAdmin, removeAllowed, switchCloudSize } from "../api/admin";
+import { addAllowed, fetchAdmin, removeAllowed, setMachineHoursCap, switchCloudSize } from "../api/admin";
 import type { ApiResult } from "../api/request";
 
 type AdminState = { kind: "loading" } | { kind: "loaded"; admin: AdminResponse } | { kind: "problem"; problem: string };
@@ -15,6 +16,7 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
   const [email, setEmail] = useState("");
   const [problem, setProblem] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  const [cap, setCap] = useState("");
 
   /** Shows the API's answer; a refused change keeps the page and says why. */
   const show = useCallback(
@@ -47,6 +49,13 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
   async function remove(address: string) {
     setBusy(true);
     show(await removeAllowed(address), true);
+    setBusy(false);
+  }
+
+  async function saveCap(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    if (show(await setMachineHoursCap(Number(cap.trim())), true)) setCap("");
     setBusy(false);
   }
 
@@ -177,10 +186,85 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
               ))}
             </ul>
           </section>
+          <section className="admin-card" aria-label="Solver machines">
+            <h3 className="wallet-subtitle">Solver machines</h3>
+            <p className="wallet-note">{launcherNote(state.admin.solverMachines)}</p>
+            <p className="admin-hours">
+              <strong>{state.admin.solverMachines.hoursThisMonth.toFixed(1)} h</strong> of{" "}
+              {state.admin.solverMachines.hoursCap} h used this month (UTC)
+            </p>
+            <form className="admin-add" onSubmit={saveCap}>
+              <label className="field">
+                <span>Monthly limit in hours</span>
+                <input
+                  name="hours"
+                  type="number"
+                  min={0}
+                  max={744}
+                  step={1}
+                  placeholder={String(state.admin.solverMachines.hoursCap)}
+                  value={cap}
+                  onChange={(event) => setCap(event.target.value)}
+                  required
+                />
+              </label>
+              <button type="submit" disabled={busy}>
+                Set limit
+              </button>
+            </form>
+            <p className="wallet-note">
+              When the limit is reached no machine is started and new runs and meshes are refused until the 1st.
+              Set it to 0 to pause the solver; the site stays up.
+            </p>
+            {state.admin.solverMachines.starts.length === 0 ? (
+              <p className="pane-empty">No machine started yet.</p>
+            ) : (
+              <table className="wallet-table" aria-label="Machine starts">
+              <thead>
+                <tr>
+                  <th>Asked for (UTC)</th>
+                  <th>Size</th>
+                  <th>State</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.admin.solverMachines.starts.map((start) => (
+                  <tr key={start.requestedAt + start.size}>
+                    <td>{utc(start.requestedAt)}</td>
+                    <td>{start.size}</td>
+                    <td>{startText(start)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              </table>
+            )}
+          </section>
         </div>
       )}
     </section>
   );
+}
+
+/** What the admin needs to know about starting machines on this server. */
+function launcherNote(machines: SolverMachines): string {
+  if (machines.launcher === "local") {
+    return "Jobs here run on the local worker, so no machine is started and the limit changes nothing on this server. On the live site machines start on AWS when work is queued and stop 10 minutes after their last job.";
+  }
+  if (machines.launcher === "not_set_up") {
+    return `Machines cannot be started yet, so queued work fails at once. ${machines.problem ?? ""}`;
+  }
+  return "Machines start on AWS when work is queued and stop 10 minutes after their last job.";
+}
+
+const START_STATES: Record<MachineStart["state"], string> = {
+  starting: "Starting",
+  running: "Running",
+  ended: "Stopped",
+  failed: "Did not start",
+};
+
+function startText(start: MachineStart): string {
+  return start.problem === null ? START_STATES[start.state] : `${START_STATES[start.state]}: ${start.problem}`;
 }
 
 /** Machine time in hours and minutes, such as "1 h 05 min", or seconds under a minute. */

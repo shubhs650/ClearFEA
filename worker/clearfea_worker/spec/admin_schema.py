@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 type Admin = Annotated[Any, Field(title="Admin")]
 """
-Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, and the cloud machine sizes (M10.6). Only the admin reaches them. Each message is a definition under $defs.
+Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) and the solver machines started on AWS (M10.7). Only the admin reaches them. Each message is a definition under $defs.
 """
 
 
@@ -77,6 +77,61 @@ class CloudMachineSize(BaseModel):
     """
 
 
+class MachineStart(BaseModel):
+    """
+    One solver machine the API asked AWS to start (M10.7, ADR-100).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    size: str
+    """
+    A machine_sizes name: medium (standard) or large.
+    """
+    requested_at: Annotated[str, Field(alias="requestedAt")]
+    """
+    ISO 8601 UTC.
+    """
+    state: Literal["starting", "running", "ended", "failed"]
+    """
+    starting: asked for, its worker not seen yet; running: its worker made contact in the last minute; ended: its worker was seen and has stopped; failed: AWS refused it or its worker never made contact.
+    """
+    problem: str | None
+    """
+    Why AWS refused the start, in AWS's words; null otherwise.
+    """
+
+
+class SolverMachines(BaseModel):
+    """
+    The live site's solver machines and their monthly cap (M10.7, ADR-100).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    launcher: Literal["ready", "not_set_up", "local"]
+    """
+    ready: the API can start machines on AWS; not_set_up: it runs on cloud machines but lacks what starting one needs, which problem names; local: jobs run on the local worker and nothing is started.
+    """
+    problem: str | None
+    hours_this_month: Annotated[float, Field(alias="hoursThisMonth", ge=0.0)]
+    """
+    Machine hours used this calendar month (UTC), from each start to its worker's last contact.
+    """
+    hours_cap: Annotated[int, Field(alias="hoursCap", ge=0)]
+    """
+    The monthly machine-hours cap; 0 pauses the solver.
+    """
+    starts: list[MachineStart]
+    """
+    The latest starts, newest first, at most 10.
+    """
+
+
 class AdminResponse(BaseModel):
     """
     Answer to GET /api/admin and to adding or removing an address.
@@ -97,6 +152,7 @@ class AdminResponse(BaseModel):
     Where jobs run: cloud machines (the live site, MACHINES=cloud) or the local worker, which simulates every size and ignores the cloud size list.
     """
     cloud_sizes: Annotated[list[CloudMachineSize], Field(alias="cloudSizes")]
+    solver_machines: Annotated[SolverMachines, Field(alias="solverMachines")]
 
 
 class SwitchCloudSizeRequest(BaseModel):
@@ -109,6 +165,21 @@ class SwitchCloudSizeRequest(BaseModel):
         populate_by_name=True,
     )
     enabled: bool
+
+
+class SetMachineHoursCapRequest(BaseModel):
+    """
+    Body of PUT /api/admin/machine-hours-cap.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    hours: Annotated[int, Field(ge=0, le=744)]
+    """
+    Machine hours per calendar month (UTC); 744 is one machine for a whole month.
+    """
 
 
 class AddAllowedRequest(BaseModel):

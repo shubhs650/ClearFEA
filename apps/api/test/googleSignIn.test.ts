@@ -231,6 +231,32 @@ describe("Google sign-in", () => {
     expect(row?.cloud).toBeNull();
   });
 
+  it("shows the solver machines and lets the admin set the monthly hours cap (M10.7)", async () => {
+    const { jar: admin } = await signInWithGoogle({ sub: "g-admin", email: ADMIN });
+    const machines = async (response: Response) => {
+      const view = validateAdminResponse(await response.json());
+      if (!view.ok) throw new Error(view.errors.join(" "));
+      return view.value.solverMachines;
+    };
+    expect(await machines(await call("GET", "/api/admin", { jar: admin }))).toEqual({
+      launcher: "local",
+      problem: null,
+      hoursThisMonth: 0,
+      hoursCap: 60,
+      starts: [],
+    });
+    const paused = await call("PUT", "/api/admin/machine-hours-cap", { jar: admin, json: { hours: 0 } });
+    expect((await machines(paused)).hoursCap).toBe(0);
+    for (const hours of [-1, 745, 2.5, "60"]) {
+      const refused = await call("PUT", "/api/admin/machine-hours-cap", { jar: admin, json: { hours } });
+      expect(refused.status).toBe(400);
+      expect(((await refused.json()) as { error: string }).error).toContain("whole number of hours");
+    }
+    await call("PUT", "/api/admin/machine-hours-cap", { jar: admin, json: { hours: 60 } });
+    const row = await env.DB.prepare("SELECT value FROM settings WHERE name = 'machine_hours_cap'").first<{ value: number }>();
+    expect(row?.value).toBe(60);
+  });
+
   it("gives a returning user their same account and no second grant", async () => {
     const first = await signInWithGoogle({ sub: "g-admin", email: ADMIN });
     const second = await signInWithGoogle({ sub: "g-admin", email: ADMIN });

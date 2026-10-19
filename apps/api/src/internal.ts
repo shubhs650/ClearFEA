@@ -31,6 +31,7 @@ import {
 } from "./db/jobs";
 import { machineSizeExists } from "./db/machines";
 import { getRun } from "./db/runs";
+import { recordContact } from "./db/workerStarts";
 import type { Env } from "./env";
 import { jobFiles, transfers } from "./jobs/files";
 import { OUT_OF_MEMORY, recordOutcome, sweepLostJobs } from "./jobs/outcome";
@@ -81,6 +82,8 @@ internal.post("/jobs/claim", async (c) => {
   const body = await readBody(c.req.raw, validateClaimRequest, "ClaimRequest", SCHEMA);
   if ("error" in body) return c.json({ error: body.error }, 400);
   const { workerId } = body.value;
+  // A machine the launcher started is alive while it asks (M10.7, ADR-100).
+  await recordContact(c.env.DB, workerId);
   // Jobs whose worker is lost, this one's included (it asks only when it holds none), are failed
   // first, so a restarted or dead worker never leaves a run solving (M8.4).
   await sweepLostJobs(c.env, workerId);
@@ -237,7 +240,10 @@ internal.post("/jobs/:id/heartbeat", async (c) => {
   if ("error" in body) return c.json({ error: body.error }, 400);
   const { workerId, stage = null, log = "" } = body.value;
   const jobId = c.req.param("id");
-  const outcome = await recordHeartbeat(c.env.DB, workerId, jobId, stage);
+  const [outcome] = await Promise.all([
+    recordHeartbeat(c.env.DB, workerId, jobId, stage),
+    recordContact(c.env.DB, workerId),
+  ]);
   if (!outcome.found) return c.json({ error: "This worker holds no job with that id." }, 404);
   await appendJobLog(c.env.DB, jobId, log);
   return c.json({ action: outcome.action } satisfies HeartbeatResponse);
