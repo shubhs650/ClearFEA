@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Live checks (M10.9, ADR-095 item 11, ADR-104): the verification harness run against the live site
+# at clearfea.triyalabs.com, signed in as the verification account with the VERIFY_TOKEN secret.
+# Started by hand from the Actions tab; nothing runs it on its own, since every solve starts a
+# solver machine on AWS that the maintainer pays for. Suites:
+#   quick       the coarse verification tier (every V case) and the wallet ledger check
+#   acceptance  acceptance cases A and B at the full tier (Phase 0 gate item 1)
+#   limits      a model at each solver's element limit (gate item 4; about four hours)
+# `cases` narrows a suite, for example "V-01 V-02", "A" or "pastix-2 spooles-1".
+name: Live checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: What to run against the live site
+        type: choice
+        options: [quick, acceptance, limits]
+        default: quick
+      cases:
+        description: Case ids or keys, separated by spaces (empty for the whole suite)
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# One at a time: they share the verification account's wallet and the solver machines.
+concurrency:
+  group: live-checks
+  cancel-in-progress: false
+
+env:
+  SITE_URL: https://clearfea.triyalabs.com
+  SUITE: ${{ inputs.suite }}
+  CASES: ${{ inputs.cases }}
+
+jobs:
+  live:
+    name: Live ${{ inputs.suite }}
+    runs-on: ubuntu-24.04
+    # The limit models take about four hours, mostly the modal 10-node run.
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.32"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: worker/uv.lock
+      # The harness writes each case's STEP file with Gmsh on this runner.
+      - name: Gmsh system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1 libglu1-mesa libgomp1 libxrender1 libxcursor1 libxft2 libxinerama1
+      - name: Python dependencies
+        run: uv sync --project worker --locked
+
+      - name: Check the site and the token
+        env:
+          CLEARFEA_VERIFY_TOKEN: ${{ secrets.VERIFY_TOKEN }}
+        run: |
+          if [ -z "$CLEARFEA_VERIFY_TOKEN" ]; then
+            echo "::error::Add the repository secret VERIFY_TOKEN (docs/DEPLOYMENT.md section 3) and deploy, then run this again."
+            exit 1
+          fi
+          curl -fsS "$SITE_URL/api/health"; echo
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $CLEARFEA_VERIFY_TOKEN" \
+            "$SITE_URL/api/session/verification")
+          case "$status" in
+            200) echo "The verification account signs in." ;;
+            404) echo "::error::The site has no VERIFY_TOKEN: run Deploy after adding the secret."; exit 1 ;;
+            *) echo "::error::The verification sign-in answered $status: the site's token differs from the secret, or it is locked for an hour after wrong tokens."; exit 1 ;;
+          esac
+
+      - name: Run the ${{ inputs.suite }} suite
+        working-directory: verification
+        env:
+          CLEARFEA_VERIFY_TOKEN: ${{ secrets.VERIFY_TOKEN }}
+          OUT: ${{ runner.temp }}/live
+        run: |
+          # shellcheck disable=SC2086 # CASES is a list of words
+          case "$SUITE" in
+            quick) uv run --project ../worker --locked python -m harness --api "$SITE_URL" --tier coarse --out "$OUT" $CASES ;;
+            acceptance) uv run --project ../worker --locked python -m harness --api "$SITE_URL" --tier full --out "$OUT" ${CASES:-A B} ;;
+            limits) uv run --project ../worker --locked python -m harness.limits --api "$SITE_URL" --out "$OUT" $CASES ;;
+          esac
+
+      - name: Result table
+        if: always()
+        run: |
+          for f in "$RUNNER_TEMP"/live/results.md "$RUNNER_TEMP"/live/limits.md; do
+            [ -f "$f" ] && { echo "## Live $SUITE ($(date -u +%F))"; echo; cat "$f"; } >> "$GITHUB_STEP_SUMMARY"
+          done
+          true

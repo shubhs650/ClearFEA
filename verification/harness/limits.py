@@ -11,7 +11,9 @@ under the limit for the solver and element order. Each run goes the whole way a 
 upload, mesh, estimate, run on the recommended machine size, and every file the viewer fetches.
 It prints a table of element counts, estimated and measured time, the solver's peak memory
 (read from /proc on this host, so the API, worker and solver must run on it) and the host's
-least available memory, and writes it with the figures as JSON to --out. Exit status 1 if a
+least available memory, and writes it with the figures as JSON to --out. Against an API on
+another host, such as the live site (M10.9), the memory columns are left empty: the solver runs
+on a machine this script cannot see. Exit status 1 if a
 mesh misses its limit, a run does not succeed or a viewer file cannot be fetched.
 """
 
@@ -24,6 +26,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from .client import ApiError, Client
 
@@ -127,21 +130,25 @@ def spec_for(case: LimitCase, geometry_id: str, fixed: int, loaded: int) -> dict
 
 
 class MemoryWatch:
-    """Samples this host's available memory and the largest resident ccx process every 0.5 s."""
+    """Samples this host's available memory and the largest resident ccx process every 0.5 s;
+    does nothing when not `enabled` (the solver runs on another host)."""
 
-    def __init__(self) -> None:
+    def __init__(self, enabled: bool = True) -> None:
+        self.enabled = enabled
         self.least_available = float("inf")
         self.ccx_peak = 0
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def __enter__(self) -> "MemoryWatch":
-        self._thread.start()
+        if self.enabled:
+            self._thread.start()
         return self
 
     def __exit__(self, *_: object) -> None:
-        self._stop.set()
-        self._thread.join()
+        if self.enabled:
+            self._stop.set()
+            self._thread.join()
 
     def _run(self) -> None:
         while not self._stop.wait(0.5):
@@ -169,7 +176,12 @@ def fetch_timed(api: Client, path: str) -> dict[str, Any]:
 
 
 def run_limit(
-    api: Client, case: LimitCase, limit: int, geometry: dict[str, Any], timeout: float
+    api: Client,
+    case: LimitCase,
+    limit: int,
+    geometry: dict[str, Any],
+    timeout: float,
+    local: bool = True,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {"case": case.key, "solver": case.solver, "order": case.order,
                            "analysis": case.analysis, "limit": limit, "ok": False}  # fmt: skip
@@ -181,11 +193,12 @@ def run_limit(
     )["simulation"]["id"]
 
     started = time.monotonic()
-    with MemoryWatch() as watch:
+    with MemoryWatch(local) as watch:
         api.json("POST", f"/api/simulations/{sid}/mesh")
         mesh = api.wait(f"/api/simulations/{sid}/mesh", "mesh", {"meshing"}, timeout)
     row["meshSeconds"] = round(time.monotonic() - started, 1)
-    row["meshLeastAvailableGiB"] = round(watch.least_available / GIB, 2)
+    if local:
+        row["meshLeastAvailableGiB"] = round(watch.least_available / GIB, 2)
     if mesh["status"] != "ready":
         row["problem"] = f"Meshing failed: {mesh['problem']}"
         return row
@@ -203,12 +216,13 @@ def run_limit(
     row["recommended"] = estimate.get("recommended")
 
     started = time.monotonic()
-    with MemoryWatch() as watch:
+    with MemoryWatch(local) as watch:
         run = api.json("POST", f"/api/simulations/{sid}/runs")["run"]
         run = api.wait(f"/api/runs/{run['id']}", "run", {"solving"}, timeout)
     row["runSeconds"] = round(time.monotonic() - started, 1)
-    row["ccxPeakGiB"] = round(watch.ccx_peak / GIB, 2)
-    row["leastAvailableGiB"] = round(watch.least_available / GIB, 2)
+    if local:
+        row["ccxPeakGiB"] = round(watch.ccx_peak / GIB, 2)
+        row["leastAvailableGiB"] = round(watch.least_available / GIB, 2)
     row["machine"] = run["machine"]
     row["billedSeconds"] = (run.get("cost") or {}).get("billedSeconds")
     if run["status"] != "succeeded":
@@ -265,6 +279,7 @@ def main() -> int:
     out = args.out or Path(tempfile.mkdtemp(prefix="limits-"))
     out.mkdir(parents=True, exist_ok=True)
     estimator = json.loads(ESTIMATOR.read_text())
+    local = urlparse(args.api).hostname in {"127.0.0.1", "localhost"}
 
     api = Client(args.api)
     api.sign_in(LOGIN, PASSWORD)
@@ -282,7 +297,7 @@ def main() -> int:
     for case in cases:
         print(f"[limits] {case.key} at {case.size_mm} mm", flush=True)
         try:
-            row = run_limit(api, case, limit_of(estimator, case), geometry, args.timeout)
+            row = run_limit(api, case, limit_of(estimator, case), geometry, args.timeout, local)
         except ApiError as error:
             row = {"case": case.key, "limit": limit_of(estimator, case), "ok": False,
                    "problem": str(error).replace("\n", " ")}  # fmt: skip

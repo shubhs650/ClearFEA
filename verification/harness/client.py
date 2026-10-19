@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""A small client for the ClearFEA API, signed in as one of the seeded local users."""
+"""A small client for the ClearFEA API, signed in as one of the seeded local users, or on the
+live site as the verification account (M10.9, ADR-104)."""
 
 import http.cookiejar
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -20,10 +22,19 @@ class Client:
             urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
         )
 
-    def _send(self, method: str, path: str, body: bytes | None, kind: str | None) -> bytes:
+    def _send(
+        self,
+        method: str,
+        path: str,
+        body: bytes | None,
+        kind: str | None,
+        headers: dict[str, str] | None = None,
+    ) -> bytes:
         request = urllib.request.Request(self.base + path, data=body, method=method)
         if kind is not None:
             request.add_header("Content-Type", kind)
+        for name, value in (headers or {}).items():
+            request.add_header(name, value)
         try:
             with self.opener.open(request, timeout=120) as response:
                 return response.read()
@@ -44,7 +55,14 @@ class Client:
         return json.loads(self._send("POST", path, content, "application/octet-stream"))
 
     def sign_in(self, login: str, password: str) -> None:
-        self.json("POST", "/api/session", {"login": login, "password": password})
+        """Signs in as the verification account when CLEARFEA_VERIFY_TOKEN is set (the live site,
+        where password sign-in is off), else with this seeded local login."""
+        token = os.environ.get("CLEARFEA_VERIFY_TOKEN", "").strip()
+        if token:
+            headers = {"Authorization": f"Bearer {token}"}
+            self._send("POST", "/api/session/verification", None, None, headers)
+        else:
+            self.json("POST", "/api/session", {"login": login, "password": password})
 
     def wait(self, path: str, key: str, busy: set[str], timeout: float) -> dict[str, Any]:
         """Polls GET path until body[key].status leaves `busy`; returns body[key]."""

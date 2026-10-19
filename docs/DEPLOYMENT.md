@@ -145,6 +145,7 @@ openssl rand -base64 32
 | --- | --- |
 | `BETTER_AUTH_SECRET` | Signs sign-in sessions. Changing it signs everyone out. |
 | `WORKER_TOKEN` | The key solver machines use to talk to the API. The API hands it to each machine when it starts it, so it is never stored in AWS. |
+| `VERIFY_TOKEN` | For the live checks (M10.9): signs the verification account in, so the checks run without a Google account. At least 32 characters; leave it out and that sign-in does not exist. Changing it ends the account's sign-in. |
 
 ## 4. AWS (for task M10.7)
 
@@ -217,6 +218,7 @@ When all sections are done, the repository's **Settings** → **Secrets and vari
 | `ADMIN_EMAIL` | Variable | 2.3 |
 | `BETTER_AUTH_SECRET` | Secret | 3 |
 | `WORKER_TOKEN` | Secret | 3 |
+| `VERIFY_TOKEN` | Secret | 3 (optional, for the live checks) |
 | `AWS_REGION` | Variable | 4.2 |
 | `AWS_DEPLOY_ROLE_ARN` | Variable | 4.3 |
 | `AWS_LAUNCHER_ACCESS_KEY_ID` | Secret | 4.4 |
@@ -287,6 +289,10 @@ AWS → **Elastic Container Service** → **Clusters** → `clearfea` → **Task
 - **Pause the solver**: admin page → **Solver machines** → set the monthly limit to 0. No machine starts and new runs are refused; the site stays up. Set it back (for example to 60) to resume.
 - **Shut AWS down completely**: CloudFormation → `clearfea` → **Delete**. The image store must be emptied first (ECR → `clearfea-worker` → select all images → **Delete**).
 - **Take the site down**: Cloudflare → **Compute (Workers)** → `clearfea` → **Settings** → **Domains & Routes** → remove `clearfea.triyalabs.com`.
+
+### 7.7 Run the live checks
+
+GitHub → **Actions** → **Live checks** → **Run workflow**, and pick a suite: `quick` (the coarse verification tier, a few minutes of solver time), `acceptance` (cases A and B, the Phase 0 gate's item 1) or `limits` (a model at each solver's element limit, about four hours of solver time, gate item 4). The result table is on the run's summary page. They sign in as the verification account (`VERIFY_TOKEN`, section 3), which has its own play-money wallet, is not an admin and counts towards the monthly machine hours like anyone. It shows on the admin page as "Verification account (live checks)". Nothing starts them on their own, since each solve starts a solver machine.
 
 ## 8. When something goes wrong
 
