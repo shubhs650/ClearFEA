@@ -73,7 +73,15 @@ class Client:
         """Polls GET path until body[key].status leaves `busy`; returns body[key]."""
         deadline = time.monotonic() + timeout
         while True:
-            item = self.json("GET", path)[key]
+            try:
+                item = self.json("GET", path)[key]
+            except (urllib.error.URLError, ConnectionError, TimeoutError) as error:
+                # A dropped connection to the live site mid-poll is not the job's answer: try again
+                # until the deadline (an HTTPError is an answer, raised as ApiError by _send).
+                if time.monotonic() > deadline:
+                    raise ApiError(f"GET {path} kept failing: {error}") from None
+                time.sleep(5.0)
+                continue
             if item is not None and item["status"] not in busy:
                 return item
             if time.monotonic() > deadline:
