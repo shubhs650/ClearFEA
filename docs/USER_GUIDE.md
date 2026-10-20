@@ -43,6 +43,8 @@ Open <https://clearfea.triyalabs.com> and choose **Sign in with Google**, then *
 
 If ClearFEA says "This Google account is not invited", you picked another Google account than the one on the invitation (a work account, say). Choose **Sign in with Google** again and pick the invited one, or ask the person who invited you to add the address you use. If Google itself says "Access blocked: ClearFEA has not completed the Google verification process", that address has not been added on Google's side yet; ask the person who invited you.
 
+On a company network, the company's web filter (Zscaler, for example) can block the sign-in: the card then says "Google sign-in could not start: the server answered HTTP 403", usually with the filter's name. ClearFEA is fine; the filter stopped the request before it arrived. Ask your IT to allow `clearfea.triyalabs.com`, or sign in from a home network or a phone on mobile data.
+
 On a self-hosted ClearFEA, open <http://localhost:5173/app> instead and sign in as `alice`, password `alice-local`.
 
 Each account starts with 100 credits of play money, which is enough for many hours of solving; see [Wallet](#10-share-wallet-and-storage).
@@ -216,6 +218,7 @@ Every value has its own unit list, so you can enter a pressure in MPa next to a 
 | The run was stopped at its stop limit | Raise the stop limit and run again, or make the mesh coarser. |
 | A face is hard to click | Zoom in with the scroll wheel and orbit until the face looks towards you; the hover text says which face is under the pointer. |
 | "This Google account is not invited" | Sign in again with the Google account you were invited with, or ask the person who invited you to add this one. |
+| "Google sign-in could not start: the server answered HTTP 403" with a company filter's name (Zscaler, for example) | Your company's web filter blocks the site. Ask your IT to allow `clearfea.triyalabs.com`, or sign in from a home network or a phone on mobile data (section 2). |
 | Google says "Access blocked: ClearFEA has not completed the Google verification process" | Your address is not yet on Google's list of test users for ClearFEA. Ask the person who invited you to add it. |
 | "Starting a solver machine" | After a break a machine takes 1 to 3 minutes to start. Leave it; the job starts by itself, even if you close the page. |
 | A job failed saying no solver machine came up, or that the site has used its machine hours for this month | Not your fault, and nothing is charged. Try again later, and tell the person who invited you. |

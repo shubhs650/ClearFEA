@@ -19,6 +19,11 @@ The admin is the Google account named by the `ADMIN_EMAIL` variable (DEPLOYMENT.
 
 ## 1. Invite an engineer
 
+**Before you invite anyone, two things to know.**
+
+- **Company networks can block sign-in.** A corporate web filter such as Zscaler can block the Google sign-in request to the site: the sign-in card then says "Google sign-in could not start: the server answered HTTP 403", usually with the filter's name in brackets. ClearFEA never sees the request, so nothing on the admin page helps. Tell colleagues on a company network up front: either their IT adds `clearfea.triyalabs.com` to the filter's allow list, or they sign in from a non-corporate network (home broadband, or a phone on mobile data). Your own sign-in hit this on 2026-10-20.
+- **Updating the AWS stack always uses the current template.** Whenever you change a stack setting (switching on the large machine, the budget, the alert email), use **Update** → **Replace existing template** with the current `infra/aws/clearfea.yaml` from `main`, never **Use current template**: the template in AWS may be older than the repository and would undo fixes made since (DEPLOYMENT.md section 4.3). The live stack was created before PR #134, which wrote the deploy role's hand-made fixes into the file, so the first update after it must replace the template. Do it while no job is running.
+
 An invitation takes three steps, all needed. Ask for the exact Gmail address they will sign in with; many people have a second Google account (a work one, say) that would be refused.
 
 1. **ClearFEA:** admin page → **Allowed addresses** → type the address → **Add**. It is listed in lower case with the time it was added.
