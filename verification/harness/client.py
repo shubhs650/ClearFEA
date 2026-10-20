@@ -15,6 +15,10 @@ class ApiError(RuntimeError):
     pass
 
 
+#: Cloudflare refuses urllib's default "Python-urllib" agent on the live site (error 1010).
+USER_AGENT = "ClearFEA-harness/1.0 (+https://github.com/shubhs650/ClearFEA)"
+
+
 class Client:
     def __init__(self, base: str) -> None:
         self.base = base.rstrip("/")
@@ -31,6 +35,7 @@ class Client:
         headers: dict[str, str] | None = None,
     ) -> bytes:
         request = urllib.request.Request(self.base + path, data=body, method=method)
+        request.add_header("User-Agent", USER_AGENT)
         if kind is not None:
             request.add_header("Content-Type", kind)
         for name, value in (headers or {}).items():
