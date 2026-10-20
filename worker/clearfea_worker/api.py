@@ -46,6 +46,10 @@ class ApiError(Exception):
 #: again, so a retry cannot store half of one.
 TRANSFER_RETRY_PAUSES = (1.0, 4.0)
 
+#: Sent with every request. Cloudflare, in front of the live site, refuses urllib's default
+#: "Python-urllib/3.x" agent with "error code: 1010" (M10.9), so a machine with it never gets a job.
+USER_AGENT = "ClearFEA-worker/1.0 (+https://github.com/shubhs650/ClearFEA)"
+
 
 def _retryable(error: Exception) -> bool:
     """A 5xx answer or no answer at all; a 4xx answer would only be repeated."""
@@ -76,8 +80,8 @@ class ApiClient:
     def _headers(self, url: str) -> dict[str, str]:
         """The worker token goes only to the API's own internal routes, never elsewhere."""
         if url.startswith(f"{self._base_url}/internal/"):
-            return {"Authorization": f"Bearer {self._token}"}
-        return {}
+            return {"User-Agent": USER_AGENT, "Authorization": f"Bearer {self._token}"}
+        return {"User-Agent": USER_AGENT}
 
     def _transfer_error(self, url: str, error: Exception) -> ApiError:
         if isinstance(error, urllib.error.HTTPError):
@@ -137,6 +141,7 @@ class ApiClient:
             data=data,
             method="POST",
             headers={
+                "User-Agent": USER_AGENT,
                 "Authorization": f"Bearer {self._token}",
                 "Content-Type": "application/json",
             },
