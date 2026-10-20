@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Machine logs (M10.9): why the latest solver machines on AWS stopped, and the end of their
+# worker logs, read with the deploy role. Started by hand from the Actions tab; it only reads.
+# The deploy role needs ecs:ListTasks, ecs:DescribeTasks and logs:GetLogEvents on the worker log
+# group (docs/DEPLOYMENT.md section 8); without them the steps say which call AWS refused.
+name: Machine logs
+
+on:
+  workflow_dispatch:
+    inputs:
+      lines:
+        description: Log lines to show per machine
+        type: number
+        default: 80
+
+permissions:
+  contents: read
+
+jobs:
+  logs:
+    name: Machine logs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # GitHub's OIDC token for the deploy role; no AWS keys are stored
+    # The deploy role trusts this environment only (infra/aws/clearfea.yaml).
+    environment:
+      name: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STACK_NAME: clearfea
+      LOG_GROUP: /clearfea/worker
+      LINES: ${{ inputs.lines }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: clearfea-machine-logs-${{ github.run_id }}
+
+      - name: Stopped machines
+        run: |
+          cluster=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+            --query "Stacks[0].Outputs[?OutputKey=='ClusterName'].OutputValue | [0]" --output text)
+          echo "Cluster: $cluster"
+          for status in RUNNING STOPPED; do
+            arns=$(aws ecs list-tasks --cluster "$cluster" --desired-status "$status" --max-items 10 \
+              --query 'taskArns' --output text)
+            [ -n "$arns" ] && [ "$arns" != "None" ] || { echo "No $status machines."; continue; }
+            # shellcheck disable=SC2086 # a list of task ARNs
+            aws ecs describe-tasks --cluster "$cluster" --tasks $arns --query 'tasks[].{
+              task: taskArn, last: lastStatus, created: createdAt, started: startedAt, stopped: stoppedAt,
+              stopCode: stopCode, stoppedReason: stoppedReason, taskDefinition: taskDefinitionArn,
+              containers: containers[].{name: name, exit: exitCode, reason: reason, image: image}}' --output json
+          done
+
+      - name: Worker logs
+        if: always()
+        run: |
+          streams=$(aws logs describe-log-streams --log-group-name "$LOG_GROUP" \
+            --order-by LastEventTime --descending --max-items 3 --query 'logStreams[].logStreamName' --output text)
+          for stream in $streams; do
+            [ "$stream" = "None" ] && continue
+            echo "::group::$stream"
+            aws logs get-log-events --log-group-name "$LOG_GROUP" --log-stream-name "$stream" \
+              --limit "$LINES" --no-start-from-head --query 'events[].message' --output text | tr '\t' '\n'
+            echo "::endgroup::"
+          done
