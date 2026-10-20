@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from clearfea_worker import solver, versions
-from clearfea_worker.api import ApiClient, ApiError, ClaimedJob
+from clearfea_worker.api import USER_AGENT, ApiClient, ApiError, ClaimedJob
 from clearfea_worker.config import Settings
 from clearfea_worker.geometry.importer import import_geometry
 from clearfea_worker.jobs import (
@@ -218,7 +218,7 @@ def test_fake_api_refuses_bodies_outside_the_schema() -> None:
             f"{api.url}/internal/jobs/claim",
             data=json.dumps({"workerId": "w1", "jobTypes": ["bake"]}).encode(),
             method="POST",
-            headers={"Authorization": f"Bearer {api.token}"},
+            headers={"Authorization": f"Bearer {api.token}", "User-Agent": USER_AGENT},
         )
         with pytest.raises(urllib.error.HTTPError) as raised:
             urllib.request.urlopen(request)

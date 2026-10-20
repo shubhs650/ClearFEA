@@ -111,6 +111,10 @@ class FakeApi:
 
         class Handler(BaseHTTPRequestHandler):
             def _authorised(self) -> bool:
+                # Like Cloudflare in front of the live site, which bans urllib's default agent.
+                if self.headers.get("User-Agent", "").startswith("Python-urllib"):
+                    self._send(403, {"error": "error code: 1010"})
+                    return False
                 if self.headers.get("Authorization") != f"Bearer {api.token}":
                     self._send(401, {"error": "The worker token is missing or wrong."})
                     return False
