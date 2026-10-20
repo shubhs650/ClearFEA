@@ -177,12 +177,15 @@ Do this once the M10.7 pull request is merged.
    | `AlertEmail` | Your email, for cost alarms |
    | `MonthlyBudgetUsd` | The monthly AWS amount that should email you, for example `25` |
    | `GitHubRepository` | `shubhs650/ClearFEA` |
+   | `GitHubRepositoryIds` | `shubhs650@221185337/ClearFEA@1419578936` (the name GitHub gives this repository in a deploy's identity; empty for a repository GitHub names as owner/name) |
    | `ApiUrl` | `https://clearfea.triyalabs.com` |
    | `LargeSizeEnabled` | `false` (switch on later, section 7.3) |
 
 5. **Next** → leave the options as they are → **Next** → at the bottom tick **I acknowledge that AWS CloudFormation might create IAM resources with custom names** → **Submit**.
 6. Wait until the stack status reads **CREATE_COMPLETE** (a few minutes; press the refresh button).
 7. Open the **Outputs** tab. In GitHub, add the **variable** `AWS_DEPLOY_ROLE_ARN` with the value of `DeployRoleArn`. You do not copy the other outputs: the stack also writes how to start a machine (cluster, subnets, security group) into a setting named `/clearfea/launch`, which the API reads by itself.
+
+To bring an existing stack up to a newer `clearfea.yaml`: download it as in step 1, then **CloudFormation** → `clearfea` → **Update** → **Replace existing template** → **Upload a template file** → **Next**, check the parameters against the table above (a new one shows its default) → **Next** to the end → tick the acknowledgement → **Submit**. Do it while no job is running: the update can replace machine definitions. An older file would undo what newer ones add, such as the deploy role's permissions, so always upload the current one.
 
 The budget alarm emails `AlertEmail` directly when the month's spending is forecast to pass 80% of `MonthlyBudgetUsd` and when it has passed it; there is no subscription to confirm.
 
@@ -269,7 +272,7 @@ GitHub → **Actions** → **Deploy** → **Run workflow**, and in **Use workflo
 
 ### 7.3 Switch on the large machine (8 vCPU / 32 GB)
 
-1. AWS → **CloudFormation** → `clearfea` → **Update** → **Use existing template** → set `LargeSizeEnabled` to `true` → **Next** to the end → **Submit**.
+1. AWS → **CloudFormation** → `clearfea` → **Update** → **Replace existing template** → upload the current `clearfea.yaml` (4.3) → set `LargeSizeEnabled` to `true` → **Next** to the end → **Submit**.
 2. ClearFEA admin page → **Machine sizes** → switch **Large** on.
 
 Until the large machine is benchmarked it keeps the 16 GB element limits, so it does not yet allow bigger models (ADR-095 item 5).
@@ -301,13 +304,13 @@ GitHub → **Actions** → **Live checks** → **Run workflow**, and pick a suit
 | Deploy fails at "Check the deploy settings" | A secret or variable from section 5 is missing | The error names each missing one and its section; add it and run the deploy again (6.1) |
 | Deploy fails at "Authenticate to Cloudflare" | `CLOUDFLARE_API_TOKEN` missing, mistyped or lacking a permission | Make a new token as in 1.6 and replace the secret |
 | Deploy fails at "Configure AWS credentials" | `AWS_DEPLOY_ROLE_ARN` or `AWS_REGION` missing or wrong | Copy them again from 4.2 and 4.3 |
-| "Not authorized to perform sts:AssumeRoleWithWebIdentity" at "Configure AWS credentials" | The deploy role does not trust the identity GitHub gave the run | The next step, "Show the identity AWS was given", prints its `sub`. IAM → Roles → `clearfea-github-deploy` → **Trust relationships** must list that `sub` exactly; if not, update the stack with the right `GitHubRepository` (4.3) |
+| "Not authorized to perform sts:AssumeRoleWithWebIdentity" at "Configure AWS credentials" | The deploy role does not trust the identity GitHub gave the run | The next step, "Show the identity AWS was given", prints its `sub`. IAM → Roles → `clearfea-github-deploy` → **Trust relationships** must list that `sub` exactly; if not, update the stack (4.3) with the right `GitHubRepository`, or with `GitHubRepositoryIds` when the `sub` reads `owner@id/name@id` |
 | Deploy fails at "Find the image store" or "Register the machine definitions" | The `clearfea` stack is missing, in another region than `AWS_REGION`, or older than the current `clearfea.yaml` | Create or update the stack (4.3) in that region and run the deploy again (6.1). Nothing of the site was deployed in that run |
 | Google says "Error 400: redirect_uri_mismatch" | The redirect URI in 2.3 differs from the site's | It must be exactly `https://clearfea.triyalabs.com/api/auth/callback/google` |
 | Google says "Access blocked: ClearFEA has not completed the Google verification process" | The account is not a test user | Add it under Test users (2.2 step 7) |
 | ClearFEA says the address is not invited | Not on the allowlist | Add it on the admin page (6.3) |
 | A job fails saying the solver machines of this site are not set up | The launcher key or `AWS_REGION` is missing | The admin page's **Solver machines** card names what is missing; add it (4.2, 4.4) and deploy again |
-| A job fails saying 3 solver machines were started and none came up | AWS refused the starts, or the machines could not start | The admin page lists each start with AWS's reason. "AccessDenied": the key is not the `clearfea-launcher` one, or the stack is in another region than `AWS_REGION`. "ParameterNotFound": the stack is missing. A start that says nothing and never runs: the worker image is not in the image store yet (M10.8), or see the machine's log in AWS → CloudWatch → Log groups → `/clearfea/worker`. The **Machine logs** workflow (Actions tab, `.github/workflows/machine-logs.yml`) prints why the latest machines stopped and the end of their logs, once the deploy role has the read-only inline policy `clearfea-read-machine-logs` (`ecs:ListTasks`, `ecs:DescribeTasks`, and `logs:DescribeLogStreams`/`GetLogEvents`/`FilterLogEvents` on `/clearfea/worker`) |
+| A job fails saying 3 solver machines were started and none came up | AWS refused the starts, or the machines could not start | The admin page lists each start with AWS's reason. "AccessDenied": the key is not the `clearfea-launcher` one, or the stack is in another region than `AWS_REGION`. "ParameterNotFound": the stack is missing. A start that says nothing and never runs: the worker image is not in the image store yet (M10.8), or see the machine's log in AWS → CloudWatch → Log groups → `/clearfea/worker`. The **Machine logs** workflow (Actions tab, `.github/workflows/machine-logs.yml`) prints why the latest machines stopped and the end of their logs, with the deploy role's read-only policy `clearfea-read-machine-logs` (`ecs:ListTasks`, `ecs:DescribeTasks`, and `logs:DescribeLogStreams`/`GetLogEvents`/`FilterLogEvents` on `/clearfea/worker`), which the stack defines |
 | Runs are refused with "used its ... machine hours for this month" | The monthly limit was reached | Raise it on the admin page, or wait for the 1st |
 | A cost alarm email | AWS spending passed `MonthlyBudgetUsd` | Check 7.5 for machines left running; tell a thread |
 

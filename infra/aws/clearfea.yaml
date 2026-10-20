@@ -40,6 +40,11 @@ Parameters:
     Default: shubhs650/ClearFEA
     AllowedPattern: "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
     Description: The repository whose deploy workflow may push worker images and register machine definitions (owner/name).
+  GitHubRepositoryIds:
+    Type: String
+    Default: shubhs650@221185337/ClearFEA@1419578936
+    AllowedPattern: "^$|^[A-Za-z0-9_.-]+@[0-9]+/[A-Za-z0-9_.-]+@[0-9]+$"
+    Description: The same repository with GitHub's numeric ids (owner@id/name@id), which GitHub names some repositories by in a deploy's identity; a refused deploy prints it (DEPLOYMENT.md section 8). Empty if GitHub uses owner/name.
   ApiUrl:
     Type: String
     Default: https://clearfea.triyalabs.com
@@ -59,6 +64,7 @@ Parameters:
 Conditions:
   Large: !Equals [!Ref LargeSizeEnabled, "true"]
   NewOidcProvider: !Equals [!Ref CreateGitHubOidcProvider, "true"]
+  RepositoryIds: !Not [!Equals [!Ref GitHubRepositoryIds, ""]]
 
 Metadata:
   AWS::CloudFormation::Interface:
@@ -66,7 +72,7 @@ Metadata:
       - Label: { default: Costs }
         Parameters: [AlertEmail, MonthlyBudgetUsd]
       - Label: { default: Site and deploys }
-        Parameters: [ApiUrl, GitHubRepository, CreateGitHubOidcProvider]
+        Parameters: [ApiUrl, GitHubRepository, GitHubRepositoryIds, CreateGitHubOidcProvider]
       - Label: { default: Machine sizes }
         Parameters: [LargeSizeEnabled]
 
@@ -306,12 +312,20 @@ Resources:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               # The deploy job runs in the production environment; main and tags are for runs
-              # without one (a manual rollback from a tag, DEPLOYMENT.md section 7.2).
+              # without one (a manual rollback from a tag, DEPLOYMENT.md section 7.2). Each is
+              # allowed under both names GitHub may give the repository.
               StringLike:
-                token.actions.githubusercontent.com:sub:
-                  - !Sub repo:${GitHubRepository}:environment:production
-                  - !Sub repo:${GitHubRepository}:ref:refs/heads/main
-                  - !Sub repo:${GitHubRepository}:ref:refs/tags/*
+                token.actions.githubusercontent.com:sub: !If
+                  - RepositoryIds
+                  - - !Sub repo:${GitHubRepositoryIds}:environment:production
+                    - !Sub repo:${GitHubRepositoryIds}:ref:refs/heads/main
+                    - !Sub repo:${GitHubRepositoryIds}:ref:refs/tags/*
+                    - !Sub repo:${GitHubRepository}:environment:production
+                    - !Sub repo:${GitHubRepository}:ref:refs/heads/main
+                    - !Sub repo:${GitHubRepository}:ref:refs/tags/*
+                  - - !Sub repo:${GitHubRepository}:environment:production
+                    - !Sub repo:${GitHubRepository}:ref:refs/heads/main
+                    - !Sub repo:${GitHubRepository}:ref:refs/tags/*
       Policies:
         - PolicyName: deploy-worker-image
           PolicyDocument:
@@ -351,6 +365,25 @@ Resources:
                 Effect: Allow
                 Action: cloudformation:DescribeStacks
                 Resource: !Ref AWS::StackId
+        # The Machine logs workflow (M10.9): why machines stopped and the end of their logs.
+        # It only reads.
+        - PolicyName: clearfea-read-machine-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecs:ListTasks
+                  - ecs:DescribeTasks
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:DescribeLogStreams
+                  - logs:GetLogEvents
+                  - logs:FilterLogEvents
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${WorkerLogs}
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${WorkerLogs}:*
 
   # Emails the admin when the month's spending is forecast to pass 80% of the budget, and when
   # it has passed it. Budgets emails directly; there is no subscription to confirm.
