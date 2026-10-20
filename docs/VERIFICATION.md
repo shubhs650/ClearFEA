@@ -71,7 +71,7 @@ Stress is checked away from supports and load application points unless the case
 | V-20 | Cantilever beam frequencies | Euler-Bernoulli, first three bending modes in the stiff direction and first two in the other (800 × 16 × 8 mm steel bar, M6.1), and three mode shapes at mid-span (M6.2) | M6 |
 | V-21 | Fixed-fixed beam frequencies | Euler-Bernoulli, first two bending modes in one direction and the first in the other (the same bar, both ends fixed, M6.1) | M6 |
 | V-22 | Unrestrained body | Six rigid-body modes near zero (within 0.1 % of mode 7), first two elastic modes against the free-free beam (the same bar, no supports, SPOOLES, M6.1) | M6 |
-| V-23 | NAFEMS LE10, thick plate under pressure | Published target stress at point D; take the value from the NAFEMS document when implementing | M3 |
+| V-23 | NAFEMS LE10, thick plate under pressure | Published target stress at point D; take the value from the NAFEMS document when implementing. **Not built**: listed for M3 but no task in `PLAN.md` made it, found at Close M9 (2026-10-20); its supports include a line on an edge, which ClearFEA does not offer, so building or dropping it is the maintainer's decision | M3 |
 | V-24 | Quarter bar stretched by prescribed end displacements on two symmetry planes | Uniform stress Eδ/L (von Mises, σxx, σ1), strains δ/L and −νδ/L, lateral contraction νεy, end reaction σA; safety factor against yield Sy/σ (M3.5) | M2 |
 | V-25 | V-09's quarter tube with its outside on an elastic support (a stiff sleeve) | Lamé with σr(b) = −k u(b): von Mises and radial displacement at the bore and the outside; the sleeve's and the cut planes' reactions | M2 |
 | V-26 | V-24's kind of quarter bar pulled by a force on its end, meshed with first-order (four-node) tetrahedra | Uniform stress F/A, end displacement FL/(EA), lateral contraction νεy, start reaction F (exact for four-node tetrahedra) | M2 |
@@ -90,7 +90,7 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Frictionless / symmetry support | V-09, V-24, V-06, V-07, V-08, V-25, V-03, V-26 |
 | Elastic support | V-07, V-25 |
 | Force | V-02, V-12, V-03, V-26 |
-| Pressure | V-01, V-23 |
+| Pressure | V-01, V-09, V-25; acceptance case A (V-23 is not built) |
 | Remote force and moment | V-04 |
 | Hydrostatic pressure | V-05 |
 | Gravity | V-10 |

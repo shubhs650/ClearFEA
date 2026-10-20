@@ -121,6 +121,7 @@ class ReportDocument:
 MAX_WARNINGS = 50
 
 NOT_ENTERED = "(not entered)"
+VARIES_WITH_TEMPERATURE = "Varies with temperature (table below)"
 
 #: The statement printed before the sections; the others close the report.
 OPENING_STATEMENT = "toolPositioning"
@@ -305,14 +306,18 @@ class _Builder:
         return blocks
 
     def material(self, m: IsotropicMaterial, bodies: list[str]) -> list[Block]:
+        youngs = self.q(m.youngs_modulus, "pressure")
+        poisson = NOT_ENTERED if m.poissons_ratio is None else format_number(m.poissons_ratio)
+        # A value given only as a table against temperature is not missing.
+        if m.youngs_modulus is None and m.youngs_modulus_table and m.youngs_modulus_table.rows:
+            youngs = VARIES_WITH_TEMPERATURE
+        if m.poissons_ratio is None and m.poissons_ratio_table and m.poissons_ratio_table.rows:
+            poisson = VARIES_WITH_TEMPERATURE
         rows = [
             ["Bodies", ", ".join(bodies) or "(none)"],
             ["Model", "Linear elastic, isotropic"],
-            ["Young's modulus", self.q(m.youngs_modulus, "pressure")],
-            [
-                "Poisson's ratio",
-                NOT_ENTERED if m.poissons_ratio is None else format_number(m.poissons_ratio),
-            ],
+            ["Young's modulus", youngs],
+            ["Poisson's ratio", poisson],
         ]
         optional = [
             ("Density", m.density, "density"),
