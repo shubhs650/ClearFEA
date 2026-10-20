@@ -286,12 +286,16 @@ def main() -> int:
     step = out / "block.step"
     write_block(step)
     geometry = api.upload(f"/api/geometries?name={step.name}", step.read_bytes())["geometry"]
-    geometry = api.wait(f"/api/geometries/{geometry['id']}", "geometry", {"importing"}, 300)
+    geometry = api.wait(
+        f"/api/geometries/{geometry['id']}", "geometry", {"importing"}, args.timeout
+    )
     if geometry["status"] != "ready":
         geometry = api.json("POST", f"/api/geometries/{geometry['id']}/unit", {"unit": "mm"})[
             "geometry"
         ]
-        geometry = api.wait(f"/api/geometries/{geometry['id']}", "geometry", {"importing"}, 300)
+        geometry = api.wait(
+            f"/api/geometries/{geometry['id']}", "geometry", {"importing"}, args.timeout
+        )
 
     rows = []
     for case in cases:

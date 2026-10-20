@@ -184,7 +184,7 @@ def run_case(api: Client, case: Case, tier: str, work: Path, timeout: float) -> 
                    capture_output=True)  # fmt: skip
 
     geometry = api.upload(f"/api/geometries?name={step.name}", step.read_bytes())["geometry"]
-    geometry = api.wait(f"/api/geometries/{geometry['id']}", "geometry", {"importing"}, 300)
+    geometry = api.wait(f"/api/geometries/{geometry['id']}", "geometry", {"importing"}, timeout)
     if geometry["status"] == "failed":
         raise CaseError(f"The import failed: {geometry['problem']}")
     detected = geometry["detectedUnit"]
@@ -202,7 +202,7 @@ def run_case(api: Client, case: Case, tier: str, work: Path, timeout: float) -> 
         geometry = api.json("POST", f"/api/geometries/{geometry['id']}/unit", {"unit": case.unit})[
             "geometry"
         ]
-        geometry = api.wait(f"/api/geometries/{geometry['id']}", "geometry", {"importing"}, 300)
+        geometry = api.wait(f"/api/geometries/{geometry['id']}", "geometry", {"importing"}, timeout)
     if geometry["status"] != "ready":
         raise CaseError(f"The geometry is {geometry['status']} after confirming {case.unit}.")
     topology = api.json("GET", f"/api/geometries/{geometry['id']}/topology")
