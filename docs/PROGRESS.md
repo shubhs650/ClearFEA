@@ -23,7 +23,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M7 | Report | Done (phase-end run on main green, [run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) | 2026-10-17 |
 | M8 | Platform | Done (phase-end run on main green, [run 39023659289](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289); verify 307 of 307 with the ledger reconciling over 26 cases, E-01 to E-07) | 2026-10-17 |
 | M9 | Gate | In progress (M9.2, M9.8 and M9.9 move to the live site, ADR-095) | |
-| M10 | Live closed beta | Done (phase-end run on main green, [run 39475421085](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085); live quick tier 307 of 307 and cases A and B 34 of 34 in M10.9; the colleagues' first sign-in and tutorial move to M9.8) | 2026-10-20 |
+| M10 | Live closed beta | Done (phase-end run on main green, [run 39475421085](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085), full tier 307 of 307, E-01 to E-08; live quick tier 307 of 307 and cases A and B 34 of 34 in M10.9; the colleagues' first sign-in and tutorial move to M9.8) | 2026-10-20 |
 
 Status values: Not started, In progress, Verifying, Done.
 
@@ -185,7 +185,7 @@ Things only the maintainer can do.
 | Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4); V-18 16 of 16 (M5.4); V-19 19 of 19 (2026-10-16, M5.5); V-14 and V-27 22 of 22 (M5.6); V-20 and V-21 at 3 mm 16 of 16, V-22 at 2 mm 12 of 12 (2026-10-16, M6.1) |
 | Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 (one body, every result step to M3.8), E-02 (mixed-unit entry, written during M6), E-03 (two bonded bodies; also as thermal stress with heat across the bond since M5.6) and E-04 (thermal stress, M5.4; with conductivity and Young's modulus tables since M5.5); E-01 also checks the ADR-063 solver choice |
 | Live site | 2026-10-20 (Live checks workflow, main ec3dd18 and 6bb3199) | Green: quick 307 of 307 checks in 26 cases; full-tier A and B 34 of 34; all ten limit models |
-| Phase end (CI) | 2026-10-20 (`phase-end.yml` by hand on main 8a665bf, [run 39475421085](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085); closed M10) | Green: full tier PHASEEND_VERIFY; E-01 to E-08 |
+| Phase end (CI) | 2026-10-20 (`phase-end.yml` by hand on main 8a665bf, [run 39475421085](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085); closed M10) | Green: full tier 307 of 307 checks in all 26 cases; E-01 to E-08, 8 of 8 |
 
 ## Handoff notes
 
