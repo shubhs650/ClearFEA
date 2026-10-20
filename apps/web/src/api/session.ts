@@ -33,26 +33,58 @@ export function fetchSignInOptions(): Promise<ApiResult<SignInOptions>> {
  * Google sends it back to the workbench, signed in, or with `?error=<code>` when refused.
  */
 export async function startGoogleSignIn(): Promise<ApiResult<undefined>> {
-  const result = await apiRequest("POST", "/api/auth/sign-in/social", validateGoogleStart, {
-    provider: "google",
-    callbackURL: WORKBENCH_PATH,
-    errorCallbackURL: WORKBENCH_PATH,
-  });
-  if (result.kind === "error" && result.problem.endsWith("(HTTP 403)")) {
-    return { kind: "error", problem: googleStartRefused() };
+  let response: Response;
+  try {
+    response = await fetch("/api/auth/sign-in/social", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ provider: "google", callbackURL: WORKBENCH_PATH, errorCallbackURL: WORKBENCH_PATH }),
+    });
+  } catch {
+    return { kind: "error", problem: "ClearFEA's server did not answer. Check your internet connection and try again in a minute." };
   }
-  if (result.kind !== "ok") return result;
-  window.location.assign(result.value.url);
+  const text = await response.text().catch(() => "");
+  if (!response.ok) return { kind: "error", problem: googleStartRefused(response.status, text) };
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = undefined;
+  }
+  const start = validateGoogleStart(body);
+  if (!start.ok) return { kind: "error", problem: `The sign-in answer was not understood: ${start.errors.join(" ")}` };
+  window.location.assign(start.value.url);
   return { kind: "ok", value: undefined };
 }
 
 /**
- * Better Auth refuses the start with 403 when the browser did not say which site the request
- * came from (no Origin or Referer header, as some privacy extensions and settings do) or named
- * another site. Its own answer is not a ClearFEA error, so the screen says what to try.
+ * Why the start of Google sign-in was refused, from the answer's status and text. Better Auth
+ * answers JSON with a code, for example when the browser did not say which site the request came
+ * from; anything else (such as Cloudflare's "error code: 1010") is shown as it came, shortened,
+ * so the person can pass it on.
  */
-export function googleStartRefused(): string {
-  return `Your browser did not say that this sign-in came from ${window.location.origin}, so it was refused (HTTP 403). Open ${window.location.origin}/app by typing it in the address bar, or try a private window with extensions turned off; privacy and ad-blocking extensions can cause this.`;
+export function googleStartRefused(status: number, text: string): string {
+  let code = "";
+  let message = "";
+  let parsed: unknown = text;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    // Not JSON: an HTML or plain-text page, shown as text.
+  }
+  if (typeof parsed === "object" && parsed !== null) {
+    const fields = parsed as { code?: unknown; message?: unknown; error?: unknown };
+    code = typeof fields.code === "string" ? fields.code : "";
+    message = typeof fields.message === "string" ? fields.message : typeof fields.error === "string" ? fields.error : "";
+  } else {
+    message = String(parsed).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+  }
+  if (code === "MISSING_OR_NULL_ORIGIN" || code === "INVALID_ORIGIN") {
+    return `Your browser did not say that this sign-in came from ${window.location.origin}, so it was refused (HTTP ${status}, ${code}). Open ${window.location.origin}/app by typing it in the address bar, or try a private window with extensions turned off.`;
+  }
+  const detail = [code, message].filter((part) => part !== "").join(": ");
+  return `Google sign-in could not start: the server answered HTTP ${status}${detail ? ` (${detail})` : ""}. Try again in a minute; if it keeps happening, send this message to the person who invited you.`;
 }
 
 /** Better Auth's own answer, not a ClearFEA shape: only the address to go to is read. */

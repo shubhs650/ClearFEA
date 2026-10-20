@@ -155,8 +155,22 @@ describe("Google sign-in (M10.3)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Sign in with Google" }));
     const alert = (await screen.findByRole("alert")).textContent ?? "";
     expect(alert).toContain("Your browser did not say that this sign-in came from");
-    expect(alert).toContain("extensions");
+    expect(alert).toContain("MISSING_OR_NULL_ORIGIN");
     expect(alert).not.toContain("did not answer");
+  });
+
+  it("shows what else refused the start of Google sign-in", async () => {
+    serve({
+      "GET /api/health": healthy,
+      "GET /api/session": signedOut,
+      "GET /api/session/options": google,
+      "POST /api/auth/sign-in/social": { status: 403, body: "error code: 1010" },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in with Google" }));
+    const alert = (await screen.findByRole("alert")).textContent ?? "";
+    expect(alert).toContain("HTTP 403 (error code: 1010)");
+    expect(alert).not.toContain("did not say");
   });
 
   it("says why Google sign-in was refused, and takes the code out of the address", async () => {
