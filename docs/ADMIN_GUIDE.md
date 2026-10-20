@@ -121,5 +121,6 @@ Gate item 8 is met when two or three engineers complete the tutorial case unaide
 | A job failed saying no solver machine came up | Three starts failed; the admin page lists why. DEPLOYMENT.md section 8 has the causes. |
 | Runs are refused for machine hours | The monthly limit was reached: raise it (section 6). |
 | Runs are refused for their balance | Their credits ran out: section 4. |
+| "Google sign-in could not start: the server answered HTTP 403 (Internet Security by Zscaler …)" (or another company filter's name) | Their company's web filter blocks the site, not ClearFEA. Ask their IT to allow `clearfea.triyalabs.com`; meanwhile they can sign in from a phone on mobile data or a home network. |
 
 For anything about deploys, keys or the AWS stack, see DEPLOYMENT.md section 8.
