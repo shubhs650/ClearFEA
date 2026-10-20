@@ -144,6 +144,21 @@ describe("Google sign-in (M10.3)", () => {
     );
   });
 
+  it("says what to try when the server refuses to start Google sign-in", async () => {
+    serve({
+      "GET /api/health": healthy,
+      "GET /api/session": signedOut,
+      "GET /api/session/options": google,
+      "POST /api/auth/sign-in/social": { status: 403, body: { message: "Missing or null Origin", code: "MISSING_OR_NULL_ORIGIN" } },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in with Google" }));
+    const alert = (await screen.findByRole("alert")).textContent ?? "";
+    expect(alert).toContain("Your browser did not say that this sign-in came from");
+    expect(alert).toContain("extensions");
+    expect(alert).not.toContain("did not answer");
+  });
+
   it("says why Google sign-in was refused, and takes the code out of the address", async () => {
     window.history.replaceState(null, "", "/app?error=NOT_INVITED&error_description=x");
     serve({ "GET /api/health": healthy, "GET /api/session": signedOut, "GET /api/session/options": google });
