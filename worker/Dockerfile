@@ -61,9 +61,11 @@ FROM ${BASE}
 ENV DEBIAN_FRONTEND=noninteractive
 # Gmsh's wheel links against these system libraries even when run headless.
 # CalculiX's runtime libraries (ADR-063): the solvers' and CUDA's, which the PaStiX build links.
+# ca-certificates: machines on AWS reach the site over https (M10.9); without it every call
+# fails with CERTIFICATE_VERIFY_FAILED.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      python3.12 \
+      python3.12 ca-certificates \
       libarpack2t64 libspooles2.2t64 libscotch-7.0 libhwloc15 liblapacke libopenblas0-pthread \
       libgfortran5 libcublas12 libcudart12 \
       libgl1 libglu1-mesa libgomp1 libxrender1 libxcursor1 libxft2 libxinerama1 \

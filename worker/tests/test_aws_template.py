@@ -88,3 +88,11 @@ def test_the_launch_parameter_names_both_families_for_the_api() -> None:
         if entry:
             expected["large"] = "clearfea-large"
         assert value["taskDefinitions"] == expected
+
+
+def test_the_worker_image_trusts_public_certificates() -> None:
+    """The machines reach the site over https, which needs the system's CA certificates in the
+    image's last stage, not only in the build stages (M10.9)."""
+    dockerfile = (Path(__file__).resolve().parents[1] / "Dockerfile").read_text()
+    final_stage = dockerfile.rsplit("\nFROM ", 1)[1]
+    assert re.search(r"apt-get install[^&]*\bca-certificates\b", final_stage)
