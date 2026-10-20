@@ -40,7 +40,9 @@ export function awsAccess(env: Env, fetcher: Fetch): AwsAccess | { problem: stri
   if (!region || !accessKeyId || !secretAccessKey) {
     return { problem: `The API cannot start solver machines: ${missing.join(", ")} not set (docs/DEPLOYMENT.md section 4).` };
   }
-  return { region, credentials: { accessKeyId, secretAccessKey }, fetch: fetcher };
+  // Wrapped, not stored as is: workerd's fetch throws "Illegal invocation" when called as
+  // `access.fetch(...)`, a method of another object.
+  return { region, credentials: { accessKeyId, secretAccessKey }, fetch: (request) => fetcher(request) };
 }
 
 export class AwsError extends Error {}

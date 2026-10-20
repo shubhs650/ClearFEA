@@ -191,7 +191,10 @@ function fakeAws(runTask: (body: Record<string, unknown>) => Response = () =>
   Response.json({ tasks: [{ taskArn: "arn:aws:ecs:ap-south-1:123456789012:task/clearfea/abc" }], failures: [] }),
 ) {
   const requests: { url: string; target: string; authorization: string; body: Record<string, unknown> }[] = [];
-  const fetcher = async (request: Request) => {
+  // Like workerd's own fetch, which throws "Illegal invocation" when called as a method of
+  // another object, as the live site's launcher once did.
+  const fetcher = async function (this: unknown, request: Request) {
+    if (this !== undefined) throw new TypeError("Illegal invocation: function called with incorrect `this` reference.");
     const body = JSON.parse(new TextDecoder().decode(await request.arrayBuffer())) as Record<string, unknown>;
     const target = request.headers.get("x-amz-target") ?? "";
     requests.push({ url: request.url, target, authorization: request.headers.get("authorization") ?? "", body });
