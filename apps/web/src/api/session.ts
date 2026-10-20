@@ -38,9 +38,21 @@ export async function startGoogleSignIn(): Promise<ApiResult<undefined>> {
     callbackURL: WORKBENCH_PATH,
     errorCallbackURL: WORKBENCH_PATH,
   });
+  if (result.kind === "error" && result.problem.endsWith("(HTTP 403)")) {
+    return { kind: "error", problem: googleStartRefused() };
+  }
   if (result.kind !== "ok") return result;
   window.location.assign(result.value.url);
   return { kind: "ok", value: undefined };
+}
+
+/**
+ * Better Auth refuses the start with 403 when the browser did not say which site the request
+ * came from (no Origin or Referer header, as some privacy extensions and settings do) or named
+ * another site. Its own answer is not a ClearFEA error, so the screen says what to try.
+ */
+export function googleStartRefused(): string {
+  return `Your browser did not say that this sign-in came from ${window.location.origin}, so it was refused (HTTP 403). Open ${window.location.origin}/app by typing it in the address bar, or try a private window with extensions turned off; privacy and ad-blocking extensions can cause this.`;
 }
 
 /** Better Auth's own answer, not a ClearFEA shape: only the address to go to is read. */
