@@ -1004,3 +1004,27 @@ def test_reconciliation_finds_each_kind_of_mismatch() -> None:
     wallet["entries"].insert(0, _entry(4, -5, 99_997_217, "storage"))
     wallet.update(balance=99_997_217, charged=-2_783)
     assert [r.ok for r in reconcile(wallet, runs)] == [True, True, True, True, False]
+
+
+def test_a_poll_rides_out_a_dropped_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+
+    from harness import client as client_module
+
+    answers: list[object] = [
+        {"run": {"status": "solving"}},
+        urllib.error.URLError(ConnectionResetError(104, "Connection reset by peer")),
+        {"run": {"status": "succeeded"}},
+    ]
+
+    def answer(self: client_module.Client, method: str, path: str, body: object = None) -> object:
+        reply = answers.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(client_module.Client, "json", answer)
+    monkeypatch.setattr(client_module.time, "sleep", lambda seconds: None)
+    api = client_module.Client("https://example.test")
+    assert api.wait("/api/runs/1", "run", {"solving"}, 60)["status"] == "succeeded"
+    assert answers == []
