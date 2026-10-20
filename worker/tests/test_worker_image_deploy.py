@@ -7,6 +7,7 @@ against a stand-in `aws` command that answers as the AWS CLI does and records wh
 
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -275,11 +276,16 @@ def test_the_names_and_permissions_match_the_aws_stack() -> None:
         if resource["Type"] == "AWS::ECS::TaskDefinition":
             [container] = resource["Properties"]["ContainerDefinitions"]
             assert container["Name"] == "worker"
-    [policy] = resources["DeployRole"]["Properties"]["Policies"]
+    policies = resources["DeployRole"]["Properties"]["Policies"]
+    assert {policy["PolicyName"] for policy in policies} == {
+        "deploy-worker-image",
+        "clearfea-read-machine-logs",  # the name the maintainer gave it by hand (M10.9)
+    }
     granted = set()
-    for statement in policy["PolicyDocument"]["Statement"]:
-        actions = statement["Action"]
-        granted.update([actions] if isinstance(actions, str) else actions)
+    for policy in policies:
+        for statement in policy["PolicyDocument"]["Statement"]:
+            actions = statement["Action"]
+            granted.update([actions] if isinstance(actions, str) else actions)
     used = {
         "cloudformation:DescribeStacks",
         "ecr:GetAuthorizationToken",
@@ -293,6 +299,11 @@ def test_the_names_and_permissions_match_the_aws_stack() -> None:
         "ecs:DescribeTaskDefinition",
         "ecs:RegisterTaskDefinition",
         "iam:PassRole",
+        # the Machine logs workflow
+        "ecs:ListTasks",
+        "ecs:DescribeTasks",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
     }
     assert used <= granted
     workflow = (REPO / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
@@ -300,4 +311,13 @@ def test_the_names_and_permissions_match_the_aws_stack() -> None:
     subjects = resources["DeployRole"]["Properties"]["AssumeRolePolicyDocument"]["Statement"][0][
         "Condition"
     ]["StringLike"]["token.actions.githubusercontent.com:sub"]
-    assert {"Sub": "repo:${GitHubRepository}:environment:production"} in subjects
+    # GitHub names some repositories by numeric ids in the token (owner@id/name@id).
+    condition, with_ids, without_ids = subjects["If"]
+    assert condition == "RepositoryIds"
+    assert {"Sub": "repo:${GitHubRepositoryIds}:environment:production"} in with_ids
+    for names in (with_ids, without_ids):
+        assert {"Sub": "repo:${GitHubRepository}:environment:production"} in names
+    assert re.fullmatch(
+        template["Parameters"]["GitHubRepositoryIds"]["AllowedPattern"].split("|")[1],
+        template["Parameters"]["GitHubRepositoryIds"]["Default"],
+    )

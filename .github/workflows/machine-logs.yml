@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Machine logs (M10.9): why the latest solver machines on AWS stopped, and the end of their
 # worker logs, read with the deploy role. Started by hand from the Actions tab; it only reads.
-# The deploy role needs ecs:ListTasks, ecs:DescribeTasks and logs:GetLogEvents on the worker log
-# group (docs/DEPLOYMENT.md section 8); without them the steps say which call AWS refused.
+# The deploy role's clearfea-read-machine-logs policy (infra/aws/clearfea.yaml) grants the reads;
+# without them the steps say which call AWS refused.
 name: Machine logs
 
 on:

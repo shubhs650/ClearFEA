@@ -66,7 +66,7 @@ There is no button to give an account more credits yet. If someone runs out, ask
 
 Standard is always on. To switch on large, do both steps in this order:
 
-1. AWS → **CloudFormation** → `clearfea` → **Update** → **Use existing template** → `LargeSizeEnabled` = `true` → **Next** to the end → **Submit** (DEPLOYMENT.md section 7.3).
+1. AWS → **CloudFormation** → `clearfea` → **Update** → **Replace existing template** → upload the current `clearfea.yaml` from the repository → `LargeSizeEnabled` = `true` → **Next** to the end → **Submit** (DEPLOYMENT.md section 7.3).
 2. Admin page → **Machine sizes** → tick **large**.
 
 Runs then offer large next to standard. Until it is benchmarked it allows no bigger model, only a faster machine, so leave it off unless an engineer needs it. To switch it off, untick it: queued jobs for it fail without charge if no large machine is running, and a running one finishes its work.

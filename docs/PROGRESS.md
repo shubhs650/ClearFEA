@@ -439,6 +439,10 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 
 Newest first. One entry per session: date, what was done, what was learned.
 
+### 2026-10-20
+
+- M10.10 follow-up: `infra/aws/clearfea.yaml` now holds what the maintainer added to the deploy role by hand, so a stack update keeps it: the trust policy also allows GitHub's numeric-id name for this repository (new parameter `GitHubRepositoryIds`, default `shubhs650@221185337/ClearFEA@1419578936`), and the read-only `clearfea-read-machine-logs` policy the Machine logs workflow uses. Learned: GitHub names some repositories `owner@id/name@id` in the OIDC `sub`, which a trust policy written as `owner/name` refuses; the deploy now prints the `sub` when AWS refuses it. The live stack takes this at its next update (DEPLOYMENT.md 4.3); until then the hand-made role is identical.
+
 ### 2026-10-19
 
 - M10.10 follow-up: the maintainer's first manual Deploy failed in the fast tier on the flaky Setup.test.tsx "puts the system back and says why when the API refuses the change". Cause: the project's unit system, loading after a refused change, cleared the refusal and drew over the choice (the parked E-02 item). `useProject` now keeps a system chosen before the project has loaded; a new test holds the load back and fails without the fix. Learned: a deploy reruns the fast tier, so a flaky test now blocks going live.
