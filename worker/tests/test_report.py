@@ -378,6 +378,21 @@ def test_thermal_run_has_a_heat_balance() -> None:
     assert "Reactions" not in text
 
 
+def test_a_value_given_only_as_a_table_is_not_reported_missing() -> None:
+    params = static_params()
+    material = params["run"]["spec"]["materials"][0]
+    material["youngsModulus"] = None
+    material["youngsModulusTable"] = {
+        "temperatureUnit": "°C",
+        "unit": "GPa",
+        "rows": [{"temperature": 20, "value": 200}, {"temperature": 300, "value": 180}],
+    }
+    text = texts(build(params))
+    assert "Young's modulus | Varies with temperature (table below)" in text
+    assert "Young's modulus | (not entered)" not in text
+    assert "Poisson's ratio | 0.3" in text
+
+
 def test_modal_run_lists_frequencies() -> None:
     params = static_params()
     params["run"]["spec"]["analysis"] = "modal"

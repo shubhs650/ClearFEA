@@ -2,12 +2,13 @@
   {
     "file": "suite.md",
     "title": "Verification cases",
-    "description": "the [phase-end run](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289) on `main` at commit c34302a on 2026-10-17, which closed M8 (`make verify` in GitHub Actions, ADR-037)."
+    "description": "the [phase-end run](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085) on `main` at commit 8a665bf on 2026-10-20, which closed M10 (`make verify` in GitHub Actions, ADR-037).",
+    "note": "The same 26 cases also ran on the live site, https://clearfea.triyalabs.com, on its standard solver machine (4 vCPU, 16 GB) at the coarse tier: 307 of 307 checks within tolerance ([Live checks run 39430740324](https://github.com/shubhs650/ClearFEA/actions/runs/39430740324), commit ec3dd18, 2026-10-20). A model at each solver's element limit (ADR-063) also ran there, all ten to completion ([runs 39439642986](https://github.com/shubhs650/ClearFEA/actions/runs/39439642986) and [39449881370](https://github.com/shubhs650/ClearFEA/actions/runs/39449881370))."
   },
   {
     "file": "acceptance.md",
     "title": "Acceptance cases",
-    "description": "a local `VERIFY_TIER=full CASES=\"A B\" make verify` on `main` at commit 1da1550 on 2026-10-17, in the Claude Code cloud development environment (the phase-end run does not run them).",
+    "description": "the [Live checks run](https://github.com/shubhs650/ClearFEA/actions/runs/39434864276) on `main` at commit ec3dd18 on 2026-10-20, against the live site https://clearfea.triyalabs.com on its standard solver machine (4 vCPU, 16 GB; ADR-095, ADR-104). The phase-end run does not run them.",
     "note": "The two acceptance models of Phase 0 (VERIFICATION.md, Acceptance cases): A, a nozzle with a reinforcing pad on a cylindrical shell under pressure and a piping load; B, thermal stress in a thick-walled flanged pipe. The rows below are the checks with a hand-calculated value. The WRC-style comparison (A) and the FreeCAD FEM comparisons (A and B) are written up, with their numbers, in each case's hand_checks.md and are not repeated here."
   }
 ]

@@ -9,7 +9,7 @@ ClearFEA runs on your own machine with the same one command the project uses for
 | Platform | Status |
 | --- | --- |
 | Linux with Docker Engine (Ubuntu 24.04, x86-64) | Checked: the project is developed and tested this way, and every milestone's verification and browser tests pass on it. |
-| Windows 10/11 with Docker Desktop and WSL 2 | Not yet checked. The steps below are what should work; the run on the project's verification laptop (an i5 10th-generation class machine with 16 GB, PLAN task M9.2) has not happened yet. |
+| Windows 10/11 with Docker Desktop and WSL 2 | Runs: the maintainer installed and ran it on his Windows laptop on 2026-10-19 (PLAN task M9.2), after some trouble setting up WSL and Docker. The steps below were not confirmed one by one; expect to need some familiarity with WSL and Docker. |
 | macOS with Docker Desktop | Not checked. The worker image is built for x86-64; on Apple silicon it would run under emulation, slowly if at all. |
 
 Where a step below is marked *not checked*, it has not been run by the project. Please report what you find.
@@ -59,7 +59,7 @@ Install Docker Engine from Docker's own instructions for your distribution and s
 
 The helper scripts that write the tutorial model and the test models use Gmsh on the host, which needs the system's OpenGL libraries even without a screen. On Ubuntu: `sudo apt-get install libglu1-mesa libxcursor1 libxinerama1 libxft2`.
 
-### Windows (not checked)
+### Windows (runs; steps not confirmed one by one)
 
 1. Install [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/) with the WSL 2 back end, and a Linux distribution in WSL (Ubuntu 24.04).
 2. In Docker Desktop, under Settings, Resources, WSL integration, turn on your distribution.

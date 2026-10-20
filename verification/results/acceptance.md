@@ -16,7 +16,7 @@ Tier: full
 | A | Reactions balance the applied load | applied 5.6949e+05, -3000, -5963.6 N | reactions -5.6949e+05, 3000, 5999.9 N | 0.0007 % of 5.3464e+06 N | 0.1 % | pass |
 | A | The run's balance check closes | force and moment | force 9.9e-08 %, moment 8.4e-09 % | 0.0000 % | 0.1 % | pass |
 | A | Solver log has no unexpected warnings | none | none |  |  | pass |
-| A | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 116 s, charged True, 1 entry |  |  | pass |
+| A | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 58 s, charged True, 1 entry |  |  | pass |
 | B | STEP length unit detected | mm | mm |  | equal | pass |
 | B | Bore temperature away from the flange | 233.86 °C | 233.86 °C (1110 vertices) | -0.00 % | 0.2 % | pass |
 | B | Outside temperature away from the flange | 153.03 °C | 153.02 °C (1647 vertices) | -0.00 % | 0.2 % | pass |
@@ -30,14 +30,14 @@ Tier: full
 | B | Reactions balance the applied load | applied 0, 0, 0 N | reactions -0.016799, -0.00013126, -0.0060359 N | 0.0000 % of 4.6837e+06 N | 0.1 % | pass |
 | B | The run's balance check closes | force and moment | force 3.8e-07 %, moment 1.6e-07 % | 0.0000 % | 0.1 % | pass |
 | B | Solver log has no unexpected warnings | none | none |  |  | pass |
-| B | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 228 s, charged True, 1 entry |  |  | pass |
-| Ledger | Every running balance is the previous one plus the entry | 5 entries chained | 5 entries chained |  | exact | pass |
-| Ledger | Wallet balance equals the sum of the ledger | 99.863334 credits | 99.863334 credits |  | exact | pass |
-| Ledger | Each job charge is its billed seconds at its rate | 4 jobs, 0.136666 credits | 0.136666 credits |  | exact | pass |
-| Ledger | Each charged run has one entry for exactly its recorded cost | 2 runs, 0.127777 credits | 2 runs matched |  | exact | pass |
+| B | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 114 s, charged True, 1 entry |  |  | pass |
+| Ledger | Every running balance is the previous one plus the entry | 59 entries chained | 59 entries chained |  | exact | pass |
+| Ledger | Wallet balance equals the sum of the ledger | 99.865837 credits | 99.865837 credits |  | exact | pass |
+| Ledger | Each job charge is its billed seconds at its rate | 58 jobs, 0.134163 credits | 0.134163 credits |  | exact | pass |
+| Ledger | Each charged run has one entry for exactly its recorded cost | 2 runs, 0.047778 credits | 2 runs matched |  | exact | pass |
 | Ledger | No entry without a job other than the grant | none | none |  | exact | pass |
 
-- A Nozzle with reinforcing pad on a cylindrical shell: mesh 12 mm, 123317 elements, 248060 nodes; 147 s; solve estimated 472 s, billed 116 s; clearfea 0.0.0+1da1550, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- B Thermal stress in a thick-walled flanged pipe: mesh 6 mm, 119405 elements, 176853 nodes; 245 s; solve estimated 261 s, billed 228 s; clearfea 0.0.0+1da1550, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- A Nozzle with reinforcing pad on a cylindrical shell: mesh 12 mm, 123317 elements, 248060 nodes; 146 s; solve estimated 472 s, billed 58 s; clearfea 0.0.0+ec3dd185675ab368bf069b7c475efb753e1ec628, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- B Thermal stress in a thick-walled flanged pipe: mesh 6 mm, 119405 elements, 176853 nodes; 150 s; solve estimated 261 s, billed 114 s; clearfea 0.0.0+ec3dd185675ab368bf069b7c475efb753e1ec628, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
 
 34 of 34 checks passed, 2 cases.
