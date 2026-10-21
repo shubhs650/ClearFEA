@@ -97,6 +97,8 @@ A force is a total, spread over its faces in proportion to their area. For a loa
 
 The other supports are prescribed displacement, frictionless (a symmetry plane) and elastic (springs normal to the face). The other structural loads are pressure, remote force and moment, hydrostatic pressure, gravity, centrifugal load and a uniform temperature change. Each panel says in one line what the item does.
 
+**Supports on edges.** A fixed support or a prescribed displacement can also hold edges, for a line support such as a plate resting on one line. Open the support and set **Click in the viewer to select** to **Edges**: the viewer draws the edges, the one under the pointer and the selected ones wider and coloured. Click the edges, then choose **Use the selected edges**. Stresses right next to a held edge are not meaningful (a line support is a point of infinite stress in theory); the reaction is exact. A mesh made before edge supports existed is made again: the Mesh item asks for it.
+
 Before a run, ClearFEA checks for free that every body has a material, that the model is held against rigid-body motion, and that every item has its faces and values. What is missing is listed at the top of the panel and in the Run panel.
 
 ## 6. Mesh

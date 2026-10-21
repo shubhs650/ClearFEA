@@ -165,6 +165,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 - [ ] M9.7 Publish the verification results page.
 - [ ] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found.
 - [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome.
+- [ ] M9.10 Supports on edges (fixed and prescribed displacement, picked in the viewer) and V-23, NAFEMS LE10, in `make verify` (ADR-105). Added 2026-10-21 at the maintainer's request, since V-23 was listed but needed a support on an edge.
 
 **Exit:** all eight gate conditions met. Since ADR-095, gate items 1 and 4 are met on the live standard machine and item 8 by the invited colleagues on the live site; since 2026-10-21 there is no laptop run (M9.2 removed), and M9 closes after them.
 
