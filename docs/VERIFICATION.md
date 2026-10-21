@@ -177,7 +177,7 @@ Run at the end of Phase 0 (M9). They are judged by the maintainer, not automated
 
 Checks for each:
 
-1. Completed start to finish in the UI on the laptop, with no file touched by hand.
+1. Completed start to finish in the UI, with no file touched by hand, and run on a 16 GB machine (the live standard machine; the laptop requirement was removed on 2026-10-21, ADR-095 item 12).
 2. Reaction balance closes.
 3. Stress away from discontinuities agrees with hand calculation (membrane stress for A, closed-form through-wall values for B).
 4. Local stresses for A compared with a WRC-style calculation, with the difference noted, since the two methods are known to differ.

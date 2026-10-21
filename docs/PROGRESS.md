@@ -6,8 +6,8 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M9 Gate, in progress (started 2026-10-17 under the maintainer's autodrive); M10 Live closed beta done 2026-10-20, the site is live at https://clearfea.triyalabs.com
-- **Next task:** M9.8, the invited colleagues' tutorial trial on the live site, then M9.9, the maintainer's walk of the gate (a draft of it is in the Close M9 handoff note). Every agent task of M9 is done.
-- **Blocked on:** the maintainer: inviting the first colleagues (`docs/ADMIN_GUIDE.md` section 1) for M9.8, the M9.9 sign-off, the ADR review list (ADR-091 to ADR-104) and the V-23 decision (Close M9 handoff note)
+- **Next task:** V-23 (NAFEMS LE10) with edge supports, in its own thread; then M9.9, the maintainer's sign-off of the gate walk (Close M9 handoff note). M9.8 is met (2026-10-21).
+- **Blocked on:** nothing for the agents; M9.9 waits on V-23 and then on the maintainer's sign-off
 
 ## Milestones
 
@@ -22,7 +22,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M6 | Modal | Done (phase-end run on main green, [run 38991537033](https://github.com/shubhs650/ClearFEA/actions/runs/38991537033)) | 2026-10-17 |
 | M7 | Report | Done (phase-end run on main green, [run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) | 2026-10-17 |
 | M8 | Platform | Done (phase-end run on main green, [run 39023659289](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289); verify 307 of 307 with the ledger reconciling over 26 cases, E-01 to E-07) | 2026-10-17 |
-| M9 | Gate | In progress: every agent task done (Close M9, 2026-10-20); waiting on the maintainer for M9.8 (colleagues' trial) and M9.9 (sign-off) | |
+| M9 | Gate | In progress: every gate item has its evidence except V-23 (edge supports and NAFEMS LE10, in progress); then the maintainer's M9.9 sign-off | |
 | M10 | Live closed beta | Done (phase-end run on main green, [run 39475421085](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085), full tier 307 of 307, E-01 to E-08; live quick tier 307 of 307 and cases A and B 34 of 34 in M10.9; the colleagues' first sign-in and tutorial move to M9.8) | 2026-10-20 |
 
 Status values: Not started, In progress, Verifying, Done.
@@ -34,14 +34,14 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M9 Gate
 
 - [x] M9.1 Run a model at each solver's element limit (ADR-063) in the development environment; fix what breaks (`python -m harness.limits`, ADR-093)
-- [ ] M9.2 Set up and run on the laptop; demonstrate the laptop tier; fix viewer performance. (Shubham installed and ran the prototype on Windows, Docker Desktop on WSL 2, on 2026-10-19 after WSL and Docker setup hiccups, and judged the setup too much to ask of his colleagues, which led to the live closed beta, ADR-095. He gave no detail on which cases he ran or on viewer speed. Under ADR-095 item 12 gate items 1 and 4 ran on the live standard machine instead (M10.9). **Open for M9.9**: whether that run covers the rest of M9.2, or he wants the cases or a large model's viewer tried on the laptop.)
+- [x] ~~M9.2 Set up and run on the laptop; demonstrate the laptop tier; fix viewer performance.~~ Removed by Shubham on 2026-10-21: no local laptop requirement (ADR-095 item 12, amended). He had installed and run it on Windows, Docker Desktop on WSL 2, on 2026-10-19 after WSL and Docker setup hiccups; the 16 GB checks ran on the live standard machine (M10.9).
 - [x] M9.3 User guide for the main flow; self-hosting instructions (`docs/USER_GUIDE.md` with the plate-with-hole tutorial, `docs/SELF_HOSTING.md`; the Windows steps are checked in M9.2)
 - [x] M9.4 Build the two acceptance models as original geometry that can be published (`verification/acceptance/`)
 - [x] M9.5 Acceptance case A: nozzle, shell and pad under pressure and nozzle loads. Hand checks and FreeCAD FEM comparison. (Done in the development environment, `verification/acceptance/A-nozzle-on-shell/hand_checks.md`; Shubham counted check 5 as met and the report as good enough for the gate on 2026-10-17; the 16 GB run is M10.9's on the live standard machine, 34 of 34 with case B, ADR-095 item 12.)
 - [x] M9.6 Acceptance case B: thermal stress. Hand checks and FreeCAD FEM comparison. (Done in the development environment, `verification/acceptance/B-flanged-pipe-thermal/hand_checks.md`; Shubham approved case B on 2026-10-18; the 16 GB run is M10.9's on the live standard machine, ADR-095 item 12.)
 - [x] M9.7 Publish the verification results page. (Rebuilt at Close M9 from M10's phase-end run 39475421085 and the live acceptance run 39434864276, ADR-092.)
-- [ ] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found. **Waiting on Shubham**: he invites the colleagues on the live site (`docs/ADMIN_GUIDE.md` section 1, its trial notes table in section 7); a thread then fixes the top problems found.
-- [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome. **Waiting on Shubham** after M9.8: his sign-off on the gate walk drafted in the Close M9 handoff note.
+- [x] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found. (Shubham, 2026-10-21: "My colleague was able to run FEA individually", on the live site. He reported no problems to fix.)
+- [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome. **Waiting** for V-23 (edge supports and NAFEMS LE10, which Shubham asked to build on 2026-10-21), then his sign-off on the gate walk in the Close M9 handoff note. His answers of 2026-10-21 are not that sign-off.
 
 ### M10 Live closed beta
 
@@ -173,10 +173,10 @@ Things only the maintainer can do.
 - [x] Confirm Docker Desktop (or equivalent) runs on the verification laptop (Windows, WSL 2, 2026-10-19; M9.2)
 - [x] Live closed beta setup (done 2026-10-19 and 2026-10-20; the site went live 2026-10-19), `docs/DEPLOYMENT.md`: Cloudflare Workers Paid, R2, D1, account ID and tokens (section 1); Google OAuth client and admin email (2); two random keys (3); AWS account, region and the `clearfea` stack once M10.7 lands (4); everything into GitHub secrets and variables (5)
 - [x] Add `clearfea.triyalabs.com` to the Claude project environment's allowed domains (`docs/DEPLOYMENT.md` section 9; reachable from threads on 2026-10-20)
-- [ ] Invite the first two or three colleagues (`docs/ADMIN_GUIDE.md` section 1; read its "Before you invite anyone" first): this starts M9.8
-- [ ] Review ADR-091 to ADR-104 (one-line list in the Close M9 handoff note and pull request) and say which are accepted
-- [ ] Decide V-23 (NAFEMS LE10): build it, which needs a support on an edge line, or drop it from `VERIFICATION.md` (Close M9 handoff note)
-- [ ] M9.9: sign off the gate walk after M9.8 (draft in the Close M9 handoff note)
+- [x] Invite the first two or three colleagues (`docs/ADMIN_GUIDE.md` section 1): a colleague ran FEA on the live site on their own (2026-10-21, M9.8)
+- [x] Review ADR-091 to ADR-104: all accepted (2026-10-21)
+- [x] Decide V-23 (NAFEMS LE10): build it, with the edge supports it needs (2026-10-21)
+- [ ] M9.9: sign off the gate walk once V-23 is built (Close M9 handoff note)
 - [ ] At the next AWS stack change, update the `clearfea` stack with **Replace existing template** and the current `infra/aws/clearfea.yaml` (DEPLOYMENT.md 4.3), so the stack holds PR #134's deploy role fixes; do it while no job is running
 
 ## Verification status
@@ -196,18 +196,18 @@ Written by the last session for the next one. Replace, do not append.
 
 > Close M9 (2026-10-20): every agent task of M9 is done; M9 stays open for the maintainer's M9.8 (colleagues' trial on the live site), M9.9 (sign-off) and the M9.2 question below. The verification page (`docs/VERIFICATION_RESULTS.md`, ADR-092) is rebuilt: the verification cases from M10's phase-end run [39475421085](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085) (full tier, 307 of 307), the acceptance cases from the Live checks run [39434864276](https://github.com/shubhs650/ClearFEA/actions/runs/39434864276) on the live standard machine (34 of 34), and a note on the live quick tier and the ten limit models. Both tables were cut from the downloaded job logs with `python -m harness.page --from-log`. Listed but never built, found by checking the exit conditions: **V-23, NAFEMS LE10** (`VERIFICATION.md`, listed for M3, no PLAN task); pressure is covered by V-01, V-09, V-25 and case A, so gate item 2 holds, but LE10's supports include a line on an edge, which ClearFEA does not offer, so building it or dropping it is the maintainer's call (`VERIFICATION.md` now says so). The **opt-in public gallery** (DECISIONS, Platform decisions, Privacy) is in no milestone and no gate item; left for after the beta. Fixed: the report printed "Young's modulus (not entered)" when only a table against temperature was given (case B); it now says "Varies with temperature (table below)", for Poisson's ratio too.
 >
-> Draft of the M9.9 gate walk ("Phase 0 is done when", with ADR-095 item 12):
+> Draft of the M9.9 gate walk ("Phase 0 is done when", with ADR-095 item 12 as amended 2026-10-21; Shubham answered the open questions that day, and all ADRs 091 to 104 are accepted):
 >
 > | # | Condition | Evidence | State |
 > | --- | --- | --- | --- |
-> | 1 | Acceptance cases through the UI on 16 GB, reactions balanced, within tolerance of hand checks and FreeCAD, report fit for a reviewer | UI runs (Playwright clicking faces) and reports in the development environment (M9.5, M9.6; Shubham judged both reports good enough); the same models on the live standard machine through the API, 34 of 34 (M10.9) | Met, if a run through the API counts for the live machine; nobody has yet run A or B by hand in the live site's UI |
-> | 2 | Full suite green, every gate load and support covered | Phase-end run 39475421085, 307 of 307; coverage matrix in `VERIFICATION.md` | Met (V-23 not built, see above) |
+> | 1 | Acceptance cases through the UI and on 16 GB, reactions balanced, within tolerance of hand checks and FreeCAD, report fit for a reviewer | UI runs (Playwright clicking faces) and reports in the development environment (M9.5, M9.6; Shubham judged both reports good enough); the same models on the live standard machine through the API, 34 of 34 (M10.9) | Met: Shubham counted the live API run on 2026-10-21, no hand run needed |
+> | 2 | Full suite green, every gate load and support covered | Phase-end run 39475421085, 307 of 307; coverage matrix in `VERIFICATION.md` | Met for the cases built; V-23 (NAFEMS LE10, with edge supports) in progress, asked for by Shubham on 2026-10-21 |
 > | 3 | Estimates within margin on the benchmark set; ledger reconciles | `benchmarks/solver/check.py` in `make test` (ADR-081); ledger rows green in every phase-end and live run | Met (live estimates up to 8x cautious, parked) |
 > | 4 | A model at each element limit on 16 GB, responsive viewer | All ten on the live standard machine, results fetched in 7 to 25 s (M10.9); viewer opened on the largest runs in the development environment (M9.1) | Met for the runs; viewer speed on a laptop browser not measured |
-> | 5 | Fresh clone starts with one documented command | `make dev`, `docs/SELF_HOSTING.md`; Shubham's Windows run (M9.2) | Met |
+> | 5 | Fresh clone starts with one documented command | `make dev`, `docs/SELF_HOSTING.md`; Shubham's Windows run (2026-10-19) | Met |
 > | 6 | Data isolation proven by tests | `apps/api/test/isolation.test.ts` (M8.8, extended in M10.3); E-07 | Met |
 > | 7 | Short user guide | `docs/USER_GUIDE.md` (M9.3, M10.10) | Met |
-> | 8 | Two or three outside engineers complete the tutorial unaided | M9.8 | Waiting on the maintainer's invitations |
+> | 8 | Two or three outside engineers complete the tutorial unaided | M9.8: Shubham, 2026-10-21, "My colleague was able to run FEA individually" | Met, by Shubham's account |
 >
 > ADRs awaiting the maintainer's review (091 was his own card's decision, listed for completeness): 091 no-load balance measured against the run's nodal force scale; 092 verification page generated in the repository from the phase-end table, rebuilt by hand each milestone; 093 limit models on the development environment, job files streamed up to 5 GiB, dropped transfers retried; 094 UI redesign (header, ribbon, floating viewer controls, cut plane on geometry and mesh); 095 live closed beta on Cloudflare, Google allowlist and AWS Fargate on demand, gate items 1, 4 and 8 on the live site; 096 production configuration written at deploy time, workbench at `/app`, health reports the commit; 097 Better Auth Google sign-in in ClearFEA's users table, allowlist checked at user and session creation; 098 presigned R2 URLs signed in the API, valid for the stop limit plus an hour; 099 a cloud machine takes only its size's jobs and exits after 10 idle minutes or 12 hours; 100 the API starts Fargate machines itself, 60 machine-hours a month cap; 101 solver image tagged by its source and pinned by digest before the site deploys; 102 guides written for the live site, tutorial plate served by the site, admin guide; 103 "Starting a solver machine" note while a job waits; 104 live checks as one verification account with a secret token, workflow started by hand.
 
@@ -464,6 +464,10 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 ## Log
 
 Newest first. One entry per session: date, what was done, what was learned.
+
+### 2026-10-21
+
+- Close M9, Shubham's answers recorded: a colleague ran FEA on the live site on their own (M9.8); the live API run of cases A and B meets gate item 1 and the laptop requirement is removed (M9.2 dropped, ADR-095 item 12 amended, gate items 1 and 4 reworded); ADR-091 to ADR-104 accepted; V-23 to be built with edge supports in its own thread. M9 closes after V-23 and his M9.9 sign-off.
 
 ### 2026-10-20
 
