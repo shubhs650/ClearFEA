@@ -652,6 +652,10 @@ class MeshResult(BaseModel):
     """
     Triangles in the mesh display file.
     """
+    edges: Annotated[int | None, Field(ge=0)] = None
+    """
+    Edges of the geometry whose mesh segments mesh.bin keeps (version 2, ADR-105), for supports on edges. Absent from meshes made before edge supports.
+    """
     software: Software
     """
     Versions that made the mesh.
@@ -694,6 +698,10 @@ class MeshView(BaseModel):
     quality: MeshQuality | None
     """
     Null until the mesh is ready, and for meshes made before M2.8.
+    """
+    edges_kept: Annotated[bool, Field(alias="edgesKept")]
+    """
+    True when mesh.bin keeps the segments along the geometry's edges (ADR-105). A support on edges needs such a mesh; one made before edge supports has none, and the simulation's mesh is then made again.
     """
     created_at: Annotated[str, Field(alias="createdAt")]
 

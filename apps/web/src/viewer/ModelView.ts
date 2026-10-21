@@ -54,6 +54,9 @@ import {
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { type DisplayFace, type DisplayMesh, faceAtTriangle, faceOutlines, triangleEdges } from "./displayMesh";
 import { type EdgePolyline, type EdgeSegments, edgeSegments, nearestEdge } from "./edges";
 import { BAND_COLOURS, nearestCorner } from "./resultFields";
@@ -122,7 +125,15 @@ export const ISOMETRIC: readonly [number, number, number] = [1, 0.8, 1.2];
 const CLICK_SLOP_PX = 4;
 
 /** How near the pointer an edge must pass on screen to be hovered or picked. */
-const EDGE_SLOP_PX = 8;
+const EDGE_SLOP_PX = 10;
+
+/**
+ * Widths of the geometry's edges on screen while they are picked (M9, ADR-105): WebGL draws plain
+ * lines 1 px wide, too thin to see which edge is picked, so edges are wide lines, and the
+ * hovered and selected ones wider still.
+ */
+const EDGE_WIDTH_PX = 2.5;
+const PICKED_EDGE_WIDTH_PX = 6;
 
 /** What a click picks: faces, or (while edges are shown, M2.8) edges. */
 export type PickMode = "faces" | "edges";
@@ -186,7 +197,9 @@ export class ModelView {
   private surface: Mesh<BufferGeometry, MeshStandardMaterial> | null = null;
   private outlines: LineSegments | null = null;
   private edges: EdgeSegments | null = null;
-  private edgeLines: LineSegments | null = null;
+  private edgeLines: LineSegments2 | null = null;
+  /** The hovered and selected edges, drawn again wider over edgeLines. */
+  private pickedEdgeLines: LineSegments2 | null = null;
   private mode: PickMode = "faces";
   private hovered: number | null = null;
   private hoveredEdge: number | null = null;
@@ -431,10 +444,10 @@ export class ModelView {
     if (edges !== null) {
       this.setHovered(null);
       this.edges = edgeSegments(edges);
-      const geometry = new BufferGeometry();
-      geometry.setAttribute("position", new BufferAttribute(this.edges.positions, 3));
-      geometry.setAttribute("color", new BufferAttribute(new Float32Array(this.edges.positions.length), 3));
-      this.edgeLines = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true }));
+      const geometry = new LineSegmentsGeometry();
+      geometry.setPositions(this.edges.positions);
+      this.edgeLines = new LineSegments2(geometry, this.edgeMaterial(EDGE_WIDTH_PX, false));
+      this.edgeLines.renderOrder = 1;
       this.scene.add(this.edgeLines);
       this.paintEdges();
     }
@@ -610,38 +623,59 @@ export class ModelView {
     this.markerLayer.remove();
   }
 
+  /** A wide-line material `width` pixels wide, in the edge colour or the vertices' own. */
+  private edgeMaterial(width: number, vertexColors: boolean): LineMaterial {
+    const material = new LineMaterial({ linewidth: width, vertexColors, color: vertexColors ? 0xffffff : COLOURS.edge });
+    const size = this.renderer.getSize(new Vector2());
+    material.resolution.set(size.x, size.y);
+    return material;
+  }
+
+  private clearPickedEdges(): void {
+    if (this.pickedEdgeLines) {
+      this.scene.remove(this.pickedEdgeLines);
+      this.pickedEdgeLines.geometry.dispose();
+      this.pickedEdgeLines.material.dispose();
+    }
+    this.pickedEdgeLines = null;
+  }
+
   private clearEdges(): void {
     if (this.edgeLines) {
       this.scene.remove(this.edgeLines);
       this.edgeLines.geometry.dispose();
-      const material = this.edgeLines.material;
-      if (!Array.isArray(material)) material.dispose();
+      this.edgeLines.material.dispose();
     }
+    this.clearPickedEdges();
     this.edgeLines = null;
     this.edges = null;
     this.hoveredEdge = null;
     this.mode = "faces";
   }
 
+  /** (Re)draws the hovered and selected edges wide, in their colours, over the others. */
   private paintEdges(): void {
-    const attribute = this.edgeLines?.geometry.getAttribute("color");
-    if (!this.edges || !(attribute instanceof BufferAttribute)) return;
-    const colours = attribute.array as Float32Array;
+    this.clearPickedEdges();
+    if (!this.edges) return;
+    const positions: number[] = [];
+    const colours: number[] = [];
     for (const run of this.edges.runs) {
       const selected = this.selectedEdges.has(run.tag);
+      if (!selected && run.tag !== this.hoveredEdge) continue;
       const colour =
-        run.tag === this.hoveredEdge
-          ? selected
-            ? COLOURS.selectedHover
-            : COLOURS.hover
-          : selected
-            ? COLOURS.selected
-            : COLOURS.edge;
+        run.tag === this.hoveredEdge ? (selected ? COLOURS.selectedHover : COLOURS.hover) : COLOURS.selected;
       for (let p = run.firstPoint; p < run.firstPoint + run.pointCount; p++) {
-        colours.set([colour.r, colour.g, colour.b], p * 3);
+        positions.push(...this.edges.positions.subarray(p * 3, p * 3 + 3));
+        colours.push(colour.r, colour.g, colour.b);
       }
     }
-    attribute.needsUpdate = true;
+    if (positions.length === 0) return;
+    const geometry = new LineSegmentsGeometry();
+    geometry.setPositions(positions);
+    geometry.setColors(colours);
+    this.pickedEdgeLines = new LineSegments2(geometry, this.edgeMaterial(PICKED_EDGE_WIDTH_PX, true));
+    this.pickedEdgeLines.renderOrder = 2;
+    this.scene.add(this.pickedEdgeLines);
   }
 
   /**
@@ -875,6 +909,8 @@ export class ModelView {
     const width = Math.max(this.container.clientWidth, 1);
     const height = Math.max(this.container.clientHeight, 1);
     this.renderer.setSize(width, height);
+    // Wide lines are sized in pixels of the canvas.
+    for (const lines of [this.edgeLines, this.pickedEdgeLines]) lines?.material.resolution.set(width, height);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.requestRender();

@@ -40,13 +40,40 @@ describe("reading mesh.bin", () => {
     }
   });
 
+  it("reads a version 2 file, which adds the edges' segments (ADR-105)", () => {
+    for (const order of [1, 2] as const) {
+      const v1 = boxMesh(2, order);
+      // One edge of one segment: two counts after the version 1 header, a row and its nodes at the end.
+      const per = order + 1;
+      const v2 = new ArrayBuffer(v1.byteLength + 8 + 12 + per * 4);
+      const bytes = new Uint8Array(v2);
+      bytes.set(new Uint8Array(v1, 0, 32), 0);
+      bytes.set(new Uint8Array(v1, 32), 40);
+      const view = new DataView(v2);
+      view.setUint32(4, 2, true);
+      view.setUint32(32, 1, true);
+      view.setUint32(36, 1, true);
+      const end = v1.byteLength + 8;
+      view.setInt32(end, 7, true);
+      view.setUint32(end + 4, 0, true);
+      view.setUint32(end + 8, 1, true);
+      for (let k = 0; k < per; k++) view.setUint32(end + 12 + 4 * k, k, true);
+      const mesh = parseVolumeMesh(v2);
+      const plain = parseVolumeMesh(v1);
+      expect([...mesh.positions]).toEqual([...plain.positions]);
+      expect([...mesh.elements]).toEqual([...plain.elements]);
+      expect(mesh.bodies).toEqual(plain.bodies);
+      expect(() => parseVolumeMesh(v2.slice(0, v2.byteLength - 4))).toThrow(/do not match its header/);
+    }
+  });
+
   it("refuses a damaged file with a message that says what to do", () => {
     const buffer = boxMesh(1);
     expect(() => parseVolumeMesh(buffer.slice(0, buffer.byteLength - 4))).toThrow(VolumeMeshError);
     expect(() => parseVolumeMesh(buffer.slice(0, buffer.byteLength - 4))).toThrow(/Run the simulation again/);
     const other = buffer.slice(0);
-    new DataView(other).setUint32(4, 2, true);
-    expect(() => parseVolumeMesh(other)).toThrow(/version 2/);
+    new DataView(other).setUint32(4, 3, true);
+    expect(() => parseVolumeMesh(other)).toThrow(/version 3/);
     const wrong = buffer.slice(0);
     const elements = new Uint32Array(wrong, 32 + parseVolumeMesh(buffer).nodeCount * 24);
     elements[0] = 1_000_000;

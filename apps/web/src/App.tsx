@@ -2,6 +2,7 @@
 import {
   bodyLabels as labelBodies,
   bondIsTied,
+  supportEdges,
   type GeometryView,
   type IsotropicMaterial,
   type LocalMeshScope,
@@ -10,6 +11,7 @@ import {
   DEFAULT_STOP_MULTIPLIER,
   elementLimitProblem,
   preRunProblems,
+  sameMeshSettings,
   specRunKind,
   specSolver,
   type SessionUser,
@@ -45,6 +47,7 @@ import {
   addMaterial,
   addSupport,
   bodyOf,
+  EDGES_NOT_KEPT,
   facesOf,
   type Group,
   type ItemStatus,
@@ -98,8 +101,11 @@ export function App() {
   const [session, setSession] = useState<SessionState>({ kind: "checking" });
   const [geometry, setGeometry] = useState<GeometryView | null>(null);
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
-  // Edges picked in the viewer while a local size on edges is open (M2.8).
+  // Edges picked in the viewer while a local size on edges is open (M2.8), or a support picking
+  // edges (ADR-105).
   const [edgeSelection, setEdgeSelection] = useState<ReadonlySet<number>>(new Set());
+  // Whether an open fixed support or prescribed displacement picks edges instead of faces.
+  const [supportPicksEdges, setSupportPicksEdges] = useState(false);
   // The tree item whose settings are shown: "geometry", a group, or a spec item's id.
   const [selected, setSelected] = useState("geometry");
   const [geometryRefresh, setGeometryRefresh] = useState(0);
@@ -204,7 +210,12 @@ export function App() {
       if (mesh === null || mesh.status === "failed") {
         blockers.push({ message: "There is no mesh. Generate it under Mesh.", item: "mesh" });
       } else if (!meshIsCurrent(setup.spec, mesh)) {
-        blockers.push({ message: "The mesh settings changed after the mesh was made. Generate the mesh again.", item: "mesh" });
+        blockers.push({
+          message: sameMeshSettings(setup.spec, mesh)
+            ? EDGES_NOT_KEPT
+            : "The mesh settings changed after the mesh was made. Generate the mesh again.",
+          item: "mesh",
+        });
       } else if (mesh.status === "meshing") {
         blockers.push({ message: "The mesh is still being made. Wait for it to finish.", item: "mesh" });
       } else if (mesh.elementCount !== null) {
@@ -247,6 +258,13 @@ export function App() {
     }
     const local = localSizeOf(spec, id);
     if (local?.scope === "edges") setEdgeSelection(new Set(local.tags));
+    // A support on edges shows its edges, and picks edges when it holds no faces (ADR-105).
+    const support = spec.supports.find((s) => s.id === id);
+    if (support !== undefined) {
+      const edges = supportEdges(support);
+      setEdgeSelection(new Set(edges));
+      setSupportPicksEdges(edges.length > 0 && support.faces.length === 0);
+    }
     else if (local?.scope === "bodies") setSelection(new Set(bodyFaces(local)));
     const faces = facesOf(spec, id);
     if (faces !== null) setSelection(new Set(faces));
@@ -457,6 +475,10 @@ export function App() {
           support={support}
           status={status}
           selection={selection}
+          edgeSelection={edgeSelection}
+          edgesAvailable={setup.kind === "open" && setup.topology.edges !== undefined}
+          pickEdges={supportPicksEdges}
+          onPickEdgesChange={setSupportPicksEdges}
           onChange={change}
         />
       );
@@ -541,6 +563,9 @@ export function App() {
   const itemPanel = settings();
   // An item that is gone (for example after the setup was reloaded) shows the geometry instead.
   const showGeometry = itemPanel === null;
+  const openSupport = spec?.supports.find((s) => s.id === selected);
+  const pickingSupportEdges =
+    supportPicksEdges && (openSupport?.type === "fixed" || openSupport?.type === "displacement");
 
   return (
     <UnitSystemProvider value={unitSystem}>
@@ -617,7 +642,7 @@ export function App() {
         }
         selection={selection}
         onSelectionChange={setSelection}
-        pickEdges={!showGeometry && spec !== null && localSizeOf(spec, selected)?.scope === "edges"}
+        pickEdges={!showGeometry && spec !== null && (localSizeOf(spec, selected)?.scope === "edges" || pickingSupportEdges)}
         edgeSelection={edgeSelection}
         onEdgeSelectionChange={setEdgeSelection}
         simulationId={setup.kind === "open" ? setup.id : null}

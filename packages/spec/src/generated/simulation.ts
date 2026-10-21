@@ -857,6 +857,10 @@ export interface MeshResult {
    */
   surfaceTriangles: number;
   /**
+   * Edges of the geometry whose mesh segments mesh.bin keeps (version 2, ADR-105), for supports on edges. Absent from meshes made before edge supports.
+   */
+  edges?: number;
+  /**
    * Versions that made the mesh.
    */
   software: {
@@ -890,6 +894,10 @@ export interface MeshView {
    * Null until the mesh is ready, and for meshes made before M2.8.
    */
   quality: MeshQuality | null;
+  /**
+   * True when mesh.bin keeps the segments along the geometry's edges (ADR-105). A support on edges needs such a mesh; one made before edge supports has none, and the simulation's mesh is then made again.
+   */
+  edgesKept: boolean;
   createdAt: string;
 }
 /**

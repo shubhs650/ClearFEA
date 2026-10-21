@@ -30,6 +30,7 @@ import {
   type SpecProblem,
   simulationSpecProblems,
   specBonds,
+  supportEdges,
   supportKinds,
   type TableProperty,
   type TopologyTags,
@@ -193,11 +194,16 @@ function loadFaceProblem(load: Load, add: (item: string, message: string) => voi
   }
 }
 
-/** What the supports still need (M1.12, M2.2, M2.6): faces, a stiffness, every component. */
+/** What the supports still need (M1.12, M2.2, M2.6): faces (or edges, ADR-105), a stiffness, every component. */
 function supportProblems(spec: SimulationSpec, add: (item: string, message: string) => void) {
   for (const support of spec.supports) {
-    if (support.faces.length === 0) {
-      const what = { fixed: "to fix", displacement: "to move", frictionless: "it holds", elastic: "it supports" }[support.type];
+    if (support.type === "fixed" || support.type === "displacement") {
+      if (support.faces.length === 0 && supportEdges(support).length === 0) {
+        const what = support.type === "fixed" ? "to fix" : "to move";
+        add(support.id, `Support "${support.name}" has no faces or edges. Select the faces or edges ${what} and add them to it.`);
+      }
+    } else if (support.faces.length === 0) {
+      const what = { frictionless: "it holds", elastic: "it supports" }[support.type];
       add(support.id, `Support "${support.name}" has no faces. Select the faces ${what} and add them to it.`);
     }
     if (support.type === "elastic" && support.stiffness === null) {

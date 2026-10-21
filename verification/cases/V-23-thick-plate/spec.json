@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "analysis": "linear_static",
+  "geometryId": null,
+  "bodies": [{ "tag": 1, "material": "steel" }],
+  "materials": [
+    {
+      "id": "steel",
+      "name": "Steel (NAFEMS LE10 values)",
+      "model": "isotropic_elastic",
+      "youngsModulus": { "value": 210000, "unit": "MPa" },
+      "poissonsRatio": 0.3
+    }
+  ],
+  "supports": [
+    {
+      "id": "y0",
+      "type": "displacement",
+      "name": "Face DCD'C', uy = 0",
+      "faces": ["y0"],
+      "x": "free",
+      "y": { "value": 0, "unit": "mm" },
+      "z": "free"
+    },
+    {
+      "id": "x0",
+      "type": "displacement",
+      "name": "Face ABA'B', ux = 0",
+      "faces": ["x0"],
+      "x": { "value": 0, "unit": "in" },
+      "y": "free",
+      "z": "free"
+    },
+    {
+      "id": "outside",
+      "type": "displacement",
+      "name": "Face BCB'C', ux = uy = 0",
+      "faces": ["outside-lower", "outside-upper"],
+      "x": { "value": 0, "unit": "m" },
+      "y": { "value": 0, "unit": "mm" },
+      "z": "free"
+    },
+    {
+      "id": "mid-line",
+      "type": "displacement",
+      "name": "Line EE', uz = 0",
+      "faces": [],
+      "edges": ["mid-line"],
+      "x": "free",
+      "y": "free",
+      "z": { "value": 0, "unit": "mm" }
+    }
+  ],
+  "loads": [
+    {
+      "id": "pressure-1",
+      "type": "pressure",
+      "name": "Pressure on the upper face",
+      "faces": ["top"],
+      "magnitude": { "value": 1000, "unit": "kPa" }
+    }
+  ],
+  "mesh": {
+    "size": { "value": 100, "unit": "mm" },
+    "order": 2,
+    "local": [
+      {
+        "id": "hole",
+        "name": "Hole",
+        "scope": "faces",
+        "tags": ["hole-lower", "hole-upper"],
+        "size": { "value": 40, "unit": "mm" }
+      }
+    ]
+  }
+}

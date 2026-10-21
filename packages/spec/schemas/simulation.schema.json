@@ -688,6 +688,11 @@
         "nodes": { "type": "integer", "minimum": 4 },
         "elements": { "description": "Tetrahedra in the volume mesh.", "type": "integer", "minimum": 1 },
         "surfaceTriangles": { "description": "Triangles in the mesh display file.", "type": "integer", "minimum": 1 },
+        "edges": {
+          "description": "Edges of the geometry whose mesh segments mesh.bin keeps (version 2, ADR-105), for supports on edges. Absent from meshes made before edge supports.",
+          "type": "integer",
+          "minimum": 0
+        },
         "software": {
           "description": "Versions that made the mesh.",
           "type": "object",
@@ -705,7 +710,7 @@
       "description": "A mesh as its owner sees it.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "geometryId", "size", "order", "local", "status", "problem", "nodeCount", "elementCount", "quality", "createdAt"],
+      "required": ["id", "geometryId", "size", "order", "local", "status", "problem", "nodeCount", "elementCount", "quality", "edgesKept", "createdAt"],
       "properties": {
         "id": { "type": "string" },
         "geometryId": { "type": "string" },
@@ -717,6 +722,10 @@
         "nodeCount": { "type": ["integer", "null"] },
         "elementCount": { "type": ["integer", "null"] },
         "quality": { "description": "Null until the mesh is ready, and for meshes made before M2.8.", "oneOf": [{ "$ref": "#/$defs/MeshQuality" }, { "type": "null" }] },
+        "edgesKept": {
+          "description": "True when mesh.bin keeps the segments along the geometry's edges (ADR-105). A support on edges needs such a mesh; one made before edge supports has none, and the simulation's mesh is then made again.",
+          "type": "boolean"
+        },
         "createdAt": { "type": "string" }
       }
     },

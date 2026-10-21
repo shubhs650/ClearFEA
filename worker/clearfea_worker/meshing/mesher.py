@@ -485,6 +485,7 @@ def mesh_geometry(
         nodes=mesh.node_count,
         elements=mesh.element_count,
         surface_triangles=triangles,
+        edges=len(mesh.edges),
         quality=summary,
         software=MeshSoftware(gmsh=versions.gmsh, occt=versions.occt),
     )

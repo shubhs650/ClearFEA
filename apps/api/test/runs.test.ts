@@ -185,13 +185,13 @@ async function complete(jobId: string, body: Record<string, unknown>): Promise<v
 }
 
 /** Plays the worker: claims the mesh job, uploads both outputs, reports success. */
-async function runMesh(): Promise<ClaimResponse["job"]> {
+async function runMesh(result: MeshResult = RESULT): Promise<ClaimResponse["job"]> {
   const job = await claim("mesh");
   for (const name of ["mesh.bin", "display.bin"]) {
     const put = await call("PUT", transferPath(job, name, "upload"), { raw: `${name} content`, token: TOKEN });
     expect(put.status).toBe(200);
   }
-  await complete(job.id, { status: "succeeded", result: RESULT });
+  await complete(job.id, { status: "succeeded", result });
   return job;
 }
 
@@ -303,12 +303,37 @@ describe("starting a run", () => {
     expect(refused.status).toBe(409);
     const { error } = (await refused.json()) as { error: string };
     expect(error).toContain("The setup is not ready to run.");
-    expect(error).toContain(`Support "Fixed support 1" has no faces.`);
+    expect(error).toContain(`Support "Fixed support 1" has no faces or edges.`);
     expect(error).toContain("There is no load");
     const jobsAfter = await env.DB.prepare("SELECT COUNT(*) AS n FROM jobs").first<{ n: number }>();
     expect(jobsAfter?.n).toBe(jobsBefore?.n);
     const list = await call("GET", `/api/simulations/${id}/runs`, { cookie: alice });
     expect(((await list.json()) as { runs: unknown[] }).runs).toEqual([]);
+  });
+
+  it("asks for a new mesh when a support holds an edge and the mesh kept no edges (ADR-105)", async () => {
+    const withEdges: Topology = {
+      ...TOPOLOGY,
+      edges: [{ tag: 4, length: 0.1, bbox: [0, 0, 0, 0.1, 0, 0], faces: [1, 2], points: [0, 0, 0, 0.1, 0, 0] }],
+    };
+    const id = await simulation(fixture.mesh.size, withEdges);
+    const row = validateSimulationResponse(await (await call("GET", `/api/simulations/${id}`, { cookie: alice })).json());
+    if (!row.ok) throw new Error(row.errors.join(" "));
+    const spec = row.value.simulation.spec;
+    const onEdge = { ...spec, supports: spec.supports.map((s) => ({ ...s, faces: [], edges: [4] })) };
+    expect((await call("PUT", `/api/simulations/${id}/spec`, { json: onEdge, cookie: alice })).status).toBe(200);
+    await requestMesh(id);
+    await runMesh();
+    const refused = await startRun(id);
+    expect(refused.status).toBe(409);
+    expect((await refused.json()) as { error: string }).toEqual({
+      error: "A support holds an edge, and this mesh was made before ClearFEA kept edges. Generate the mesh again, then run.",
+    });
+    // The same settings make a new mesh now (the settings version changed), which keeps its edges.
+    await env.DB.prepare("UPDATE meshes SET edge_count = 12").run();
+    expect((await startRun(id)).status).toBe(201);
+    const job = await claim("solve");
+    expect(job.params).toMatchObject({ spec: { supports: [{ faces: [], edges: [4] }] } });
   });
 
   it("freezes every bond of the geometry into a run of a spec saved without its bond list (M4.3)", async () => {

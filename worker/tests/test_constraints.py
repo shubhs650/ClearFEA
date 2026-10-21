@@ -113,9 +113,7 @@ def test_a_fixed_support_on_one_straight_edge_leaves_the_turn_about_it_free() ->
     # The turn about the x axis through the edge, not about the part's own centre, so it is
     # not one of the named motions.
     assert free_motions(mesh, holds(spec, mesh)) == ["move in 1 other way"]
-    both = spec_with(
-        [{"id": "e", "type": "fixed", "name": "Edges", "faces": [], "edges": [1, 2]}]
-    )
+    both = spec_with([{"id": "e", "type": "fixed", "name": "Edges", "faces": [], "edges": [1, 2]}])
     assert free_motions(mesh, holds(both, mesh)) == []
 
 

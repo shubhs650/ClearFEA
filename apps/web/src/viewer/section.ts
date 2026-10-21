@@ -8,8 +8,9 @@
 // section by linear interpolation along that edge, without cutting again.
 
 const MAGIC = "CFVM";
-const VERSION = 1;
-const HEADER_BYTES = 32;
+const VERSION = 2;
+/** Version 2 (ADR-105) adds two counts to version 1's header and the edges' segments at the end. */
+const HEADER_BYTES = { 1: 32, 2: 40 } as const;
 
 /** The volume mesh as the cut needs it: nodes and element connectivity, 0-based. */
 export type VolumeMesh = {
@@ -33,16 +34,18 @@ const broken = (why: string) =>
 
 /** Reads and checks a mesh.bin file. Throws VolumeMeshError with a user-facing message. */
 export function parseVolumeMesh(buffer: ArrayBuffer): VolumeMesh {
-  if (buffer.byteLength < HEADER_BYTES) throw broken("the file is shorter than its header");
+  if (buffer.byteLength < HEADER_BYTES[1]) throw broken("the file is shorter than its header");
   const view = new DataView(buffer);
   const magic = String.fromCharCode(...new Uint8Array(buffer, 0, 4));
   if (magic !== MAGIC) throw broken("it does not start with CFVM");
   const version = view.getUint32(4, true);
-  if (version !== VERSION) {
+  if (version !== 1 && version !== 2) {
     throw new VolumeMeshError(
-      `The mesh file is format version ${version}, but this viewer reads only version ${VERSION}. Reload the page to get the current viewer.`,
+      `The mesh file is format version ${version}, but this viewer reads only versions 1 to ${VERSION}. Reload the page to get the current viewer.`,
     );
   }
+  const header = HEADER_BYTES[version];
+  if (buffer.byteLength < header) throw broken("the file is shorter than its header");
   const order = view.getUint32(8, true);
   if (order !== 1 && order !== 2) throw broken(`its element order ${order} is not 1 or 2`);
   const nodeCount = view.getUint32(12, true);
@@ -50,13 +53,21 @@ export function parseVolumeMesh(buffer: ArrayBuffer): VolumeMesh {
   const bodyCount = view.getUint32(20, true);
   const faceCount = view.getUint32(24, true);
   const entryCount = view.getUint32(28, true);
+  // The edges' segments (two or three nodes each) are not needed for a cut, only counted.
+  const edgeCount = version === 2 ? view.getUint32(32, true) : 0;
+  const segmentCount = version === 2 ? view.getUint32(36, true) : 0;
   const npe = order === 1 ? 4 : 10;
-  const elementsStart = HEADER_BYTES + nodeCount * 24;
-  const expected = elementsStart + elementCount * npe * 4 + (bodyCount + faceCount) * 12 + entryCount * 8;
+  const elementsStart = header + nodeCount * 24;
+  const expected =
+    elementsStart +
+    elementCount * npe * 4 +
+    (bodyCount + faceCount + edgeCount) * 12 +
+    entryCount * 8 +
+    segmentCount * (order + 1) * 4;
   if (expected !== buffer.byteLength) throw broken(`its ${buffer.byteLength} bytes do not match its header`);
   // The header keeps positions on an 8-byte boundary, so the arrays are views, not copies,
   // on a little-endian machine (every browser ClearFEA supports).
-  const positions = new Float64Array(buffer, HEADER_BYTES, nodeCount * 3);
+  const positions = new Float64Array(buffer, header, nodeCount * 3);
   const elements = new Uint32Array(buffer, elementsStart, elementCount * npe);
   for (let i = 0; i < elements.length; i++) {
     if ((elements[i] ?? 0) >= nodeCount) throw broken("an element uses a node that does not exist");

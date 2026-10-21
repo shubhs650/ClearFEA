@@ -52,6 +52,7 @@ import {
   type Solver,
   type SolveResult,
   stopLimitSeconds,
+  supportEdges,
   systemUnit,
 } from "@clearfea/spec";
 import { Fragment, useEffect, useState } from "react";
@@ -406,6 +407,8 @@ function percent(ratio: number): string {
 /** Reactions per support, totals per load and their balance (ADR-051). Numbers only. */
 function Reactions({ result, spec, units }: { result: SolveResult; spec: SimulationSpec; units: ResultUnits }) {
   const supportName = new Map(spec.supports.map((s) => [s.id, s.name]));
+  // A support on edges only takes its moment about its edges' centre (ADR-105).
+  const onEdges = new Set(spec.supports.filter((s) => s.faces.length === 0 && supportEdges(s).length > 0).map((s) => s.id));
   const loadName = new Map(spec.loads.map((l) => [l.id, l.name]));
   const balance = result.balance;
   return (
@@ -419,7 +422,8 @@ function Reactions({ result, spec, units }: { result: SolveResult; spec: Simulat
               <>
                 <br />
                 <span className="field-hint">
-                  moment {components(reaction.moment, units.moment, "moment")} about the faces' centre{" "}
+                  moment {components(reaction.moment, units.moment, "moment")} about the{" "}
+                  {onEdges.has(reaction.supportId) ? "edges'" : "faces'"} centre{" "}
                   {at(reaction.point, units.length)}
                 </span>
               </>

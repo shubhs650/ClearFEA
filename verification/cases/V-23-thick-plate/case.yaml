@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# V-23: NAFEMS LE10, a thick elliptic plate with an elliptic hole under pressure, held on its
+# outside face in x and y and on that face's mid-plane line in z (a support on an edge,
+# ADR-105). Reference value and its derivation: reference.md.
+id: V-23
+title: NAFEMS LE10, thick plate under pressure
+analysis: linear_static
+features: [support on an edge, prescribed displacement, pressure, local mesh refinement, mixed input units]
+geometry:
+  unit: mm
+# Each face by its bounding box, in the geometry's unit. The curved faces are split at the
+# mid-plane z = 0 (geometry.py); the flat ones are not.
+faces:
+  top: { min: [0, 0, 300], max: [3250, 2750, 300] }
+  y0: { min: [2000, 0, -300], max: [3250, 0, 300] }
+  x0: { min: [0, 1000, -300], max: [0, 2750, 300] }
+  outside-lower: { min: [0, 0, -300], max: [3250, 2750, 0] }
+  outside-upper: { min: [0, 0, 0], max: [3250, 2750, 300] }
+  hole-lower: { min: [0, 0, -300], max: [2000, 1000, 0] }
+  hole-upper: { min: [0, 0, 0], max: [2000, 1000, 300] }
+# Each edge by its bounding box, as faces: the outside face's mid-plane line, EE' in NAFEMS.
+edges:
+  mid-line: { min: [0, 0, 0], max: [3250, 2750, 0] }
+mesh:
+  coarse: { value: 150, unit: mm }
+  full: { value: 100, unit: mm }
+  # The size on the hole per tier, replacing the one in spec.json.
+  local:
+    hole:
+      coarse: { value: 50, unit: mm }
+      full: { value: 40, unit: mm }
+checks:
+  - name: Hoop stress σyy at point D (NAFEMS target -5.38 MPa)
+    quantity: stress.yy
+    face: top
+    # Point D, where the hole meets the plane y = 0 on the loaded face: one vertex.
+    box: { min: [1999, 0, 300], max: [2001, 1, 300] }
+    reference: { value: -5.38, unit: MPa }
+    tolerance: { coarse: 0.02, full: 0.01 }
+  - name: Mid-plane line carries the whole pressure load, z (p × area = 5.4487 MN)
+    quantity: reaction.z
+    support: mid-line
+    reference: { value: 5.4487, unit: MN }
+    tolerance: { coarse: 0.001, full: 0.001 }

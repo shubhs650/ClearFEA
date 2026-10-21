@@ -15,6 +15,7 @@ import {
   type RunView,
   type SavedView,
   type Support,
+  supportEdges,
   supportKinds,
   type Topology,
 } from "@clearfea/spec";
@@ -415,6 +416,12 @@ async function drawItem(
   view.setHiddenFaces(new Set());
   view.setSelection(new Set(faces));
   view.setMesh(model.mesh, "outlines", false);
+  // A support's edges (ADR-105) are drawn wide in the selection colour; setMesh clears them again.
+  const edges = new Set(figure.kind === "support" ? supportEdges(figure.support) : []);
+  if (edges.size > 0) {
+    view.setEdges((model.topology.edges ?? []).filter((e) => edges.has(e.tag)));
+    view.setEdgeSelection(edges);
+  }
   view.resetView(facingDirection(faces, model.normals), ITEM_MARGIN);
   view.setArrows(load === null ? [] : loadArrows(load, model.topology, model.normals, sizeOf(model.topology)));
   return { legend: null };

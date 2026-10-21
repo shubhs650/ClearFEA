@@ -27,6 +27,8 @@ export interface Mesh {
   nodeCount: number | null;
   elementCount: number | null;
   quality: MeshQuality | null;
+  /** Edges whose segments mesh.bin keeps (ADR-105); null for a mesh made before edge supports. */
+  edgeCount: number | null;
   jobId: string | null;
   createdAt: string;
 }
@@ -43,6 +45,7 @@ interface MeshRow {
   node_count: number | null;
   element_count: number | null;
   quality: string | null;
+  edge_count: number | null;
   job_id: string | null;
   created_at: string;
 }
@@ -60,6 +63,7 @@ function toMesh(row: MeshRow): Mesh {
     nodeCount: row.node_count,
     elementCount: row.element_count,
     quality: row.quality === null ? null : JSON.parse(row.quality),
+    edgeCount: row.edge_count,
     jobId: row.job_id,
     createdAt: row.created_at,
   };
@@ -212,13 +216,14 @@ export async function recordMeshOutcome(db: D1Database, job: Job, outcome: MeshO
     .prepare(
       `UPDATE meshes
           SET status = 'ready', problem = NULL, node_count = ?, element_count = ?, quality = ?,
-              updated_at = ${NOW}
+              edge_count = ?, updated_at = ${NOW}
         ${scope}`,
     )
     .bind(
       outcome.result.nodes,
       outcome.result.elements,
       JSON.stringify(outcome.result.quality),
+      outcome.result.edges ?? null,
       job.targetId,
       job.ownerId,
       job.id,
