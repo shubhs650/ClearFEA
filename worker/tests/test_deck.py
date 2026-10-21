@@ -114,6 +114,44 @@ def supports_spec() -> dict:
     return spec
 
 
+def edge_supports_spec() -> dict:
+    """Supports on edges (ADR-105): a fixed support on two edges through A, which holds every
+    rigid-body motion on its own, and a prescribed displacement on a third edge in mixed units."""
+    spec = fixture_spec()
+    spec["supports"] = [
+        {"id": "pins", "type": "fixed", "name": "Pinned edges", "faces": [], "edges": [1, 2]},
+        {
+            "id": "line",
+            "type": "displacement",
+            "name": "Moved line",
+            "faces": [],
+            "edges": [3],
+            "x": "free",
+            "y": {"value": 0.1, "unit": "mm"},
+            "z": {"value": 0, "unit": "in"},
+        },
+    ]
+    spec["loads"] = [spec["loads"][0] | {"faces": [3]}]
+    return spec
+
+
+def test_a_mesh_without_edges_is_refused_for_a_support_on_edges() -> None:
+    """A mesh made before edges were kept (mesh.bin version 1) has none (ADR-105)."""
+    mesh = two_tets(order=2)
+    old = VolumeMesh(mesh.order, mesh.positions, mesh.elements, mesh.bodies, mesh.faces)
+    with pytest.raises(DeckError, match="made before ClearFEA kept edges"):
+        deck(edge_supports_spec(), old)
+
+
+def test_a_support_on_faces_and_edges_holds_the_nodes_of_both() -> None:
+    spec = fixture_spec()
+    spec["supports"][0] |= {"faces": [1], "edges": [3]}
+    text = deck(spec, two_tets(order=1))
+    assert '** Fixed support fixed-1 "Fixed support 1", faces 1; edges 3\n*NSET, NSET=S1\n' in text
+    # Face 1 is A C D, edge 3 is D E: A, C, D and E.
+    assert "*NSET, NSET=S1\n1, 3, 4, 5\n" in text
+
+
 def loads_spec() -> dict:
     """The loads of M2.3 beside a pressure: a force on two faces in kN, gravity in g and a
     centrifugal load in rpm about a tilted axis, on a material with a density in lb/in³."""
@@ -637,6 +675,8 @@ SNAPSHOT_CASES = {
     "two-bodies-c3d10": (two_body_spec, lambda: two_tets(order=2, bodies=2)),
     "supports-c3d10": (supports_spec, lambda: two_tets(order=2)),
     "supports-turned-c3d4": (supports_spec, lambda: turned(two_tets(order=1))),
+    "edge-supports-c3d10": (edge_supports_spec, lambda: two_tets(order=2)),
+    "edge-supports-c3d4": (edge_supports_spec, lambda: two_tets(order=1)),
     "loads-c3d10": (loads_spec, lambda: two_tets(order=2)),
     "loads-two-bodies-c3d4": (two_body_loads_spec, lambda: two_tets(order=1, bodies=2)),
     "remote-c3d10": (remote_spec, lambda: two_tets(order=2)),
@@ -735,6 +775,9 @@ def broken(change) -> dict:  # type: ignore[no-untyped-def]
     [
         (lambda s: s.update(supports=[]), "no supports"),
         (lambda s: s["supports"][0].update(faces=[]), "has no faces"),
+        (lambda s: s["supports"][0].update(faces=[], edges=[]), "has no faces"),
+        (lambda s: s["supports"][0].update(edges=[3, 3]), "lists an edge more than once"),
+        (lambda s: s["supports"][0].update(edges=[9]), "edges [9], which the mesh does not have"),
         (lambda s: s["loads"][0].update(faces=[2, 2]), "more than once"),
         (lambda s: s["loads"][0].update(faces=[2, 9]), "faces [9], which the mesh"),
         (lambda s: s["loads"][0].update(magnitude=None), "magnitude has no value"),

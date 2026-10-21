@@ -6,8 +6,8 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M9 Gate, in progress (started 2026-10-17 under the maintainer's autodrive); M10 Live closed beta done 2026-10-20, the site is live at https://clearfea.triyalabs.com
-- **Next task:** V-23 (NAFEMS LE10) with edge supports, in its own thread; then M9.9, the maintainer's sign-off of the gate walk (Close M9 handoff note). M9.8 is met (2026-10-21).
-- **Blocked on:** nothing for the agents; M9.9 waits on V-23 and then on the maintainer's sign-off
+- **Next task:** M9.9, the maintainer's sign-off of the gate walk (handoff note). M9.8 is met (2026-10-21); M9.10, edge supports and V-23 (NAFEMS LE10), is done (2026-10-21).
+- **Blocked on:** the maintainer's M9.9 sign-off
 
 ## Milestones
 
@@ -22,7 +22,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M6 | Modal | Done (phase-end run on main green, [run 38991537033](https://github.com/shubhs650/ClearFEA/actions/runs/38991537033)) | 2026-10-17 |
 | M7 | Report | Done (phase-end run on main green, [run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) | 2026-10-17 |
 | M8 | Platform | Done (phase-end run on main green, [run 39023659289](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289); verify 307 of 307 with the ledger reconciling over 26 cases, E-01 to E-07) | 2026-10-17 |
-| M9 | Gate | In progress: every gate item has its evidence except V-23 (edge supports and NAFEMS LE10, in progress); then the maintainer's M9.9 sign-off | |
+| M9 | Gate | In progress: every gate item has its evidence, V-23 (NAFEMS LE10) included since M9.10; waits for the maintainer's M9.9 sign-off | |
 | M10 | Live closed beta | Done (phase-end run on main green, [run 39475421085](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085), full tier 307 of 307, E-01 to E-08; live quick tier 307 of 307 and cases A and B 34 of 34 in M10.9; the colleagues' first sign-in and tutorial move to M9.8) | 2026-10-20 |
 
 Status values: Not started, In progress, Verifying, Done.
@@ -41,7 +41,8 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M9.6 Acceptance case B: thermal stress. Hand checks and FreeCAD FEM comparison. (Done in the development environment, `verification/acceptance/B-flanged-pipe-thermal/hand_checks.md`; Shubham approved case B on 2026-10-18; the 16 GB run is M10.9's on the live standard machine, ADR-095 item 12.)
 - [x] M9.7 Publish the verification results page. (Rebuilt at Close M9 from M10's phase-end run 39475421085 and the live acceptance run 39434864276, ADR-092.)
 - [x] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found. (Shubham, 2026-10-21: "My colleague was able to run FEA individually", on the live site. He reported no problems to fix.)
-- [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome. **Waiting** for V-23 (edge supports and NAFEMS LE10, which Shubham asked to build on 2026-10-21), then his sign-off on the gate walk in the Close M9 handoff note. His answers of 2026-10-21 are not that sign-off.
+- [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome. **Waiting** for Shubham's sign-off on the gate walk in the handoff note (V-23 is built, M9.10). His answers of 2026-10-21 are not that sign-off.
+- [x] M9.10 Supports on edges (fixed and prescribed displacement, picked in the viewer) and V-23, NAFEMS LE10, in `make verify` (ADR-105; σyy at D −5.3854 MPa against −5.38, +0.10 %, full tier; E-09)
 
 ### M10 Live closed beta
 
@@ -176,7 +177,7 @@ Things only the maintainer can do.
 - [x] Invite the first two or three colleagues (`docs/ADMIN_GUIDE.md` section 1): a colleague ran FEA on the live site on their own (2026-10-21, M9.8)
 - [x] Review ADR-091 to ADR-104: all accepted (2026-10-21)
 - [x] Decide V-23 (NAFEMS LE10): build it, with the edge supports it needs (2026-10-21)
-- [ ] M9.9: sign off the gate walk once V-23 is built (Close M9 handoff note)
+- [ ] M9.9: sign off the gate walk (handoff note); V-23 is built (M9.10)
 - [ ] At the next AWS stack change, update the `clearfea` stack with **Replace existing template** and the current `infra/aws/clearfea.yaml` (DEPLOYMENT.md 4.3), so the stack holds PR #134's deploy role fixes; do it while no job is running
 
 ## Verification status
@@ -185,14 +186,16 @@ Things only the maintainer can do.
 | --- | --- | --- |
 | Fast (pull request) | 2026-10-14 | Green (PR #9) |
 | Nightly coarse | 2026-10-16 (`make verify`, run locally; not scheduled, phase-end runs instead, ADR-037) | Green, V-20, V-21 and V-22 28 of 28 (M6.1, new modal cases; V-22 on SPOOLES); before that all 23 cases, all 23 cases, 271 of 271 checks (M5.6: new V-14 tube wall and V-27 two-layer tube); before that 249 of 249 (M5.5: new V-19); 230 of 230 (M5.4: new V-18 thermal stress cylinder); V-08, V-12, V-18 and V-24 61 of 61 again after the no-load balance scale change |
-| Full | 2026-10-15 (`VERIFY_TIER=full make verify`, local) | Green, V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4); V-18 16 of 16 (M5.4); V-19 19 of 19 (2026-10-16, M5.5); V-14 and V-27 22 of 22 (M5.6); V-20 and V-21 at 3 mm 16 of 16, V-22 at 2 mm 12 of 12 (2026-10-16, M6.1) |
-| Browser end-to-end | 2026-10-16 (`make e2e`, run locally) | Green, E-01 (one body, every result step to M3.8), E-02 (mixed-unit entry, written during M6), E-03 (two bonded bodies; also as thermal stress with heat across the bond since M5.6) and E-04 (thermal stress, M5.4; with conductivity and Young's modulus tables since M5.5); E-01 also checks the ADR-063 solver choice |
+| Full | 2026-10-21 (`VERIFY_TIER=full make verify`, local) | Green, all 27 cases, 314 of 314 checks (M9.10: new V-23 NAFEMS LE10, σyy at D −5.3854 MPa against −5.38 MPa); before that V-01, V-02, V-06, V-09, V-10 and V-24, 56 of 56 checks (M2.3; V-10 rerun after setting ν = 0); V-04 8 of 8 (M2.4); V-05 8 of 8 (M2.5); V-07 and V-25 20 of 20 (M2.6); V-08 9 of 9 (M2.7); V-03 and V-26 15 of 15 (M2.8); V-01, V-08 and V-24 with the M3.1 checks 40 of 40 (M3.1); V-10 with the inside check 10 of 10 (M3.4); V-18 16 of 16 (M5.4); V-19 19 of 19 (2026-10-16, M5.5); V-14 and V-27 22 of 22 (M5.6); V-20 and V-21 at 3 mm 16 of 16, V-22 at 2 mm 12 of 12 (2026-10-16, M6.1) |
+| Browser end-to-end | 2026-10-21 (`make e2e`, run locally) | Green, E-01 to E-09, 9 of 9 (M9.10: new E-09, a fixed support on edges picked in the viewer); before that E-01 (one body, every result step to M3.8), E-02 (mixed-unit entry, written during M6), E-03 (two bonded bodies; also as thermal stress with heat across the bond since M5.6) and E-04 (thermal stress, M5.4; with conductivity and Young's modulus tables since M5.5); E-01 also checks the ADR-063 solver choice |
 | Live site | 2026-10-20 (Live checks workflow, main ec3dd18 and 6bb3199) | Green: quick 307 of 307 checks in 26 cases; full-tier A and B 34 of 34; all ten limit models |
 | Phase end (CI) | 2026-10-20 (`phase-end.yml` by hand on main 8a665bf, [run 39475421085](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085); closed M10) | Green: full tier 307 of 307 checks in all 26 cases; E-01 to E-08, 8 of 8 |
 
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M9.10 (2026-10-21): edge supports and V-23 are merged (ADR-105). Fixed supports and prescribed displacements take edges as well as faces; other supports and loads do not, which no gate item needs. A mesh made before this change has no edges, so a run that holds an edge asks for the mesh again (the web app's mesh status and the API both say so); runs that hold only faces reuse old meshes as before, but every mesh made from now on is a new settings version, so the first run of an existing simulation meshes again. Stresses right next to a held edge are singular; the support hint says so. With this, gate item 2 is met and the gate walk below waits only for Shubham's M9.9 sign-off; row 2 is updated. Docker Compose v5 in the cloud sandbox needs `BUILDX_BAKE_ENTITLEMENTS_FS=0` before `make dev`, `make verify` and `make e2e` (CLAUDE.md).
 
 > Close M9 (2026-10-20): every agent task of M9 is done; M9 stays open for the maintainer's M9.8 (colleagues' trial on the live site), M9.9 (sign-off) and the M9.2 question below. The verification page (`docs/VERIFICATION_RESULTS.md`, ADR-092) is rebuilt: the verification cases from M10's phase-end run [39475421085](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085) (full tier, 307 of 307), the acceptance cases from the Live checks run [39434864276](https://github.com/shubhs650/ClearFEA/actions/runs/39434864276) on the live standard machine (34 of 34), and a note on the live quick tier and the ten limit models. Both tables were cut from the downloaded job logs with `python -m harness.page --from-log`. Listed but never built, found by checking the exit conditions: **V-23, NAFEMS LE10** (`VERIFICATION.md`, listed for M3, no PLAN task); pressure is covered by V-01, V-09, V-25 and case A, so gate item 2 holds, but LE10's supports include a line on an edge, which ClearFEA does not offer, so building it or dropping it is the maintainer's call (`VERIFICATION.md` now says so). The **opt-in public gallery** (DECISIONS, Platform decisions, Privacy) is in no milestone and no gate item; left for after the beta. Fixed: the report printed "Young's modulus (not entered)" when only a table against temperature was given (case B); it now says "Varies with temperature (table below)", for Poisson's ratio too.
 >
@@ -201,7 +204,7 @@ Written by the last session for the next one. Replace, do not append.
 > | # | Condition | Evidence | State |
 > | --- | --- | --- | --- |
 > | 1 | Acceptance cases through the UI and on 16 GB, reactions balanced, within tolerance of hand checks and FreeCAD, report fit for a reviewer | UI runs (Playwright clicking faces) and reports in the development environment (M9.5, M9.6; Shubham judged both reports good enough); the same models on the live standard machine through the API, 34 of 34 (M10.9) | Met: Shubham counted the live API run on 2026-10-21, no hand run needed |
-> | 2 | Full suite green, every gate load and support covered | Phase-end run 39475421085, 307 of 307; coverage matrix in `VERIFICATION.md` | Met for the cases built; V-23 (NAFEMS LE10, with edge supports) in progress, asked for by Shubham on 2026-10-21 |
+> | 2 | Full suite green, every gate load and support covered | Phase-end run 39475421085, 307 of 307; coverage matrix in `VERIFICATION.md` | Met: V-23 (NAFEMS LE10) built with edge supports in M9.10, σyy at D −5.3854 MPa against the NAFEMS −5.38 MPa (+0.10 %, tolerance 1 %), whole suite at full tier 314 of 314 in 27 cases (local, 2026-10-21) |
 > | 3 | Estimates within margin on the benchmark set; ledger reconciles | `benchmarks/solver/check.py` in `make test` (ADR-081); ledger rows green in every phase-end and live run | Met (live estimates up to 8x cautious, parked) |
 > | 4 | A model at each element limit on 16 GB, responsive viewer | All ten on the live standard machine, results fetched in 7 to 25 s (M10.9); viewer opened on the largest runs in the development environment (M9.1) | Met for the runs; viewer speed on a laptop browser not measured |
 > | 5 | Fresh clone starts with one documented command | `make dev`, `docs/SELF_HOSTING.md`; Shubham's Windows run (2026-10-19) | Met |
@@ -467,6 +470,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-21
 
+- M9.10 Edge supports and V-23: fixed supports and prescribed displacements can hold edges picked in the viewer (Faces/Edges switch in the support panel, edges drawn 2.5 px and 6 px when picked); meshes keep their edges (mesh.bin version 2, MESH_SETTINGS_VERSION 2, older meshes are made again before a run that holds an edge); V-23 NAFEMS LE10 added, −5.3854 MPa against −5.38 MPa at full tier; E-09 picks edges in the browser (ADR-105). Learned: Docker Compose v5 builds through buildx bake and refuses the CA secret unless `BUILDX_BAKE_ENTITLEMENTS_FS=0` is set.
 - Close M9, Shubham's answers recorded: a colleague ran FEA on the live site on their own (M9.8); the live API run of cases A and B meets gate item 1 and the laptop requirement is removed (M9.2 dropped, ADR-095 item 12 amended, gate items 1 and 4 reworded); ADR-091 to ADR-104 accepted; V-23 to be built with edge supports in its own thread. M9 closes after V-23 and his M9.9 sign-off.
 
 ### 2026-10-20

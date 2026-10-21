@@ -290,6 +290,7 @@ describe("mesh mark", () => {
     nodeCount: 10,
     elementCount: 4,
     quality: null,
+    edgesKept: true,
     createdAt: "2026-10-15T12:00:00.000Z",
     ...overrides,
   });

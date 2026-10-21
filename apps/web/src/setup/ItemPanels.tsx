@@ -27,7 +27,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { QuantityInput } from "../units/QuantityInput";
 import type { QuantityKind } from "../units/system";
-import { BodiesField, FacesField, NumberField, TextField } from "./fields";
+import { BodiesField, FacesField, NumberField, TagsField, TextField } from "./fields";
 import { PropertyTableField } from "./PropertyTableField";
 import {
   assignMaterial,
@@ -397,9 +397,10 @@ export function MaterialPanel({
 }
 
 const supportHints: Record<SupportType, string> = {
-  fixed: "Holds every displacement component of the faces at zero.",
+  fixed:
+    "Holds every displacement component of the faces and edges at zero. On an edge it holds the line of nodes along it; stresses right next to a held edge are not meaningful.",
   displacement:
-    "Moves the faces by the given amounts along the global x, y and z axes. 0 holds a direction; a free one is left to the solution.",
+    "Moves the faces and edges by the given amounts along the global x, y and z axes. 0 holds a direction; a free one is left to the solution. On an edge it holds or moves the line of nodes along it; stresses right next to it are not meaningful.",
   frictionless:
     "Holds each flat face against moving along its normal and lets it slide in its plane, both ways (it does not lift off). Use it on symmetry planes.",
   elastic:
@@ -435,16 +436,28 @@ export function SupportPanel({
   support,
   status,
   selection,
+  edgeSelection,
+  edgesAvailable,
+  pickEdges,
+  onPickEdgesChange,
   onChange,
 }: {
   spec: SimulationSpec;
   support: Support;
   status: ItemStatus | undefined;
   selection: ReadonlySet<number>;
+  /** Edges selected in the viewer, for a fixed support or prescribed displacement (ADR-105). */
+  edgeSelection: ReadonlySet<number>;
+  /** False for a geometry imported before edges could be picked. */
+  edgesAvailable: boolean;
+  /** Whether a click in the viewer picks edges instead of faces. */
+  pickEdges: boolean;
+  onPickEdgesChange: (pickEdges: boolean) => void;
   onChange: (spec: SimulationSpec) => void;
 }) {
   const set = (changes: Partial<Support>) => onChange(updateSupport(spec, { ...support, ...changes } as Support));
   const title = supportKinds[support.type];
+  const takesEdges = support.type === "fixed" || support.type === "displacement";
   return (
     <section className="setup-panel" aria-label={title}>
       <h2 className="pane-title">{title}</h2>
@@ -472,7 +485,37 @@ export function SupportPanel({
           onChange={(stiffness) => set({ stiffness } as Partial<Support>)}
         />
       )}
+      {takesEdges && (
+        <fieldset className="setup-components">
+          <legend>Click in the viewer to select</legend>
+          {([false, true] as const).map((edges) => (
+            <label key={String(edges)} className="checkbox">
+              <input
+                type="radio"
+                name="pick-mode"
+                checked={pickEdges === edges}
+                disabled={edges && !edgesAvailable}
+                onChange={() => onPickEdgesChange(edges)}
+              />
+              {edges ? "Edges" : "Faces"}
+            </label>
+          ))}
+        </fieldset>
+      )}
       <FacesField faces={support.faces} selection={selection} onChange={(faces) => set({ faces })} />
+      {takesEdges &&
+        (edgesAvailable ? (
+          <TagsField
+            tags={support.edges ?? []}
+            selection={edgeSelection}
+            onChange={(edges) => set({ edges } as Partial<Support>)}
+            noun={{ label: "Edges", one: "edge", many: "edges" }}
+          />
+        ) : (
+          <p className="field-hint">
+            This geometry was imported before edges could be picked. Upload the STEP file again to hold its edges.
+          </p>
+        ))}
       <Remove what="support" onRemove={() => onChange(removeItem(spec, support.id))} />
     </section>
   );

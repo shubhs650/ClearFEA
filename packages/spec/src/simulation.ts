@@ -17,6 +17,7 @@ import type {
   PropertyTable,
   Quantity,
   SimulationSpec,
+  Support,
 } from "./generated/simulation";
 import { unitsTable } from "./units";
 
@@ -29,7 +30,8 @@ export interface TopologyTags {
   bodies: readonly { tag: number; name?: string }[];
   /** bodies: the body each face belongs to, as topology.json lists it (used by unheldBodies, M4.4). */
   faces: readonly { tag: number; type?: string; bodies?: readonly number[] }[];
-  edges?: readonly { tag: number }[];
+  /** faces: the faces each edge bounds, as topology.json lists it (used by unheldBodies for supports on edges). */
+  edges?: readonly { tag: number; faces?: readonly number[] }[];
   /**
    * Candidate bonds between touching faces of different bodies (M4.2, ADR-059), with the contact
    * area (m²) and largest gap (m) where known. Absent for geometries imported before M4.2.
@@ -74,11 +76,23 @@ export function bondIsTied(status: BondStatus): boolean {
  * every rigid-body motion of a piece needs the mesh and is checked by the deck generator.
  */
 export function unheldBodies(spec: SimulationSpec, topology?: TopologyTags): number[][] {
+  // A support on edges (ADR-105) holds the bodies of the faces its edges bound.
+  const edgeFaces = new Map((topology?.edges ?? []).map((e) => [e.tag, e.faces ?? []]));
   return unreachedBodies(
     spec,
     topology,
-    spec.supports.flatMap((s) => s.faces),
+    spec.supports.flatMap((s) => [...s.faces, ...supportEdges(s).flatMap((e) => edgeFaces.get(e) ?? [])]),
   );
+}
+
+/** The edges a support holds (ADR-105): a fixed support's or a prescribed displacement's, else none. */
+export function supportEdges(support: Support): readonly number[] {
+  return (support.type === "fixed" || support.type === "displacement" ? support.edges : undefined) ?? [];
+}
+
+/** True when a support of the setup holds an edge, which needs a mesh that keeps its edges (ADR-105). */
+export function holdsEdges(spec: Pick<SimulationSpec, "supports">): boolean {
+  return spec.supports.some((s) => supportEdges(s).length > 0);
 }
 
 /**
@@ -336,8 +350,11 @@ export function sameMeshSettings(
   );
 }
 
-/** Bumped when the mesher changes what the same settings produce, so older meshes stop being reused. */
-export const MESH_SETTINGS_VERSION = 1;
+/**
+ * Bumped when the mesher changes what the same settings produce, so older meshes stop being reused.
+ * 2: mesh.bin keeps the segments along each edge, which supports on edges need (ADR-105).
+ */
+export const MESH_SETTINGS_VERSION = 2;
 
 /**
  * The text the mesh-settings hash is taken of (M2.10, ADR-047): everything that decides a mesh,
@@ -681,6 +698,19 @@ export function simulationSpecProblems(spec: SimulationSpec, topology?: Topology
       const unknown = entry.faces.filter((tag) => !faces.has(tag));
       if (unknown.length > 0) {
         add(entry.id, `${entry.label} uses face ${listTags(unknown)}, which the geometry does not have.`);
+      }
+    }
+    if (holdsEdges(spec)) {
+      const edges = new Set((topology.edges ?? []).map((e) => e.tag));
+      for (const support of spec.supports) {
+        const unknown = supportEdges(support).filter((tag) => !edges.has(tag));
+        if (unknown.length === 0) continue;
+        add(
+          support.id,
+          topology.edges === undefined
+            ? `Support "${support.name}" uses edges, but this geometry was imported before edges could be picked. Upload the STEP file again to hold its edges.`
+            : `Support "${support.name}" uses edge ${listTags(unknown)}, which the geometry does not have.`,
+        );
       }
     }
     for (const load of spec.loads) {

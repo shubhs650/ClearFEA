@@ -51,6 +51,12 @@ Face tags from the geometry's topology.json (ARCHITECTURE.md section 3). Empty w
 """
 
 
+type EdgeTags = list[int]
+"""
+Edge tags from the geometry's topology.json (M2.8). A fixed support or a prescribed displacement may hold edges as well as faces, or instead of them (ADR-105); absent or empty when it holds none.
+"""
+
+
 type AnalysisType = Literal["linear_static", "steady_thermal", "thermal_stress", "modal"]
 """
 linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports. thermal_stress: a steady-state thermal step followed by a linear static step on the temperatures it solved, in one deck (M5.4, ADR-067); it uses supports, the structural loads other than a uniform temperature change, and the thermal loads, and needs the spec's stressFreeTemperature. modal: the natural frequencies of the bodies as they are held, one *FREQUENCY step (M6.1, ADR-070); it uses supports and no loads, and needs the spec's modes; bodies no support holds have rigid-body modes at or near zero.
@@ -162,7 +168,7 @@ class MaterialReference(BaseModel):
 
 class FixedSupport(BaseModel):
     """
-    All displacement components of the faces' nodes held at zero.
+    All displacement components of the nodes of its faces and edges held at zero. An edge holds the nodes along it (a line support, ADR-105).
     """
 
     model_config = ConfigDict(
@@ -173,6 +179,7 @@ class FixedSupport(BaseModel):
     type: Literal["fixed"]
     name: ItemName
     faces: FaceTags
+    edges: EdgeTags | None = None
 
 
 type DisplacementComponent = Quantity | Literal["free"] | None
@@ -183,7 +190,7 @@ One global component of a prescribed displacement: a length quantity (zero holds
 
 class PrescribedDisplacement(BaseModel):
     """
-    The faces' nodes moved by a given displacement in the global x, y and z directions; a free component is left to the solution. At least one component must have a value before a run.
+    The nodes of its faces and edges moved by a given displacement in the global x, y and z directions; a free component is left to the solution. At least one component must have a value before a run. An edge moves the nodes along it (a line support, ADR-105).
     """
 
     model_config = ConfigDict(
@@ -194,6 +201,7 @@ class PrescribedDisplacement(BaseModel):
     type: Literal["displacement"]
     name: ItemName
     faces: FaceTags
+    edges: EdgeTags | None = None
     x: DisplacementComponent
     y: DisplacementComponent
     z: DisplacementComponent
@@ -644,6 +652,10 @@ class MeshResult(BaseModel):
     """
     Triangles in the mesh display file.
     """
+    edges: Annotated[int | None, Field(ge=0)] = None
+    """
+    Edges of the geometry whose mesh segments mesh.bin keeps (version 2, ADR-105), for supports on edges. Absent from meshes made before edge supports.
+    """
     software: Software
     """
     Versions that made the mesh.
@@ -686,6 +698,10 @@ class MeshView(BaseModel):
     quality: MeshQuality | None
     """
     Null until the mesh is ready, and for meshes made before M2.8.
+    """
+    edges_kept: Annotated[bool, Field(alias="edgesKept")]
+    """
+    True when mesh.bin keeps the segments along the geometry's edges (ADR-105). A support on edges needs such a mesh; one made before edge supports has none, and the simulation's mesh is then made again.
     """
     created_at: Annotated[str, Field(alias="createdAt")]
 

@@ -60,6 +60,7 @@ from .loads import (
     force_vector,
     hydrostatic_values,
     remote_vectors,
+    support_nodes,
 )
 from .loads.body import gravity_vector, rotation
 from .loads.heat import (
@@ -162,6 +163,27 @@ def _check_faces(mesh: VolumeMesh, faces: list[int], what: str) -> None:
         raise DeckError(
             f"{what} uses faces {unknown}, which the mesh does not have. The setup and the "
             "mesh belong to different geometries; mesh the simulation again."
+        )
+
+
+def _check_support_edges(
+    mesh: VolumeMesh, support: FixedSupport | PrescribedDisplacement, what: str
+) -> None:
+    """A fixed support or prescribed displacement holds faces, edges or both (ADR-105)."""
+    edges = support.edges or []
+    if not edges:
+        _check_faces(mesh, support.faces, what)
+        return
+    if support.faces:
+        _check_faces(mesh, support.faces, what)
+    if len(set(edges)) != len(edges):
+        raise DeckError(f"{what} lists an edge more than once. List each edge once.")
+    unknown = sorted(set(edges) - set(mesh.edges))
+    if unknown:
+        raise DeckError(
+            f"{what} uses edges {unknown}, which the mesh does not have. The mesh was made "
+            "before ClearFEA kept edges, or belongs to a different geometry; mesh the "
+            "simulation again."
         )
 
 
@@ -735,7 +757,9 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
         raise DeckError("The setup has no supports, so the part is free to move. Add a support.")
     structural = [x for x in spec.loads if not isinstance(x, _THERMAL_LOADS)]
     for item in (*spec.supports, *structural):
-        if not isinstance(item, (GravityLoad, CentrifugalLoad, TemperatureLoad)):
+        if isinstance(item, (FixedSupport, PrescribedDisplacement)):
+            _check_support_edges(mesh, item, f"{item.name}")
+        elif not isinstance(item, (GravityLoad, CentrifugalLoad, TemperatureLoad)):
             _check_faces(mesh, item.faces, f"{item.name}")
     bodies = _materials(spec, mesh)
     gravity, spin = body_loads(spec)
@@ -766,10 +790,19 @@ def _static_parts(spec: SimulationSpec, mesh: VolumeMesh, solver: str) -> _Parts
     support_sets = support_set_names(spec)
     fixed_nodes: set[int] = set()
     for support, name in zip(spec.supports, support_sets, strict=True):
-        nodes = fixed_support_nodes(mesh, support.faces)
-        line = (
-            f'** {support_kind(support)} {support.id} "{_label(support.name)}", faces '
-            + ", ".join(str(f) for f in support.faces)
+        edges: list[int] = []
+        if isinstance(support, (FixedSupport, PrescribedDisplacement)):
+            nodes = support_nodes(mesh, support)
+            edges = support.edges or []
+        else:
+            nodes = fixed_support_nodes(mesh, support.faces)
+        held_on = []
+        if support.faces or not edges:
+            held_on.append("faces " + ", ".join(str(f) for f in support.faces))
+        if edges:
+            held_on.append("edges " + ", ".join(str(e) for e in edges))
+        line = f'** {support_kind(support)} {support.id} "{_label(support.name)}", ' + "; ".join(
+            held_on
         )
         if isinstance(support, ElasticSupport):
             k = elastic_stiffness(support)

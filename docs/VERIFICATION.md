@@ -71,7 +71,7 @@ Stress is checked away from supports and load application points unless the case
 | V-20 | Cantilever beam frequencies | Euler-Bernoulli, first three bending modes in the stiff direction and first two in the other (800 × 16 × 8 mm steel bar, M6.1), and three mode shapes at mid-span (M6.2) | M6 |
 | V-21 | Fixed-fixed beam frequencies | Euler-Bernoulli, first two bending modes in one direction and the first in the other (the same bar, both ends fixed, M6.1) | M6 |
 | V-22 | Unrestrained body | Six rigid-body modes near zero (within 0.1 % of mode 7), first two elastic modes against the free-free beam (the same bar, no supports, SPOOLES, M6.1) | M6 |
-| V-23 | NAFEMS LE10, thick plate under pressure | Published target stress at point D; take the value from the NAFEMS document when implementing. **Not built**: listed for M3 but no task in `PLAN.md` made it, found at Close M9 (2026-10-20); its supports include a line on an edge, which ClearFEA does not offer, so building or dropping it is the maintainer's decision | M3 |
+| V-23 | NAFEMS LE10, thick plate under pressure: a quarter of an elliptic plate with an elliptic hole, held in x and y on its faces and in z on the mid-plane line of its outside face, a support on an edge (ADR-105) | NAFEMS target σyy = -5.38 MPa at point D; the line's reaction equals the pressure total p × area | M9 (M9.10; listed for M3, built once supports on edges existed) |
 | V-24 | Quarter bar stretched by prescribed end displacements on two symmetry planes | Uniform stress Eδ/L (von Mises, σxx, σ1), strains δ/L and −νδ/L, lateral contraction νεy, end reaction σA; safety factor against yield Sy/σ (M3.5) | M2 |
 | V-25 | V-09's quarter tube with its outside on an elastic support (a stiff sleeve) | Lamé with σr(b) = −k u(b): von Mises and radial displacement at the bore and the outside; the sleeve's and the cut planes' reactions | M2 |
 | V-26 | V-24's kind of quarter bar pulled by a force on its end, meshed with first-order (four-node) tetrahedra | Uniform stress F/A, end displacement FL/(EA), lateral contraction νεy, start reaction F (exact for four-node tetrahedra) | M2 |
@@ -86,11 +86,12 @@ Every gate feature must appear in at least one case. Update this table in the sa
 | Feature | Cases |
 | --- | --- |
 | Fixed support | V-01, V-02, V-04, V-05, V-10 |
-| Prescribed displacement | V-24, V-12 |
+| Prescribed displacement | V-24, V-12, V-23 |
+| Support on an edge (fixed or prescribed displacement) | V-23; E-09 picks edges in the browser and runs |
 | Frictionless / symmetry support | V-09, V-24, V-06, V-07, V-08, V-25, V-03, V-26 |
 | Elastic support | V-07, V-25 |
 | Force | V-02, V-12, V-03, V-26 |
-| Pressure | V-01, V-09, V-25; acceptance case A (V-23 is not built) |
+| Pressure | V-01, V-09, V-25, V-23; acceptance case A |
 | Remote force and moment | V-04 |
 | Hydrostatic pressure | V-05 |
 | Gravity | V-10 |
@@ -166,6 +167,7 @@ Playwright drives the real UI against the local system on tiny models. `make e2e
 | E-06 | Cancel a running job; stop limit reached. Since M8.2: bob sets up the E-01 block at 1 mm, quadratic, on SPOOLES (about two minutes of solving), runs it, sees the stage, the elapsed time ticking against the estimate, the cost so far against the estimated cost and the live log, cancels it, sees "Cancelling…", then the run cancelled with its charge, its deck and log kept, and the charge in the wallet. Since M8.3 the same simulation then runs again with its stop limit at 0.25 × the estimate (the 30 s floor; the run takes about a minute in the worker container): bob sees the limit's time in the form and the running view, the run is stopped there and says so with its charge, its record shows the limit, and the wallet lists it as stopped at its limit (`e06-running-job.e2e.ts`, ADR-085, ADR-087) | M8 (M8.2, M8.3) |
 | E-07 | Second user cannot open first user's project or share-revoked link: alice solves a block as in E-01 and makes a read-only link to the run; a browser that is not signed in opens it and sees the results and nothing to change; bob, signed in, gets 404 for alice's geometry, simulation, run and its share link; alice revokes the link and the same browser is told it does not work (`e07-share-link.e2e.ts`, ADR-083) | M8 (M8.7) |
 | E-08 | Sign-in and the admin page of the live closed beta: the sign-in screen as the live site shows it (only Sign in with Google), an address that is not invited told so, alice (the admin locally) inviting two addresses, seeing them and the users listed and removing them, switching the large machine size on and off with the default size held on (M10.6), setting the monthly machine-hours limit and seeing that no machine is started locally (M10.7), and bob seeing no Admin with the admin routes answering him 404. Real Google sign-in is checked on the live site (`e08-admin.e2e.ts`, ADR-097, ADR-099, ADR-100) | M10 (M10.3, M10.6, M10.7) |
+| E-09 | A fixed support on edges (ADR-105): on E-01's block, the support's Edges choice, two edges of the x = 40 mm end picked in the viewer (the bottom edge and the upright edge at y = 0) and drawn wide, a pressure on the top face, mesh and run, and the edges' reaction balancing the 800 N pressure total with its moment about the edges' centre (`e09-edge-support.e2e.ts`) | M9 (M9.10) |
 
 ## Acceptance cases
 

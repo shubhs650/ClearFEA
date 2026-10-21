@@ -25,7 +25,7 @@ from ..spec.simulation_schema import (
 )
 from .common import DeckError
 from .linalg import Vector, cross, dot, norm, solve, symmetric_eigen
-from .loads import Spring, face_normal, fixed_support_nodes, prescribed_components
+from .loads import Spring, face_normal, fixed_support_nodes, prescribed_components, support_nodes
 
 AXES: tuple[Vector, Vector, Vector] = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 
@@ -123,7 +123,8 @@ def support_kind(
 
 
 def node_constraints(spec: SimulationSpec, mesh: VolumeMesh) -> dict[int, list[Constraint]]:
-    """The constraints at every supported node (0-based), in spec order. Faces must exist.
+    """The constraints at every supported node (0-based), in spec order. Faces and edges must
+    exist.
 
     Elastic supports hold nothing; their springs are separate elements (loads/elastic.py)."""
     out: dict[int, list[Constraint]] = {}
@@ -134,11 +135,11 @@ def node_constraints(spec: SimulationSpec, mesh: VolumeMesh) -> dict[int, list[C
 
     for k, support in enumerate(spec.supports):
         if isinstance(support, FixedSupport):
-            nodes = fixed_support_nodes(mesh, support.faces)
+            nodes = support_nodes(mesh, support)
             for axis in AXES:
                 add(nodes, Constraint(k, axis, 0.0))
         elif isinstance(support, PrescribedDisplacement):
-            nodes = fixed_support_nodes(mesh, support.faces)
+            nodes = support_nodes(mesh, support)
             for axis, value in prescribed_components(support):
                 add(nodes, Constraint(k, AXES[axis], value))
         elif isinstance(support, FrictionlessSupport):

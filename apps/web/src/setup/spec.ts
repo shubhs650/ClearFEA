@@ -32,6 +32,8 @@ import {
   type SimulationSpec,
   type Support,
   sameMeshSettings,
+  supportEdges,
+  holdsEdges,
   setsTemperature,
   simulationSpecProblems,
   solvesTemperature,
@@ -226,11 +228,12 @@ export function setupStatus(spec: SimulationSpec, topology?: TopologyTags): Map<
 
   const supports = spec.supports.map((s) => {
     const missing: string[] = [];
-    if (s.faces.length === 0) {
+    // A fixed support or prescribed displacement may hold edges instead of faces (ADR-105).
+    if (s.faces.length === 0 && supportEdges(s).length === 0) {
       missing.push(
         {
-          fixed: "Pick the faces to fix.",
-          displacement: "Pick the faces to move.",
+          fixed: "Pick the faces or edges to fix.",
+          displacement: "Pick the faces or edges to move.",
           frictionless: "Pick the flat faces it holds.",
           elastic: "Pick the faces it supports.",
         }[s.type],
@@ -382,9 +385,13 @@ function loadMissing(load: Load): string[] {
   return missing;
 }
 
+/** Why a mesh made before supports on edges cannot be used by one (ADR-105). */
+export const EDGES_NOT_KEPT = "A support holds an edge, and this mesh was made before ClearFEA kept edges. Generate the mesh again.";
+
 /** True when the mesh was made with the spec's current mesh settings (size, order, local sizes). */
 export function meshIsCurrent(spec: SimulationSpec, mesh: MeshView | null): boolean {
-  return mesh !== null && sameMeshSettings(spec, mesh);
+  // A support on edges needs a mesh that keeps its edges (ADR-105); an older mesh is made again.
+  return mesh !== null && sameMeshSettings(spec, mesh) && (mesh.edgesKept || !holdsEdges(spec));
 }
 
 /**
@@ -394,8 +401,11 @@ export function meshIsCurrent(spec: SimulationSpec, mesh: MeshView | null): bool
 export function meshStatus(settings: ItemStatus, spec: SimulationSpec, mesh: MeshView | null): ItemStatus {
   if (settings.mark !== "complete") return settings;
   if (mesh === null) return { mark: "incomplete", notes: ["Generate the mesh."] };
-  if (!meshIsCurrent(spec, mesh)) {
+  if (!sameMeshSettings(spec, mesh)) {
     return { mark: "incomplete", notes: ["The mesh settings changed after the mesh was made. Generate the mesh again."] };
+  }
+  if (!meshIsCurrent(spec, mesh)) {
+    return { mark: "incomplete", notes: [EDGES_NOT_KEPT] };
   }
   if (mesh.status === "meshing") return { mark: "incomplete", notes: ["The mesh is being made."] };
   if (mesh.status === "failed") return { mark: "error", notes: [mesh.problem ?? "Meshing failed."] };

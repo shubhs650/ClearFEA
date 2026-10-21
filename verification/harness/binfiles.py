@@ -51,14 +51,20 @@ def read_surface(data: bytes) -> Surface:
 
 
 def read_mesh_positions(data: bytes) -> list[tuple[float, float, float]]:
-    """The node positions of a mesh.bin file, in metres, in node order."""
+    """The node positions of a mesh.bin file, in metres, in node order. Version 2 adds the
+    edges' segments after the version 1 parts and two counts to the header (ADR-105)."""
     magic, version, order, nn, ne, nb, nf, entries = struct.unpack_from("<4sIIIIIII", data, 0)
-    if magic != b"CFVM" or version != 1 or order not in (1, 2):
-        raise ValueError("mesh.bin is not a version 1 volume mesh file.")
+    if magic != b"CFVM" or version not in (1, 2) or order not in (1, 2):
+        raise ValueError("mesh.bin is not a version 1 or 2 volume mesh file.")
+    header, edges, segments = 32, 0, 0
+    if version == 2:
+        header = 40
+        edges, segments = struct.unpack_from("<II", data, 32)
     per = 4 if order == 1 else 10
-    if 32 + 24 * nn + 4 * per * ne + 12 * (nb + nf) + 8 * entries != len(data):
+    size = header + 24 * nn + 4 * per * ne + 12 * (nb + nf + edges) + 8 * entries
+    if size + 4 * (order + 1) * segments != len(data):
         raise ValueError("mesh.bin's length does not match its header.")
-    flat = struct.unpack_from(f"<{3 * nn}d", data, 32)
+    flat = struct.unpack_from(f"<{3 * nn}d", data, header)
     return [(flat[3 * n], flat[3 * n + 1], flat[3 * n + 2]) for n in range(nn)]
 
 

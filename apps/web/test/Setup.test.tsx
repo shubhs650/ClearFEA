@@ -550,6 +550,37 @@ describe("setup tree", () => {
     expect(scene.selections.at(-1)).toEqual([3]);
   });
 
+  it("holds edges with a fixed support picked in edge mode (ADR-105)", async () => {
+    const { sent, route } = saves();
+    serve(routes([simulation()], { "PUT /api/simulations/s1/spec": route }));
+    render(<App />);
+    await screen.findByText(/Click a face to select it/);
+    fireEvent.click(tree().getByRole("button", { name: "Supports, incomplete" }));
+    fireEvent.click(settings().getByRole("button", { name: "Add a fixed support" }));
+    expect(tree().getByRole("button", { name: "Fixed support 1, incomplete" }).getAttribute("title")).toBe(
+      "Pick the faces or edges to fix.",
+    );
+    // Picking edges draws the geometry's edges and a click picks one instead of a face.
+    fireEvent.click(settings().getByLabelText("Edges"));
+    expect(scene.geometryEdges.at(-1)).toEqual([5, 6]);
+    expect(await screen.findByText(/Click an edge to select it/)).toBeTruthy();
+    act(() => scene.events[0]?.onPick(6));
+    expect(scene.edgeSelections.at(-1)).toEqual([6]);
+    fireEvent.click(settings().getByRole("button", { name: "Use the selected edge" }));
+    expect(tree().getByRole("button", { name: "Fixed support 1, complete" })).toBeTruthy();
+    await waitFor(() =>
+      expect(sent.at(-1)?.supports).toEqual([{ id: "fixed-1", type: "fixed", name: "Fixed support 1", faces: [], edges: [6] }]),
+    );
+
+    // Back to faces, the viewer picks faces again; reopening the support picks its edges.
+    fireEvent.click(settings().getByLabelText("Faces"));
+    expect(scene.geometryEdges.at(-1)).toBeNull();
+    fireEvent.click(tree().getByRole("button", { name: "Geometry, complete" }));
+    fireEvent.click(tree().getByRole("button", { name: "Fixed support 1, complete" }));
+    expect(scene.geometryEdges.at(-1)).toEqual([5, 6]);
+    expect(scene.edgeSelections.at(-1)).toEqual([6]);
+  });
+
   it("adds a prescribed displacement and a frictionless support (M2.2)", async () => {
     const { sent, route } = saves();
     serve(routes([simulation()], { "PUT /api/simulations/s1/spec": route }));
@@ -851,6 +882,7 @@ function mesh(overrides: Partial<MeshView> = {}): MeshView {
     nodeCount: 7108,
     elementCount: 4000,
     quality: null,
+    edgesKept: true,
     createdAt: "2026-10-15T12:00:00.000Z",
     ...overrides,
   };

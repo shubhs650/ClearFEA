@@ -25,6 +25,7 @@ export function meshView(mesh: Mesh): MeshView {
     nodeCount: mesh.nodeCount,
     elementCount: mesh.elementCount,
     quality: mesh.quality,
+    edgesKept: mesh.edgeCount !== null,
     createdAt: mesh.createdAt,
   };
 }

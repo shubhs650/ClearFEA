@@ -11,7 +11,7 @@ from .body import (
 )
 from .displacement import prescribed_components
 from .elastic import Spring, elastic_springs, elastic_stiffness, spring_forces, spring_reaction
-from .fixed import fixed_support_nodes
+from .fixed import edge_nodes, edges_centroid, fixed_support_nodes, support_nodes
 from .force import faces_centroid, force_nodal_loads, force_vector
 from .frictionless import face_normal
 from .hydrostatic import hydrostatic_nodal_loads, hydrostatic_values
@@ -26,6 +26,8 @@ __all__ = [
     "body_loads",
     "body_nodal_forces",
     "densities",
+    "edge_nodes",
+    "edges_centroid",
     "elastic_springs",
     "elastic_stiffness",
     "element_face_pressures",
@@ -42,5 +44,6 @@ __all__ = [
     "remote_nodal_loads",
     "remote_vectors",
     "spring_forces",
+    "support_nodes",
     "spring_reaction",
 ]

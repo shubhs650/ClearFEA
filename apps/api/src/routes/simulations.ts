@@ -41,6 +41,7 @@ import {
   type ReportOptionsResponse,
   validateReportOptions,
   type ViewResponse,
+  holdsEdges,
   sameMeshSettings,
   specBonds,
   type Topology,
@@ -291,6 +292,10 @@ async function runnableMesh(
   }
   if (!sameMeshSettings(simulation.spec, mesh)) {
     return { error: "The mesh settings changed after the mesh was made. Generate the mesh again, then run." };
+  }
+  if (mesh.edgeCount === null && holdsEdges(simulation.spec)) {
+    // A mesh made before supports on edges has no edges in mesh.bin (ADR-105).
+    return { error: "A support holds an edge, and this mesh was made before ClearFEA kept edges. Generate the mesh again, then run." };
   }
   return { mesh };
 }

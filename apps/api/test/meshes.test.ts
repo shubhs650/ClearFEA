@@ -200,13 +200,13 @@ async function complete(jobId: string, body: Record<string, unknown>): Promise<v
 }
 
 /** Plays the worker: claims the mesh job, uploads both outputs, reports success. */
-async function runMesh(): Promise<ClaimResponse["job"]> {
+async function runMesh(result: MeshResult = RESULT): Promise<ClaimResponse["job"]> {
   const job = await claim();
   for (const name of ["mesh.bin", "display.bin"]) {
     const put = await call("PUT", transferPath(job, name, "upload"), { raw: `${name} content`, token: TOKEN });
     expect(put.status).toBe(200);
   }
-  await complete(job.id, { status: "succeeded", result: RESULT });
+  await complete(job.id, { status: "succeeded", result });
   return job;
 }
 
@@ -314,12 +314,21 @@ describe("a finished mesh job", () => {
       nodeCount: 7108,
       elementCount: 4000,
       quality: RESULT.quality,
+      // A worker from before supports on edges reports no edges (ADR-105).
+      edgesKept: false,
     });
     const display = await call("GET", `/api/meshes/${requested.id}/display`, { cookie: alice });
     expect(display.status).toBe(200);
     expect(new TextDecoder().decode(await display.arrayBuffer())).toBe("display.bin content");
     const stored = await env.FILES.get(`owners/${aliceId}/meshes/${requested.id}/mesh.bin`);
     expect(await stored?.text()).toBe("mesh.bin content");
+  });
+
+  it("says the mesh keeps its edges when the job reports them (ADR-105)", async () => {
+    const id = await simulation();
+    await requestMesh(id);
+    await runMesh({ ...RESULT, edges: 24 });
+    expect(await currentMesh(id)).toMatchObject({ status: "ready", edgesKept: true });
   });
 
   it("lets a request with other settings replace the simulation's mesh", async () => {

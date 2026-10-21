@@ -34,6 +34,12 @@
       "items": { "type": "integer" },
       "uniqueItems": true
     },
+    "EdgeTags": {
+      "description": "Edge tags from the geometry's topology.json (M2.8). A fixed support or a prescribed displacement may hold edges as well as faces, or instead of them (ADR-105); absent or empty when it holds none.",
+      "type": "array",
+      "items": { "type": "integer" },
+      "uniqueItems": true
+    },
     "AnalysisType": {
       "description": "linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports. thermal_stress: a steady-state thermal step followed by a linear static step on the temperatures it solved, in one deck (M5.4, ADR-067); it uses supports, the structural loads other than a uniform temperature change, and the thermal loads, and needs the spec's stressFreeTemperature. modal: the natural frequencies of the bodies as they are held, one *FREQUENCY step (M6.1, ADR-070); it uses supports and no loads, and needs the spec's modes; bodies no support holds have rigid-body modes at or near zero.",
       "enum": ["linear_static", "steady_thermal", "thermal_stress", "modal"]
@@ -206,7 +212,7 @@
       "properties": { "material": { "$ref": "#/$defs/IsotropicMaterial" } }
     },
     "FixedSupport": {
-      "description": "All displacement components of the faces' nodes held at zero.",
+      "description": "All displacement components of the nodes of its faces and edges held at zero. An edge holds the nodes along it (a line support, ADR-105).",
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "type", "name", "faces"],
@@ -214,7 +220,8 @@
         "id": { "$ref": "#/$defs/ItemId" },
         "type": { "const": "fixed" },
         "name": { "$ref": "#/$defs/ItemName" },
-        "faces": { "$ref": "#/$defs/FaceTags" }
+        "faces": { "$ref": "#/$defs/FaceTags" },
+        "edges": { "$ref": "#/$defs/EdgeTags" }
       }
     },
     "DisplacementComponent": {
@@ -222,7 +229,7 @@
       "oneOf": [{ "$ref": "#/$defs/Quantity" }, { "const": "free" }, { "type": "null" }]
     },
     "PrescribedDisplacement": {
-      "description": "The faces' nodes moved by a given displacement in the global x, y and z directions; a free component is left to the solution. At least one component must have a value before a run.",
+      "description": "The nodes of its faces and edges moved by a given displacement in the global x, y and z directions; a free component is left to the solution. At least one component must have a value before a run. An edge moves the nodes along it (a line support, ADR-105).",
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "type", "name", "faces", "x", "y", "z"],
@@ -231,6 +238,7 @@
         "type": { "const": "displacement" },
         "name": { "$ref": "#/$defs/ItemName" },
         "faces": { "$ref": "#/$defs/FaceTags" },
+        "edges": { "$ref": "#/$defs/EdgeTags" },
         "x": { "$ref": "#/$defs/DisplacementComponent" },
         "y": { "$ref": "#/$defs/DisplacementComponent" },
         "z": { "$ref": "#/$defs/DisplacementComponent" }
@@ -680,6 +688,11 @@
         "nodes": { "type": "integer", "minimum": 4 },
         "elements": { "description": "Tetrahedra in the volume mesh.", "type": "integer", "minimum": 1 },
         "surfaceTriangles": { "description": "Triangles in the mesh display file.", "type": "integer", "minimum": 1 },
+        "edges": {
+          "description": "Edges of the geometry whose mesh segments mesh.bin keeps (version 2, ADR-105), for supports on edges. Absent from meshes made before edge supports.",
+          "type": "integer",
+          "minimum": 0
+        },
         "software": {
           "description": "Versions that made the mesh.",
           "type": "object",
@@ -697,7 +710,7 @@
       "description": "A mesh as its owner sees it.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "geometryId", "size", "order", "local", "status", "problem", "nodeCount", "elementCount", "quality", "createdAt"],
+      "required": ["id", "geometryId", "size", "order", "local", "status", "problem", "nodeCount", "elementCount", "quality", "edgesKept", "createdAt"],
       "properties": {
         "id": { "type": "string" },
         "geometryId": { "type": "string" },
@@ -709,6 +722,10 @@
         "nodeCount": { "type": ["integer", "null"] },
         "elementCount": { "type": ["integer", "null"] },
         "quality": { "description": "Null until the mesh is ready, and for meshes made before M2.8.", "oneOf": [{ "$ref": "#/$defs/MeshQuality" }, { "type": "null" }] },
+        "edgesKept": {
+          "description": "True when mesh.bin keeps the segments along the geometry's edges (ADR-105). A support on edges needs such a mesh; one made before edge supports has none, and the simulation's mesh is then made again.",
+          "type": "boolean"
+        },
         "createdAt": { "type": "string" }
       }
     },

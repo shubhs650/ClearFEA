@@ -65,7 +65,7 @@ describe("pre-run validation", () => {
       { item: "steel", message: `Material "Structural steel" has no Poisson's ratio. Enter it.` },
       {
         item: "fixed-1",
-        message: `Support "Fixed support 1" has no faces. Select the faces to fix and add them to it.`,
+        message: `Support "Fixed support 1" has no faces or edges. Select the faces or edges to fix and add them to it.`,
       },
       {
         item: "pressure-1",
@@ -118,7 +118,7 @@ describe("pre-run validation", () => {
     ]);
     const noFaces = { ...move, faces: [], x: { value: 0, unit: "mm" } } as SimulationSpec["supports"][0];
     expect(messages({ ...s, supports: [noFaces] })).toEqual([
-      `Support "Pull" has no faces. Select the faces to move and add them to it.`,
+      `Support "Pull" has no faces or edges. Select the faces or edges to move and add them to it.`,
     ]);
   });
 
@@ -333,6 +333,23 @@ describe("bodies no support holds (M4.4)", () => {
       },
     ]);
     expect(preRunProblems(assemblySpec(["accepted", "accepted"], [1, 7]), assembly)).toEqual([]);
+  });
+
+  it("counts a support on an edge as holding the bodies of the faces the edge bounds (ADR-105)", () => {
+    const withEdges = { ...assembly, edges: [{ tag: 9, faces: [7] }] };
+    const s = assemblySpec(["accepted", "accepted"]);
+    const [support] = s.supports;
+    if (!support) throw new Error("incomplete fixture");
+    const held = { ...s, supports: [support, { ...support, id: "edge-1", faces: [], edges: [9] } as SimulationSpec["supports"][0]] };
+    expect(unheldBodies(held, withEdges)).toEqual([]);
+    expect(preRunProblems(held, withEdges)).toEqual([]);
+    expect(preRunProblems(held, { ...withEdges, edges: [{ tag: 8, faces: [7] }] })).toEqual([
+      { item: "edge-1", message: 'Support "Fixed support 1" uses edge 9, which the geometry does not have.' },
+      {
+        item: "bodies",
+        message: "Body 4 is not bonded to a held body and no support holds it, so it is free to move. Add a support on one of its faces.",
+      },
+    ]);
   });
 
   it("follows bonds through bodies that hold each other, and stops at removed ones", () => {

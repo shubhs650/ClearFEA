@@ -105,6 +105,18 @@ def test_supports_that_hold_every_motion_leave_none_free() -> None:
     assert free_motions(two_tets(1), holds(fixed, two_tets(1))) == []
 
 
+def test_a_fixed_support_on_one_straight_edge_leaves_the_turn_about_it_free() -> None:
+    """A line support (ADR-105) holds the nodes along the edge and nothing else, so a part
+    held only on one straight edge can still turn about it."""
+    mesh = two_tets(order=2)
+    spec = spec_with([{"id": "e", "type": "fixed", "name": "Edge", "faces": [], "edges": [1]}])
+    # The turn about the x axis through the edge, not about the part's own centre, so it is
+    # not one of the named motions.
+    assert free_motions(mesh, holds(spec, mesh)) == ["move in 1 other way"]
+    both = spec_with([{"id": "e", "type": "fixed", "name": "Edges", "faces": [], "edges": [1, 2]}])
+    assert free_motions(mesh, holds(both, mesh)) == []
+
+
 def test_an_inclined_free_motion_is_reported_as_another_way() -> None:
     mesh = turned(two_tets(order=1))
     spec = spec_with([frictionless([1, 2])])  # leaning x plane and z = 0: one slide is free
