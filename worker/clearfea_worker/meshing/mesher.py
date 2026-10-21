@@ -52,6 +52,7 @@ SAMPLING_MIN, SAMPLING_MAX = 20, 400
 #: Gmsh element types: tetrahedra and the triangles on their faces, by element order.
 _TETRAHEDRON = {1: 4, 2: 11}
 _TRIANGLE = {1: 2, 2: 9}
+_LINE = {1: 1, 2: 8}
 
 
 class MeshFailure(Exception):
@@ -389,7 +390,17 @@ def _volume_mesh(gmsh: ModuleType, order: int) -> tuple[VolumeMesh, list[FacePat
             "face_map",
             f"{len(triangle_of)} surface triangles matched {found} tetrahedron faces.",
         )
-    return VolumeMesh(order, positions, elements, bodies, faces), patches
+    # The segments along each edge (ADR-105), for supports on edges: Gmsh's line elements,
+    # whose nodes are the two ends and then, for order 2, the middle node.
+    edges: dict[int, list[int]] = {}
+    for _, curve in sorted(model.getEntities(1)):
+        types, _, nodes = model.mesh.getElements(1, curve)
+        if [int(t) for t in types] != [_LINE[order]]:
+            raise MeshFailure(
+                "platform_fault", "unexpected_elements", f"Edge {curve} has element types {types}."
+            )
+        edges[curve] = [index[int(n)] for n in nodes[0]]
+    return VolumeMesh(order, positions, elements, bodies, faces, edges), patches
 
 
 def _inverted(gmsh: ModuleType) -> int:

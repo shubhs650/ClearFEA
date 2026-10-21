@@ -9,7 +9,7 @@ import copy
 import json
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -69,7 +69,8 @@ class Case:
     mesh: dict[str, Any]  # tier -> {value, unit}; "local" -> local size id -> tier -> {value, unit}
     checks: list[Check]
     allowed_warnings: list[re.Pattern[str]]
-    spec: dict[str, Any]  # spec.json, faces by name
+    spec: dict[str, Any]  # spec.json, faces and edges by name
+    edges: dict[str, Box] = field(default_factory=dict)  # supports on edges (ADR-105)
 
 
 #: Tensor components in fields.bin order (result-fields.md): xx, yy, zz, xy, yz, zx.
@@ -222,7 +223,13 @@ def load_case(folder: Path) -> Case:
             )
         )
     allowed = [re.compile(p) for p in raw.get("allowedWarnings", [])]
-    return Case(raw["id"], raw["title"], folder, unit, faces, raw["mesh"], checks, allowed, spec)
+    edges = {
+        name: _box(box, unit, f"{folder.name} edge {name}")
+        for name, box in raw.get("edges", {}).items()
+    }
+    return Case(
+        raw["id"], raw["title"], folder, unit, faces, raw["mesh"], checks, allowed, spec, edges
+    )
 
 
 def name_faces(case: Case, topology: dict[str, Any]) -> dict[str, int]:
@@ -249,22 +256,60 @@ def name_faces(case: Case, topology: dict[str, Any]) -> dict[str, int]:
     return tags
 
 
-def _tags(case: Case, item: dict[str, Any], names: list[str], tags: dict[str, int]) -> list[int]:
+def name_edges(case: Case, topology: dict[str, Any]) -> dict[str, int]:
+    """Edge name -> tag: the one edge of topology.json whose bounding box is the name's box,
+    matched as faces are (name_faces). For supports on edges (ADR-105)."""
+    slack = to_si(FACE_MATCH, case.unit, "length")
+    tags = {}
+    for name, box in case.edges.items():
+        found = [
+            edge["tag"]
+            for edge in topology.get("edges") or []
+            if all(abs(edge["bbox"][i] - box.lo[i]) <= slack for i in range(3))
+            and all(abs(edge["bbox"][3 + i] - box.hi[i]) <= slack for i in range(3))
+        ]
+        if len(found) != 1:
+            raise CaseError(
+                f"{case.id}: edge {name!r} should match exactly one edge of the geometry, "
+                f"found tags {found}. Check its box in case.yaml."
+            )
+        tags[name] = found[0]
+    return tags
+
+
+def _tags(
+    case: Case,
+    item: dict[str, Any],
+    names: list[str],
+    tags: dict[str, int],
+    noun: str = "faces",
+) -> list[int]:
     unknown = [f for f in names if f not in tags]
     if unknown:
-        raise CaseError(f"{case.id}: spec.json item {item['id']} names unknown faces {unknown}.")
+        raise CaseError(f"{case.id}: spec.json item {item['id']} names unknown {noun} {unknown}.")
     return [tags[f] for f in names]
 
 
-def build_spec(case: Case, tags: dict[str, int], geometry_id: str, tier: str) -> dict[str, Any]:
-    """spec.json with face names turned into tags, the geometry id and the tier's mesh sizes.
+def build_spec(
+    case: Case,
+    tags: dict[str, int],
+    geometry_id: str,
+    tier: str,
+    edge_tags: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """spec.json with face and edge names turned into tags, the geometry id and the tier's mesh
+    sizes.
 
-    The element order and local sizes come from spec.json (M2.8); a local size on faces names
-    them, a local size on bodies gives body tags, and case.yaml may give a local size per tier.
+    The element order and local sizes come from spec.json (M2.8); a local size on faces or edges
+    names them, a local size on bodies gives body tags, and case.yaml may give a local size per
+    tier. A support's edges (ADR-105) are named in case.yaml's edges.
     """
+    edge_tags = edge_tags or {}
     spec = copy.deepcopy(case.spec)
     spec["geometryId"] = geometry_id
     for item in spec["supports"] + spec["loads"]:
+        if "edges" in item:
+            item["edges"] = _tags(case, item, item["edges"], edge_tags, "edges")
         if "faces" not in item:  # gravity and centrifugal loads act on every body
             continue
         item["faces"] = _tags(case, item, item["faces"], tags)
@@ -272,8 +317,12 @@ def build_spec(case: Case, tags: dict[str, int], geometry_id: str, tier: str) ->
     for item in spec["mesh"].get("local", []):
         if item["scope"] == "faces":
             item["tags"] = _tags(case, item, item["tags"], tags)
+        elif item["scope"] == "edges":
+            item["tags"] = _tags(case, item, item["tags"], edge_tags, "edges")
         elif item["scope"] != "bodies":
-            raise CaseError(f"{case.id}: local size {item['id']}: cases name faces or bodies only.")
+            raise CaseError(
+                f"{case.id}: local size {item['id']}: cases name faces, edges or bodies."
+            )
         if item["id"] in tiers:
             item["size"] = dict(tiers[item["id"]][tier])
     spec["mesh"]["size"] = dict(case.mesh[tier])

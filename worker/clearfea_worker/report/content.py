@@ -429,7 +429,15 @@ class _Builder:
         blocks: list[Block] = []
         for support in self.spec.supports:
             blocks.append(Heading(f"{support.name} ({SUPPORT_KINDS[support.type].lower()})"))
-            rows = [["Kind", SUPPORT_KINDS[support.type]], ["Faces", self.faces(support.faces)]]
+            rows = [["Kind", SUPPORT_KINDS[support.type]]]
+            edges = getattr(support, "edges", None) or []
+            if support.faces or not edges:
+                rows.append(["Faces", self.faces(support.faces)])
+            if edges:
+                # A support on edges (ADR-105).
+                count = "1 edge" if len(edges) == 1 else f"{len(edges)} edges"
+                tags = ", ".join(map(str, edges))
+                rows.append(["Edges", f"{count} (tag{'s' if len(edges) != 1 else ''} {tags})"])
             rows += self.support_rows(support)
             blocks.append(Table(support.name, ["Item", "Value"], rows, [1, 2]))
             blocks.extend(self.figure("support", support.id))

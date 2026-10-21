@@ -4,6 +4,7 @@
 No API, worker or solver: those run in `make verify`.
 """
 
+import copy
 import json
 import math
 import re
@@ -30,6 +31,7 @@ from harness.cases import (
     frequency_error,
     heat_flow,
     load_case,
+    name_edges,
     name_faces,
     reaction,
     unexpected_warnings,
@@ -117,6 +119,27 @@ def test_refuses_a_face_box_that_matches_no_face() -> None:
     case = small_case(faces={"plate": Box((0, 0, 0), (0.1, 0.06, 0))})
     with pytest.raises(CaseError, match="exactly one face"):
         name_faces(case, TOPOLOGY)
+
+
+def test_names_a_supports_edges_by_their_bounding_box() -> None:
+    """Supports on edges (ADR-105): case.yaml names edges by box as it names faces."""
+    topology = TOPOLOGY | {
+        "edges": [
+            {"tag": 4, "bbox": [-1e-7, -1e-7, -1e-7, 0.1000001, 1e-7, 1e-7]},
+            {"tag": 5, "bbox": [-1e-7, -1e-7, -1e-7, 1e-7, 0.0500001, 1e-7]},
+        ]
+    }
+    spec = copy.deepcopy(small_case().spec)
+    spec["supports"][0] |= {"faces": [], "edges": ["front"]}
+    case = small_case(spec=spec, edges={"front": Box((0, 0, 0), (0.1, 0, 0))})
+    tags = name_edges(case, topology)
+    assert tags == {"front": 4}
+    built = build_spec(case, name_faces(case, topology), "g", "full", tags)
+    assert (built["supports"][0]["faces"], built["supports"][0]["edges"]) == ([], [4])
+    with pytest.raises(CaseError, match="unknown edges"):
+        build_spec(case, name_faces(case, topology), "g", "full", {})
+    with pytest.raises(CaseError, match="exactly one edge"):
+        name_edges(case, TOPOLOGY)
 
 
 def test_builds_the_spec_with_tags_geometry_and_the_tier_mesh_size() -> None:

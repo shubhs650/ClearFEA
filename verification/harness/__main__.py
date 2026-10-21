@@ -38,6 +38,7 @@ from .cases import (
     frequency_error,
     heat_flow,
     load_case,
+    name_edges,
     name_faces,
     reaction,
     unexpected_warnings,
@@ -207,7 +208,7 @@ def run_case(api: Client, case: Case, tier: str, work: Path, timeout: float) -> 
         raise CaseError(f"The geometry is {geometry['status']} after confirming {case.unit}.")
     topology = api.json("GET", f"/api/geometries/{geometry['id']}/topology")
     tags = name_faces(case, topology)
-    spec = build_spec(case, tags, geometry["id"], tier)
+    spec = build_spec(case, tags, geometry["id"], tier, name_edges(case, topology))
 
     simulation = api.json(
         "POST", "/api/simulations", {"geometryId": geometry["id"], "name": case.title, "spec": spec}

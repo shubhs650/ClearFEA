@@ -20,10 +20,17 @@ from ..deck import REACTION_SET, TIE_SET, support_set_names
 from ..deck.applied import Resultant, applied_nodal_loads, load_resultants
 from ..deck.constraints import holds, node_constraints, node_frames, support_node_reactions
 from ..deck.linalg import Vector, cross, norm
-from ..deck.loads import elastic_springs, faces_centroid, spring_forces
+from ..deck.loads import edges_centroid, elastic_springs, faces_centroid, spring_forces
 from ..deck.loads.tie import tie_forces, ties
 from ..meshing.volume import VolumeMesh
-from ..spec.simulation_schema import ElasticSupport, SimulationSpec, SolveResult
+from ..spec.simulation_schema import (
+    ElasticSupport,
+    FixedSupport,
+    PrescribedDisplacement,
+    SimulationSpec,
+    SolveResult,
+    Support,
+)
 from .dat import DatError, read_node_displacements, read_node_forces
 from .fields import (
     NodalFields,
@@ -292,11 +299,20 @@ def read_reactions(spec: SimulationSpec, mesh: VolumeMesh, dat: Path) -> list[Re
     for k, support in enumerate(spec.supports):
         if isinstance(support, ElasticSupport):
             nodal[k] = _spring_forces(mesh, support, dat, names[k])
-    return [_reaction(mesh, s.faces, f) for s, f in zip(spec.supports, nodal, strict=True)]
+    return [_reaction(mesh, s, f) for s, f in zip(spec.supports, nodal, strict=True)]
 
 
-def _reaction(mesh: VolumeMesh, faces: list[int], nodal: dict[int, Vector]) -> Reaction:
-    point = faces_centroid(mesh, faces)
+def _reaction(mesh: VolumeMesh, support: Support, nodal: dict[int, Vector]) -> Reaction:
+    # About the area centroid of the support's faces, or, for one on edges only (ADR-105), the
+    # length centroid of its edges.
+    edges = (
+        support.edges if isinstance(support, (FixedSupport, PrescribedDisplacement)) else None
+    ) or []
+    point = (
+        edges_centroid(mesh, edges)
+        if not support.faces and edges
+        else faces_centroid(mesh, support.faces)
+    )
     p = mesh.positions
     force = [0.0, 0.0, 0.0]
     moment = [0.0, 0.0, 0.0]

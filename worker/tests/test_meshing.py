@@ -3,6 +3,7 @@
 
 import json
 import math
+import struct
 from collections.abc import Callable
 from pathlib import Path
 
@@ -87,6 +88,28 @@ def test_meshes_every_face_and_maps_it_to_element_faces(
     for tag, patch in display.items():
         assert len(patch.triangles) // 3 == len(mesh.faces[tag])
     assert output.result.surface_triangles == len(entries)
+
+    # Every edge's segments (ADR-105) lie in its box, run end to end along it, and add up to its
+    # length; an order 2 segment's middle node is between its ends.
+    assert topology.edges is not None
+    assert sorted(mesh.edges) == sorted(e.tag for e in topology.edges)
+    per = 2 if order == 1 else 3
+    for edge in topology.edges:
+        flat = mesh.edges[edge.tag]
+        assert flat and len(flat) % per == 0
+        length = 0.0
+        for k in range(0, len(flat), per):
+            ends = [mesh.positions[3 * n : 3 * n + 3] for n in flat[k : k + 2]]
+            for p in [mesh.positions[3 * n : 3 * n + 3] for n in flat[k : k + per]]:
+                for axis in range(3):
+                    assert edge.bbox[axis] - pad <= p[axis] <= edge.bbox[axis + 3] + pad
+            if per == 3:
+                middle = mesh.positions[3 * flat[k + 2] : 3 * flat[k + 2] + 3]
+                assert math.dist(ends[0], middle) + math.dist(middle, ends[1]) == pytest.approx(
+                    math.dist(*ends), rel=0.05
+                )
+            length += math.dist(*ends)
+        assert length == pytest.approx(edge.length, rel=0.02)
 
 
 def test_meshes_each_body_of_an_assembly_on_its_own(tmp_path: Path) -> None:
@@ -189,11 +212,30 @@ def test_volume_mesh_file_round_trips(tmp_path: Path) -> None:
         elements=[0, 1, 2, 3, 1, 2, 3, 4],
         bodies={7: (0, 2)},
         faces={2: [(0, 0), (0, 1)], 1: [(1, 3)]},
+        edges={5: [0, 1, 1, 4], 3: [2, 3]},
     )
     path = tmp_path / "mesh.bin"
     write_volume_mesh(path, mesh)
-    assert path.stat().st_size == 32 + 5 * 24 + 8 * 4 + 3 * 12 + 3 * 8
+    assert path.stat().st_size == 40 + 5 * 24 + 8 * 4 + 5 * 12 + 3 * 8 + 3 * 2 * 4
     assert read_volume_mesh(path) == mesh
+
+
+def test_volume_mesh_reader_reads_a_version_1_file(tmp_path: Path) -> None:
+    """Meshes made before edge supports (ADR-105) have no edges and are still read."""
+    positions = [0.0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]
+    data = (
+        struct.pack("<4sIIIIIII", b"CFVM", 1, 1, 4, 1, 1, 1, 1)
+        + struct.pack("<12d", *positions)
+        + struct.pack("<4I", 0, 1, 2, 3)
+        + struct.pack("<iII", 1, 0, 1)
+        + struct.pack("<iII", 4, 0, 1)
+        + struct.pack("<2I", 0, 2)
+    )
+    path = tmp_path / "mesh.bin"
+    path.write_bytes(data)
+    assert read_volume_mesh(path) == VolumeMesh(
+        1, positions, [0, 1, 2, 3], {1: (0, 1)}, {4: [(0, 2)]}
+    )
 
 
 def test_volume_mesh_reader_refuses_a_damaged_file(tmp_path: Path) -> None:
@@ -204,7 +246,7 @@ def test_volume_mesh_reader_refuses_a_damaged_file(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="does not match its header"):
         read_volume_mesh(path)
     path.write_bytes(b"CFDM" + bytes(28))
-    with pytest.raises(ValueError, match="not a version 1 volume mesh"):
+    with pytest.raises(ValueError, match="not a version 1 or 2 volume mesh"):
         read_volume_mesh(path)
 
 

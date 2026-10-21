@@ -34,6 +34,13 @@ export type ItemName = string;
  */
 export type FaceTags = number[];
 /**
+ * Edge tags from the geometry's topology.json (M2.8). A fixed support or a prescribed displacement may hold edges as well as faces, or instead of them (ADR-105); absent or empty when it holds none.
+ *
+ * This interface was referenced by `Simulation`'s JSON-Schema
+ * via the `definition` "EdgeTags".
+ */
+export type EdgeTags = number[];
+/**
  * linear_static: small-displacement linear elastic static analysis, one load step. steady_thermal: steady-state heat conduction, one step (M5.1, ADR-064), with convection and radiation from faces (M5.2); it solves temperatures only, so it uses thermal loads and no supports. thermal_stress: a steady-state thermal step followed by a linear static step on the temperatures it solved, in one deck (M5.4, ADR-067); it uses supports, the structural loads other than a uniform temperature change, and the thermal loads, and needs the spec's stressFreeTemperature. modal: the natural frequencies of the bodies as they are held, one *FREQUENCY step (M6.1, ADR-070); it uses supports and no loads, and needs the spec's modes; bodies no support holds have rigid-body modes at or near zero.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
@@ -338,7 +345,7 @@ export interface MaterialResponse {
   material: IsotropicMaterial;
 }
 /**
- * All displacement components of the faces' nodes held at zero.
+ * All displacement components of the nodes of its faces and edges held at zero. An edge holds the nodes along it (a line support, ADR-105).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "FixedSupport".
@@ -348,9 +355,10 @@ export interface FixedSupport {
   type: "fixed";
   name: ItemName;
   faces: FaceTags;
+  edges?: EdgeTags;
 }
 /**
- * The faces' nodes moved by a given displacement in the global x, y and z directions; a free component is left to the solution. At least one component must have a value before a run.
+ * The nodes of its faces and edges moved by a given displacement in the global x, y and z directions; a free component is left to the solution. At least one component must have a value before a run. An edge moves the nodes along it (a line support, ADR-105).
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "PrescribedDisplacement".
@@ -360,6 +368,7 @@ export interface PrescribedDisplacement {
   type: "displacement";
   name: ItemName;
   faces: FaceTags;
+  edges?: EdgeTags;
   x: DisplacementComponent;
   y: DisplacementComponent;
   z: DisplacementComponent;
@@ -1495,6 +1504,7 @@ export const validateOptionalQuantity = validator<OptionalQuantity>(schema, "Opt
 export const validateItemId = validator<ItemId>(schema, "ItemId");
 export const validateItemName = validator<ItemName>(schema, "ItemName");
 export const validateFaceTags = validator<FaceTags>(schema, "FaceTags");
+export const validateEdgeTags = validator<EdgeTags>(schema, "EdgeTags");
 export const AnalysisTypeValues = ["linear_static", "steady_thermal", "thermal_stress", "modal"] as const satisfies readonly AnalysisType[];
 export const validateAnalysisType = validator<AnalysisType>(schema, "AnalysisType");
 export const validateBodyAssignment = validator<BodyAssignment>(schema, "BodyAssignment");

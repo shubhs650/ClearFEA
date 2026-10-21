@@ -1,26 +1,33 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""The volume mesh file (mesh.bin): nodes, tetrahedra by body, and element faces by face tag.
+"""The volume mesh file (mesh.bin): nodes, tetrahedra by body, element faces by face tag and,
+since version 2, the mesh segments along each edge (ADR-105).
 
-Format version 1, little-endian, described for readers in packages/spec/volume-mesh.md:
+Format version 2, little-endian, described for readers in packages/spec/volume-mesh.md:
 
     header     b"CFVM", then uint32 version, order, nodeCount, elementCount, bodyCount,
-               faceCount, entryCount
+               faceCount, entryCount, edgeCount, segmentCount
     positions  float64 x, y, z per node, in metres
     elements   uint32 node indices, 4 or 10 per element, in Gmsh's node order
     bodies     per body: int32 bodyTag, uint32 firstElement, elementCount
     faces      per face: int32 faceTag, uint32 firstEntry, entryCount
     entries    per element face: uint32 element, uint32 localFace (see TET_FACES)
+    edges      per edge: int32 edgeTag, uint32 firstSegment, segmentCount
+    segments   uint32 node indices, 2 or 3 per segment: its two ends, then its middle node
+
+Version 1 files (meshes made before M9's edge supports) have the shorter header and no edges
+or segments; they are still read, with no edges.
 """
 
 import struct
 import sys
 from array import array
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 MAGIC = b"CFVM"
-VERSION = 1
-_HEADER = struct.Struct("<4sIIIIIII")
+VERSION = 2
+_HEADER_V1 = struct.Struct("<4sIIIIIII")
+_HEADER = struct.Struct("<4sIIIIIIIII")
 _RANGE = struct.Struct("<iII")
 
 #: Corner nodes of each local face of a tetrahedron, in Gmsh's corner numbering.
@@ -29,6 +36,9 @@ TET_FACES = ((0, 1, 2), (0, 1, 3), (0, 2, 3), (1, 2, 3))
 #: Nodes per element for each element order.
 NODES_PER_ELEMENT = {1: 4, 2: 10}
 
+#: Nodes per edge segment for each element order: two ends, and for order 2 the middle node.
+NODES_PER_SEGMENT = {1: 2, 2: 3}
+
 
 @dataclass(frozen=True)
 class VolumeMesh:
@@ -36,7 +46,9 @@ class VolumeMesh:
 
     ``elements`` is flat: element ``e`` uses ``elements[e * n : (e + 1) * n]`` with
     ``n = NODES_PER_ELEMENT[order]``. ``bodies`` maps a body tag to its run of elements as
-    ``(first, count)``; ``faces`` maps a face tag to its ``(element, localFace)`` pairs.
+    ``(first, count)``; ``faces`` maps a face tag to its ``(element, localFace)`` pairs;
+    ``edges`` maps an edge tag to its segments, flat, ``NODES_PER_SEGMENT[order]`` node indices
+    each (empty for a version 1 file).
     """
 
     order: int
@@ -44,6 +56,7 @@ class VolumeMesh:
     elements: list[int]
     bodies: dict[int, tuple[int, int]]
     faces: dict[int, list[tuple[int, int]]]
+    edges: dict[int, list[int]] = field(default_factory=dict)
 
     @property
     def node_count(self) -> int:
@@ -74,6 +87,15 @@ def write_volume_mesh(path: Path, mesh: VolumeMesh) -> None:
         for element, local in pairs:
             entries.extend((element, local))
     body_rows = [(tag, *mesh.bodies[tag]) for tag in sorted(mesh.bodies)]
+    nps = NODES_PER_SEGMENT[mesh.order]
+    segments = array("I")
+    edge_rows = []
+    for tag in sorted(mesh.edges):
+        flat = mesh.edges[tag]
+        if len(flat) % nps != 0:
+            raise ValueError(f"Edge {tag}'s node list does not divide into whole segments.")
+        edge_rows.append((tag, len(segments) // nps, len(flat) // nps))
+        segments.extend(flat)
     with path.open("wb") as f:
         f.write(
             _HEADER.pack(
@@ -85,6 +107,8 @@ def write_volume_mesh(path: Path, mesh: VolumeMesh) -> None:
                 len(body_rows),
                 len(face_rows),
                 len(entries) // 2,
+                len(edge_rows),
+                len(segments) // nps,
             )
         )
         f.write(_little(array("d", mesh.positions)))
@@ -94,21 +118,40 @@ def write_volume_mesh(path: Path, mesh: VolumeMesh) -> None:
         for row in face_rows:
             f.write(_RANGE.pack(*row))
         f.write(_little(entries))
+        for row in edge_rows:
+            f.write(_RANGE.pack(*row))
+        f.write(_little(segments))
 
 
 def read_volume_mesh(path: Path) -> VolumeMesh:
-    """Reads and checks a mesh file. Raises ValueError when it is not a valid version 1 file."""
+    """Reads and checks a mesh file. Raises ValueError when it is not a valid version 1 or 2
+    file."""
     data = path.read_bytes()
-    if len(data) < _HEADER.size:
+    if len(data) < _HEADER_V1.size:
         raise ValueError(f"{path} is shorter than a volume mesh header.")
-    magic, version, order, nn, ne, nb, nf, nentries = _HEADER.unpack_from(data, 0)
-    if magic != MAGIC or version != VERSION or order not in NODES_PER_ELEMENT:
-        raise ValueError(f"{path} is not a version {VERSION} volume mesh file.")
+    magic, version, order, nn, ne, nb, nf, nentries = _HEADER_V1.unpack_from(data, 0)
+    if magic != MAGIC or version not in (1, VERSION) or order not in NODES_PER_ELEMENT:
+        raise ValueError(f"{path} is not a version 1 or {VERSION} volume mesh file.")
+    header = _HEADER_V1
+    ned = nsegments = 0
+    if version == 2:
+        if len(data) < _HEADER.size:
+            raise ValueError(f"{path} is shorter than a volume mesh header.")
+        header = _HEADER
+        ned, nsegments = _HEADER.unpack_from(data, 0)[8:]
     npe = NODES_PER_ELEMENT[order]
-    expected = _HEADER.size + nn * 24 + ne * npe * 4 + (nb + nf) * _RANGE.size + nentries * 8
+    nps = NODES_PER_SEGMENT[order]
+    expected = (
+        header.size
+        + nn * 24
+        + ne * npe * 4
+        + (nb + nf + ned) * _RANGE.size
+        + nentries * 8
+        + nsegments * nps * 4
+    )
     if len(data) != expected:
         raise ValueError(f"{path} has {len(data)} bytes, which does not match its header.")
-    offset = _HEADER.size
+    offset = header.size
     positions = list(struct.unpack_from(f"<{nn * 3}d", data, offset))
     offset += nn * 24
     elements = list(struct.unpack_from(f"<{ne * npe}I", data, offset))
@@ -135,4 +178,18 @@ def read_volume_mesh(path: Path) -> VolumeMesh:
         if any(e >= ne or local > 3 for e, local in pairs):
             raise ValueError(f"{path}: face {tag} names an element face that does not exist.")
         faces[tag] = pairs
-    return VolumeMesh(order, positions, elements, bodies, faces)
+    offset += nentries * 8
+    edge_rows = []
+    for _ in range(ned):
+        edge_rows.append(_RANGE.unpack_from(data, offset))
+        offset += _RANGE.size
+    nodes = struct.unpack_from(f"<{nsegments * nps}I", data, offset)
+    edges: dict[int, list[int]] = {}
+    for tag, first, count in edge_rows:
+        if first + count > nsegments:
+            raise ValueError(f"{path}: edge {tag} runs past the last segment.")
+        run = list(nodes[first * nps : (first + count) * nps])
+        if any(n >= nn for n in run):
+            raise ValueError(f"{path}: edge {tag} uses a node that does not exist.")
+        edges[tag] = run
+    return VolumeMesh(order, positions, elements, bodies, faces, edges)
