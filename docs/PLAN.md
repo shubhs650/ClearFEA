@@ -17,7 +17,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 | M6 | Modal | Natural frequencies and mode shapes |
 | M7 | Report | PDF and Word report |
 | M8 | Platform | Wallet, estimates, stop limit, storage rules, share links, isolation tests |
-| M9 | Gate | Size targets, laptop verification, acceptance cases, outside trial |
+| M9 | Gate | Size targets, acceptance cases, outside trial |
 | M10 | Live closed beta | ClearFEA live at clearfea.triyalabs.com for invited engineers; merges deploy themselves (ADR-095) |
 
 ## M0: Bootstrap
@@ -157,7 +157,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 ## M9: Gate
 
 - [ ] M9.1 Run a model at each solver's element limit (ADR-063) in the development environment; fix what breaks. (The 2-million-element target was dropped by ADR-063.)
-- [ ] M9.2 Set up and run on the laptop; demonstrate the laptop tier; fix viewer performance.
+- ~~M9.2 Set up and run on the laptop; demonstrate the laptop tier; fix viewer performance.~~ Removed by the maintainer on 2026-10-21: the gate has no local laptop requirement (ADR-095 item 12, amended). He ran it on Windows on 2026-10-19; the 16 GB checks ran on the live standard machine (M10.9).
 - [ ] M9.3 User guide for the main flow; self-hosting instructions.
 - [ ] M9.4 Build the two acceptance models as original geometry that can be published.
 - [ ] M9.5 Acceptance case A: nozzle, shell and pad under pressure and nozzle loads. Hand checks and FreeCAD FEM comparison.
@@ -166,7 +166,7 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 - [ ] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found.
 - [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome.
 
-**Exit:** all eight gate conditions met. Since ADR-095, M9.2 and M9.8 are done on the live site that M10 puts up (gate items 1 and 4 on the live standard machine, item 8 by the invited colleagues), and M9 closes after them.
+**Exit:** all eight gate conditions met. Since ADR-095, gate items 1 and 4 are met on the live standard machine and item 8 by the invited colleagues on the live site; since 2026-10-21 there is no laptop run (M9.2 removed), and M9 closes after them.
 
 ## M10: Live closed beta
 

@@ -68,16 +68,16 @@ Product decisions for ClearFEA, from the interview of 2026-10-13, followed by a 
 
 ## Phase 0 is done when
 
-1. Both acceptance cases are completed entirely through the UI on the laptop (i5 10th gen class, 16 GB RAM), with reactions balanced, results within tolerance of hand checks and the FreeCAD run, and a report fit to hand to a reviewer.
+1. Both acceptance cases are completed through the UI and on a 16 GB machine (the live standard machine), with reactions balanced, results within tolerance of hand checks and the FreeCAD run, and a report fit to hand to a reviewer.
 2. The full verification suite is green, with every gate load and support type covered.
 3. Cost estimates are within the agreed margin of measured cost on the benchmark set, and the wallet ledger reconciles exactly.
-4. A model at each solver's element limit (ADR-063) is run on the laptop, with a responsive viewer.
+4. A model at each solver's element limit (ADR-063) is run on a 16 GB machine (the live standard machine), with a responsive viewer.
 5. A fresh clone starts the whole system with one documented command.
 6. Data isolation between test users is proven by automated tests.
 7. A short user guide covers the main flow.
 8. Two or three outside engineers complete a provided tutorial case unaided.
 
-Since the hosted closed beta (ADR-095 item 12): items 1 and 4 are met on the live standard machine (16 GB, the laptop tier), the laptop run being the self-hosting check, and item 8 by the invited colleagues completing the tutorial case on the live site.
+Since the hosted closed beta (ADR-095 item 12): items 1 and 4 are met on the live standard machine (16 GB) and item 8 by the invited colleagues on the live site. On 2026-10-21 Shubham removed the local laptop requirement: the gate no longer needs a run on an i5 10th-generation laptop, and item 1 is met by the UI runs in the development environment together with the same cases through the API on the live standard machine, with no run by hand in the live site's UI.
 
 Working tolerances, to be tuned from benchmark data: results within 5 percent of the FreeCAD run on a matching mesh; cost estimates within 30 percent of measured cost.
 
@@ -117,7 +117,7 @@ After the beta: team workspaces, user-defined acceptance checks in reports, brin
 ## Open items
 
 - Domain, GitHub organisation and trademark checks for the name. The closed beta runs at `clearfea.triyalabs.com` (ADR-095); the product's own domain is still open.
-- Confirm Docker runs on the laptop. The Claude Code cloud environment was confirmed in M0.1 (ADR-012).
+- ~~Confirm Docker runs on the laptop.~~ Closed: Shubham ran it on Windows (WSL 2, Docker Desktop) on 2026-10-19, and the gate no longer needs a laptop (2026-10-21, ADR-095 item 12). The Claude Code cloud environment was confirmed in M0.1 (ADR-012).
 - Free storage quota, retention period, machine size list and rates: configuration values, set from benchmark and beta data.
 - Lawyer review of terms of service before real payments are taken.
 
@@ -1166,7 +1166,7 @@ M8's exit asks for the ledger to reconcile exactly over the full verification su
 2. **Only through the API.** The harness used to count ledger entries with `wrangler d1 execute` on the API's local database. That second process locks the SQLite file while the API is serving the worker's polls, so either side fails with `SQLITE_BUSY`: the read failed V-22 in a phase-end run, an earlier local run lost V-16 the same way (M8.5), and a stress test made the API answer 500 mid-case. The harness now reads the wallet (`GET /api/wallet`) instead and no longer takes `--persist-to`. The ledger rows are the API's own, so this checks the stored ledger and the wallet against each other and against the platform's pricing, not against a second reading of the database.
 
 ### ADR-091: With no applied load, the verification harness measures force balance against the run's nodal force scale
-2026-10-17 · Accepted (Shubham's decision on the M9.4 thread's card, 2026-10-17).
+2026-10-17 · Accepted (Shubham's decision on the M9.4 thread's card, 2026-10-17; reviewed and accepted by Shubham on 2026-10-21).
 
 Acceptance case B (M9.4) is a body heated on symmetry planes with no structural load, so each support's total reaction is rounding (about 0.01 N). The harness's "Reactions balance the applied load" row measured the miss against the sum of the reactions' sizes when there is no applied load (M2.2, for prescribed displacements), so it read B as 70 percent out of balance while the run's own check closed at 2.5e-7 percent. Choices:
 
@@ -1174,7 +1174,7 @@ Acceptance case B (M9.4) is a body heated on symmetry planes with no structural 
 2. **Tolerance unchanged.** The row's 0.1 percent stands. On the four no-load V cases (V-08, V-18, V-19, V-24, coarse tier) every verdict and miss is unchanged and each still reads 0.0000 percent; the scale grows for V-18 (467 kN to 558 kN) and V-19 (1.61 MN to 1.64 MN) and is the same for V-08 and V-24. B now passes at 0.0000 percent of 4.70 MN.
 
 ### ADR-092: The verification results page is a Markdown page in the repository, written from the phase-end run's result table
-2026-10-17 · Accepted (under Shubham's M9 autodrive; pending his review at M9 close).
+2026-10-17 · Accepted (under Shubham's M9 autodrive; reviewed and accepted by Shubham on 2026-10-21).
 
 M9.7 publishes the verification results page that `docs/VERIFICATION.md` promised and every report links to (DECISIONS Positioning, ADR-073 item 5). VERIFICATION.md said "the nightly run" writes it, but ADR-037 replaced the nightly run with a phase-end run per milestone, whose result table lives only in its log and summary page. Choices:
 
@@ -1185,7 +1185,7 @@ M9.7 publishes the verification results page that `docs/VERIFICATION.md` promise
 5. **What it would take to automate.** Having the phase-end run upload `results.json` (or commit the page) would remove the hand step of downloading the log; that is a CI change, left to the maintainer.
 
 ### ADR-093: A model at each solver's element limit runs on the development environment; job files are streamed, up to 5 GiB, and a dropped transfer is tried again
-2026-10-17 · Accepted (under Shubham's M9 autodrive, pending his review).
+2026-10-17 · Accepted (under Shubham's M9 autodrive; reviewed and accepted by Shubham on 2026-10-21).
 
 M9.1 runs a model at each solver's element limit (ADR-063, ADR-072) on `make dev` and fixes what breaks. Choices and findings:
 
@@ -1197,7 +1197,7 @@ M9.1 runs a model at each solver's element limit (ADR-063, ADR-072) on `make dev
 6. **Not covered.** The browser's handling of these results (drawing a 1.1-million-element run, cut planes on 612,670 nodes, 100 mode shapes) is M9.2's viewer work on the laptop; here the viewer was opened on the largest runs once (screenshots in the pull request).
 
 ### ADR-094: The workbench gets a header, a ribbon and floating viewer controls; the cut plane works on the geometry and mesh too
-2026-10-18 · Accepted (Shubham asked for the redesign and for each UI pull request to be merged once green, pending his review).
+2026-10-18 · Accepted (Shubham asked for the redesign and for each UI pull request to be merged once green; reviewed and accepted by Shubham on 2026-10-21).
 
 Shubham asked for a modern, professional interface before the M9.8 trial ("no ribbon UI, no control, no 3d interaction, no way to do sections in 3d"). The cut plane, probes, body hiding and saved views already existed (M3.3, M3.4, M3.6) but sat behind small checkboxes. Choices:
 
@@ -1209,7 +1209,7 @@ Shubham asked for a modern, professional interface before the M9.8 trial ("no ri
 6. **Icons** come from `lucide-react` (ISC licence, pinned 0.576.0), the only new dependency.
 
 ### ADR-095: Phase 0 goes live as an invite-only closed beta at clearfea.triyalabs.com: Cloudflare for the site, API, database and files, AWS Fargate on demand for the job worker
-2026-10-19 · Accepted. The move to a hosted closed beta is Shubham's own decision; he approved milestone M10 on this plan on 2026-10-19 ("Yes I approve M10"), leaving the defaults offered with it: AWS region `ap-south-1` (Mumbai), threads merge their own green pull requests (which now deploys them), and the gate mapping of item 12. Details pending his review.
+2026-10-19 · Accepted. The move to a hosted closed beta is Shubham's own decision; he approved milestone M10 on this plan on 2026-10-19 ("Yes I approve M10"), leaving the defaults offered with it: AWS region `ap-south-1` (Mumbai), threads merge their own green pull requests (which now deploys them), and the gate mapping of item 12. Details reviewed and accepted by Shubham on 2026-10-21; item 12 amended the same day.
 
 Shubham ran the prototype on Windows and found WSL and Docker too much to ask of his colleagues, mechanical engineers with no coding background who test in spare moments. He decided to put ClearFEA live for two or three invited colleagues (a closed beta), develop it from their feedback, and only later open a public beta. His stack: the domain `clearfea.triyalabs.com` on Cloudflare, Cloudflare Workers, D1 and R2, Better Auth with Google sign-in for an admin-managed Gmail allowlist, a polished landing page, and the solver on AWS compute that costs nothing while idle, with a 4 vCPU / 16 GB standard size and an 8 vCPU / 32 GB large size ready to switch on. Choices:
 
@@ -1224,19 +1224,19 @@ Shubham ran the prototype on Windows and found WSL and Docker too much to ask of
 9. **Merging to main deploys.** A GitHub Actions workflow on every push to main runs the fast tier, then builds and pushes the worker image to Amazon ECR and registers a new task definition revision when `worker/` or `packages/spec/` changed (new starts use the newest revision; a running job finishes on its own), then applies D1 migrations and deploys the Worker with the web app, then checks `/api/health` reports the new commit. GitHub reaches AWS through an OIDC role (no stored AWS keys for deploys) and Cloudflare through an API token. All secrets live in GitHub repository secrets and the workflow copies them to the Worker and to AWS Systems Manager; none is committed or held in the Claude environment. Because a new API can meet an old worker for a few minutes and the reverse, a change to the job protocol stays compatible with the previous side for one deploy. Migrations are forward-only; D1 Time Travel restores the database to any minute of the last 30 days.
 10. **AWS is described as a CloudFormation template** in the repository (`infra/aws/clearfea.yaml`): network, registry, cluster, the two task definitions, roles, the launch user, the log group, the budget alarm and the GitHub deploy role. The maintainer creates it once by uploading the file in the AWS console; no infrastructure tool is installed.
 11. **What stays the same.** Physics, the deck generator, solver numerics, tolerances, verification cases, element limits, metering and the ledger (play-money credits; the beta is free, Pricing decisions). Self-hosting stays first-class: `make dev` runs exactly as before. The phase-end workflow still runs `make verify` and `make e2e` in CI; a verification run against the live site is added with a dedicated verification account that signs in with a secret token.
-12. **The Phase 0 gate on the live site.** Items 1 and 4 ("on the laptop") are met on the live standard machine, which has the same 16 GB the laptop tier and the element limits were set for; the laptop run stays the self-hosting check. Item 8 is met by the closed beta: the invited colleagues complete the tutorial case on the live site. Items 2, 3, 5, 6 and 7 are unchanged. M9 therefore stays open until the live site runs; M9.2, M9.8 and M9.9 are done on it.
+12. **The Phase 0 gate on the live site.** Items 1 and 4 ("on the laptop") are met on the live standard machine, which has the same 16 GB the laptop tier and the element limits were set for; the laptop run stays the self-hosting check. Item 8 is met by the closed beta: the invited colleagues complete the tutorial case on the live site. Items 2, 3, 5, 6 and 7 are unchanged. M9 therefore stays open until the live site runs; M9.2, M9.8 and M9.9 are done on it. **Amended 2026-10-21 by Shubham:** the local laptop requirement is removed, so M9.2 is dropped from the plan; cases A and B through the API on the live standard machine meet item 1, with no run by hand in the live site's UI.
 
 Not decided here: a public beta (machines for more users, real payments, terms of service, a staging copy and pull-request previews), spot capacity, and a fast path for light jobs (AWS Lambda with the same image), each its own decision later.
 
 ### ADR-096: The production Worker's configuration is written at deploy time from wrangler.jsonc; the workbench moves to /app; /api/health reports the deployed commit
-2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.1), pending his review.
+2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.1); reviewed and accepted by Shubham on 2026-10-21.
 
 1. **One configuration source.** `apps/api/scripts/production-config.mjs` reads `wrangler.jsonc` and writes `wrangler.production.json` (not committed): the same code, compatibility date, bindings and cron triggers the tests run against, plus the Worker name `clearfea`, the custom domain `clearfea.triyalabs.com` (no `workers.dev` or preview addresses), the built web app as static assets with `/api/*` and `/internal/*` run in the Worker first and every other unknown path served the app's page, the production D1 id and the deployed commit, and Workers logs on. The D1 id comes from the GitHub variable `CLOUDFLARE_D1_DATABASE_ID` and is checked to be an id; wrangler cannot read it from the environment, and a wrangler `env.production` section would still need it written into the committed file. The deploy runs `pnpm --filter @clearfea/api deploy:config`, `deploy:migrate` and `deploy:worker` (not `deploy`, which pnpm takes as its own command); a secrets file is passed to the last with `--secrets-file`. Considered: a second committed configuration file (two places to keep the bindings and crons in step).
 2. **The workbench is at `/app`.** `/` opens it at `/app` (the address is rewritten in place, no reload) until the landing page of M10.4 takes `/`; `/share/<token>` is unchanged; any other address shows a short "no page at this address" page with a link to the workbench. The e2e tests open `/app`; the `localhost:5173` address in the guides still works through `/`.
 3. **`/api/health` has a `commit` field**, the Worker variable `CLEARFEA_COMMIT` written by the deploy, or `development` when it runs locally. The deploy workflow (M10.2) waits for it to equal the commit it deployed. Nothing else reads it, so an old worker meeting the new API is unaffected.
 
 ### ADR-097: Google sign-in runs on Better Auth inside the API, in ClearFEA's own users table, behind an allowlist checked at user and session creation
-2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.3), pending his review.
+2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.3); reviewed and accepted by Shubham on 2026-10-21.
 
 1. **Better Auth in the API, on D1 directly.** `apps/api/src/session/google.ts` builds Better Auth (1.7.10) per request with the D1 binding as its database (its built-in D1 dialect), Google as the only provider (`prompt=select_account`), email and password off and telemetry off, mounted at `/api/auth/*` only when `AUTH_MODE=google`. It needs the Workers flag `nodejs_als` for `node:async_hooks`, the one Node module it uses; `nodejs_compat` is not turned on. The web app calls `/api/auth/sign-in/social` itself, so no Better Auth client is added to the browser bundle.
 2. **One users table.** Better Auth's user model is ClearFEA's `users` table, with `email`, `email_verified`, `image` and `updated_at` added (migration 0022) and user ids generated as UUIDs, so every owner-scoped table keeps working unchanged. A Google user's `login` is their lower-case address. Sessions, linked accounts and OAuth state live in `auth_sessions`, `auth_accounts` and `auth_verifications`, snake_case like the rest of the schema. Considered: Better Auth's own `user` table with a ClearFEA user row made beside it at first sign-in (two rows per person to keep in step).
@@ -1247,7 +1247,7 @@ Not decided here: a public beta (machines for more users, real payments, terms o
 7. **Two modes, one interface.** `AUTH_MODE` is `local` (the default, the seeded password login of ADR-022 for `make dev`, `make verify` and `make e2e`) or `google`; any other value, or a Google mode missing `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_SECRET`, refuses every signed-in route with a message naming what is missing. In Google mode `POST /api/session` refuses the password login. `GET /api/session/options` tells the sign-in screen which to show. The production configuration (ADR-096) sets `AUTH_MODE=google` and `BETTER_AUTH_URL=https://clearfea.triyalabs.com`. Locally the seed gives alice and bob `.test` addresses and `.dev.vars.example` makes alice the admin, so the admin page can be developed and tested without Google.
 
 ### ADR-098: Job files' presigned R2 URLs are signed inside the API, valid for the stop limit plus an hour, and the pass-through routes stay for make dev
-2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.5), pending his review.
+2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.5); reviewed and accepted by Shubham on 2026-10-21.
 
 ADR-095 item 4 moves job files to presigned R2 URLs in production. Choices it needed:
 
@@ -1258,7 +1258,7 @@ ADR-095 item 4 moves job files to presigned R2 URLs in production. Choices it ne
 5. **STEP uploads are streamed.** `POST /api/geometries` reads only the first chunks to check the ISO-10303-21 header, then streams the body into R2 through a `FixedLengthStream` of the declared size, so the Worker's 128 MB of memory is no limit. It now needs `Content-Length` (411 without it; browsers and the harness always send it) and stores nothing when the body is shorter or longer than declared. The 100 MB limit stays: it is Cloudflare's request limit on the domain's plan. Report figures (5 MB) and logos (1 MB) are still read whole, since their image checks need the bytes and they are small.
 
 ### ADR-099: A cloud worker claims only its own size's jobs and exits after 10 idle minutes or 12 hours up; the cloud size list lives in machine_sizes
-2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.6), pending his review.
+2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.6); reviewed and accepted by Shubham on 2026-10-21.
 
 ADR-095 items 5 to 7 put the worker on AWS Fargate machines of two sizes that exit after 10 idle minutes. M10.6 is the worker's and the API's side of that; the AWS template and the launcher are M10.7. Choices:
 
@@ -1271,7 +1271,7 @@ ADR-095 items 5 to 7 put the worker on AWS Fargate machines of two sizes that ex
 7. **No limits change.** Large keeps the 16 GB element limits of ADR-063 until it is benchmarked (ADR-095 item 5); this decision only makes the size selectable.
 
 ### ADR-100: The API starts Fargate machines itself with a signed RunTask, reads how from a stack parameter, passes the worker token at start, and counts machine hours from start records
-2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.7), pending his review.
+2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.7); reviewed and accepted by Shubham on 2026-10-21.
 
 ADR-095 items 6, 8 and 10 put the solver machines on AWS Fargate, started by the API when work is queued, under a monthly machine-hours cap, from a CloudFormation template. M10.7 builds them. Choices:
 
@@ -1286,7 +1286,7 @@ ADR-095 items 6, 8 and 10 put the solver machines on AWS Fargate, started by the
 9. **Not done here.** The image push and new machine definition revisions are M10.8; until then the definitions name `clearfea-worker:latest`, so M10.8 must push that tag or register revisions before the first start. Nothing reads ECS task states: machine hours and liveness come from the worker's own contact, and stopping a machine by hand is done in the AWS console (DEPLOYMENT.md section 7.5).
 
 ### ADR-101: The solver image is tagged by its source, built only when that source has no image yet, and each machine definition gets a revision pinned to the image's digest before the site deploys
-2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.8), pending his review.
+2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.8); reviewed and accepted by Shubham on 2026-10-21.
 
 ADR-095 item 9 has the deploy workflow push the worker image and register new machine definition revisions when `worker/` or `packages/spec/` changed, before the API deploys. M10.8 builds it as the **Solver image** job of `.github/workflows/deploy.yml`, with the AWS calls in `infra/aws/worker-image.sh`. Choices:
 
@@ -1297,7 +1297,7 @@ ADR-095 item 9 has the deploy workflow push the worker image and register new ma
 5. **Build as `make worker-image` does.** Same Dockerfile, `worker/` context and `spec` build context, nothing changed in the image. Buildx caches layers in GitHub's Actions cache (free, 10 GB per repository), so a change to the Python code rebuilds in minutes and only a change to the CalculiX build or the base takes the full half hour. Provenance and SBOM attestations are off so each push is one image manifest, which the store's keep-ten rule counts as one image. GitHub reaches AWS through the stack's OIDC deploy role in the `production` environment; no AWS key is stored.
 
 ### ADR-102: The guides are written for the live site, the tutorial plate is served by the site, and the admin has a guide of their own
-2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.10), pending his review.
+2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.10); reviewed and accepted by Shubham on 2026-10-21.
 
 ADR-095 has the invited colleagues, mechanical engineers with no coding background and little spare time, complete the tutorial on the live site (gate item 8). M10.10 writes what they and the admin read. Choices:
 
@@ -1308,7 +1308,7 @@ ADR-095 has the invited colleagues, mechanical engineers with no coding backgrou
 5. **There is no credit top-up for the admin.** 100 credits are many hours on the standard machine (1 credit per hour); the admin guide says to ask a thread for a ledger grant if one runs out.
 
 ### ADR-103: The screens say "Starting a solver machine" while a user's queued job waits for one, from a small owner-scoped check
-2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.10), pending his review.
+2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.10); reviewed and accepted by Shubham on 2026-10-21.
 
 ADR-102 item 4 parked a note for the 1 to 3 minute wait while a solver machine starts. The coordinator asked for it before the colleagues' trial: their very first job waits that long, and a panel that only says "Importing" looks broken. Choices:
 
@@ -1317,7 +1317,7 @@ ADR-102 item 4 parked a note for the 1 to 3 minute wait while a solver machine s
 3. **Not shown for a job behind busy machines.** A job that waits because the machines alive are busy (ADR-100 item 4, up to 180 s before another start) shows the panel's usual waiting text; the note appears once a start for it is pending.
 
 ### ADR-104: The live checks sign in as one verification account with a secret token, and run from a workflow started by hand
-2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.9); Shubham approved building the token sign-in on 2026-10-19. Pending his review.
+2026-10-19 · Accepted under the maintainer's M10 autodrive (M10.9); Shubham approved building the token sign-in on 2026-10-19; reviewed and accepted by Shubham on 2026-10-21.
 
 ADR-095 item 11 adds a verification run against the live site with "a dedicated verification account that signs in with a secret token". The live site otherwise signs in only with Google, so this is a second way in, kept as narrow as it can be:
 
