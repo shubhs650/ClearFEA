@@ -10,9 +10,9 @@ export const SELF_HOSTING_URL = `${REPOSITORY_URL}/blob/main/docs/SELF_HOSTING.m
 
 /** The verification summary: the cases of the last phase-end run and the acceptance cases. */
 export const VERIFICATION_SUMMARY = {
-  cases: 26,
-  checks: 307,
-  checksWithin: 307,
+  cases: 27,
+  checks: 314,
+  checksWithin: 314,
   acceptanceCases: 2,
   acceptanceChecks: 34,
   acceptanceChecksWithin: 34,

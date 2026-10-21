@@ -9,14 +9,14 @@ How each case is built and where its reference values come from: [VERIFICATION.m
 
 ## Where these numbers come from
 
-- **Verification cases**: the [phase-end run](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085) on `main` at commit 8a665bf on 2026-10-20, which closed M10 (`make verify` in GitHub Actions, ADR-037). Full tier; 26 cases, 307 of 307 checks within tolerance. Software: clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1.
+- **Verification cases**: the [phase-end run](https://github.com/shubhs650/ClearFEA/actions/runs/39568682383) on `main` at commit 71621c5 on 2026-10-21, which closed M9 (`make verify` in GitHub Actions, ADR-037). Full tier; 27 cases, 314 of 314 checks within tolerance. Software: clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1.
 - **Acceptance cases**: the [Live checks run](https://github.com/shubhs650/ClearFEA/actions/runs/39434864276) on `main` at commit ec3dd18 on 2026-10-20, against the live site https://clearfea.triyalabs.com on its standard solver machine (4 vCPU, 16 GB; ADR-095, ADR-104). The phase-end run does not run them. Full tier; 2 cases, 34 of 34 checks within tolerance. Software: clearfea 0.0.0+ec3dd185675ab368bf069b7c475efb753e1ec628, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1.
 
 To produce the same tables: `VERIFY_TIER=full make verify` for the verification cases and `VERIFY_TIER=full CASES="A B" make verify` for the acceptance cases (verification/README.md).
 
 ## Verification cases
 
-The same 26 cases also ran on the live site, https://clearfea.triyalabs.com, on its standard solver machine (4 vCPU, 16 GB) at the coarse tier: 307 of 307 checks within tolerance ([Live checks run 39430740324](https://github.com/shubhs650/ClearFEA/actions/runs/39430740324), commit ec3dd18, 2026-10-20). A model at each solver's element limit (ADR-063) also ran there, all ten to completion ([runs 39439642986](https://github.com/shubhs650/ClearFEA/actions/runs/39439642986) and [39449881370](https://github.com/shubhs650/ClearFEA/actions/runs/39449881370)).
+The 26 cases other than V-23 (added in M9.10) also ran on the live site, https://clearfea.triyalabs.com, on its standard solver machine (4 vCPU, 16 GB) at the coarse tier: 307 of 307 checks within tolerance ([Live checks run 39430740324](https://github.com/shubhs650/ClearFEA/actions/runs/39430740324), commit ec3dd18, 2026-10-20). A model at each solver's element limit (ADR-063) also ran there, all ten to completion ([runs 39439642986](https://github.com/shubhs650/ClearFEA/actions/runs/39439642986) and [39449881370](https://github.com/shubhs650/ClearFEA/actions/runs/39449881370)).
 
 | Case | Mesh | Checks within tolerance |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ The same 26 cases also ran on the live site, https://clearfea.triyalabs.com, on 
 | [V-20 Cantilever beam frequencies](#v-20-cantilever-beam-frequencies) | 3 mm, 19577 elements, 36937 nodes | 12 of 12 |
 | [V-21 Fixed-fixed beam frequencies](#v-21-fixed-fixed-beam-frequencies) | 3 mm, 19577 elements, 36937 nodes | 7 of 7 |
 | [V-22 Unrestrained body](#v-22-unrestrained-body) | 2 mm, 66677 elements, 113748 nodes | 12 of 12 |
+| [V-23 NAFEMS LE10, thick plate under pressure](#v-23-nafems-le10-thick-plate-under-pressure) | 100 mm, 40 mm local, 41783 elements, 64045 nodes | 7 of 7 |
 | [V-24 Bar stretched by a prescribed displacement](#v-24-bar-stretched-by-a-prescribed-displacement) | 2 mm, 10682 elements, 17747 nodes | 17 of 17 |
 | [V-25 Tube in an elastic sleeve (curved elastic support)](#v-25-tube-in-an-elastic-sleeve-curved-elastic-support) | 5 mm, 6409 elements, 10853 nodes | 13 of 13 |
 | [V-26 Bar in tension with first-order elements](#v-26-bar-in-tension-with-first-order-elements) | 2 mm, first order, 12839 elements, 3408 nodes | 10 of 10 |
@@ -49,7 +50,7 @@ The same 26 cases also ran on the live site, https://clearfea.triyalabs.com, on 
 
 ### V-01 Thick cylinder, internal pressure
 
-Mesh 5 mm, 71783 elements, 114238 nodes; 46 s from upload to result. Reference values: [reference.md](../verification/cases/V-01-thick-cylinder/reference.md).
+Mesh 5 mm, 71783 elements, 114238 nodes; 42 s from upload to result. Reference values: [reference.md](../verification/cases/V-01-thick-cylinder/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -65,7 +66,7 @@ Mesh 5 mm, 71783 elements, 114238 nodes; 46 s from upload to result. Reference v
 | Reactions balance the applied load | applied 5.0147e-11, 1.7875e-11, 7.6605e-15 N | reactions 0.00028877, -7.5576e-05, 0.00064602 N | 0.0000 % of 7.5389e+05 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 9.4e-08 %, moment 1.1e-08 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
-| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 36 s, charged True, 1 entry |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 32 s, charged True, 1 entry |   |   | yes |
 
 ### V-02 Cantilever, end load
 
@@ -92,14 +93,14 @@ Mesh 2.5 mm, 0.25 mm local, 14665 elements, 27880 nodes; 11 s from upload to res
 | STEP length unit detected | mm | mm |   | equal | yes |
 | Peak stress at the side of the hole (Kt sigma, Kt = 3.025) | 302.5 MPa | 303.6 MPa (21 vertices) | +0.36 % | 1 % | yes |
 | Uniform stress at the pulled end (F / A) | 100 MPa | 99.995 MPa (203 vertices) | -0.01 % | 0.5 % | yes |
-| Reactions balance the applied load | applied 12500, 0, 0 N | reactions -12500, -1.1568e-06, -7.8775e-08 N | 0.0000 % of 12500 N | 0.1 % | yes |
+| Reactions balance the applied load | applied 12500, 0, 0 N | reactions -12500, -1.1568e-06, -7.8848e-08 N | 0.0000 % of 12500 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 1.9e-06 %, moment 2.4e-07 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 5 s, charged True, 1 entry |   |   | yes |
 
 ### V-04 Remote force and moment on a stub
 
-Mesh 2 mm, 82285 elements, 120919 nodes; 61 s from upload to result. Reference values: [reference.md](../verification/cases/V-04-remote-load/reference.md).
+Mesh 2 mm, 82285 elements, 120919 nodes; 54 s from upload to result. Reference values: [reference.md](../verification/cases/V-04-remote-load/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -113,11 +114,11 @@ Mesh 2 mm, 82285 elements, 120919 nodes; 61 s from upload to result. Reference v
 | Reactions balance the applied load | applied 6000, 0, 0 N | reactions -6000, 4.4986e-05, 5.5733e-05 N | 0.0000 % of 6000 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 5.4e-07 %, moment 3.4e-08 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
-| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 51 s, charged True, 1 entry |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 44 s, charged True, 1 entry |   |   | yes |
 
 ### V-05 Tank wall, hydrostatic pressure
 
-Mesh 5 mm, 38946 elements, 63582 nodes; 29 s from upload to result. Reference values: [reference.md](../verification/cases/V-05-tank-wall/reference.md).
+Mesh 5 mm, 38946 elements, 63582 nodes; 28 s from upload to result. Reference values: [reference.md](../verification/cases/V-05-tank-wall/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -126,10 +127,10 @@ Mesh 5 mm, 38946 elements, 63582 nodes; 29 s from upload to result. Reference va
 | Bending stress on the dry side at z = 100 mm | 661.95 kPa | 661.69 kPa (209 vertices) | -0.04 % | 0.5 % | yes |
 | Bending stress on the dry side at z = 200 mm | 196.13 kPa | 195.94 kPa (213 vertices) | -0.10 % | 0.5 % | yes |
 | Top of the wall moves away from the water | 0.094323 mm | 0.094322 mm (469 vertices) | -0.00 % | 0.5 % | yes |
-| Reactions balance the applied load | applied 0, 78.453, 0 N | reactions 5.83e-10, -78.453, -9.4618e-06 N | 0.0000 % of 78.453 N | 0.1 % | yes |
+| Reactions balance the applied load | applied 0, 78.453, 0 N | reactions 6.76e-10, -78.453, -9.4618e-06 N | 0.0000 % of 78.453 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 1.2e-05 %, moment 1.5e-06 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
-| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 21 s, charged True, 1 entry |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 20 s, charged True, 1 entry |   |   | yes |
 
 ### V-06 Thin rotating ring
 
@@ -144,7 +145,7 @@ Mesh 1.25 mm, 19424 elements, 33316 nodes; 15 s from upload to result. Reference
 | Radial growth inside (a σθ/E) | 0.035667 mm | 0.035666 mm (2601 vertices) | -0.00 % | 0.5 % | yes |
 | Hoop force across the cut x = 0 | -3.8882 kN | -3.8882 kN (support cut-x) | -0.00 % | 0.1 % | yes |
 | Hoop force across the cut y = 0 | -3.8882 kN | -3.8882 kN (support cut-y) | -0.00 % | 0.1 % | yes |
-| Reactions balance the applied load | applied 3888.2, 3888.2, 0 N | reactions -3888.2, -3888.2, 8.7659e-09 N | 0.0003 % of 6107.5 N | 0.1 % | yes |
+| Reactions balance the applied load | applied 3888.2, 3888.2, 0 N | reactions -3888.2, -3888.2, 7.793e-09 N | 0.0003 % of 6107.5 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 9.1e-07 %, moment 8e-07 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 8 s, charged True, 1 entry |   |   | yes |
@@ -160,14 +161,14 @@ Mesh 5 mm, 9440 elements, 14988 nodes; 9 s from upload to result. Reference valu
 | Top moves by F / (k A) + F H / (E A) | -2.242 mm | -2.242 mm (1209 vertices) | +0.00 % | 0.1 % | yes |
 | Uniform compression F / A | 1 MPa | 0.99999 MPa (521 vertices) | -0.00 % | 0.1 % | yes |
 | Foundation carries the force | 6 kN | 6 kN (support foundation) | -0.00 % | 0.1 % | yes |
-| Reactions balance the applied load | applied 0, 0, -6000 N | reactions 4.5704e-11, 4.8248e-12, 6000 N | 0.0000 % of 6000 N | 0.1 % | yes |
+| Reactions balance the applied load | applied 0, 0, -6000 N | reactions 5.5635e-11, 1.1073e-11, 6000 N | 0.0000 % of 6000 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 1.5e-05 %, moment 6.9e-06 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 4 s, charged True, 1 entry |   |   | yes |
 
 ### V-08 Bar with ends restrained, uniform temperature rise
 
-Mesh 2.5 mm, 13496 elements, 23121 nodes; 10 s from upload to result. Reference values: [reference.md](../verification/cases/V-08-heated-bar/reference.md).
+Mesh 2.5 mm, 13496 elements, 23121 nodes; 11 s from upload to result. Reference values: [reference.md](../verification/cases/V-08-heated-bar/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -181,14 +182,14 @@ Mesh 2.5 mm, 13496 elements, 23121 nodes; 10 s from upload to result. Reference 
 | Smallest principal stress is the axial compression | -116.97 MPa | -116.97 MPa (1841 vertices) | -0.00 % | 0.1 % | yes |
 | Total strain across the width (1 + nu) alpha dT | 0.07605 % | 0.076049 % (1841 vertices) | -0.00 % | 0.1 % | yes |
 | Total strain through the thickness (1 + nu) alpha dT | 760.5 µε | 760.49 µε (3381 vertices) | -0.00 % | 0.1 % | yes |
-| Reactions balance the applied load | applied 0, 0, 0 N | reactions -1.0914e-11, -2.4633e-10, 2.3767e-10 N | 0.0000 % of 46788 N | 0.1 % | yes |
-| The run's balance check closes | force and moment | force 7.3e-13 %, moment 4e-13 % | 0.0000 % | 0.1 % | yes |
+| Reactions balance the applied load | applied 0, 0, 0 N | reactions -7.276e-12, 4.2743e-10, 1.7932e-10 N | 0.0000 % of 46788 N | 0.1 % | yes |
+| The run's balance check closes | force and moment | force 9.9e-13 %, moment 6.4e-13 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
-| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 4 s, charged True, 1 entry |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 5 s, charged True, 1 entry |   |   | yes |
 
 ### V-09 Symmetry model against full model (quarter tube)
 
-Mesh 5 mm, 6409 elements, 10853 nodes; 9 s from upload to result. Reference values: [reference.md](../verification/cases/V-09-symmetry-tube/reference.md).
+Mesh 5 mm, 6409 elements, 10853 nodes; 8 s from upload to result. Reference values: [reference.md](../verification/cases/V-09-symmetry-tube/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -204,7 +205,7 @@ Mesh 5 mm, 6409 elements, 10853 nodes; 9 s from upload to result. Reference valu
 | Reactions balance the applied load | applied 14641, 54641, 1.9984e-15 N | reactions -14641, -54641, 2.1474e-07 N | 0.0000 % of 62825 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 2.8e-07 %, moment 1.5e-07 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
-| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 2 s, charged True, 1 entry |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 3 s, charged True, 1 entry |   |   | yes |
 
 ### V-10 Column under self-weight
 
@@ -218,14 +219,14 @@ Mesh 12.7 mm, 25896 elements, 41153 nodes; 18 s from upload to result. Reference
 | Axial stress at mid-height (ρ g h/2) | 5.68 psi | 5.6782 psi (179 vertices) | -0.03 % | 0.5 % | yes |
 | Axial stress inside at quarter height (ρ g 3h/4) | -8.52 psi | -8.5179 psi (1075 nodes inside) | -0.02 % | 0.5 % | yes |
 | Top shortens by ρ g h²/(2E) | -7.8324e-06 in | -7.8324e-06 in (357 vertices) | +0.00 % | 0.5 % | yes |
-| Reactions balance the applied load | applied 0, 0, -808.51 N | reactions 9.3175e-12, -4.9055e-12, 808.51 N | 0.0000 % of 808.51 N | 0.1 % | yes |
+| Reactions balance the applied load | applied 0, 0, -808.51 N | reactions -1.1507e-12, -3.2807e-12, 808.51 N | 0.0000 % of 808.51 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 9.8e-07 %, moment 4.6e-08 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 11 s, charged True, 1 entry |   |   | yes |
 
 ### V-11 Two bonded blocks against one block (cantilever)
 
-Mesh 2.5 mm, 1.75 mm local, 80414 elements, 121470 nodes; 57 s from upload to result. Reference values: [reference.md](../verification/cases/V-11-bonded-blocks/reference.md).
+Mesh 2.5 mm, 1.75 mm local, 80414 elements, 121470 nodes; 54 s from upload to result. Reference values: [reference.md](../verification/cases/V-11-bonded-blocks/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -237,11 +238,11 @@ Mesh 2.5 mm, 1.75 mm local, 80414 elements, 121470 nodes; 57 s from upload to re
 | Reactions balance the applied load | applied 0, -2224.1, 0 N | reactions -0.00015764, 2224.1, 8.393e-06 N | 0.0000 % of 2224.1 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 8.8e-06 %, moment 9.4e-07 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
-| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 48 s, charged True, 1 entry |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 44 s, charged True, 1 entry |   |   | yes |
 
 ### V-12 Bi-material bar in tension
 
-Mesh 2.5 mm, 1.5 mm local, 12527 elements, 21389 nodes; 10 s from upload to result. Reference values: [reference.md](../verification/cases/V-12-bimaterial-bar/reference.md).
+Mesh 2.5 mm, 1.5 mm local, 12527 elements, 21389 nodes; 11 s from upload to result. Reference values: [reference.md](../verification/cases/V-12-bimaterial-bar/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -255,14 +256,14 @@ Mesh 2.5 mm, 1.5 mm local, 12527 elements, 21389 nodes; 10 s from upload to resu
 | Body 1 side contracts (−ν1 σ / E1 · 10 mm) | -0.00075 mm | -0.00075 mm (929 vertices) | +0.00 % | 0.1 % | yes |
 | Body 2 side contracts alike (−ν2 σ / E2 · 10 mm) | -0.00075 mm | -0.00074998 mm (1391 vertices) | -0.00 % | 0.1 % | yes |
 | Start holds the end load | -5 kN | -5 kN (support start) | -0.00 % | 0.1 % | yes |
-| Reactions balance the applied load | applied 5000, 0, 0 N | reactions -5000, 9.9112e-08, -7.2553e-07 N | 0.0000 % of 5000 N | 0.1 % | yes |
+| Reactions balance the applied load | applied 5000, 0, 0 N | reactions -5000, 9.9011e-08, -7.2534e-07 N | 0.0000 % of 5000 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 1.2e-06 %, moment 7e-08 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 5 s, charged True, 1 entry |   |   | yes |
 
 ### V-13 Plane wall conduction
 
-Mesh 2.5 mm, 42818 elements, 63020 nodes; 14 s from upload to result. Reference values: [reference.md](../verification/cases/V-13-plane-wall/reference.md).
+Mesh 2.5 mm, 42818 elements, 63020 nodes; 13 s from upload to result. Reference values: [reference.md](../verification/cases/V-13-plane-wall/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -316,7 +317,7 @@ Mesh 2.5 mm, 42818 elements, 63020 nodes; 14 s from upload to result. Reference 
 
 ### V-16 Heated plate radiating to ambient
 
-Mesh 2.5 mm, 19913 elements, 32662 nodes; 11 s from upload to result. Reference values: [reference.md](../verification/cases/V-16-radiating-plate/reference.md).
+Mesh 2.5 mm, 19913 elements, 32662 nodes; 12 s from upload to result. Reference values: [reference.md](../verification/cases/V-16-radiating-plate/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -333,7 +334,7 @@ Mesh 2.5 mm, 19913 elements, 32662 nodes; 11 s from upload to result. Reference 
 
 ### V-17 Slab with internal heat generation
 
-Mesh 2.5 mm, 42818 elements, 63020 nodes; 17 s from upload to result. Reference values: [reference.md](../verification/cases/V-17-heat-generation/reference.md).
+Mesh 2.5 mm, 42818 elements, 63020 nodes; 16 s from upload to result. Reference values: [reference.md](../verification/cases/V-17-heat-generation/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -375,7 +376,7 @@ Mesh 2.5 mm, 10203 elements, 16454 nodes; 12 s from upload to result. Reference 
 
 ### V-19 Wall with temperature-dependent properties
 
-Mesh 2.5 mm, 5252 elements, 8618 nodes; 8 s from upload to result. Reference values: [reference.md](../verification/cases/V-19-temperature-dependent-wall/reference.md).
+Mesh 2.5 mm, 5252 elements, 8618 nodes; 9 s from upload to result. Reference values: [reference.md](../verification/cases/V-19-temperature-dependent-wall/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -416,7 +417,7 @@ Mesh 3 mm, 19577 elements, 36937 nodes; 17 s from upload to result. Reference va
 | Second bending mode in z, shape at mid-span | -0.71367 1 | -0.71356 1 (81 vertices) | -0.01 % | 0.3 % | yes |
 | Modes found | 5 | 5 |   | equal | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
-| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 11 s, charged True, 1 entry |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 10 s, charged True, 1 entry |   |   | yes |
 
 ### V-21 Fixed-fixed beam frequencies
 
@@ -430,11 +431,11 @@ Mesh 3 mm, 19577 elements, 36937 nodes; 15 s from upload to result. Reference va
 | Second bending mode in z, βL = 7.8532 | 178.78 Hz | 178.86 Hz (mode 3) | +0.0440 % | 0.3 % | yes |
 | Modes found | 3 | 3 |   | equal | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
-| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 8 s, charged True, 1 entry |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 9 s, charged True, 1 entry |   |   | yes |
 
 ### V-22 Unrestrained body
 
-Mesh 2 mm, 66677 elements, 113748 nodes; 67 s from upload to result. Reference values: [reference.md](../verification/cases/V-22-free-body-modes/reference.md).
+Mesh 2 mm, 66677 elements, 113748 nodes; 71 s from upload to result. Reference values: [reference.md](../verification/cases/V-22-free-body-modes/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -449,11 +450,25 @@ Mesh 2 mm, 66677 elements, 113748 nodes; 67 s from upload to result. Reference v
 | Second elastic mode, free-free bending in y, βL = 4.7300 | 0.12971 kHz | 0.12953 kHz (mode 8) | -0.1435 % | 0.3 % | yes |
 | Modes found | 8 | 8 |   | equal | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
-| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 57 s, charged True, 1 entry |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 61 s, charged True, 1 entry |   |   | yes |
+
+### V-23 NAFEMS LE10, thick plate under pressure
+
+Mesh 100 mm, 40 mm local, 41783 elements, 64045 nodes; 26 s from upload to result. Reference values: [reference.md](../verification/cases/V-23-thick-plate/reference.md).
+
+| Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
+| --- | --- | --- | --- | --- | --- |
+| STEP length unit detected | mm | mm |   | equal | yes |
+| Hoop stress σyy at point D (NAFEMS target -5.38 MPa) | -5.38 MPa | -5.3854 MPa (1 vertices) | +0.10 % | 1 % | yes |
+| Mid-plane line carries the whole pressure load, z (p × area = 5.4487 MN) | 5.4487 MN | 5.4487 MN (support mid-line) | -0.00 % | 0.1 % | yes |
+| Reactions balance the applied load | applied 0, 0, -5.4484e+06 N | reactions 0.10378, 0.061153, 5.4487e+06 N | 0.0048 % of 5.4484e+06 N | 0.1 % | yes |
+| The run's balance check closes | force and moment | force 2e-06 %, moment 2e-07 % | 0.0000 % | 0.1 % | yes |
+| Solver log has no unexpected warnings | none | none |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 19 s, charged True, 1 entry |   |   | yes |
 
 ### V-24 Bar stretched by a prescribed displacement
 
-Mesh 2 mm, 10682 elements, 17747 nodes; 9 s from upload to result. Reference values: [reference.md](../verification/cases/V-24-stretched-bar/reference.md).
+Mesh 2 mm, 10682 elements, 17747 nodes; 10 s from upload to result. Reference values: [reference.md](../verification/cases/V-24-stretched-bar/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -470,7 +485,7 @@ Mesh 2 mm, 10682 elements, 17747 nodes; 9 s from upload to result. Reference val
 | Axial strain along the side (δ / L) | 500 µε | 500 µε (1741 vertices) | -0.00 % | 0.1 % | yes |
 | Lateral strain along the side (−ν ε) | -0.000145 in/in | -0.000145 in/in (1741 vertices) | -0.00 % | 0.1 % | yes |
 | Safety factor against yield along the side (Sy / σvm) | 2.4828 1 | 2.4828 1 (1741 vertices) | -0.00 % | 0.1 % | yes |
-| Reactions balance the applied load | applied 0, 0, 0 N | reactions 0.00016, -1.973e-10, 1.1889e-10 N | 0.0000 % of 32250 N | 0.1 % | yes |
+| Reactions balance the applied load | applied 0, 0, 0 N | reactions 0.00016, -2.2654e-10, -4.3348e-10 N | 0.0000 % of 32250 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 5e-07 %, moment 3.9e-08 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 4 s, charged True, 1 entry |   |   | yes |
@@ -507,14 +522,14 @@ Mesh 2 mm, first order, 12839 elements, 3408 nodes; 7 s from upload to result. R
 | Side contracts in y (−ν ε y) | -0.002129 mm | -0.002129 mm (710 vertices) | +0.00 % | 0.1 % | yes |
 | Side contracts in z (−ν ε z) | -0.002129 mm | -0.002129 mm (709 vertices) | +0.00 % | 0.1 % | yes |
 | The start holds the pull | -1000 lbf | -1000 lbf (support start) | +0.00 % | 0.1 % | yes |
-| Reactions balance the applied load | applied 4448.2, 0, 0 N | reactions -4448.2, -9.3315e-11, -1.2631e-10 N | 0.0000 % of 4448.2 N | 0.1 % | yes |
+| Reactions balance the applied load | applied 4448.2, 0, 0 N | reactions -4448.2, 1.8211e-11, -1.3102e-10 N | 0.0000 % of 4448.2 N | 0.1 % | yes |
 | The run's balance check closes | force and moment | force 2.4e-06 %, moment 1.3e-07 % | 0.0000 % | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 1 s, charged True, 1 entry |   |   | yes |
 
 ### V-27 Two-layer tube wall conduction
 
-Mesh 2.5 mm, 1 mm local, 85994 elements, 129217 nodes; 40 s from upload to result. Reference values: [reference.md](../verification/cases/V-27-two-layer-tube/reference.md).
+Mesh 2.5 mm, 1 mm local, 85994 elements, 129217 nodes; 38 s from upload to result. Reference values: [reference.md](../verification/cases/V-27-two-layer-tube/reference.md).
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
@@ -529,7 +544,7 @@ Mesh 2.5 mm, 1 mm local, 85994 elements, 129217 nodes; 40 s from upload to resul
 | Heat out through the outside, all of it across the bond | -967.61 BTU/h | -967.59 BTU/h (load outside) | -0.00 % | 0.2 % | yes |
 | The run's heat balance closes | heat in 283.57 W | heat out 283.57 W | 0.0000 % of 283.61 W | 0.1 % | yes |
 | Solver log has no unexpected warnings | none | none |   |   | yes |
-| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 30 s, charged True, 1 entry |   |   | yes |
+| Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 28 s, charged True, 1 entry |   |   | yes |
 
 ### Ledger
 
@@ -537,10 +552,10 @@ The wallet ledger over the whole run: every charge the cases made, against the c
 
 | Check | Reference | ClearFEA | Error | Tolerance | Within tolerance |
 | --- | --- | --- | --- | --- | --- |
-| Every running balance is the previous one plus the entry | 53 entries chained | 53 entries chained |   | exact | yes |
-| Wallet balance equals the sum of the ledger | 99.930272 credits | 99.930272 credits |   | exact | yes |
-| Each job charge is its billed seconds at its rate | 52 jobs, 0.069728 credits | 0.069728 credits |   | exact | yes |
-| Each charged run has one entry for exactly its recorded cost | 26 runs, 0.055834 credits | 26 runs matched |   | exact | yes |
+| Every running balance is the previous one plus the entry | 55 entries chained | 55 entries chained |   | exact | yes |
+| Wallet balance equals the sum of the ledger | 99.927911 credits | 99.927911 credits |   | exact | yes |
+| Each job charge is its billed seconds at its rate | 54 jobs, 0.072089 credits | 0.072089 credits |   | exact | yes |
+| Each charged run has one entry for exactly its recorded cost | 27 runs, 0.056527 credits | 27 runs matched |   | exact | yes |
 | No entry without a job other than the grant | none | none |   | exact | yes |
 
 ## Acceptance cases

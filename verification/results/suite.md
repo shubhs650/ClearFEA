@@ -14,7 +14,7 @@ Tier: full
 | V-01 | Reactions balance the applied load | applied 5.0147e-11, 1.7875e-11, 7.6605e-15 N | reactions 0.00028877, -7.5576e-05, 0.00064602 N | 0.0000 % of 7.5389e+05 N | 0.1 % | pass |
 | V-01 | The run's balance check closes | force and moment | force 9.4e-08 %, moment 1.1e-08 % | 0.0000 % | 0.1 % | pass |
 | V-01 | Solver log has no unexpected warnings | none | none |  |  | pass |
-| V-01 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 36 s, charged True, 1 entry |  |  | pass |
+| V-01 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 32 s, charged True, 1 entry |  |  | pass |
 | V-02 | STEP length unit detected | in | in |  | equal | pass |
 | V-02 | Tip deflection (mean over the free end) | -0.064313 in | -0.063851 in (633 vertices) | -0.72 % | 1.5 % | pass |
 | V-02 | Bending stress on top at mid-length | 13500 psi | 13495 psi (252 vertices) | -0.04 % | 0.5 % | pass |
@@ -27,7 +27,7 @@ Tier: full
 | V-03 | STEP length unit detected | mm | mm |  | equal | pass |
 | V-03 | Peak stress at the side of the hole (Kt sigma, Kt = 3.025) | 302.5 MPa | 303.6 MPa (21 vertices) | +0.36 % | 1 % | pass |
 | V-03 | Uniform stress at the pulled end (F / A) | 100 MPa | 99.995 MPa (203 vertices) | -0.01 % | 0.5 % | pass |
-| V-03 | Reactions balance the applied load | applied 12500, 0, 0 N | reactions -12500, -1.1568e-06, -7.8775e-08 N | 0.0000 % of 12500 N | 0.1 % | pass |
+| V-03 | Reactions balance the applied load | applied 12500, 0, 0 N | reactions -12500, -1.1568e-06, -7.8848e-08 N | 0.0000 % of 12500 N | 0.1 % | pass |
 | V-03 | The run's balance check closes | force and moment | force 1.9e-06 %, moment 2.4e-07 % | 0.0000 % | 0.1 % | pass |
 | V-03 | Solver log has no unexpected warnings | none | none |  |  | pass |
 | V-03 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 5 s, charged True, 1 entry |  |  | pass |
@@ -41,16 +41,16 @@ Tier: full
 | V-04 | Reactions balance the applied load | applied 6000, 0, 0 N | reactions -6000, 4.4986e-05, 5.5733e-05 N | 0.0000 % of 6000 N | 0.1 % | pass |
 | V-04 | The run's balance check closes | force and moment | force 5.4e-07 %, moment 3.4e-08 % | 0.0000 % | 0.1 % | pass |
 | V-04 | Solver log has no unexpected warnings | none | none |  |  | pass |
-| V-04 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 51 s, charged True, 1 entry |  |  | pass |
+| V-04 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 44 s, charged True, 1 entry |  |  | pass |
 | V-05 | STEP length unit detected | mm | mm |  | equal | pass |
 | V-05 | Base carries the water's push (ρ g b H²/2) | -78.453 N | -78.453 N (support base) | -0.00 % | 0.1 % | pass |
 | V-05 | Bending stress on the dry side at z = 100 mm | 661.95 kPa | 661.69 kPa (209 vertices) | -0.04 % | 0.5 % | pass |
 | V-05 | Bending stress on the dry side at z = 200 mm | 196.13 kPa | 195.94 kPa (213 vertices) | -0.10 % | 0.5 % | pass |
 | V-05 | Top of the wall moves away from the water | 0.094323 mm | 0.094322 mm (469 vertices) | -0.00 % | 0.5 % | pass |
-| V-05 | Reactions balance the applied load | applied 0, 78.453, 0 N | reactions 5.83e-10, -78.453, -9.4618e-06 N | 0.0000 % of 78.453 N | 0.1 % | pass |
+| V-05 | Reactions balance the applied load | applied 0, 78.453, 0 N | reactions 6.76e-10, -78.453, -9.4618e-06 N | 0.0000 % of 78.453 N | 0.1 % | pass |
 | V-05 | The run's balance check closes | force and moment | force 1.2e-05 %, moment 1.5e-06 % | 0.0000 % | 0.1 % | pass |
 | V-05 | Solver log has no unexpected warnings | none | none |  |  | pass |
-| V-05 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 21 s, charged True, 1 entry |  |  | pass |
+| V-05 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 20 s, charged True, 1 entry |  |  | pass |
 | V-06 | STEP length unit detected | mm | mm |  | equal | pass |
 | V-06 | Hoop stress outside, r = b | 72.591 MPa | 72.591 MPa (2861 vertices) | -0.00 % | 0.5 % | pass |
 | V-06 | Hoop stress inside, r = a | 83.223 MPa | 83.221 MPa (2601 vertices) | -0.00 % | 0.5 % | pass |
@@ -58,7 +58,7 @@ Tier: full
 | V-06 | Radial growth inside (a σθ/E) | 0.035667 mm | 0.035666 mm (2601 vertices) | -0.00 % | 0.5 % | pass |
 | V-06 | Hoop force across the cut x = 0 | -3.8882 kN | -3.8882 kN (support cut-x) | -0.00 % | 0.1 % | pass |
 | V-06 | Hoop force across the cut y = 0 | -3.8882 kN | -3.8882 kN (support cut-y) | -0.00 % | 0.1 % | pass |
-| V-06 | Reactions balance the applied load | applied 3888.2, 3888.2, 0 N | reactions -3888.2, -3888.2, 8.7659e-09 N | 0.0003 % of 6107.5 N | 0.1 % | pass |
+| V-06 | Reactions balance the applied load | applied 3888.2, 3888.2, 0 N | reactions -3888.2, -3888.2, 7.793e-09 N | 0.0003 % of 6107.5 N | 0.1 % | pass |
 | V-06 | The run's balance check closes | force and moment | force 9.1e-07 %, moment 8e-07 % | 0.0000 % | 0.1 % | pass |
 | V-06 | Solver log has no unexpected warnings | none | none |  |  | pass |
 | V-06 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 8 s, charged True, 1 entry |  |  | pass |
@@ -67,7 +67,7 @@ Tier: full
 | V-07 | Top moves by F / (k A) + F H / (E A) | -2.242 mm | -2.242 mm (1209 vertices) | +0.00 % | 0.1 % | pass |
 | V-07 | Uniform compression F / A | 1 MPa | 0.99999 MPa (521 vertices) | -0.00 % | 0.1 % | pass |
 | V-07 | Foundation carries the force | 6 kN | 6 kN (support foundation) | -0.00 % | 0.1 % | pass |
-| V-07 | Reactions balance the applied load | applied 0, 0, -6000 N | reactions 4.5704e-11, 4.8248e-12, 6000 N | 0.0000 % of 6000 N | 0.1 % | pass |
+| V-07 | Reactions balance the applied load | applied 0, 0, -6000 N | reactions 5.5635e-11, 1.1073e-11, 6000 N | 0.0000 % of 6000 N | 0.1 % | pass |
 | V-07 | The run's balance check closes | force and moment | force 1.5e-05 %, moment 6.9e-06 % | 0.0000 % | 0.1 % | pass |
 | V-07 | Solver log has no unexpected warnings | none | none |  |  | pass |
 | V-07 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 4 s, charged True, 1 entry |  |  | pass |
@@ -81,10 +81,10 @@ Tier: full
 | V-08 | Smallest principal stress is the axial compression | -116.97 MPa | -116.97 MPa (1841 vertices) | -0.00 % | 0.1 % | pass |
 | V-08 | Total strain across the width (1 + nu) alpha dT | 0.07605 % | 0.076049 % (1841 vertices) | -0.00 % | 0.1 % | pass |
 | V-08 | Total strain through the thickness (1 + nu) alpha dT | 760.5 µε | 760.49 µε (3381 vertices) | -0.00 % | 0.1 % | pass |
-| V-08 | Reactions balance the applied load | applied 0, 0, 0 N | reactions -1.0914e-11, -2.4633e-10, 2.3767e-10 N | 0.0000 % of 46788 N | 0.1 % | pass |
-| V-08 | The run's balance check closes | force and moment | force 7.3e-13 %, moment 4e-13 % | 0.0000 % | 0.1 % | pass |
+| V-08 | Reactions balance the applied load | applied 0, 0, 0 N | reactions -7.276e-12, 4.2743e-10, 1.7932e-10 N | 0.0000 % of 46788 N | 0.1 % | pass |
+| V-08 | The run's balance check closes | force and moment | force 9.9e-13 %, moment 6.4e-13 % | 0.0000 % | 0.1 % | pass |
 | V-08 | Solver log has no unexpected warnings | none | none |  |  | pass |
-| V-08 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 4 s, charged True, 1 entry |  |  | pass |
+| V-08 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 5 s, charged True, 1 entry |  |  | pass |
 | V-09 | STEP length unit detected | mm | mm |  | equal | pass |
 | V-09 | von Mises stress at the bore (full tube 32.1870 MPa) | 32.187 MPa | 32.081 MPa (1307 vertices) | -0.33 % | 1 % | pass |
 | V-09 | von Mises stress at the outside (full tube 16.0 MPa) | 16 MPa | 15.978 MPa (1879 vertices) | -0.14 % | 1 % | pass |
@@ -97,14 +97,14 @@ Tier: full
 | V-09 | Reactions balance the applied load | applied 14641, 54641, 1.9984e-15 N | reactions -14641, -54641, 2.1474e-07 N | 0.0000 % of 62825 N | 0.1 % | pass |
 | V-09 | The run's balance check closes | force and moment | force 2.8e-07 %, moment 1.5e-07 % | 0.0000 % | 0.1 % | pass |
 | V-09 | Solver log has no unexpected warnings | none | none |  |  | pass |
-| V-09 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 2 s, charged True, 1 entry |  |  | pass |
+| V-09 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 3 s, charged True, 1 entry |  |  | pass |
 | V-10 | STEP length unit detected | in | in |  | equal | pass |
 | V-10 | Node values served per field match nodes.bin | 5 fields | 41153 nodes | equal | equal | pass |
 | V-10 | Base carries the weight (ρ g A h) | 181.76 lbf | 181.76 lbf (support base) | -0.00 % | 0.1 % | pass |
 | V-10 | Axial stress at mid-height (ρ g h/2) | 5.68 psi | 5.6782 psi (179 vertices) | -0.03 % | 0.5 % | pass |
 | V-10 | Axial stress inside at quarter height (ρ g 3h/4) | -8.52 psi | -8.5179 psi (1075 nodes inside) | -0.02 % | 0.5 % | pass |
 | V-10 | Top shortens by ρ g h²/(2E) | -7.8324e-06 in | -7.8324e-06 in (357 vertices) | +0.00 % | 0.5 % | pass |
-| V-10 | Reactions balance the applied load | applied 0, 0, -808.51 N | reactions 9.3175e-12, -4.9055e-12, 808.51 N | 0.0000 % of 808.51 N | 0.1 % | pass |
+| V-10 | Reactions balance the applied load | applied 0, 0, -808.51 N | reactions -1.1507e-12, -3.2807e-12, 808.51 N | 0.0000 % of 808.51 N | 0.1 % | pass |
 | V-10 | The run's balance check closes | force and moment | force 9.8e-07 %, moment 4.6e-08 % | 0.0000 % | 0.1 % | pass |
 | V-10 | Solver log has no unexpected warnings | none | none |  |  | pass |
 | V-10 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 11 s, charged True, 1 entry |  |  | pass |
@@ -116,7 +116,7 @@ Tier: full
 | V-11 | Reactions balance the applied load | applied 0, -2224.1, 0 N | reactions -0.00015764, 2224.1, 8.393e-06 N | 0.0000 % of 2224.1 N | 0.1 % | pass |
 | V-11 | The run's balance check closes | force and moment | force 8.8e-06 %, moment 9.4e-07 % | 0.0000 % | 0.1 % | pass |
 | V-11 | Solver log has no unexpected warnings | none | none |  |  | pass |
-| V-11 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 48 s, charged True, 1 entry |  |  | pass |
+| V-11 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 44 s, charged True, 1 entry |  |  | pass |
 | V-12 | STEP length unit detected | mm | mm |  | equal | pass |
 | V-12 | Normal stress σxx along body 1 (F / A) | 50 MPa | 49.998 MPa (929 vertices) | -0.00 % | 0.1 % | pass |
 | V-12 | Normal stress σxx along body 2 (F / A) | 50 MPa | 50.005 MPa (1391 vertices) | +0.01 % | 0.1 % | pass |
@@ -127,7 +127,7 @@ Tier: full
 | V-12 | Body 1 side contracts (−ν1 σ / E1 · 10 mm) | -0.00075 mm | -0.00075 mm (929 vertices) | +0.00 % | 0.1 % | pass |
 | V-12 | Body 2 side contracts alike (−ν2 σ / E2 · 10 mm) | -0.00075 mm | -0.00074998 mm (1391 vertices) | -0.00 % | 0.1 % | pass |
 | V-12 | Start holds the end load | -5 kN | -5 kN (support start) | -0.00 % | 0.1 % | pass |
-| V-12 | Reactions balance the applied load | applied 5000, 0, 0 N | reactions -5000, 9.9112e-08, -7.2553e-07 N | 0.0000 % of 5000 N | 0.1 % | pass |
+| V-12 | Reactions balance the applied load | applied 5000, 0, 0 N | reactions -5000, 9.9011e-08, -7.2534e-07 N | 0.0000 % of 5000 N | 0.1 % | pass |
 | V-12 | The run's balance check closes | force and moment | force 1.2e-06 %, moment 7e-08 % | 0.0000 % | 0.1 % | pass |
 | V-12 | Solver log has no unexpected warnings | none | none |  |  | pass |
 | V-12 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 5 s, charged True, 1 entry |  |  | pass |
@@ -232,14 +232,14 @@ Tier: full
 | V-20 | Second bending mode in z, shape at mid-span | -0.71367 1 | -0.71356 1 (81 vertices) | -0.01 % | 0.3 % | pass |
 | V-20 | Modes found | 5 | 5 |  | equal | pass |
 | V-20 | Solver log has no unexpected warnings | none | none |  |  | pass |
-| V-20 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 11 s, charged True, 1 entry |  |  | pass |
+| V-20 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 10 s, charged True, 1 entry |  |  | pass |
 | V-21 | STEP length unit detected | mm | mm |  | equal | pass |
 | V-21 | First bending mode in z, βL = 4.7300 | 3891.4 cpm | 3896.5 cpm (mode 1) | +0.1314 % | 0.3 % | pass |
 | V-21 | First bending mode in y, βL = 4.7300 | 129.71 Hz | 129.53 Hz (mode 2) | -0.1395 % | 0.3 % | pass |
 | V-21 | Second bending mode in z, βL = 7.8532 | 178.78 Hz | 178.86 Hz (mode 3) | +0.0440 % | 0.3 % | pass |
 | V-21 | Modes found | 3 | 3 |  | equal | pass |
 | V-21 | Solver log has no unexpected warnings | none | none |  |  | pass |
-| V-21 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 8 s, charged True, 1 entry |  |  | pass |
+| V-21 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 9 s, charged True, 1 entry |  |  | pass |
 | V-22 | STEP length unit detected | mm | mm |  | equal | pass |
 | V-22 | Rigid-body mode 1 near zero | 0 Hz | -0.0013181 Hz (mode 1) | -0.0020 % of mode 7 | 0.1 % of mode 7 | pass |
 | V-22 | Rigid-body mode 2 near zero | 0 Hz | -0.0009431 Hz (mode 2) | -0.0015 % of mode 7 | 0.1 % of mode 7 | pass |
@@ -251,7 +251,14 @@ Tier: full
 | V-22 | Second elastic mode, free-free bending in y, βL = 4.7300 | 0.12971 kHz | 0.12953 kHz (mode 8) | -0.1435 % | 0.3 % | pass |
 | V-22 | Modes found | 8 | 8 |  | equal | pass |
 | V-22 | Solver log has no unexpected warnings | none | none |  |  | pass |
-| V-22 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 57 s, charged True, 1 entry |  |  | pass |
+| V-22 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 61 s, charged True, 1 entry |  |  | pass |
+| V-23 | STEP length unit detected | mm | mm |  | equal | pass |
+| V-23 | Hoop stress σyy at point D (NAFEMS target -5.38 MPa) | -5.38 MPa | -5.3854 MPa (1 vertices) | +0.10 % | 1 % | pass |
+| V-23 | Mid-plane line carries the whole pressure load, z (p × area = 5.4487 MN) | 5.4487 MN | 5.4487 MN (support mid-line) | -0.00 % | 0.1 % | pass |
+| V-23 | Reactions balance the applied load | applied 0, 0, -5.4484e+06 N | reactions 0.10378, 0.061153, 5.4487e+06 N | 0.0048 % of 5.4484e+06 N | 0.1 % | pass |
+| V-23 | The run's balance check closes | force and moment | force 2e-06 %, moment 2e-07 % | 0.0000 % | 0.1 % | pass |
+| V-23 | Solver log has no unexpected warnings | none | none |  |  | pass |
+| V-23 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 19 s, charged True, 1 entry |  |  | pass |
 | V-24 | STEP length unit detected | in | in |  | equal | pass |
 | V-24 | von Mises stress at the end (E ε) | 14.5 ksi | 14.5 ksi (265 vertices) | -0.00 % | 0.1 % | pass |
 | V-24 | von Mises stress along the side | 14.5 ksi | 14.5 ksi (1741 vertices) | -0.00 % | 0.1 % | pass |
@@ -265,7 +272,7 @@ Tier: full
 | V-24 | Axial strain along the side (δ / L) | 500 µε | 500 µε (1741 vertices) | -0.00 % | 0.1 % | pass |
 | V-24 | Lateral strain along the side (−ν ε) | -0.000145 in/in | -0.000145 in/in (1741 vertices) | -0.00 % | 0.1 % | pass |
 | V-24 | Safety factor against yield along the side (Sy / σvm) | 2.4828 1 | 2.4828 1 (1741 vertices) | -0.00 % | 0.1 % | pass |
-| V-24 | Reactions balance the applied load | applied 0, 0, 0 N | reactions 0.00016, -1.973e-10, 1.1889e-10 N | 0.0000 % of 32250 N | 0.1 % | pass |
+| V-24 | Reactions balance the applied load | applied 0, 0, 0 N | reactions 0.00016, -2.2654e-10, -4.3348e-10 N | 0.0000 % of 32250 N | 0.1 % | pass |
 | V-24 | The run's balance check closes | force and moment | force 5e-07 %, moment 3.9e-08 % | 0.0000 % | 0.1 % | pass |
 | V-24 | Solver log has no unexpected warnings | none | none |  |  | pass |
 | V-24 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 4 s, charged True, 1 entry |  |  | pass |
@@ -288,7 +295,7 @@ Tier: full
 | V-26 | Side contracts in y (−ν ε y) | -0.002129 mm | -0.002129 mm (710 vertices) | +0.00 % | 0.1 % | pass |
 | V-26 | Side contracts in z (−ν ε z) | -0.002129 mm | -0.002129 mm (709 vertices) | +0.00 % | 0.1 % | pass |
 | V-26 | The start holds the pull | -1000 lbf | -1000 lbf (support start) | +0.00 % | 0.1 % | pass |
-| V-26 | Reactions balance the applied load | applied 4448.2, 0, 0 N | reactions -4448.2, -9.3315e-11, -1.2631e-10 N | 0.0000 % of 4448.2 N | 0.1 % | pass |
+| V-26 | Reactions balance the applied load | applied 4448.2, 0, 0 N | reactions -4448.2, 1.8211e-11, -1.3102e-10 N | 0.0000 % of 4448.2 N | 0.1 % | pass |
 | V-26 | The run's balance check closes | force and moment | force 2.4e-06 %, moment 1.3e-07 % | 0.0000 % | 0.1 % | pass |
 | V-26 | Solver log has no unexpected warnings | none | none |  |  | pass |
 | V-26 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 1 s, charged True, 1 entry |  |  | pass |
@@ -303,38 +310,39 @@ Tier: full
 | V-27 | Heat out through the outside, all of it across the bond | -967.61 BTU/h | -967.59 BTU/h (load outside) | -0.00 % | 0.2 % | pass |
 | V-27 | The run's heat balance closes | heat in 283.57 W | heat out 283.57 W | 0.0000 % of 283.61 W | 0.1 % | pass |
 | V-27 | Solver log has no unexpected warnings | none | none |  |  | pass |
-| V-27 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 30 s, charged True, 1 entry |  |  | pass |
-| Ledger | Every running balance is the previous one plus the entry | 53 entries chained | 53 entries chained |  | exact | pass |
-| Ledger | Wallet balance equals the sum of the ledger | 99.930272 credits | 99.930272 credits |  | exact | pass |
-| Ledger | Each job charge is its billed seconds at its rate | 52 jobs, 0.069728 credits | 0.069728 credits |  | exact | pass |
-| Ledger | Each charged run has one entry for exactly its recorded cost | 26 runs, 0.055834 credits | 26 runs matched |  | exact | pass |
+| V-27 | Billable seconds recorded, one ledger entry | at least 1 s charged, 1 entry | 28 s, charged True, 1 entry |  |  | pass |
+| Ledger | Every running balance is the previous one plus the entry | 55 entries chained | 55 entries chained |  | exact | pass |
+| Ledger | Wallet balance equals the sum of the ledger | 99.927911 credits | 99.927911 credits |  | exact | pass |
+| Ledger | Each job charge is its billed seconds at its rate | 54 jobs, 0.072089 credits | 0.072089 credits |  | exact | pass |
+| Ledger | Each charged run has one entry for exactly its recorded cost | 27 runs, 0.056527 credits | 27 runs matched |  | exact | pass |
 | Ledger | No entry without a job other than the grant | none | none |  | exact | pass |
 
-- V-01 Thick cylinder, internal pressure: mesh 5 mm, 71783 elements, 114238 nodes; 46 s; solve estimated 122 s, billed 36 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-02 Cantilever, end load: mesh 2.5 mm, 50985 elements, 78396 nodes; 30 s; solve estimated 64 s, billed 23 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-03 Plate with central hole in tension: mesh 2.5 mm, 0.25 mm local, 14665 elements, 27880 nodes; 11 s; solve estimated 12 s, billed 5 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-04 Remote force and moment on a stub: mesh 2 mm, 82285 elements, 120919 nodes; 61 s; solve estimated 135 s, billed 51 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-05 Tank wall, hydrostatic pressure: mesh 5 mm, 38946 elements, 63582 nodes; 29 s; solve estimated 45 s, billed 21 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-06 Thin rotating ring: mesh 1.25 mm, 19424 elements, 33316 nodes; 15 s; solve estimated 15 s, billed 8 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-07 Block on an elastic support: mesh 5 mm, 9440 elements, 14988 nodes; 9 s; solve estimated 5 s, billed 4 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-08 Bar with ends restrained, uniform temperature rise: mesh 2.5 mm, 13496 elements, 23121 nodes; 10 s; solve estimated 9 s, billed 4 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-09 Symmetry model against full model (quarter tube): mesh 5 mm, 6409 elements, 10853 nodes; 9 s; solve estimated 4 s, billed 2 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-10 Column under self-weight: mesh 12.7 mm, 25896 elements, 41153 nodes; 18 s; solve estimated 22 s, billed 11 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-11 Two bonded blocks against one block (cantilever): mesh 2.5 mm, 1.75 mm local, 80414 elements, 121470 nodes; 57 s; solve estimated 136 s, billed 48 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-12 Bi-material bar in tension: mesh 2.5 mm, 1.5 mm local, 12527 elements, 21389 nodes; 10 s; solve estimated 8 s, billed 5 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-13 Plane wall conduction: mesh 2.5 mm, 42818 elements, 63020 nodes; 14 s; solve estimated 44 s, billed 7 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-14 Cylinder wall conduction: mesh 2.5 mm, 10203 elements, 16454 nodes; 8 s; solve estimated 6 s, billed 2 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-15 Wall with convection on both sides: mesh 2.5 mm, 42818 elements, 63020 nodes; 14 s; solve estimated 44 s, billed 7 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-16 Heated plate radiating to ambient: mesh 2.5 mm, 19913 elements, 32662 nodes; 11 s; solve estimated 15 s, billed 5 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-17 Slab with internal heat generation: mesh 2.5 mm, 42818 elements, 63020 nodes; 17 s; solve estimated 44 s, billed 10 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-18 Thick cylinder thermal stress: mesh 2.5 mm, 10203 elements, 16454 nodes; 12 s; solve estimated 6 s, billed 6 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-19 Wall with temperature-dependent properties: mesh 2.5 mm, 5252 elements, 8618 nodes; 8 s; solve estimated 3 s, billed 3 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-20 Cantilever beam frequencies: mesh 3 mm, 19577 elements, 36937 nodes; 17 s; solve estimated 78 s, billed 11 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-21 Fixed-fixed beam frequencies: mesh 3 mm, 19577 elements, 36937 nodes; 15 s; solve estimated 68 s, billed 8 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-22 Unrestrained body: mesh 2 mm, 66677 elements, 113748 nodes; 67 s; solve estimated 693 s, billed 57 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-24 Bar stretched by a prescribed displacement: mesh 2 mm, 10682 elements, 17747 nodes; 9 s; solve estimated 6 s, billed 4 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-25 Tube in an elastic sleeve (curved elastic support): mesh 5 mm, 6409 elements, 10853 nodes; 9 s; solve estimated 4 s, billed 3 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-26 Bar in tension with first-order elements: mesh 2 mm, first order, 12839 elements, 3408 nodes; 7 s; solve estimated 2 s, billed 1 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
-- V-27 Two-layer tube wall conduction: mesh 2.5 mm, 1 mm local, 85994 elements, 129217 nodes; 40 s; solve estimated 151 s, billed 30 s; clearfea 0.0.0+8a665bf, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-01 Thick cylinder, internal pressure: mesh 5 mm, 71783 elements, 114238 nodes; 42 s; solve estimated 122 s, billed 32 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-02 Cantilever, end load: mesh 2.5 mm, 50985 elements, 78396 nodes; 30 s; solve estimated 64 s, billed 23 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-03 Plate with central hole in tension: mesh 2.5 mm, 0.25 mm local, 14665 elements, 27880 nodes; 11 s; solve estimated 12 s, billed 5 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-04 Remote force and moment on a stub: mesh 2 mm, 82285 elements, 120919 nodes; 54 s; solve estimated 135 s, billed 44 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-05 Tank wall, hydrostatic pressure: mesh 5 mm, 38946 elements, 63582 nodes; 28 s; solve estimated 45 s, billed 20 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-06 Thin rotating ring: mesh 1.25 mm, 19424 elements, 33316 nodes; 15 s; solve estimated 15 s, billed 8 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-07 Block on an elastic support: mesh 5 mm, 9440 elements, 14988 nodes; 9 s; solve estimated 5 s, billed 4 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-08 Bar with ends restrained, uniform temperature rise: mesh 2.5 mm, 13496 elements, 23121 nodes; 11 s; solve estimated 9 s, billed 5 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-09 Symmetry model against full model (quarter tube): mesh 5 mm, 6409 elements, 10853 nodes; 8 s; solve estimated 4 s, billed 3 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-10 Column under self-weight: mesh 12.7 mm, 25896 elements, 41153 nodes; 18 s; solve estimated 22 s, billed 11 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-11 Two bonded blocks against one block (cantilever): mesh 2.5 mm, 1.75 mm local, 80414 elements, 121470 nodes; 54 s; solve estimated 136 s, billed 44 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-12 Bi-material bar in tension: mesh 2.5 mm, 1.5 mm local, 12527 elements, 21389 nodes; 11 s; solve estimated 8 s, billed 5 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-13 Plane wall conduction: mesh 2.5 mm, 42818 elements, 63020 nodes; 13 s; solve estimated 44 s, billed 7 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-14 Cylinder wall conduction: mesh 2.5 mm, 10203 elements, 16454 nodes; 8 s; solve estimated 6 s, billed 2 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-15 Wall with convection on both sides: mesh 2.5 mm, 42818 elements, 63020 nodes; 14 s; solve estimated 44 s, billed 7 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-16 Heated plate radiating to ambient: mesh 2.5 mm, 19913 elements, 32662 nodes; 12 s; solve estimated 15 s, billed 5 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-17 Slab with internal heat generation: mesh 2.5 mm, 42818 elements, 63020 nodes; 16 s; solve estimated 44 s, billed 10 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-18 Thick cylinder thermal stress: mesh 2.5 mm, 10203 elements, 16454 nodes; 12 s; solve estimated 6 s, billed 6 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-19 Wall with temperature-dependent properties: mesh 2.5 mm, 5252 elements, 8618 nodes; 9 s; solve estimated 3 s, billed 3 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-20 Cantilever beam frequencies: mesh 3 mm, 19577 elements, 36937 nodes; 17 s; solve estimated 78 s, billed 10 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-21 Fixed-fixed beam frequencies: mesh 3 mm, 19577 elements, 36937 nodes; 15 s; solve estimated 68 s, billed 9 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-22 Unrestrained body: mesh 2 mm, 66677 elements, 113748 nodes; 71 s; solve estimated 693 s, billed 61 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-23 NAFEMS LE10, thick plate under pressure: mesh 100 mm, 40 mm local, 41783 elements, 64045 nodes; 26 s; solve estimated 45 s, billed 19 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-24 Bar stretched by a prescribed displacement: mesh 2 mm, 10682 elements, 17747 nodes; 10 s; solve estimated 6 s, billed 4 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-25 Tube in an elastic sleeve (curved elastic support): mesh 5 mm, 6409 elements, 10853 nodes; 9 s; solve estimated 4 s, billed 3 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-26 Bar in tension with first-order elements: mesh 2 mm, first order, 12839 elements, 3408 nodes; 7 s; solve estimated 2 s, billed 1 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
+- V-27 Two-layer tube wall conduction: mesh 2.5 mm, 1 mm local, 85994 elements, 129217 nodes; 38 s; solve estimated 151 s, billed 28 s; clearfea 0.0.0+71621c5, deckFormat 5, calculix 2.21, gmsh 4.15.2, occt 7.8.1
 
-307 of 307 checks passed, 26 cases.
+314 of 314 checks passed, 27 cases.
