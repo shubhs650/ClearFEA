@@ -156,16 +156,16 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 
 ## M9: Gate
 
-- [ ] M9.1 Run a model at each solver's element limit (ADR-063) in the development environment; fix what breaks. (The 2-million-element target was dropped by ADR-063.)
+- [x] M9.1 Run a model at each solver's element limit (ADR-063) in the development environment; fix what breaks. (The 2-million-element target was dropped by ADR-063.)
 - ~~M9.2 Set up and run on the laptop; demonstrate the laptop tier; fix viewer performance.~~ Removed by the maintainer on 2026-10-21: the gate has no local laptop requirement (ADR-095 item 12, amended). He ran it on Windows on 2026-10-19; the 16 GB checks ran on the live standard machine (M10.9).
-- [ ] M9.3 User guide for the main flow; self-hosting instructions.
-- [ ] M9.4 Build the two acceptance models as original geometry that can be published.
-- [ ] M9.5 Acceptance case A: nozzle, shell and pad under pressure and nozzle loads. Hand checks and FreeCAD FEM comparison.
-- [ ] M9.6 Acceptance case B: thermal stress. Hand checks and FreeCAD FEM comparison.
-- [ ] M9.7 Publish the verification results page.
-- [ ] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found.
-- [ ] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome.
-- [ ] M9.10 Supports on edges (fixed and prescribed displacement, picked in the viewer) and V-23, NAFEMS LE10, in `make verify` (ADR-105). Added 2026-10-21 at the maintainer's request, since V-23 was listed but needed a support on an edge.
+- [x] M9.3 User guide for the main flow; self-hosting instructions.
+- [x] M9.4 Build the two acceptance models as original geometry that can be published.
+- [x] M9.5 Acceptance case A: nozzle, shell and pad under pressure and nozzle loads. Hand checks and FreeCAD FEM comparison.
+- [x] M9.6 Acceptance case B: thermal stress. Hand checks and FreeCAD FEM comparison.
+- [x] M9.7 Publish the verification results page.
+- [x] M9.8 Outside trial: two or three engineers complete the tutorial case unaided over a screen share; fix the top problems found.
+- [x] M9.9 Walk the "Phase 0 is done when" checklist in `DECISIONS.md` and record the outcome.
+- [x] M9.10 Supports on edges (fixed and prescribed displacement, picked in the viewer) and V-23, NAFEMS LE10, in `make verify` (ADR-105). Added 2026-10-21 at the maintainer's request, since V-23 was listed but needed a support on an edge.
 
 **Exit:** all eight gate conditions met. Since ADR-095, gate items 1 and 4 are met on the live standard machine and item 8 by the invited colleagues on the live site; since 2026-10-21 there is no laptop run (M9.2 removed), and M9 closes after them.
 
