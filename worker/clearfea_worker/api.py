@@ -32,11 +32,17 @@ from .spec.jobs_schema import (
     WorkerSoftware,
 )
 
-__all__ = ["ApiClient", "ApiError", "ClaimedJob", "HeartbeatAction"]
+__all__ = ["AccessBlocked", "ApiClient", "ApiError", "ClaimedJob", "HeartbeatAction"]
 
 
 class ApiError(Exception):
     """The API could not be reached or answered with an error."""
+
+
+class AccessBlocked(ApiError):
+    """The API's address answered with a web page instead of JSON: Cloudflare Access's sign-in
+    page in front of the live site (ADR-111), or something else in the way. Retrying at the
+    usual pace cannot help, so the worker backs off."""
 
 
 #: Pauses before the second and third try of a file transfer that failed on the server's side
@@ -49,6 +55,10 @@ TRANSFER_RETRY_PAUSES = (1.0, 4.0)
 #: Sent with every request. Cloudflare, in front of the live site, refuses urllib's default
 #: "Python-urllib/3.x" agent with "error code: 1010" (M10.9), so a machine with it never gets a job.
 USER_AGENT = "ClearFEA-worker/1.0 (+https://github.com/shubhs650/ClearFEA)"
+
+
+def _is_json(content_type: str | None) -> bool:
+    return (content_type or "").split(";")[0].strip().lower() == "application/json"
 
 
 def _retryable(error: Exception) -> bool:
@@ -67,21 +77,43 @@ class ApiClient:
         timeout: float = 30.0,
         software: WorkerSoftware | None = None,
         machine_size: str | None = None,
+        access: tuple[str, str] | None = None,
     ) -> None:
         """``software`` is sent with every claim, so the API records what ran each job.
-        ``machine_size`` limits claims to that size's jobs (M10.6); None claims any size's."""
+        ``machine_size`` limits claims to that size's jobs (M10.6); None claims any size's.
+        ``access`` is the Cloudflare Access service token (client id, secret), sent with every
+        request to the API's address (ADR-111)."""
         self._base_url = base_url.rstrip("/")
         self._token = token
         self._worker_id = worker_id
         self._timeout = timeout
         self._software = software
         self._machine_size = machine_size
+        self._access = access
 
     def _headers(self, url: str) -> dict[str, str]:
-        """The worker token goes only to the API's own internal routes, never elsewhere."""
+        """The worker token goes only to the API's own internal routes, and the Access service
+        token only to the API's address, never elsewhere (such as a signed storage link)."""
+        headers = {"User-Agent": USER_AGENT}
+        if self._access is not None and url.startswith(f"{self._base_url}/"):
+            headers["CF-Access-Client-Id"], headers["CF-Access-Client-Secret"] = self._access
         if url.startswith(f"{self._base_url}/internal/"):
-            return {"User-Agent": USER_AGENT, "Authorization": f"Bearer {self._token}"}
-        return {"User-Agent": USER_AGENT}
+            headers["Authorization"] = f"Bearer {self._token}"
+        return headers
+
+    def _blocked(self, status: int) -> AccessBlocked:
+        hint = (
+            "the Cloudflare Access service token it was given is wrong or not admitted by the "
+            "application's Service Auth policy"
+            if self._access is not None
+            else "set CLEARFEA_ACCESS_CLIENT_ID and CLEARFEA_ACCESS_CLIENT_SECRET to the Access "
+            "service token"
+        )
+        return AccessBlocked(
+            f"The API at {self._base_url} answered with a web page instead of JSON "
+            f"(HTTP {status}), most likely Cloudflare Access's sign-in page: {hint} "
+            "(docs/DEPLOYMENT.md section 1.8)."
+        )
 
     def _transfer_error(self, url: str, error: Exception) -> ApiError:
         if isinstance(error, urllib.error.HTTPError):
@@ -99,6 +131,10 @@ class ApiClient:
         def fetch() -> None:
             request = urllib.request.Request(url, method="GET", headers=self._headers(url))
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
+                # The API serves files as octet-stream; a web page there is Access's sign-in.
+                kind = response.headers.get("Content-Type", "")
+                if url.startswith(f"{self._base_url}/") and kind.startswith("text/html"):
+                    raise self._blocked(response.status)
                 with destination.open("wb") as f:
                     shutil.copyfileobj(response, f)
 
@@ -141,17 +177,26 @@ class ApiClient:
             data=data,
             method="POST",
             headers={
-                "User-Agent": USER_AGENT,
-                "Authorization": f"Bearer {self._token}",
+                **self._headers(f"{self._base_url}/internal{path}"),
                 "Content-Type": "application/json",
             },
         )
         try:
             with urllib.request.urlopen(request, timeout=self._timeout) as response:
                 raw = response.read()
-                return response.status, json.loads(raw) if raw else None
+                if not raw:
+                    return response.status, None
+                # Access answers with a redirect to its sign-in page, which urllib follows.
+                if not _is_json(response.headers.get("Content-Type")):
+                    raise self._blocked(response.status)
+                try:
+                    return response.status, json.loads(raw)
+                except ValueError:
+                    raise self._blocked(response.status) from None
         except urllib.error.HTTPError as error:
             raw = error.read()
+            if error.headers.get("Content-Type", "").startswith("text/html"):
+                raise self._blocked(error.code) from None
             try:
                 message = json.loads(raw).get("error", raw.decode(errors="replace"))
             except (ValueError, AttributeError):

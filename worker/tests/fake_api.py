@@ -21,10 +21,16 @@ from clearfea_worker.spec.jobs_schema import (
 # here also proves the worker speaks the same wire format as the real API.
 _complete_request: TypeAdapter[Any] = TypeAdapter(CompleteRequest)
 
+#: Where the Access stand-in sends a request without the service token.
+ACCESS_LOGIN = "/cdn-cgi/access/login"
+
 
 class FakeApi:
-    def __init__(self, token: str = "t") -> None:
+    def __init__(self, token: str = "t", access: tuple[str, str] | None = None) -> None:
         self.token = token
+        #: When set, the (client id, secret) of the Cloudflare Access service token the site is
+        #: behind: requests without it are redirected to a sign-in page, as Access does (ADR-111).
+        self.access = access
         self.queue: list[dict[str, Any]] = []
         self.jobs: dict[str, dict[str, Any]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -115,6 +121,19 @@ class FakeApi:
                 if self.headers.get("User-Agent", "").startswith("Python-urllib"):
                     self._send(403, {"error": "error code: 1010"})
                     return False
+                if (
+                    api.access is not None
+                    and (
+                        self.headers.get("CF-Access-Client-Id"),
+                        self.headers.get("CF-Access-Client-Secret"),
+                    )
+                    != api.access
+                ):
+                    self.send_response(302)
+                    self.send_header("Location", ACCESS_LOGIN)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return False
                 if self.headers.get("Authorization") != f"Bearer {api.token}":
                     self._send(401, {"error": "The worker token is missing or wrong."})
                     return False
@@ -135,6 +154,14 @@ class FakeApi:
                 return True
 
             def do_GET(self) -> None:  # noqa: N802 (name fixed by BaseHTTPRequestHandler)
+                if self.path == ACCESS_LOGIN:
+                    page = b"<!doctype html><title>Sign in - Cloudflare Access</title>"
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(page)))
+                    self.end_headers()
+                    self.wfile.write(page)
+                    return
                 if not self._authorised() or self._failed():
                     return
                 content = api.files.get(self._file_key())

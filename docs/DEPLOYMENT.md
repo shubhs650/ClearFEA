@@ -37,6 +37,7 @@ Keep a private note (a password manager is best) of what you created, since some
 | Google sign-in client | M10.3 | 2 |
 | Two random keys | M10.3, M10.6 | 3 |
 | R2 API token | M10.5 | 1.7 |
+| Access service token | M11.1 | 1.8 |
 | AWS account and stack | M10.7 | 4 |
 | GitHub secrets and variables | as each value is made | 5 |
 | First deploy, invite colleagues | M10.2 onwards, M10.10 | 6 |
@@ -104,6 +105,18 @@ The API uses this to give a solver machine signed links to its files.
 
 The deploy names the account and bucket for these links itself (from `CLOUDFLARE_ACCOUNT_ID` and the bucket in `wrangler.jsonc`). Until both secrets are set, solver machines move files through the API instead, which works only for files under 100 MB (ADR-098).
 
+### 1.8 Let machines and checks through Cloudflare Access (for task M11.1)
+
+The site is behind Cloudflare Access until the public beta, so a program (the solver host, the deploy's health check, the **Live checks** workflow, the verification harness) gets Access's sign-in page instead of the API unless it sends a **service token** (ADR-111). People still sign in to Access as before.
+
+1. Cloudflare dashboard → **Zero Trust** → **Access** → **Service auth** → **Service Tokens** → **Create Service Token**. Name: `clearfea-machines`. Duration: **Non-expiring**. **Generate token**.
+2. The next page shows a **Client ID** (ending in `.access`) and a **Client Secret**, once. Copy both into your private note.
+3. **Access** → **Applications** → the application for `clearfea.triyalabs.com` → **Policies** → **Add a policy**. Name: `Machines`. Action: **Service Auth**. Include: **Service Token** → `clearfea-machines`. **Save**. Keep the existing policy for people beside it.
+4. In GitHub, add the **secrets** `CF_ACCESS_CLIENT_ID` (the Client ID) and `CF_ACCESS_CLIENT_SECRET` (the Client Secret).
+5. The solver host gets the same two values as `CLEARFEA_ACCESS_CLIENT_ID` and `CLEARFEA_ACCESS_CLIENT_SECRET` (M12 sets this up). To run the harness against the live site from your own computer, set those two as well.
+
+The dashboard's menu names change now and then; if one is not where this says, search the Zero Trust dashboard for "Service Tokens". Check it worked: `curl -A test -H "CF-Access-Client-Id: ..." -H "CF-Access-Client-Secret: ..." https://clearfea.triyalabs.com/api/health` prints JSON with `"status":"ok"`; without the two headers it prints nothing (a redirect to Access). If the deploy's last step says "Cloudflare Access refused the health check", one of steps 3 and 4 is missing or the token was copied wrongly.
+
 ## 2. Google sign-in (for task M10.3)
 
 ### 2.1 Create a Google Cloud project
@@ -148,6 +161,8 @@ openssl rand -base64 32
 | `VERIFY_TOKEN` | For the live checks (M10.9): signs the verification account in, so the checks run without a Google account. At least 32 characters; leave it out and that sign-in does not exist. Changing it ends the account's sign-in. |
 
 ## 4. AWS (for task M10.7)
+
+> AWS is switched off for the closed beta and its resources are being deleted (ADR-106, 2026-10-22): see 7.6, "Shut AWS down completely". The deploy no longer builds or registers the solver image, and the variables `AWS_REGION` and `AWS_DEPLOY_ROLE_ARN` and the two launcher secrets can be removed from GitHub once the stack is gone. This section stays for production later; the solver moves to a VPS in M12.
 
 The solver runs on AWS Fargate: a machine exists only while there is work, and you pay per second only while it exists. Everything ClearFEA needs in AWS is created in one go from a template file in the repository, `infra/aws/clearfea.yaml` (added by M10.7).
 
@@ -216,6 +231,8 @@ When all sections are done, the repository's **Settings** → **Secrets and vari
 | `CLOUDFLARE_API_TOKEN` | Secret | 1.6 |
 | `R2_ACCESS_KEY_ID` | Secret | 1.7 |
 | `R2_SECRET_ACCESS_KEY` | Secret | 1.7 |
+| `CF_ACCESS_CLIENT_ID` | Secret | 1.8 |
+| `CF_ACCESS_CLIENT_SECRET` | Secret | 1.8 |
 | `GOOGLE_CLIENT_ID` | Secret | 2.3 |
 | `GOOGLE_CLIENT_SECRET` | Secret | 2.3 |
 | `ADMIN_EMAIL` | Variable | 2.3 |
@@ -227,14 +244,14 @@ When all sections are done, the repository's **Settings** → **Secrets and vari
 | `AWS_LAUNCHER_ACCESS_KEY_ID` | Secret | 4.4 |
 | `AWS_LAUNCHER_SECRET_ACCESS_KEY` | Secret | 4.4 |
 
-Optional: to approve each deploy yourself instead of letting every merge go live, go to **Settings** → **Environments** → `production` (created by the first deploy) → tick **Required reviewers** and add yourself. Deploys then wait for your click in the Actions tab, once for the **Solver image** job and once for **Site and API**.
+Optional: to approve each deploy yourself instead of letting every merge go live, go to **Settings** → **Environments** → `production` (created by the first deploy) → tick **Required reviewers** and add yourself. Deploys then wait for your click in the Actions tab for **Site and API**. (The **Solver image** job that put the worker image on AWS was removed when AWS was switched off, ADR-106.)
 
 ## 6. First deploy and inviting colleagues
 
 ### 6.1 Run the first deploy
 
 1. GitHub → the repository → **Actions** → **Deploy** (in the list on the left) → **Run workflow** → branch `main` → **Run workflow**.
-2. Click the run to watch it. It runs the tests first, then the **Solver image** job, then the **Site and API** job. Until AWS is set up (section 4), the **Solver image** job shows a warning naming `AWS_REGION` and `AWS_DEPLOY_ROLE_ARN` and builds nothing; the site still deploys. Each step turns green. The **Check the deploy settings** step stops the run and names anything from section 5 that is missing. The last step checks that `https://clearfea.triyalabs.com/api/health` answers with the commit just deployed.
+2. Click the run to watch it. It runs the tests first, then the **Site and API** job. Each step turns green. The **Check the deploy settings** step stops the run and names anything from section 5 that is missing. The last step checks that `https://clearfea.triyalabs.com/api/health` answers with the commit just deployed, through Cloudflare Access with the service token (1.8).
 3. Open <https://clearfea.triyalabs.com>. The landing page appears; the first visit can take a minute while the certificate is issued.
 
 After this, you never need to run it by hand: every merge to `main` runs it.

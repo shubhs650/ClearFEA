@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Live checks (M10.9, ADR-095 item 11, ADR-104): the verification harness run against the live site
 # at clearfea.triyalabs.com, signed in as the verification account with the VERIFY_TOKEN secret.
-# Started by hand from the Actions tab; nothing runs it on its own, since every solve starts a
-# solver machine on AWS that the maintainer pays for. Suites:
+# Started by hand from the Actions tab; nothing runs it on its own, since every solve uses solver
+# time the maintainer pays for. The site is behind Cloudflare Access, so every request carries the
+# Access service token from the CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET secrets (ADR-111).
+# Suites:
 #   quick       the coarse verification tier (every V case) and the wallet ledger check
 #   acceptance  acceptance cases A and B at the full tier (Phase 0 gate item 1)
 #   limits      a model at each solver's element limit (gate item 4; about four hours)
@@ -34,6 +36,9 @@ env:
   SITE_URL: https://clearfea.triyalabs.com
   SUITE: ${{ inputs.suite }}
   CASES: ${{ inputs.cases }}
+  # Read by verification/harness/client.py; empty when the site is not behind Access.
+  CLEARFEA_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+  CLEARFEA_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
 
 jobs:
   live:
@@ -68,9 +73,22 @@ jobs:
             echo "::error::Add the repository secret VERIFY_TOKEN (docs/DEPLOYMENT.md section 3) and deploy, then run this again."
             exit 1
           fi
-          curl -fsS "$SITE_URL/api/health"; echo
-          status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $CLEARFEA_VERIFY_TOKEN" \
-            "$SITE_URL/api/session/verification")
+          access=()
+          if [ -n "$CLEARFEA_ACCESS_CLIENT_ID" ] && [ -n "$CLEARFEA_ACCESS_CLIENT_SECRET" ]; then
+            access=(-H "CF-Access-Client-Id: $CLEARFEA_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CLEARFEA_ACCESS_CLIENT_SECRET")
+          fi
+          ua="ClearFEA-harness/1.0 (+https://github.com/shubhs650/ClearFEA)"
+          answer=$(curl -sS -A "$ua" "${access[@]}" -o "$RUNNER_TEMP/health.json" -w '%{http_code} %{redirect_url}' \
+            "$SITE_URL/api/health" || true)
+          case "$answer" in
+            200\ *) cat "$RUNNER_TEMP/health.json"; echo ;;
+            3??\ *cloudflareaccess.com*|403\ *)
+              echo "::error::Cloudflare Access refused the request ($answer). Add the repository secrets CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET (the Access service token) and make sure the Access application's Service Auth policy includes that token (docs/DEPLOYMENT.md section 1.8)."
+              exit 1 ;;
+            *) echo "::error::$SITE_URL/api/health answered $answer."; exit 1 ;;
+          esac
+          status=$(curl -sS -A "$ua" "${access[@]}" -o /dev/null -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $CLEARFEA_VERIFY_TOKEN" "$SITE_URL/api/session/verification")
           case "$status" in
             200) echo "The verification account signs in." ;;
             404) echo "::error::The site has no VERIFY_TOKEN: run Deploy after adding the secret."; exit 1 ;;

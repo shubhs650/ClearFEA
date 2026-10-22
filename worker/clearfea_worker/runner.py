@@ -8,12 +8,15 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from .api import ApiClient, ApiError, ClaimedJob
+from .api import AccessBlocked, ApiClient, ApiError, ClaimedJob
 from .config import Settings
 from .jobs import HANDLERS, Files, Handler, JobContext, JobFailure, JobStopped
 from .versions import worker_software
 
 log = logging.getLogger(__name__)
+
+#: Longest pause between claims while the API's address answers with a web page (ADR-111).
+ACCESS_BACKOFF_MAX_SECONDS = 300.0
 
 
 class _Heartbeat:
@@ -166,8 +169,10 @@ def run_forever(
     """Polls for jobs until `stop` is set, the worker has been idle for
     `settings.idle_exit_seconds`, or it has been up for `settings.max_lifetime_seconds` (checked
     between jobs, so a job it holds always finishes). API errors are logged and retried after a
-    pause; they count as idle time, so a worker that cannot reach the API exits too. Returns why
-    it stopped: "stopped", "idle" or "lifetime"."""
+    pause; they count as idle time, so a worker that cannot reach the API exits too. While
+    Cloudflare Access blocks the claims, the pause doubles up to ACCESS_BACKOFF_MAX_SECONDS
+    instead of asking again every poll (ADR-111). Returns why it stopped: "stopped", "idle" or
+    "lifetime"."""
     stop = stop or threading.Event()
     client = (client_factory or _default_client)(settings)
     size = settings.machine_size or "any size"
@@ -179,6 +184,7 @@ def run_forever(
         size,
     )
     started = last_job = clock()
+    blocked = 0
     while not stop.is_set():
         now = clock()
         lifetime = settings.max_lifetime_seconds
@@ -196,9 +202,17 @@ def run_forever(
             return "idle"
         try:
             claimed = run_once(client, settings, handlers)
+            blocked = 0
+        except AccessBlocked as error:
+            blocked += 1
+            pause = min(settings.poll_seconds * 2**blocked, ACCESS_BACKOFF_MAX_SECONDS)
+            log.error("%s Trying again in %.0f s.", error, pause)
+            stop.wait(pause)
+            continue
         except ApiError as error:
             log.warning("%s", error)
             claimed = False
+            blocked = 0
         if claimed:
             last_job = clock()
         else:
@@ -209,10 +223,15 @@ def run_forever(
 def _default_client(settings: Settings) -> ApiClient:
     software = worker_software()
     log.info("Worker software: %s", software.model_dump_json(by_alias=True))
+    access = None
+    if settings.access_client_id and settings.access_client_secret:
+        access = (settings.access_client_id, settings.access_client_secret)
+        log.info("Sending the Cloudflare Access service token %s", settings.access_client_id)
     return ApiClient(
         settings.api_url,
         settings.worker_token,
         settings.worker_id,
         software=software,
         machine_size=settings.machine_size,
+        access=access,
     )

@@ -19,9 +19,25 @@ class ApiError(RuntimeError):
 USER_AGENT = "ClearFEA-harness/1.0 (+https://github.com/shubhs650/ClearFEA)"
 
 
+def access_headers(env: dict[str, str] | None = None) -> dict[str, str]:
+    """The Cloudflare Access service token in front of the live site (ADR-111), from
+    CLEARFEA_ACCESS_CLIENT_ID and CLEARFEA_ACCESS_CLIENT_SECRET; none when they are not set."""
+    env = dict(os.environ) if env is None else env
+    client_id = env.get("CLEARFEA_ACCESS_CLIENT_ID", "").strip()
+    secret = env.get("CLEARFEA_ACCESS_CLIENT_SECRET", "").strip()
+    if bool(client_id) != bool(secret):
+        raise ApiError(
+            "Set both CLEARFEA_ACCESS_CLIENT_ID and CLEARFEA_ACCESS_CLIENT_SECRET, or neither."
+        )
+    if not client_id:
+        return {}
+    return {"CF-Access-Client-Id": client_id, "CF-Access-Client-Secret": secret}
+
+
 class Client:
     def __init__(self, base: str) -> None:
         self.base = base.rstrip("/")
+        self.access = access_headers()
         self.opener = urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
         )
@@ -36,12 +52,22 @@ class Client:
     ) -> bytes:
         request = urllib.request.Request(self.base + path, data=body, method=method)
         request.add_header("User-Agent", USER_AGENT)
+        for name, value in self.access.items():
+            request.add_header(name, value)
         if kind is not None:
             request.add_header("Content-Type", kind)
         for name, value in (headers or {}).items():
             request.add_header(name, value)
         try:
             with self.opener.open(request, timeout=120) as response:
+                # The API never answers with a web page; Access's sign-in page does.
+                if response.headers.get("Content-Type", "").startswith("text/html"):
+                    raise ApiError(
+                        f"{method} {path} answered with a web page, most likely Cloudflare "
+                        "Access's sign-in: set CLEARFEA_ACCESS_CLIENT_ID and "
+                        "CLEARFEA_ACCESS_CLIENT_SECRET to the Access service token "
+                        "(docs/DEPLOYMENT.md section 1.8)."
+                    )
                 return response.read()
         except urllib.error.HTTPError as error:
             text = error.read().decode("utf-8", "replace")
