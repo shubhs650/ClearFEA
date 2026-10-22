@@ -259,18 +259,6 @@ class JobView(BaseModel):
     finished_at: Annotated[str | None, Field(alias="finishedAt")]
 
 
-class JobResponse(BaseModel):
-    """
-    Answer to POST /api/jobs (HTTP 201) and GET /api/jobs/{id}.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-    job: JobView
-
-
 class JobListResponse(BaseModel):
     """
     Answer to GET /api/jobs: the signed-in user's most recent jobs, newest first.
@@ -283,18 +271,27 @@ class JobListResponse(BaseModel):
     jobs: list[JobView]
 
 
-class MachineWaitResponse(BaseModel):
+class JobWait(BaseModel):
     """
-    Answer to GET /api/jobs/machine-wait (M10.10, ADR-103): whether a job of the signed-in user is queued and waiting for a solver machine to start, so the screens can say why it has not started yet.
+    How a job that has not finished is getting on (M11.2, ADR-112). Sent as `wait` with the answers the screens poll while a job works on what they show: GET /api/jobs/{id}, /api/geometries/{id}, /api/simulations/{id}/mesh, /api/runs/{id} and /api/runs/{id}/report. Left out once the job has finished.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         populate_by_name=True,
     )
+    status: JobStatus
+    queue_position: Annotated[int | None, Field(alias="queuePosition", ge=1)]
+    """
+    While the job is queued, its place among the queued jobs of its machine size, counting every user's jobs: 1 is next. Null once a worker has claimed it.
+    """
     machine_starting: Annotated[bool, Field(alias="machineStarting")]
     """
-    True on the live site while one of the user's queued jobs has no machine of its size running, or a machine of its size is being started. Always false locally, where the worker is always there.
+    True on the live site while the job is queued and no machine of its size is running, or one is being started (ADR-103). Always false locally, where the worker is always there.
+    """
+    retry_after: Annotated[int, Field(alias="retryAfter", ge=1, le=30)]
+    """
+    Seconds after which asking again is worth it. The browser waits at least this long, and never more than 30 s.
     """
 
 
@@ -307,3 +304,16 @@ class ErrorResponse(BaseModel):
         populate_by_name=True,
     )
     error: str
+
+
+class JobResponse(BaseModel):
+    """
+    Answer to POST /api/jobs (HTTP 201) and GET /api/jobs/{id}.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    job: JobView
+    wait: JobWait | None = None

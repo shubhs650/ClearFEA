@@ -348,3 +348,7 @@ class RunReportResponse(BaseModel):
         populate_by_name=True,
     )
     report: RunReport | None
+    wait: dict[str, Any] | None = None
+    """
+    On GET while the report job has not finished: a JobWait (jobs.schema.json), checked against that schema by the browser (M11.2, ADR-112).
+    """

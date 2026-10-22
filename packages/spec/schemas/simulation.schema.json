@@ -744,7 +744,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["mesh"],
-      "properties": { "mesh": { "oneOf": [{ "$ref": "#/$defs/MeshView" }, { "type": "null" }] } }
+      "properties": {
+        "mesh": { "oneOf": [{ "$ref": "#/$defs/MeshView" }, { "type": "null" }] },
+        "wait": { "description": "On GET while the mesh job has not finished: a JobWait (jobs.schema.json), checked against that schema by the browser (M11.2, ADR-112).", "type": "object" }
+      }
     },
     "SolveParams": {
       "description": "Parameters of a solve job (ADR-030): the run's frozen spec and the mesh it is solved on. The worker writes the deck from these two alone.",
@@ -1136,7 +1139,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["run"],
-      "properties": { "run": { "$ref": "#/$defs/RunView" } }
+      "properties": {
+        "run": { "$ref": "#/$defs/RunView" },
+        "wait": { "description": "On GET while the solve job has not finished: a JobWait (jobs.schema.json), checked against that schema by the browser (M11.2, ADR-112).", "type": "object" }
+      }
     },
     "RunListResponse": {
       "description": "Answer to GET /api/simulations/{id}/runs: the simulation's runs, newest first.",

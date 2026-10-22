@@ -6,9 +6,7 @@ import type { JobStatus, JobView } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
 import { listJobs, queueNoopJob } from "../api/jobs";
 import type { ApiResult } from "../api/request";
-
-/** How often the job list is refreshed while a job is still active (docs/ARCHITECTURE.md section 8). */
-export const POLL_INTERVAL_MS = 2000;
+import { usePolling } from "./usePolling";
 
 const ACTIVE: readonly JobStatus[] = ["queued", "claimed", "running"];
 
@@ -49,12 +47,16 @@ export function TestJobs({ onSignedOut }: { onSignedOut: (problem: string) => vo
     void refresh();
   }, [refresh]);
 
+  // While a job is active, the list is checked through the shared polling hook (M11.2, ADR-112).
   const active = jobs.some((job) => ACTIVE.includes(job.status));
-  useEffect(() => {
-    if (!active) return;
-    const timer = setInterval(() => void refresh(), POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [active, refresh]);
+  usePolling(active ? "jobs" : null, async (current) => {
+    const list = handle(await listJobs());
+    if (!list || !current()) return { changed: false };
+    const key = (all: JobView[]) => all.map((job) => `${job.id}:${job.status}`).join(",");
+    const changed = key(list) !== key(jobs);
+    setJobs(list);
+    return { changed };
+  });
 
   async function queue() {
     setBusy(true);

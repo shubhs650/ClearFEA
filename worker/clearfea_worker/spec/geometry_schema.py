@@ -293,6 +293,10 @@ class GeometryResponse(BaseModel):
         populate_by_name=True,
     )
     geometry: GeometryView
+    wait: dict[str, Any] | None = None
+    """
+    On GET while the import job has not finished: a JobWait (jobs.schema.json), checked against that schema by the browser (M11.2, ADR-112).
+    """
 
 
 class GeometryListResponse(BaseModel):

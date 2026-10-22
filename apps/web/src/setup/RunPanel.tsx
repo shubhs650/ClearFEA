@@ -38,6 +38,7 @@ import {
   MAX_STOP_MULTIPLIER,
   maxElements,
   MIN_STOP_MULTIPLIER,
+  type JobWait,
   type RunEstimate,
   type RunFailure,
   type RunKind,
@@ -720,10 +721,12 @@ function useTicking(key: unknown): number {
  */
 function RunningJob({
   run,
+  wait,
   requesting,
   onCancel,
 }: {
   run: RunView;
+  wait: JobWait | null;
   requesting: boolean;
   onCancel: () => void;
 }) {
@@ -743,7 +746,7 @@ function RunningJob({
       <p role="status" aria-label="Run stage">
         {stage}
       </p>
-      <MachineStartNote waiting={!cancelling && (run.stage === "queued" || run.stage === null)} />
+      <MachineStartNote wait={cancelling ? null : wait} />
       {!waiting && (
         <dl className="geometry-facts">
           <dt>Elapsed</dt>
@@ -1027,6 +1030,7 @@ export function RunPanel({
   run,
   currentSpec,
   log,
+  wait = null,
   blockers,
   onOpen,
   units,
@@ -1052,6 +1056,8 @@ export function RunPanel({
   /** The simulation's setup as saved now, to tell whether the run's frozen setup differs. */
   currentSpec: SimulationSpec;
   log: string;
+  /** How the run's solve job is getting on while it solves (M11.2). */
+  wait?: JobWait | null;
   /** What stops the simulation from being run now; empty when it can be run. */
   blockers: readonly RunBlocker[];
   /** Opens a tree item, from a line of the blocker list. */
@@ -1135,7 +1141,7 @@ export function RunPanel({
           {requestProblem}
         </p>
       )}
-      {solving && <RunningJob run={run} requesting={requesting} onCancel={onCancel} />}
+      {solving && <RunningJob run={run} wait={wait} requesting={requesting} onCancel={onCancel} />}
       {result && run !== null && (
         <RunResults
           run={run}

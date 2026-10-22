@@ -344,6 +344,7 @@ export function App() {
           requesting={meshes.requesting}
           requestProblem={meshes.requestProblem}
           reused={meshes.reused}
+          wait={meshes.wait}
           onChange={change}
           onGenerate={() => void meshes.generate()}
           onAddLocal={addLocal}
@@ -372,6 +373,7 @@ export function App() {
           run={run}
           currentSpec={spec}
           log={runs.log}
+          wait={runs.wait}
           blockers={runBlockers()}
           onOpen={select}
           units={resultUnits}

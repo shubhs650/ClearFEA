@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The open simulation's mesh (M1.6): loads its latest mesh, requests a new one, and follows a
 // mesh that is being made until it is ready or failed. Remembers the id of a mesh the last
-// request reused instead of making (M2.10), so the panel can say so.
+// request reused instead of making (M2.10), so the panel can say so. A mesh being made is checked
+// through the shared polling hook (M11.2, ADR-112).
 
-import type { MeshView } from "@clearfea/spec";
+import type { JobWait, MeshView } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
-import { getSimulationMesh, requestMesh } from "../api/meshes";
+import { followSimulationMesh, getSimulationMesh, requestMesh } from "../api/meshes";
 import type { ApiResult } from "../api/request";
-
-/** How often a mesh that is being made is checked. */
-export const MESH_POLL_MS = 2000;
+import { usePolling, waitChanged } from "../jobs/usePolling";
 
 export type MeshState =
   | { kind: "none" }
@@ -22,6 +21,7 @@ export function useMesh(simulationId: string | null, onSignedOut: (problem: stri
   const [requesting, setRequesting] = useState(false);
   const [requestProblem, setRequestProblem] = useState<string>();
   const [reusedId, setReusedId] = useState<string | null>(null);
+  const [wait, setWait] = useState<JobWait | null>(null);
 
   const failed = useCallback(
     (result: ApiResult<unknown>): string | null => {
@@ -54,23 +54,20 @@ export function useMesh(simulationId: string | null, onSignedOut: (problem: stri
 
   // While the mesh is being made, check on it until it is ready or failed.
   const meshing = state.kind === "loaded" && state.mesh?.status === "meshing" ? state.mesh.id : null;
-  useEffect(() => {
-    if (meshing === null || simulationId === null) return;
-    let current = true;
-    const timer = setInterval(() => {
-      void getSimulationMesh(simulationId).then((result) => {
-        if (!current || result.kind !== "ok") {
-          if (current) failed(result);
-          return;
-        }
-        setState({ kind: "loaded", mesh: result.value });
-      });
-    }, MESH_POLL_MS);
-    return () => {
-      current = false;
-      clearInterval(timer);
-    };
-  }, [meshing, simulationId, failed]);
+  usePolling(meshing === null || simulationId === null ? null : `${simulationId}/${meshing}`, async (current) => {
+    if (simulationId === null) return { changed: false };
+    const result = await followSimulationMesh(simulationId);
+    if (!current()) return { changed: false };
+    if (result.kind !== "ok") {
+      failed(result);
+      return { changed: false };
+    }
+    const { value: mesh, wait: next } = result.value;
+    const changed = mesh?.status !== "meshing" || waitChanged(wait, next);
+    setWait(next);
+    setState({ kind: "loaded", mesh });
+    return { changed, retryAfter: next?.retryAfter };
+  });
 
   const generate = useCallback(async () => {
     if (simulationId === null) return;
@@ -89,5 +86,5 @@ export function useMesh(simulationId: string | null, onSignedOut: (problem: stri
 
   const mesh = state.kind === "loaded" ? state.mesh : null;
   const reused = mesh !== null && mesh.id === reusedId;
-  return { state, mesh, generate, requesting, requestProblem, reused };
+  return { state, mesh, generate, requesting, requestProblem, reused, wait: meshing === null ? null : wait };
 }

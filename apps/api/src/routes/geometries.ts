@@ -21,6 +21,7 @@ import {
   getGeometry,
   listGeometries,
 } from "../db/geometries";
+import { jobWait } from "../jobs/wait";
 import { requireUser, type SessionEnv } from "../session";
 
 export const geometries = new Hono<SessionEnv>();
@@ -174,7 +175,8 @@ geometries.get("/:id", async (c) => {
   const geometry = await getGeometry(c.env.DB, c.var.userId, c.req.param("id"));
   // Another user's geometry answers exactly like a missing one, so ids reveal nothing.
   if (geometry === null) return c.json({ error: NOT_FOUND }, 404);
-  return c.json({ geometry: view(geometry) } satisfies GeometryResponse);
+  const wait = await jobWait(c.env, c.var.userId, geometry.status === "importing" ? geometry.importJobId : null);
+  return c.json({ geometry: view(geometry), ...(wait && { wait }) } satisfies GeometryResponse);
 });
 
 async function output(

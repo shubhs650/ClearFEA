@@ -40,6 +40,7 @@ import {
   setRunPinned,
 } from "../db/runs";
 import { selfHosted } from "../selfHosting";
+import { jobWait } from "../jobs/wait";
 import { requireUser, type SessionEnv } from "../session";
 
 export const runs = new Hono<SessionEnv>();
@@ -94,7 +95,8 @@ runs.get("/:id", async (c) => {
   const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
   // Another user's run answers exactly like a missing one, so ids reveal nothing.
   if (run === null) return c.json({ error: NOT_FOUND }, 404);
-  return c.json({ run: runView(run) } satisfies RunResponse);
+  const wait = await jobWait(c.env, c.var.userId, run.status === "solving" ? run.jobId : null);
+  return c.json({ run: runView(run), ...(wait && { wait }) } satisfies RunResponse);
 });
 
 /**

@@ -10,7 +10,7 @@
 
 import type { MachineStart, SolverMachines } from "@clearfea/spec";
 import type { Completion } from "../db/jobs";
-import { failQueuedJob, type QueuedJob, queuedJobs, queuedSizes } from "../db/jobs";
+import { failQueuedJob, type QueuedJob, queuedJobs } from "../db/jobs";
 import { cloudMachines } from "../db/machines";
 import { type MachineSettings, machineSettings } from "../db/settings";
 import {
@@ -295,14 +295,13 @@ export function waitsForMachine(sizes: string[], state: Pick<MachineState, "star
 }
 
 /**
- * Whether one of the user's queued jobs waits for a solver machine to start, so the screens can
- * say why it has not started. Locally, always false: the local worker is always there.
+ * Whether a job queued for this machine size waits for a solver machine to start, so the screens
+ * can say why it has not started (M11.2: asked for one job, with its queue place). Locally,
+ * always false: the local worker is always there.
  */
-export async function machineStarting(env: Env, userId: string): Promise<boolean> {
+export async function machineStarting(env: Env, size: string): Promise<boolean> {
   if (!cloudMachines(env)) return false;
-  const sizes = await queuedSizes(env.DB, userId);
-  if (sizes.length === 0) return false;
-  return waitsForMachine(sizes, await readMachineState(env));
+  return waitsForMachine([size], await readMachineState(env));
 }
 
 /** A start as the admin page shows it. */

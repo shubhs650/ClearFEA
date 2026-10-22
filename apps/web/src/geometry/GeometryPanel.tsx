@@ -2,15 +2,13 @@
 // Upload a STEP file and confirm its length unit (M1.2). Shows the user's most recent
 // geometry; projects, and so a choice of geometry, come later in M1.
 
-import { type GeometryStatus, type GeometryView, unitsTable } from "@clearfea/spec";
+import { type GeometryStatus, type GeometryView, type JobWait, unitsTable } from "@clearfea/spec";
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { confirmUnit, getGeometry, listGeometries, uploadGeometry } from "../api/geometries";
+import { confirmUnit, followGeometry, getGeometry, listGeometries, uploadGeometry } from "../api/geometries";
 import type { ApiResult } from "../api/request";
 import { MachineStartNote } from "../jobs/MachineStartNote";
+import { usePolling, waitChanged } from "../jobs/usePolling";
 import { fromSi } from "../units/convert";
-
-/** How often the geometry is refreshed while it is importing (docs/ARCHITECTURE.md section 8). */
-export const POLL_INTERVAL_MS = 2000;
 
 const LENGTH_UNITS = Object.keys(unitsTable.kinds.length?.units ?? {});
 
@@ -63,6 +61,7 @@ export function GeometryPanel({
   const [unit, setUnit] = useState("");
   const [problem, setProblem] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [wait, setWait] = useState<JobWait | null>(null);
 
   const handle = useCallback(
     <T,>(result: ApiResult<T>): T | undefined => {
@@ -96,14 +95,18 @@ export function GeometryPanel({
 
   const importing = geometry?.status === "importing";
   const id = geometry?.id;
-  useEffect(() => {
-    if (!importing || id === undefined) return;
-    const timer = setInterval(async () => {
-      const next = handle(await getGeometry(id));
-      if (next) show(next);
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [importing, id, handle, show]);
+  // While the file imports, check on it through the shared polling hook (M11.2, ADR-112).
+  usePolling(importing && id !== undefined ? id : null, async (current) => {
+    if (id === undefined) return { changed: false };
+    const result = await followGeometry(id);
+    if (!current()) return { changed: false };
+    const followed = handle(result);
+    if (!followed) return { changed: false };
+    const changed = followed.value.status !== "importing" || waitChanged(wait, followed.wait);
+    setWait(followed.wait);
+    show(followed.value);
+    return { changed, retryAfter: followed.wait?.retryAfter };
+  });
 
   // Only a new refresh number reloads; the geometry id is read as it is then.
   const shownId = useRef(id);
@@ -172,7 +175,7 @@ export function GeometryPanel({
           )}
         </dl>
       )}
-      <MachineStartNote waiting={importing} />
+      <MachineStartNote wait={importing ? wait : null} />
       {geometry?.status === "failed" && geometry.problem && (
         <p className="form-problem" role="alert">
           {geometry.problem}

@@ -6,6 +6,7 @@
 
 import {
   type ElementOrder,
+  type JobWait,
   type LocalMeshScope,
   type LocalMeshSize,
   localScopes,
@@ -73,6 +74,7 @@ export function MeshPanel({
   requesting,
   requestProblem,
   reused = false,
+  wait = null,
   onChange,
   onGenerate,
   onAddLocal,
@@ -86,6 +88,8 @@ export function MeshPanel({
   requestProblem?: string;
   /** True when the last request reused this mesh, made earlier with the same settings (M2.10). */
   reused?: boolean;
+  /** How the mesh job is getting on while the mesh is being made (M11.2). */
+  wait?: JobWait | null;
   onChange: (spec: SimulationSpec) => void;
   onGenerate: () => void;
   /** Adds a local size of the scope, taking the viewer's selection where it fits. */
@@ -186,7 +190,7 @@ export function MeshPanel({
           )}
         </div>
       )}
-      <MachineStartNote waiting={meshing} />
+      <MachineStartNote wait={meshing ? wait : null} />
     </section>
   );
 }

@@ -3,6 +3,7 @@ import { JobTypeValues } from "@clearfea/spec";
 import { env, exports } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createJob, getJob } from "../src/db/jobs";
+import { jobWait, retryAfter } from "../src/jobs/wait";
 
 const TOKEN = "test-worker-token";
 
@@ -183,4 +184,34 @@ describe("job data access", () => {
     expect(await getJob(env.DB, "bob", job.id)).toBeNull();
     expect((await getJob(env.DB, "alice", job.id))?.id).toBe(job.id);
   });
+});
+
+describe("job wait (M11.2)", () => {
+  it("gives a queued job its place among every user's queued jobs, and nothing once it has finished", async () => {
+    const first = await createJob(env.DB, "bob", "noop");
+    const second = await createJob(env.DB, "alice", "noop");
+    expect(await jobWait(env, "alice", second.id)).toEqual({
+      status: "queued",
+      queuePosition: 2,
+      machineStarting: false,
+      retryAfter: 10,
+    });
+    expect(await jobWait(env, "bob", second.id)).toBeUndefined();
+
+    expect((await claim()).status).toBe(200);
+    expect((await jobWait(env, "bob", first.id))?.queuePosition).toBeNull();
+    expect((await jobWait(env, "alice", second.id))?.queuePosition).toBe(1);
+    expect((await post(`/jobs/${first.id}/complete`, { workerId: "w1", status: "succeeded", metering: { billableMs: 1 } })).status).toBe(200);
+    expect(await jobWait(env, "bob", first.id)).toBeUndefined();
+  });
+
+  it("hints sooner for a job a worker is on than for one far back in the queue or waiting for a machine", () => {
+    expect(retryAfter("running", null, false)).toBe(2);
+    expect(retryAfter("claimed", null, false)).toBe(2);
+    expect(retryAfter("queued", 1, false)).toBe(5);
+    expect(retryAfter("queued", 1, true)).toBe(15);
+    expect(retryAfter("queued", 4, true)).toBe(20);
+    expect(retryAfter("queued", 40, false)).toBe(30);
+  });
+
 });

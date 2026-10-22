@@ -5,16 +5,14 @@
 // (M7.3, ADR-077; M7.4, ADR-078): draws the figures again, so they follow the saved options, then
 // asks the worker to make the report and offers its Word file and PDF for download once made.
 
-import type { ReportFigure, ReportOptions, RunReport, RunView, SavedView } from "@clearfea/spec";
+import type { JobWait, ReportFigure, ReportOptions, RunReport, RunView, SavedView } from "@clearfea/spec";
 import { useEffect, useState } from "react";
 import { figurePath, listFigures } from "../api/figures";
-import { fetchRunReport, makeRunReport, reportFilePath } from "../api/reports";
+import { fetchRunReport, followRunReport, makeRunReport, reportFilePath } from "../api/reports";
 import { MachineStartNote } from "../jobs/MachineStartNote";
+import { usePolling, waitChanged } from "../jobs/usePolling";
 import { captureFigures, planFigures } from "../report/figures";
 import { resultUnits } from "./displayUnits";
-
-/** How often a report being made is checked on. */
-export const REPORT_POLL_MS = 1500;
 
 type Stored = { kind: "loading" } | { kind: "failed"; problem: string } | { kind: "ok"; figures: ReportFigure[] };
 
@@ -55,6 +53,7 @@ export function ReportFigures({
   const [capture, setCapture] = useState<Capture>({ kind: "idle" });
   const [report, setReport] = useState<Report>({ kind: "loading" });
   const [asking, setAsking] = useState(false);
+  const [wait, setWait] = useState<JobWait | null>(null);
 
   useEffect(() => {
     if (runId === null) return;
@@ -79,26 +78,27 @@ export function ReportFigures({
     };
   }, [runId, onSignedOut]);
 
-  // While a report is queued or being made, check on it until it is made or has failed.
-  const pending =
+  // While a report is queued or being made, check on it until it is made or has failed, through
+  // the shared polling hook (M11.2, ADR-112).
+  const pendingReport =
     report.kind === "ok" && report.report !== null && ["queued", "making"].includes(report.report.status)
-      ? report.report.id
+      ? report.report
       : null;
-  useEffect(() => {
-    if (pending === null || runId === null) return;
-    let current = true;
-    const timer = setInterval(() => {
-      void fetchRunReport(runId).then((result) => {
-        if (!current) return;
-        if (result.kind === "ok") return setReport({ kind: "ok", report: result.value });
-        if (result.kind === "signedOut") onSignedOut(result.problem);
-      });
-    }, REPORT_POLL_MS);
-    return () => {
-      current = false;
-      clearInterval(timer);
-    };
-  }, [pending, runId, onSignedOut]);
+  const pending = pendingReport?.id ?? null;
+  usePolling(pending === null || runId === null ? null : `${runId}/${pending}`, async (current) => {
+    if (runId === null) return { changed: false };
+    const result = await followRunReport(runId);
+    if (!current()) return { changed: false };
+    if (result.kind !== "ok") {
+      if (result.kind === "signedOut") onSignedOut(result.problem);
+      return { changed: false };
+    }
+    const { value: next, wait: nextWait } = result.value;
+    const changed = next?.id !== pendingReport?.id || next?.status !== pendingReport?.status || waitChanged(wait, nextWait);
+    setWait(nextWait);
+    setReport({ kind: "ok", report: next });
+    return { changed, retryAfter: nextWait?.retryAfter };
+  });
 
   if (solved === null || geometryId === null) {
     return (
@@ -235,7 +235,7 @@ export function ReportFigures({
       {unsaved && <span className="field-hint">Save the report options first: the report follows the saved ones.</span>}
       {asking && !drawing && <span className="field-hint" role="status">Asking for the report…</span>}
       {latest?.status === "queued" && <span className="field-hint" role="status">The report is waiting for the worker…</span>}
-      <MachineStartNote waiting={latest?.status === "queued"} />
+      <MachineStartNote wait={latest?.status === "queued" ? wait : null} />
       {latest?.status === "making" && <span className="field-hint" role="status">Making the report…</span>}
       {latest?.status === "failed" && (
         <span className="form-problem" role="alert">

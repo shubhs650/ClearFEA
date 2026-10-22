@@ -448,18 +448,31 @@ export async function queuedJobs(db: D1Database): Promise<QueuedJob[]> {
 }
 
 /**
- * The machine sizes the user's queued jobs wait for (M10.10): a job with no size of its own
- * (import, report) waits for the default size, as in `queuedJobs`.
+ * Where one of the user's queued jobs stands (M11.2, ADR-112): its place among the queued jobs of
+ * its machine size, oldest first as `claimJob` takes them, and that size (the default size for a
+ * job that has none, as in `queuedJobs`). Other users' jobs are only counted. Null when the job is
+ * not the user's or no longer queued.
  */
-export async function queuedSizes(db: D1Database, userId: string): Promise<string[]> {
-  const { results } = await db
+export async function queuePlace(
+  db: D1Database,
+  userId: string,
+  jobId: string,
+): Promise<{ position: number; machineSize: string | null } | null> {
+  const row = await db
     .prepare(
-      `SELECT DISTINCT COALESCE(machine_size, (SELECT name FROM machine_sizes WHERE is_default = 1)) AS size
-         FROM jobs WHERE owner_id = ? AND status = 'queued'`,
+      `WITH lane AS (SELECT name FROM machine_sizes WHERE is_default = 1)
+       SELECT COALESCE(jobs.machine_size, (SELECT name FROM lane)) AS size,
+              (SELECT COUNT(*) FROM jobs ahead
+                WHERE ahead.status = 'queued'
+                  AND COALESCE(ahead.machine_size, (SELECT name FROM lane))
+                      IS COALESCE(jobs.machine_size, (SELECT name FROM lane))
+                  AND (ahead.created_at < jobs.created_at
+                       OR (ahead.created_at = jobs.created_at AND ahead.id <= jobs.id))) AS position
+         FROM jobs WHERE jobs.id = ? AND jobs.owner_id = ? AND jobs.status = 'queued'`,
     )
-    .bind(userId)
-    .all<{ size: string | null }>();
-  return results.flatMap((row) => (row.size === null ? [] : [row.size]));
+    .bind(jobId, userId)
+    .first<{ size: string | null; position: number }>();
+  return row === null ? null : { position: row.position, machineSize: row.size };
 }
 
 /**

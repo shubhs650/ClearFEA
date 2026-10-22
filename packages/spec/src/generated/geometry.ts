@@ -277,6 +277,10 @@ export interface GeometryView {
  */
 export interface GeometryResponse {
   geometry: GeometryView;
+  /**
+   * On GET while the import job has not finished: a JobWait (jobs.schema.json), checked against that schema by the browser (M11.2, ADR-112).
+   */
+  wait?: {};
 }
 /**
  * Answer to GET /api/geometries: the signed-in user's geometries, newest first.

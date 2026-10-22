@@ -238,6 +238,28 @@ export interface JobView {
  */
 export interface JobResponse {
   job: JobView;
+  wait?: JobWait;
+}
+/**
+ * How a job that has not finished is getting on (M11.2, ADR-112). Sent as `wait` with the answers the screens poll while a job works on what they show: GET /api/jobs/{id}, /api/geometries/{id}, /api/simulations/{id}/mesh, /api/runs/{id} and /api/runs/{id}/report. Left out once the job has finished.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "JobWait".
+ */
+export interface JobWait {
+  status: JobStatus;
+  /**
+   * While the job is queued, its place among the queued jobs of its machine size, counting every user's jobs: 1 is next. Null once a worker has claimed it.
+   */
+  queuePosition: number | null;
+  /**
+   * True on the live site while the job is queued and no machine of its size is running, or one is being started (ADR-103). Always false locally, where the worker is always there.
+   */
+  machineStarting: boolean;
+  /**
+   * Seconds after which asking again is worth it. The browser waits at least this long, and never more than 30 s.
+   */
+  retryAfter: number;
 }
 /**
  * Answer to GET /api/jobs: the signed-in user's most recent jobs, newest first.
@@ -247,18 +269,6 @@ export interface JobResponse {
  */
 export interface JobListResponse {
   jobs: JobView[];
-}
-/**
- * Answer to GET /api/jobs/machine-wait (M10.10, ADR-103): whether a job of the signed-in user is queued and waiting for a solver machine to start, so the screens can say why it has not started yet.
- *
- * This interface was referenced by `Jobs`'s JSON-Schema
- * via the `definition` "MachineWaitResponse".
- */
-export interface MachineWaitResponse {
-  /**
-   * True on the live site while one of the user's queued jobs has no machine of its size running, or a machine of its size is being started. Always false locally, where the worker is always there.
-   */
-  machineStarting: boolean;
 }
 /**
  * Body of any 4xx or 5xx answer: what is wrong and what to do about it.
@@ -297,5 +307,5 @@ export const validateCreateJobRequest = validator<CreateJobRequest>(schema, "Cre
 export const validateJobView = validator<JobView>(schema, "JobView");
 export const validateJobResponse = validator<JobResponse>(schema, "JobResponse");
 export const validateJobListResponse = validator<JobListResponse>(schema, "JobListResponse");
-export const validateMachineWaitResponse = validator<MachineWaitResponse>(schema, "MachineWaitResponse");
+export const validateJobWait = validator<JobWait>(schema, "JobWait");
 export const validateErrorResponse = validator<ErrorResponse>(schema, "ErrorResponse");

@@ -81,6 +81,7 @@ import { userProject } from "../db/projects";
 import { getReportOptions, saveReportOptions } from "../db/report";
 import { deleteView, listViews, saveView } from "../db/views";
 import type { Env } from "../env";
+import { jobWait } from "../jobs/wait";
 import { requireUser, type SessionEnv } from "../session";
 import { meshView } from "./meshes";
 import { projectUnitSystem } from "./projects";
@@ -204,7 +205,8 @@ simulations.get("/:id/mesh", async (c) => {
   const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
   if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
   const mesh = await simulationMesh(c.env.DB, c.var.userId, simulation.id);
-  return c.json({ mesh: mesh === null ? null : meshView(mesh) } satisfies SimulationMeshResponse);
+  const wait = await jobWait(c.env, c.var.userId, mesh?.status === "meshing" ? mesh.jobId : null);
+  return c.json({ mesh: mesh === null ? null : meshView(mesh), ...(wait && { wait }) } satisfies SimulationMeshResponse);
 });
 
 /**

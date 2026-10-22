@@ -8,6 +8,7 @@ import {
   validateGeometryResponse,
   validateTopology,
 } from "@clearfea/spec";
+import { type Followed, readWait } from "./jobs";
 import { type ApiResult, apiBinary, apiRequest, apiUpload } from "./request";
 
 export async function listGeometries(): Promise<ApiResult<GeometryView[]>> {
@@ -19,6 +20,13 @@ export async function getGeometry(id: string): Promise<ApiResult<GeometryView>> 
   const path = `/api/geometries/${encodeURIComponent(id)}`;
   const result = await apiRequest("GET", path, validateGeometryResponse);
   return result.kind === "ok" ? { kind: "ok", value: result.value.geometry } : result;
+}
+
+/** The geometry and, while it imports, how its import job is getting on (M11.2). */
+export async function followGeometry(id: string): Promise<ApiResult<Followed<GeometryView>>> {
+  const path = `/api/geometries/${encodeURIComponent(id)}`;
+  const result = await apiRequest("GET", path, validateGeometryResponse);
+  return result.kind === "ok" ? { kind: "ok", value: { value: result.value.geometry, wait: readWait(result.value.wait) } } : result;
 }
 
 export async function uploadGeometry(file: File): Promise<ApiResult<GeometryView>> {
