@@ -26,6 +26,7 @@ import { listLedger } from "../src/billing/ledger";
 import { app } from "../src/index";
 import { getJob, LOG_CHUNKS_PER_READ } from "../src/db/jobs";
 import { sweepLostJobs } from "../src/jobs/outcome";
+import { userProject } from "../src/db/projects";
 
 const TOKEN = "test-worker-token";
 
@@ -117,13 +118,14 @@ async function charges(userId: string) {
 
 /** A ready geometry of alice's, imported at scaling 0.5, with its topology.json stored. */
 async function geometryRow(topology: Topology = TOPOLOGY): Promise<string> {
+  const { id: projectId } = await userProject(env.DB, aliceId);
   const id = crypto.randomUUID();
   await env.DB.prepare(
-    `INSERT INTO geometries (id, owner_id, name, size_bytes, status, detected_unit, reading_factor,
+    `INSERT INTO geometries (id, owner_id, project_id, name, size_bytes, status, detected_unit, reading_factor,
        confirmed_unit, scaling, body_count, face_count)
-     VALUES (?, ?, 'bracket.step', 100, 'ready', 'mm', 0.001, 'mm', 0.5, 1, 3)`,
+     VALUES (?, ?, ?, 'bracket.step', 100, 'ready', 'mm', 0.001, 'mm', 0.5, 1, 3)`,
   )
-    .bind(id, aliceId)
+    .bind(id, aliceId, projectId)
     .run();
   await env.FILES.put(`owners/${aliceId}/geometries/${id}/topology.json`, JSON.stringify(topology));
   await env.FILES.put(`owners/${aliceId}/geometries/${id}/model.step`, "ISO-10303-21;");

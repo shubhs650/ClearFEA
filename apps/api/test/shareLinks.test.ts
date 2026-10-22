@@ -12,6 +12,7 @@ import { env, exports } from "cloudflare:workers";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { hashShareToken } from "../src/db/shareLinks";
 import { LINK_NOT_WORKING } from "../src/routes/shareLinks";
+import { userProject } from "../src/db/projects";
 
 function call(method: string, path: string, cookie?: string): Promise<Response> {
   return exports.default.fetch(`http://localhost${path}`, { method, headers: cookie ? { Cookie: cookie } : {} });
@@ -96,16 +97,17 @@ beforeEach(async () => {
   geometryId = crypto.randomUUID();
   simulationId = crypto.randomUUID();
   const spec: SimulationSpec = { ...(JSON.parse(JSON.stringify(fixture)) as SimulationSpec), geometryId };
+  const { id: projectId } = await userProject(env.DB, aliceId);
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO geometries (id, owner_id, name, size_bytes, status, detected_unit, reading_factor,
+      `INSERT INTO geometries (id, owner_id, project_id, name, size_bytes, status, detected_unit, reading_factor,
          confirmed_unit, scaling, body_count, face_count)
-       VALUES (?, ?, 'block.step', 100, 'ready', 'mm', 0.001, 'mm', 1, 1, 6)`,
-    ).bind(geometryId, aliceId),
+       VALUES (?, ?, ?, 'block.step', 100, 'ready', 'mm', 0.001, 'mm', 1, 1, 6)`,
+    ).bind(geometryId, aliceId, projectId),
     env.DB.prepare(
-      `INSERT INTO simulations (id, owner_id, geometry_id, name, analysis_type, spec_version, spec)
-       VALUES (?, ?, ?, 'Bracket', 'linear_static', 1, ?)`,
-    ).bind(simulationId, aliceId, geometryId, JSON.stringify(spec)),
+      `INSERT INTO simulations (id, owner_id, geometry_id, project_id, name, analysis_type, spec_version, spec)
+       VALUES (?, ?, ?, ?, 'Bracket', 'linear_static', 1, ?)`,
+    ).bind(simulationId, aliceId, geometryId, projectId, JSON.stringify(spec)),
   ]);
   await env.FILES.put(`owners/${aliceId}/geometries/${geometryId}/topology.json`, '{"faces":[]}');
 });

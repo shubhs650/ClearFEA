@@ -11,6 +11,7 @@ import {
 import fixture from "@clearfea/spec/fixtures/simulation-v1.json";
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { userProject } from "../src/db/projects";
 
 
 /** The first item of a list, which the fixture always has. */
@@ -93,13 +94,14 @@ async function geometryRow(
   status = "ready",
   topology: Topology | null = TOPOLOGY,
 ): Promise<string> {
+  const { id: projectId } = await userProject(env.DB, ownerId);
   const id = crypto.randomUUID();
   await env.DB.prepare(
-    `INSERT INTO geometries (id, owner_id, name, size_bytes, status, detected_unit, reading_factor,
+    `INSERT INTO geometries (id, owner_id, project_id, name, size_bytes, status, detected_unit, reading_factor,
        confirmed_unit, scaling, body_count, face_count)
-     VALUES (?, ?, 'bracket.step', 100, ?, 'mm', 0.001, ?, 1, 1, 3)`,
+     VALUES (?, ?, ?, 'bracket.step', 100, ?, 'mm', 0.001, ?, 1, 1, 3)`,
   )
-    .bind(id, ownerId, status, status === "ready" ? "mm" : null)
+    .bind(id, ownerId, projectId, status, status === "ready" ? "mm" : null)
     .run();
   if (topology !== null) {
     await env.FILES.put(`owners/${ownerId}/geometries/${id}/topology.json`, JSON.stringify(topology));

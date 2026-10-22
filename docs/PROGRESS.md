@@ -36,6 +36,10 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 
 - [x] M12.4 API VPS mode (ADR-120): `MACHINES=vps`; the compute manager checks in through `POST /internal/hosts/check-in` every 30 s; while no host has checked in for 2 minutes every route that queues a job answers 503; the queue position counts the job's lane; the wallet shows usage only and no balance refuses work; the admin page shows the solver host
 
+### M14 Projects home (independent of M12, started under the autodrive while the VPS waits)
+
+- [x] M14.1 Data model (ADR-114, migration 0029): `folders`; projects gain a folder, `deleted_at`, `last_opened_at` and `thumbnail_at`; every geometry and simulation belongs to a project of its owner, enforced by triggers; each user's work moved into "My first project"; data-access functions for folders and projects; migration, trigger and isolation tests
+
 ### M11 Fix the live beta
 
 - [x] M11.1 Cloudflare Access service token (ADR-111): worker, deploy health check, Live checks and harness send it; AWS image job removed from the deploy. Works on the live site once the maintainer adds the service token, its Service Auth policy and the secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (DEPLOYMENT.md 1.8)
@@ -206,6 +210,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M14.1 (2026-10-22): migration 0029 is the projects home's data model; the details are in ADR-114's "As built in M14.1". `apps/api/src/db/projects.ts` has `createFolder`, `createProject`, `getFolder`, `getProject`, `listFolders`, `listProjects` and `markProjectOpened`, all owner-scoped and refusing a parent folder outside the user's or in the trash; there are no routes yet (M14.2). Three places still read the unit system from `userProject` (the user's oldest live project) rather than the simulation's own project: report options in `routes/simulations.ts`, `reportParams` in `routes/reports.ts` and the share link in `routes/shareLinks.ts`; switch them to `getProject(simulation.projectId)` when M14.2 lets a user have a second project. `GET /api/geometries` still lists all of a user's geometries; M14.2 or M14.3 filters by project. Test fixtures that insert geometries or simulations must now give a `project_id` (`userProject` first); `test/projectsHome.test.ts` tests migration 0029 on its own `MIGRATION_DB`, loading data between migrations 0028 and 0029, a pattern for later data migrations.
 
 > M12.4 (2026-10-22): `MACHINES=vps` is built but not switched on: production still sets `MACHINES=cloud` until M12.7 changes `scripts/productionConfig.mjs` (and its test). The manager (M12.1) calls `POST /internal/hosts/check-in` with `{ host, managerVersion }` (`HostCheckIn`, Pydantic model in `worker/clearfea_worker/spec/jobs_schema.py`) at start and every `intervalSeconds` (30). The 120 s silence check is `hostRefusal` inside `queueRefusal` (`apps/api/src/jobs/limits.ts`), so every job route already covers it; `queueRefusal` now returns `{ error, status }` (503 offline, 429 limits). With `MACHINES=vps` queued jobs are never failed for a silent host; they wait. The lane queue position is `queuePlace(..., byLane)` in `apps/api/src/db/jobs.ts`, oldest first; if M12.1's fairness order makes it noticeably wrong, align that one clause. The usage-only wallet is `usageOnly` in `WalletResponse`; the dashboard alert for an offline host is M13.5's, the admin page's Solver host card is the stopgap.
 
@@ -494,6 +500,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-22
 
+- M14.1 projects data model (ADR-114): folders, project folder, trash time, last opened and thumbnail columns, "My first project" holding each user's existing work, triggers refusing work in another user's project or folder. Learned: a data migration can be tested by applying the migrations before it to a second D1 binding, loading rows, then applying the rest.
 - M12.4 API VPS mode (ADR-120): host check-ins, a 503 while the host is silent for 2 minutes, the queue position per lane, a usage-only wallet and a Solver host card on the admin page. Learned: the claim cannot double as the host's check-in, since a manager with both lanes busy claims nothing for hours.
 - Close M11: phase-end run on main green ([run 39802374738](https://github.com/shubhs650/ClearFEA/actions/runs/39802374738), full tier 314 of 314, E-01 to E-09); deploys green behind Access; the exit's request count is now a test (54 status checks for a 20-minute solve); the run log answer says `more`, so a solving run's check reads the log once instead of twice. The Live checks behind Access move to M12's exit. Learned: count every request a poll makes, not only the one the hook schedules; the log read hid a second request per check.
 

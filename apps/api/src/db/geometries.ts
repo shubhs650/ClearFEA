@@ -9,6 +9,7 @@ import { getJob, type Job, newJob } from "./jobs";
 export interface Geometry {
   id: string;
   ownerId: string;
+  projectId: string;
   name: string;
   sizeBytes: number;
   status: GeometryStatus;
@@ -32,6 +33,7 @@ export interface Geometry {
 interface GeometryRow {
   id: string;
   owner_id: string;
+  project_id: string;
   name: string;
   size_bytes: number;
   status: GeometryStatus;
@@ -55,6 +57,7 @@ function toGeometry(row: GeometryRow): Geometry {
   return {
     id: row.id,
     ownerId: row.owner_id,
+    projectId: row.project_id,
     name: row.name,
     sizeBytes: row.size_bytes,
     status: row.status,
@@ -95,16 +98,17 @@ export function geometryKey(ownerId: string, geometryId: string, file: GeometryF
 export async function createGeometry(
   db: D1Database,
   userId: string,
-  geometry: { id: string; name: string; sizeBytes: number },
+  geometry: { id: string; projectId: string; name: string; sizeBytes: number },
 ): Promise<{ geometry: Geometry; job: Job }> {
   const job = newJob(db, userId, "import", geometry.id, { confirmedUnit: null });
   await db.batch([
     job.statement,
     db
       .prepare(
-        "INSERT INTO geometries (id, owner_id, name, size_bytes, import_job_id) VALUES (?, ?, ?, ?, ?)",
+        `INSERT INTO geometries (id, owner_id, project_id, name, size_bytes, import_job_id)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .bind(geometry.id, userId, geometry.name, geometry.sizeBytes, job.id),
+      .bind(geometry.id, userId, geometry.projectId, geometry.name, geometry.sizeBytes, job.id),
   ]);
   const [created, queued] = await Promise.all([
     getGeometry(db, userId, geometry.id),
