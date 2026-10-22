@@ -250,7 +250,7 @@ After M12.3.
 **Goal:** each user has a home with projects, folders, recent items and trash (ADR-114).
 
 - [x] M14.1 Data model: `folders`; projects gain a folder, `deleted_at`, `last_opened_at` and a thumbnail; geometries and simulations always belong to a project; each user's existing work moves into "My first project"; owner-scoped access and isolation tests.
-- [ ] M14.2 API: create, rename, move and duplicate folders and projects; trash and restore; purge after the retention period in the storage sweep, with R2 deletes.
+- [x] M14.2 API: create, rename, move and duplicate folders and projects; trash and restore; purge after the retention period in the storage sweep, with R2 deletes.
 - [ ] M14.3 Home page: Recent, My projects with the folder tree, Trash; grid and list, sort, search, info panel, thumbnails from the viewer; `/app` opens the home, `/app/p/<id>` the workbench.
 - [ ] M14.4 Browser test E-10 for the home page and trash.
 

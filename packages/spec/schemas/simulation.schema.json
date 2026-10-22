@@ -618,7 +618,7 @@
       "properties": { "simulation": { "$ref": "#/$defs/SimulationView" } }
     },
     "SimulationListResponse": {
-      "description": "Answer to GET /api/simulations[?geometryId=]: the signed-in user's simulations, newest first.",
+      "description": "Answer to GET /api/simulations[?geometryId=][&projectId=]: the signed-in user's simulations, newest first, those on one geometry or in one project when it is named.",
       "type": "object",
       "additionalProperties": false,
       "required": ["simulations"],

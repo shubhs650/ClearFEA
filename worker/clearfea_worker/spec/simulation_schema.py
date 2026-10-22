@@ -1534,7 +1534,7 @@ class SimulationResponse(BaseModel):
 
 class SimulationListResponse(BaseModel):
     """
-    Answer to GET /api/simulations[?geometryId=]: the signed-in user's simulations, newest first.
+    Answer to GET /api/simulations[?geometryId=][&projectId=]: the signed-in user's simulations, newest first, those on one geometry or in one project when it is named.
     """
 
     model_config = ConfigDict(

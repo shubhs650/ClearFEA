@@ -8,6 +8,7 @@ import type { RunFileName, StorageKind, StoragePart } from "@clearfea/spec";
 import { storageDayCost } from "../billing/storage";
 import { RAW_OUTPUT, runKey } from "./runs";
 import { storageSettings } from "./settings";
+import { purgeTrash } from "./trash";
 
 /** The kind of a stored file, from its key below owners/<id>/ (see the key functions in db/). */
 export function storageKind(relativeKey: string): StorageKind {
@@ -107,6 +108,9 @@ export async function runsWithRawOutput(db: D1Database, userId: string): Promise
 export interface SweepSummary {
   /** The UTC day the sweep charged for. */
   day: string;
+  /** Projects and folders purged from the trash (M14.2, ADR-124). */
+  purgedProjects: number;
+  purgedFolders: number;
   /** Runs whose raw output the sweep removed. */
   removed: number;
   /** Users charged for storage above the allowance on this day by this sweep. */
@@ -114,12 +118,14 @@ export interface SweepSummary {
 }
 
 /**
- * The daily storage sweep. First removes the raw solver output of every unpinned run that
+ * The daily storage sweep. First purges projects and folders in the trash past its retention
+ * period, with their files (M14.2), so they are not charged for; then removes the raw solver output of every unpinned run that
  * ended at least the retention period before `now`; then measures each user's storage and
  * charges the day's cost of what is above the free allowance, once per user per UTC day, so
  * running the sweep again on the same day changes nothing.
  */
 export async function sweepStorage(db: D1Database, files: R2Bucket, now: Date): Promise<SweepSummary> {
+  const purged = await purgeTrash(db, files, now);
   const settings = await storageSettings(db);
   const stamp = now.toISOString();
   const day = stamp.slice(0, 10);
@@ -169,5 +175,5 @@ export async function sweepStorage(db: D1Database, files: R2Bucket, now: Date): 
     ]);
     if (entry?.meta.changes === 1) charged += 1;
   }
-  return { day, removed, charged };
+  return { day, purgedProjects: purged.projects, purgedFolders: purged.folders, removed, charged };
 }

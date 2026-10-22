@@ -130,17 +130,18 @@ export async function getGeometry(
   return row === null ? null : toGeometry(row);
 }
 
-/** The user's most recent geometries, newest first. */
+/** The user's most recent geometries, newest first, optionally only those of one project. */
 export async function listGeometries(
   db: D1Database,
   userId: string,
-  limit = 20,
+  options: { projectId?: string; limit?: number } = {},
 ): Promise<Geometry[]> {
   const { results } = await db
     .prepare(
-      `${SELECT} WHERE owner_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+      `${SELECT} WHERE owner_id = ?1 AND (?2 IS NULL OR project_id = ?2)
+        ORDER BY created_at DESC, id DESC LIMIT ?3`,
     )
-    .bind(userId, limit)
+    .bind(userId, options.projectId ?? null, options.limit ?? 20)
     .all<GeometryRow>();
   return results.map(toGeometry);
 }
