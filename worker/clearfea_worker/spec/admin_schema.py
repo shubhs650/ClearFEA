@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from typing_extensions import TypeAliasType
 
 type Admin = Annotated[Any, Field(title="Admin")]
 """
@@ -185,7 +184,7 @@ class AdminResponse(BaseModel):
     """
 
 
-StageMsAdditionalProperty = TypeAliasType("StageMsAdditionalProperty", Annotated[int, Field(ge=0)])
+type StageMsAdditionalProperty = Annotated[int, Field(ge=0)]
 
 
 class JobTry(BaseModel):

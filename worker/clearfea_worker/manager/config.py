@@ -49,6 +49,9 @@ class ManagerSettings:
     #: A job container still running after this long is killed: above the 12-hour stop-limit
     #: ceiling, so it only catches a job that stopped answering its heartbeats.
     job_max_seconds: float = 13 * 3600.0
+    #: The file system whose free space the check-ins report (M12.3); None: Docker's data
+    #: directory when the manager can see it, else its own root.
+    disk_path: str | None = None
 
 
 #: Starting values from ADR-107 for the Contabo Cloud VPS 8 (8 vCPU, 24 GB); M12.6 measures them.
@@ -121,4 +124,5 @@ def load_manager_settings(env: Mapping[str, str] | None = None) -> ManagerSettin
         poll_seconds=worker.poll_seconds,
         idle_poll_max_seconds=_positive(env, "CLEARFEA_IDLE_POLL_MAX_SECONDS", 15.0),
         job_max_seconds=_positive(env, "CLEARFEA_JOB_MAX_SECONDS", 13 * 3600.0),
+        disk_path=env.get("CLEARFEA_HOST_DISK_PATH", "").strip() or None,
     )

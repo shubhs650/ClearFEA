@@ -7,19 +7,24 @@ clearfea_worker job`) and reports its own outcome. The manager watches it, repor
 that ended without reporting (killed, out of memory, never started) as ClearFEA's fault, and
 removes it with its scratch volume. It holds no state of record: after a restart it finds its
 containers by their labels, follows the ones still running and clears up the rest.
+
+For support (M12.3, ADR-109) it samples each job container's statistics every 5 s and sends what
+the container used once it has ended, and sends the host's load with each check-in.
 """
 
 import json
 import logging
+import os
 import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from ..api import AccessBlocked, ApiClient, ApiError, ClaimedJob
 from ..runner import ACCESS_BACKOFF_MAX_SECONDS
-from ..spec.jobs_schema import WorkerSoftware
+from ..spec.jobs_schema import ContainerStats, HostLoad, WorkerSoftware
 from ..versions import clearfea_version
 from .config import Lane, ManagerSettings
 from .containers import (
@@ -35,6 +40,7 @@ from .containers import (
     worker_id,
 )
 from .docker import DockerClient, DockerError
+from .stats import SAMPLE_SECONDS, ContainerSampler, CpuTimes, host_load
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +69,9 @@ class _LaneState:
     job_type: str | None = None
     #: Set when the manager killed the container for running past job_max_seconds.
     timed_out: bool = False
+    #: The running container's statistics so far, and when to sample them next (manager clock).
+    sampler: ContainerSampler = field(default_factory=ContainerSampler)
+    next_sample: float = 0.0
     #: When the lane next asks for a job (manager clock), and the pause after that while idle.
     next_claim: float = 0.0
     idle_pause: float = 0.0
@@ -83,10 +92,15 @@ class Manager:
     docker: DockerClient
     client_factory: Callable[[ManagerSettings, str], ApiClient] | None = None
     clocks: _Clocks = field(default_factory=_Clocks)
+    #: Where the host's /proc is read for its load; inside a container it is still the host's.
+    proc: Path = Path("/proc")
     _lanes: list[_LaneState] = field(default_factory=list, init=False)
     _software: dict[str, WorkerSoftware] = field(default_factory=dict, init=False)
     _host_cpus: int = field(default=1, init=False)
     _next_check_in: float = field(default=0.0, init=False)
+    _cpu_times: CpuTimes | None = field(default=None, init=False)
+    _disk: str = field(default="/", init=False)
+    _load_failed: bool = field(default=False, init=False)
 
     def __post_init__(self) -> None:
         factory = self.client_factory or _default_client
@@ -111,6 +125,10 @@ class Manager:
         left: a running one is followed again (one per lane), any other is cleared up."""
         info = self.docker.info()
         self._host_cpus = int(info.get("NCPU") or 1)
+        # The disk whose free space counts: where Docker keeps the jobs' scratch volumes, when
+        # the manager can see it, else its own root.
+        root = str(info.get("DockerRootDir") or "")
+        self._disk = self.settings.disk_path or (root if root and os.path.isdir(root) else "/")
         log.info(
             "Manager on %s: %d CPUs, %.1f GiB, Docker %s; lanes %s",
             self.settings.host,
@@ -170,13 +188,27 @@ class Manager:
         """Tells the API the host is up, whatever the lanes are doing (M12.4, ADR-120): with
         MACHINES=vps it refuses new jobs while no host has checked in for 2 minutes."""
         now = self.clocks.monotonic()
+        load = self._host_load()
         try:
-            interval = self._lanes[0].client.check_in(self.settings.host, clearfea_version())
+            interval = self._lanes[0].client.check_in(self.settings.host, clearfea_version(), load)
         except ApiError as error:
             log.warning("Check-in failed: %s", error)
             self._next_check_in = now + CHECK_IN_RETRY_SECONDS
             return
         self._next_check_in = now + interval
+
+    def _host_load(self) -> HostLoad | None:
+        """The host's load for the check-in, or None (said once) when it cannot be read."""
+        try:
+            running = int(self.docker.info().get("ContainersRunning") or 0)
+            load, self._cpu_times = host_load(self.proc, Path(self._disk), running, self._cpu_times)
+        except (OSError, ValueError, IndexError, DockerError) as error:
+            if not self._load_failed:
+                log.warning("Cannot read the host's load, so check-ins go without it: %s", error)
+            self._load_failed = True
+            return None
+        self._load_failed = False
+        return load
 
     # A busy lane -----------------------------------------------------------------------------
 
@@ -185,6 +217,10 @@ class Manager:
         info = self.docker.inspect(state.container)
         status = None if info is None else info["State"].get("Status")
         if status == "running":
+            now = self.clocks.monotonic()
+            if now >= state.next_sample:
+                state.sampler.add(self.docker.stats(state.container))
+                state.next_sample = now + SAMPLE_SECONDS
             started = docker_time(info["State"].get("StartedAt")) if info else None
             age = None if started is None else self.clocks.wall() - started
             if age is not None and age > self.settings.job_max_seconds and not state.timed_out:
@@ -200,6 +236,7 @@ class Manager:
         self._finish(state, state.container, state.job_id, state.job_type, info)
         state.container = state.job_id = state.job_type = None
         state.timed_out = False
+        state.sampler, state.next_sample = ContainerSampler(), 0.0
         # Look for the next job at once.
         state.next_claim = 0.0
         state.idle_pause = self._first_pause
@@ -218,13 +255,14 @@ class Manager:
         container_state = (info or {}).get("State") or {}
         code = container_state.get("ExitCode")
         reported = container_state.get("Status") == "exited" and code == 0
+        started = docker_time(container_state.get("StartedAt"))
+        finished = docker_time(container_state.get("FinishedAt"))
+        run_ms = 0
+        if started is not None:
+            end = finished if finished is not None else self.clocks.wall()
+            run_ms = max(0, round((end - started) * 1000))
         if job_id is not None and not reported:
-            started = docker_time(container_state.get("StartedAt"))
-            finished = docker_time(container_state.get("FinishedAt"))
-            billable_ms = 0
-            if started is not None:
-                end = finished if finished is not None else self.clocks.wall()
-                billable_ms = max(0, round((end - started) * 1000))
+            billable_ms = run_ms
             if container_state.get("OOMKilled"):
                 cause = OUT_OF_MEMORY
             elif state.timed_out:
@@ -250,6 +288,15 @@ class Manager:
                 log.info("The API did not take job %s's failure: %s", job_id, error)
         elif job_id is not None:
             log.info("Job %s (%s) finished in the %s lane", job_id, job_type, state.lane.name)
+        if job_id is not None:
+            self._send_stats(
+                state,
+                job_id,
+                image=str((info or {}).get("Image") or self.settings.image),
+                exit_code=code if started is not None and isinstance(code, int) else None,
+                out_of_memory=bool(container_state.get("OOMKilled")),
+                run_ms=run_ms,
+            )
         self.docker.remove(container)
         if job_id is not None:
             self.docker.remove_volume(resource_name(job_id))
@@ -306,6 +353,9 @@ class Manager:
                 state.client.fail(job.id, "platform_fault", CONTAINER_START_FAILED, billable_ms=0)
             except ApiError as api_error:
                 log.warning("%s", api_error)
+            self._send_stats(
+                state, job.id, image=image_id, exit_code=None, out_of_memory=False, run_ms=0
+            )
             try:
                 if container is not None:
                     self.docker.remove(container)
@@ -316,6 +366,33 @@ class Manager:
             state.next_claim = self.clocks.monotonic() + IMAGE_RETRY_SECONDS
             return
         state.container, state.job_id, state.job_type = container, job.id, job.type
+
+    def _send_stats(
+        self,
+        state: _LaneState,
+        job_id: str,
+        *,
+        image: str,
+        exit_code: int | None,
+        out_of_memory: bool,
+        run_ms: int,
+    ) -> None:
+        """Sends what the job's container used to its try's statistics (M12.3, ADR-109). Lost
+        statistics lose nothing else, so a refusal is only logged."""
+        stats = ContainerStats(
+            worker_id=state.worker_id,
+            host=self.settings.host,
+            lane=state.lane.name,
+            image=image[:100],
+            exit_code=exit_code,
+            out_of_memory=out_of_memory,
+            run_ms=run_ms,
+            **state.sampler.figures(),
+        )
+        try:
+            state.client.container_stats(job_id, stats)
+        except ApiError as error:
+            log.info("The API did not take job %s's statistics: %s", job_id, error)
 
     def _image_software(self, image_id: str) -> WorkerSoftware | None:
         """The versions inside the image, which the claim records as what ran the job (ADR-032),

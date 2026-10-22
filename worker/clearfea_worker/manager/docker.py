@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """A small client for the Docker Engine API over its Unix socket (M12.1, ADR-107).
 
-Only what the compute manager uses: images, volumes and containers. HTTP through the standard
-library, so the manager needs no Docker SDK and nothing beyond the worker's locked dependencies.
+Only what the compute manager uses: images, volumes, containers and their statistics. HTTP
+through the standard library, so the manager needs no Docker SDK and nothing beyond the worker's
+locked dependencies.
 """
 
 import http.client
@@ -142,6 +143,21 @@ class DockerClient:
         """Waits for the container to stop and returns its exit code."""
         answer = self._call("POST", f"/containers/{container}/wait", (200,), timeout=timeout)
         return int(answer["StatusCode"])
+
+    def stats(self, container: str) -> dict[str, Any] | None:
+        """One sample of the container's resource use (M12.3), without waiting for a second
+        one; None once the container is gone."""
+        try:
+            return self._call(
+                "GET",
+                f"/containers/{container}/stats",
+                (200,),
+                query={"stream": "false", "one-shot": "true"},
+            )
+        except DockerError as error:
+            if error.status == 404:
+                return None
+            raise
 
     def kill(self, container: str) -> None:
         # 409: the container is not running any more, which is what was asked for.
