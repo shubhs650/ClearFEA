@@ -80,8 +80,8 @@ export function UsersTab({ onSignedOut }: { onSignedOut: (notice?: string) => vo
       <section className="admin-card" aria-label="Users">
         <h3 className="wallet-subtitle">Users</h3>
         <p className="wallet-note">
-          This month is the calendar month in UTC. A user's jobs and their logs are on Jobs and runs, and their
-          sign-ins on Events.
+          Machine time, jobs and failed jobs count this calendar month (UTC). A user's jobs and their logs are on
+          Jobs and runs, and their sign-ins on Events.
         </p>
         <table className="wallet-table" aria-label="Users">
           <thead>
@@ -90,9 +90,9 @@ export function UsersTab({ onSignedOut }: { onSignedOut: (notice?: string) => vo
               <th>Email</th>
               <th>First signed in (UTC)</th>
               <th>Last signed in (UTC)</th>
-              <th className="wallet-number">Machine time this month</th>
-              <th className="wallet-number">Jobs this month</th>
-              <th className="wallet-number">Failed this month</th>
+              <th className="wallet-number">Machine time</th>
+              <th className="wallet-number">Jobs</th>
+              <th className="wallet-number">Failed</th>
               <th>Can sign in</th>
             </tr>
           </thead>

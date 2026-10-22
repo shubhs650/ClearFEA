@@ -2143,9 +2143,24 @@ details > summary {
   margin: 0 0 6px;
 }
 
+.admin-setting .field {
+  min-width: 0;
+}
+
+.admin-setting .field input {
+  width: 100%;
+  min-width: 0;
+}
+
 .admin-setting-unit {
-  align-self: center;
-  max-width: 9em;
+  flex: none;
+  align-self: flex-end;
+  max-width: 7em;
+  padding-bottom: 8px;
+}
+
+.admin-setting button {
+  flex: none;
 }
 
 .admin-grid {
