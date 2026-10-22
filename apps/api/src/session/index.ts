@@ -86,7 +86,7 @@ export async function sessionUserId(c: Context<SessionEnv>): Promise<string | nu
   return token === undefined ? null : readToken(c.env.SESSION_SECRET ?? "", token, now());
 }
 
-/** Requests one user may make per minute (M11.3, ADR-112); the API_RATE_LIMIT binding in wrangler.jsonc holds it. */
+/** Requests one user may make per minute on the live site (M11.3, ADR-112); its API_RATE_LIMIT binding holds it. */
 export const REQUESTS_PER_MINUTE = 120;
 
 export const RATE_LIMITED_MESSAGE = `Your account sent more than ${REQUESTS_PER_MINUTE} requests in the last minute, the most the API answers. Wait a minute, then try again; if a page keeps doing this, reload it.`;

@@ -80,5 +80,10 @@ export function productionConfig(base, { databaseId, accountId, commit }) {
       R2_BUCKET: files.bucket_name,
     },
     observability: { enabled: true },
+    // Each signed-in user's requests to /api (M11.3, ADR-112): REQUESTS_PER_MINUTE in
+    // src/session/index.ts. Production only: the development build of the web app asks twice
+    // for much of what it loads, and the browser tests reload pages quickly. Counted per
+    // Cloudflare location, so a limit, not an exact count.
+    ratelimits: [{ name: "API_RATE_LIMIT", namespace_id: "1001", simple: { limit: 120, period: 60 } }],
   };
 }
