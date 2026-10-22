@@ -2088,7 +2088,9 @@ details > summary {
 
 .admin-overview,
 .admin-jobs,
-.admin-events {
+.admin-events,
+.admin-settings,
+.admin-costs {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -2119,6 +2121,31 @@ details > summary {
   color: var(--warn);
   border-color: var(--warn);
   background: rgb(234 88 12 / 8%);
+}
+
+/* Settings (M13.3): one row per setting, its field and unit, then what it does. */
+.admin-setting-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-setting {
+  padding: 8px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-setting .admin-add {
+  margin-bottom: 4px;
+}
+
+.admin-setting .wallet-note {
+  margin: 0 0 6px;
+}
+
+.admin-setting-unit {
+  align-self: center;
+  max-width: 9em;
 }
 
 .admin-grid {
