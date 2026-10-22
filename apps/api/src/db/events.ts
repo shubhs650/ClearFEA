@@ -136,6 +136,8 @@ export interface EventFilter {
   userId?: string;
   since?: string;
   before?: string;
+  /** Oldest first rather than newest first, for the export (M13.4). */
+  oldestFirst?: boolean;
   limit: number;
 }
 
@@ -167,7 +169,7 @@ export async function listEvents(db: D1Database, filter: EventFilter): Promise<A
   const { results } = await db
     .prepare(
       `SELECT * FROM events ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
-        ORDER BY at DESC, id DESC LIMIT ?`,
+        ORDER BY at ${filter.oldestFirst ? "ASC" : "DESC"}, id ${filter.oldestFirst ? "ASC" : "DESC"} LIMIT ?`,
     )
     .bind(...values, filter.limit)
     .all<EventRow>();

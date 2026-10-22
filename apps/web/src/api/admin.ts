@@ -21,7 +21,7 @@ import {
   validateOverviewResponse,
   validateSettingsResponse,
 } from "@clearfea/spec";
-import { type ApiResult, apiRequest } from "./request";
+import { type ApiResult, apiDownload, apiRequest, type Download } from "./request";
 
 export function fetchAdmin(): Promise<ApiResult<AdminResponse>> {
   return apiRequest("GET", "/api/admin", validateAdminResponse);
@@ -115,4 +115,20 @@ export function setSetting(name: string, value: number): Promise<ApiResult<Setti
 
 export function fetchCosts(month: string): Promise<ApiResult<CostsResponse>> {
   return apiRequest("GET", `/api/admin/costs${query({ month })}`, validateCostsResponse);
+}
+
+// The export (M13.4, ADR-129): a table as CSV or Excel, or every table in one workbook, of the days
+// from and to (YYYY-MM-DD, UTC, both included).
+
+export type ExportFormat = "csv" | "xlsx";
+
+export function downloadExport(
+  table: string,
+  format: ExportFormat,
+  range: { from: string; to: string },
+): Promise<ApiResult<Download>> {
+  return apiDownload(
+    `/api/admin/export/${encodeURIComponent(table)}.${format}${query(range)}`,
+    `clearfea-${table}.${format}`,
+  );
 }

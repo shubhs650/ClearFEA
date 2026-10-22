@@ -99,3 +99,34 @@ export async function apiBinary(path: string): Promise<ApiResult<ArrayBuffer>> {
   }
   return { kind: "ok", value: await response.arrayBuffer() };
 }
+
+/** A file the API sends as an attachment, with the name it gives in Content-Disposition. */
+export interface Download {
+  blob: Blob;
+  name: string;
+}
+
+/** The file name of a Content-Disposition header, or the fallback. */
+export function attachmentName(header: string | null, fallback: string): string {
+  const match = header === null ? null : /filename="([^"]+)"/.exec(header);
+  return match?.[1] ?? fallback;
+}
+
+/** Fetches a file to save, such as the admin's exports (M13.4). Errors come back as the API's JSON text. */
+export async function apiDownload(path: string, fallbackName: string): Promise<ApiResult<Download>> {
+  let response: Response;
+  try {
+    response = await fetch(path, { credentials: "same-origin", redirect: "manual" });
+  } catch {
+    return { kind: "error", problem: unreachable };
+  }
+  if (isAccessRedirect(response)) return { kind: "error", problem: accessExpired };
+  if (!response.ok) {
+    const json: unknown = await response.json().catch(() => undefined);
+    const error = validateErrorResponse(json);
+    const problem = error.ok ? error.value.error : `${unreachable} (HTTP ${response.status})`;
+    return response.status === 401 ? { kind: "signedOut", problem } : { kind: "error", problem };
+  }
+  const name = attachmentName(response.headers.get("Content-Disposition"), fallbackName);
+  return { kind: "ok", value: { blob: await response.blob(), name } };
+}

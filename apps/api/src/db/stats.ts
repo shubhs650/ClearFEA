@@ -261,8 +261,12 @@ function toTry(row: TryRow): JobTry {
 export interface TryFilter {
   jobId?: string;
   targetId?: string;
+  /** Only tries claimed at or after this ISO 8601 time (M13.4's export). */
+  since?: string;
   /** Only tries claimed before this ISO 8601 time, to page on. */
   before?: string;
+  /** Oldest first rather than newest first, for the export. */
+  oldestFirst?: boolean;
   limit: number;
 }
 
@@ -278,10 +282,15 @@ export async function listTries(db: D1Database, filter: TryFilter): Promise<JobT
     where.push("jobs.target_id = ?");
     values.push(filter.targetId);
   }
+  if (filter.since !== undefined) {
+    where.push("job_stats.claimed_at >= ?");
+    values.push(filter.since);
+  }
   if (filter.before !== undefined) {
     where.push("job_stats.claimed_at < ?");
     values.push(filter.before);
   }
+  const order = filter.oldestFirst ? "ASC" : "DESC";
   const { results } = await db
     .prepare(
       `SELECT job_stats.*, jobs.type, jobs.owner_id, jobs.target_id,
@@ -289,7 +298,7 @@ export async function listTries(db: D1Database, filter: TryFilter): Promise<JobT
                 AS queue_wait_ms
          FROM job_stats JOIN jobs ON jobs.id = job_stats.job_id
         ${where.length > 0 ? `WHERE ${where.join(" AND ")}` : ""}
-        ORDER BY job_stats.claimed_at DESC, job_stats.id DESC LIMIT ?`,
+        ORDER BY job_stats.claimed_at ${order}, job_stats.id ${order} LIMIT ?`,
     )
     .bind(...values, filter.limit)
     .all<TryRow>();
@@ -339,11 +348,16 @@ interface HostRow {
 /** Most samples one read returns: a day of check-ins every 30 s. */
 export const HOST_SAMPLES_PER_READ = 2880;
 
-/** The host's load samples since the given time, oldest first. */
-export async function listHostLoad(db: D1Database, since: string): Promise<HostLoadSample[]> {
+/** The host's load samples since the given time (and before another, for the export), oldest first. */
+export async function listHostLoad(
+  db: D1Database,
+  since: string,
+  before?: string,
+  limit = HOST_SAMPLES_PER_READ,
+): Promise<HostLoadSample[]> {
   const { results } = await db
-    .prepare("SELECT * FROM host_stats WHERE at >= ? ORDER BY at, host LIMIT ?")
-    .bind(since, HOST_SAMPLES_PER_READ)
+    .prepare("SELECT * FROM host_stats WHERE at >= ?1 AND (?2 IS NULL OR at < ?2) ORDER BY at, host LIMIT ?3")
+    .bind(since, before ?? null, limit)
     .all<HostRow>();
   return results.map(toSample);
 }
