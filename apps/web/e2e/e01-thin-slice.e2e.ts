@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 import { deflateSync } from "node:zlib";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { newProject } from "./home";
 
 const MODEL = process.env.CLEARFEA_E2E_MODEL ?? "";
 const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
@@ -117,6 +118,7 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await page.getByLabel("Login").fill("alice");
     await page.getByLabel("Password").fill("alice-local");
     await page.getByRole("button", { name: "Sign in" }).click();
+    await newProject(page, "E-01 block");
   });
 
   const geometry = page.getByRole("region", { name: "Geometry", exact: true });
@@ -509,7 +511,7 @@ test("E-01: from a STEP file to a stress contour in the browser", async ({ page 
     await expect(ledger.getByRole("row", { name: /Run of “/ }).first()).toBeVisible();
     await expect(wallet.getByTestId("wallet-balance")).toHaveText(/^99\.\d+ credits$/);
     await page.screenshot({ path: `${OUT}/e01-wallet.png` });
-    await wallet.getByRole("button", { name: "Back to the workbench" }).click();
+    await wallet.getByRole("button", { name: "Close" }).click();
     await expect(wallet).toBeHidden();
   });
 });

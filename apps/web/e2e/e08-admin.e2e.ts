@@ -153,7 +153,7 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await expect(admin.getByRole("table", { name: "Costs by job type" }).getByText("No-op")).toBeVisible();
     await page.screenshot({ path: `${OUT}/e08-dashboard-costs.png` });
 
-    await admin.getByRole("button", { name: "Back to the workbench" }).click();
+    await admin.getByRole("button", { name: "Close" }).click();
     await expect(admin).toHaveCount(0);
   });
 

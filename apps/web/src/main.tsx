@@ -18,7 +18,8 @@ const page = pageOf(window.location.pathname);
 createRoot(root).render(
   <StrictMode>
     {page.kind === "landing" && <LandingPage />}
-    {page.kind === "workbench" && <App />}
+    {/* The projects home and each project's workbench (M14.3). */}
+    {(page.kind === "home" || page.kind === "project") && <App />}
     {/* A read-only share link (M8.7) opens the shared run's page instead of the workbench. */}
     {page.kind === "shared" && <SharedRunPage token={page.token} />}
     {page.kind === "missing" && <NotFoundPage />}

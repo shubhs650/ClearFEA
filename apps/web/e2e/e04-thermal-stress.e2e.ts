@@ -14,6 +14,7 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { newProject } from "./home";
 
 const MODEL = process.env.CLEARFEA_E2E_MODEL ?? "";
 const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
@@ -76,6 +77,7 @@ test("E-04: a thermal stress analysis from upload to results", async ({ page }) 
     await page.getByLabel("Login").fill("bob");
     await page.getByLabel("Password").fill("bob-local");
     await page.getByRole("button", { name: "Sign in" }).click();
+    await newProject(page, "E-04 thermal block");
   });
 
   await test.step("upload the block and start the setup", async () => {

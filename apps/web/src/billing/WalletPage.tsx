@@ -44,7 +44,7 @@ export function WalletPage({ onClose, onSignedOut }: { onClose: () => void; onSi
           Refresh
         </button>
         <button type="button" onClick={onClose}>
-          Back to the workbench
+          Close
         </button>
       </header>
       {state.kind === "loading" && <p className="pane-empty">Loading the wallet…</p>}

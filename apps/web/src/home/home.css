@@ -1,0 +1,445 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* The projects home (M14.3): the header across the top, sections and folders on the left, the
+   items in the middle, the chosen item's details on the right, the status bar along the bottom.
+   Colours come from the app's tokens in styles.css, so light and dark both work. */
+
+.home-shell {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr) 320px;
+  grid-template-rows: 48px minmax(0, 1fr) 28px;
+  grid-template-areas:
+    "header header header"
+    "nav main info"
+    "status status status";
+  height: 100vh;
+  min-width: 1024px;
+  min-height: 600px;
+}
+
+.home-nav {
+  grid-area: nav;
+  border-right: 1px solid var(--border);
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+  color: var(--text);
+}
+
+.home-nav-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-nav-item[aria-current="page"],
+.home-nav-item[aria-current="page"]:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.home-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.home-nav > .home-nav-item:last-child {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 6px 6px;
+  padding-top: 10px;
+}
+
+.home-main {
+  grid-area: main;
+  overflow: auto;
+  padding: 18px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.home-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.home-heading {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.home-heading h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.home-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 15px;
+}
+
+.home-breadcrumb-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+
+.home-breadcrumb-step h1 {
+  color: var(--text);
+}
+
+.home-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--muted);
+}
+
+.home-search input {
+  border: none;
+  background: none;
+  width: 220px;
+  padding: 6px 0;
+  outline: none;
+  color: var(--text);
+}
+
+.home-search:focus-within {
+  box-shadow: var(--focus);
+  border-color: var(--accent);
+}
+
+.home-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.home-layout {
+  display: flex;
+  gap: 2px;
+}
+
+.home-layout .header-icon {
+  color: var(--muted);
+  border: 1px solid transparent;
+}
+
+.home-layout .header-icon[aria-pressed="true"] {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.home-new {
+  display: flex;
+  gap: 8px;
+}
+
+.home-new button,
+.home-actions button,
+.home-create button,
+.home-rename button,
+.home-move button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The main action of each group is the accent button. */
+.home-new > button:not(.secondary),
+.home-create button[type="submit"],
+.home-rename button[type="submit"],
+.home-actions > button:first-child {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+
+.home-new > button:not(.secondary):hover:not(:disabled),
+.home-create button[type="submit"]:hover:not(:disabled),
+.home-rename button[type="submit"]:hover:not(:disabled),
+.home-actions > button:first-child:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.home-actions > button.danger {
+  color: var(--error);
+}
+
+.home-create {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--pane);
+}
+
+.home-create .field {
+  min-width: 260px;
+}
+
+.home-create-where {
+  color: var(--muted);
+  font-size: 13px;
+  padding-bottom: 6px;
+}
+
+.home-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.home-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 16px;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 0 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--pane);
+  text-align: left;
+  box-shadow: 0 1px 2px rgb(16 24 40 / 5%);
+}
+
+.home-card:hover:not(:disabled) {
+  background: var(--pane);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+}
+
+.home-card[aria-pressed="true"],
+.home-card[aria-pressed="true"]:hover:not(:disabled) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow);
+}
+
+.home-card-picture {
+  display: block;
+  width: 100%;
+  aspect-ratio: 8 / 5;
+  object-fit: cover;
+  background: linear-gradient(180deg, var(--viewport-top), var(--viewport-bottom));
+  border-bottom: 1px solid var(--border);
+}
+
+.home-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.home-card-folder {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.home-card-name {
+  padding: 4px 12px 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-card-meta {
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.home-list {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--pane);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.home-list th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.home-list td {
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.home-list tr[aria-selected="true"] td {
+  background: var(--accent-soft);
+}
+
+.home-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 4px 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.home-row:hover:not(:disabled) {
+  background: none;
+  color: var(--accent-text);
+}
+
+.home-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 60px 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.home-info {
+  grid-area: info;
+  border-left: 1px solid var(--border);
+  padding: 14px 16px 24px;
+}
+
+.home-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.home-details-picture .home-card-picture {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.home-details-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.home-rename,
+.home-move {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.home-rename .field,
+.home-move .field {
+  align-self: stretch;
+}
+
+.home-shell > .pane-status {
+  grid-area: status;
+}
+
+.app-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--header-text);
+  border: none;
+  background: none;
+  padding: 4px 8px;
+}
+
+.app-home-link:hover:not(:disabled) {
+  background: var(--header-hover);
+  color: #fff;
+}
+
+.project-unavailable {
+  max-width: 520px;
+  margin: 15vh auto 0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--pane);
+}
+
+.project-unavailable h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.home-shell > .wallet-page {
+  grid-row: 2;
+}
+
+.app-crumb {
+  color: var(--header-muted);
+  flex: none;
+}
+
+.app-project {
+  font-weight: 650;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280px;
+}

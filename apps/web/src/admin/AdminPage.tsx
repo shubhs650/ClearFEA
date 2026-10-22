@@ -31,7 +31,7 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
       <header className="wallet-header">
         <h2 className="wallet-title">Admin</h2>
         <button type="button" onClick={onClose}>
-          Back to the workbench
+          Close
         </button>
       </header>
       <div className="admin-tabs" role="tablist" aria-label="Dashboard">

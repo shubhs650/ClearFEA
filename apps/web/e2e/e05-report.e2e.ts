@@ -11,6 +11,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { newProject } from "./home";
 
 const MODEL = process.env.CLEARFEA_E2E_MODEL ?? "";
 const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
@@ -93,6 +94,7 @@ test("E-05: make the report of a solved run and download its Word file and PDF",
     await page.getByLabel("Login").fill("bob");
     await page.getByLabel("Password").fill("bob-local");
     await page.getByRole("button", { name: "Sign in" }).click();
+    await newProject(page, "E-05 report block");
   });
 
   await test.step("upload the block and start the setup", async () => {
