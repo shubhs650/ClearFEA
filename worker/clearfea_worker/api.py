@@ -23,12 +23,14 @@ from .spec.jobs_schema import (
     CompleteFailed,
     CompleteStopped,
     CompleteSucceeded,
+    ContainerStats,
     FailureCategory,
     HeartbeatAction,
     HeartbeatRequest,
     HeartbeatResponse,
     HostCheckIn,
     HostCheckInResponse,
+    HostLoad,
     JobType,
     Metering,
     WorkerSoftware,
@@ -249,12 +251,23 @@ class ApiClient:
             return None
         return self._parse(ClaimResponse, "/jobs/claim", body).job
 
-    def check_in(self, host: str, manager_version: str | None = None) -> int:
-        """Says the solver host is up (M12.4, ADR-120). Returns the seconds until the next
-        check-in is due."""
-        extra = {} if manager_version is None else {"manager_version": manager_version}
+    def check_in(
+        self, host: str, manager_version: str | None = None, load: HostLoad | None = None
+    ) -> int:
+        """Says the solver host is up (M12.4, ADR-120), with its load (M12.3, ADR-109). Returns
+        the seconds until the next check-in is due."""
+        extra: dict[str, Any] = {}
+        if manager_version is not None:
+            extra["manager_version"] = manager_version
+        if load is not None:
+            extra["load"] = load
         _, body = self._post("/hosts/check-in", HostCheckIn(host=host, **extra))
         return self._parse(HostCheckInResponse, "/hosts/check-in", body).interval_seconds
+
+    def container_stats(self, job_id: str, stats: ContainerStats) -> None:
+        """Sends what the compute manager measured of a job's container once it has ended
+        (M12.3, ADR-109). ``stats`` names this client's worker id."""
+        self._post(f"/jobs/{job_id}/stats", stats)
 
     def heartbeat(self, job_id: str, stage: str | None, log: str = "") -> HeartbeatAction:
         """Reports the job alive at ``stage``, with any log text written since the last one."""
