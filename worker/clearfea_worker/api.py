@@ -252,13 +252,19 @@ class ApiClient:
         return self._parse(ClaimResponse, "/jobs/claim", body).job
 
     def check_in(
-        self, host: str, manager_version: str | None = None, load: HostLoad | None = None
+        self,
+        host: str,
+        manager_version: str | None = None,
+        load: HostLoad | None = None,
+        started_at: str | None = None,
     ) -> int:
-        """Says the solver host is up (M12.4, ADR-120), with its load (M12.3, ADR-109). Returns
-        the seconds until the next check-in is due."""
+        """Says the solver host is up (M12.4, ADR-120), with its load (M12.3, ADR-109) and when
+        the manager started (M13.1, ADR-125). Returns the seconds until the next check-in is due."""
         extra: dict[str, Any] = {}
         if manager_version is not None:
             extra["manager_version"] = manager_version
+        if started_at is not None:
+            extra["started_at"] = started_at
         if load is not None:
             extra["load"] = load
         _, body = self._post("/hosts/check-in", HostCheckIn(host=host, **extra))

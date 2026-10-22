@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import type { HealthResponse } from "@clearfea/spec";
 import { Hono } from "hono";
+import { recordSilentHosts } from "./db/events";
 import { probeDatabase, probeStorage } from "./db/health";
+import { HOST_SILENT_SECONDS } from "./db/hosts";
 import { HOST_STATS_DAYS, purgeHostLoad } from "./db/stats";
 import { sweepStorage } from "./db/storage";
 import type { Env } from "./env";
@@ -88,11 +90,14 @@ const EVERY_MINUTE = "* * * * *";
  * a machine again for work left waiting (M10.7, ADR-100). Daily, and on any other call such as `make dev`'s hourly one: the
  * storage sweep (M8.6, ADR-086), which purges the trash (M14.2, ADR-124), removes raw solver output
  * past its retention period and charges storage above the free allowance, after the lost-job
- * sweep, then removes the solver host's load samples past 14 days (M12.3, ADR-109).
+ * sweep, then removes the solver host's load samples past 14 days (M12.3, ADR-109). Both record
+ * a solver host that has gone silent in the event log (M13.1).
  */
 async function scheduled(controller: ScheduledController, env: Env): Promise<void> {
   const lost = await sweepLostJobs(env);
   if (lost > 0) console.log(`Failed ${lost} jobs whose worker stopped checking in.`);
+  // A solver host gone silent is an event once (M13.1, ADR-125); nothing restarts it (ADR-106).
+  for (const host of await recordSilentHosts(env.DB, HOST_SILENT_SECONDS)) console.log(`Solver host ${host} is offline.`);
   if (controller.cron === EVERY_MINUTE) {
     await ensureMachines(env);
     return;

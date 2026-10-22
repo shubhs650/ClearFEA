@@ -385,6 +385,7 @@ const ROUTES: Record<string, Route> = {
   "PUT /api/admin/machine-hours-cap": { area: "admin" },
   "GET /api/admin/stats/jobs": { area: "admin" },
   "GET /api/admin/stats/host": { area: "admin" },
+  "GET /api/admin/events": { area: "admin" },
 
   "POST /api/jobs": { area: "account" },
   "GET /api/jobs": { area: "account" },
@@ -549,6 +550,7 @@ const ADMIN_CALLS: Record<string, Request> = {
   "PUT /api/admin/machine-hours-cap": { path: "/api/admin/machine-hours-cap", json: { hours: 0 } },
   "GET /api/admin/stats/jobs": { path: "/api/admin/stats/jobs" },
   "GET /api/admin/stats/host": { path: "/api/admin/stats/host" },
+  "GET /api/admin/events": { path: "/api/admin/events" },
 };
 
 /** The allowlist, the cloud size list and the settings as they stand, to show a refused call changed nothing. */

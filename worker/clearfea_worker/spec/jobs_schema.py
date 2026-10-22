@@ -414,6 +414,10 @@ class HostCheckIn(BaseModel):
     manager_version: Annotated[
         str | None, Field(alias="managerVersion", max_length=100, min_length=1)
     ] = None
+    started_at: Annotated[str | None, Field(alias="startedAt", max_length=40, min_length=1)] = None
+    """
+    ISO 8601 UTC: when the compute manager started (M13.1, ADR-125). A new value while the host stays online is recorded as a restart of the manager.
+    """
     load: HostLoad | None = None
 
 

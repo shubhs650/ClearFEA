@@ -9,6 +9,7 @@
 // talks to AWS.
 
 import type { MachineStart, SolverMachines } from "@clearfea/spec";
+import { recordJobFailed } from "../db/events";
 import type { Completion } from "../db/jobs";
 import { failQueuedJob, type QueuedJob, queuedJobs } from "../db/jobs";
 import { cloudMachines } from "../db/machines";
@@ -251,7 +252,9 @@ export async function ensureMachines(env: Env, fetcher: Fetch = fetch): Promise<
   for (const job of plan.fail) {
     const completion = noMachineCompletion(job);
     const failedJob = await failQueuedJob(env.DB, job.jobId, completion);
-    if (failedJob !== null) await recordOutcome(env, failedJob, completion, null);
+    if (failedJob === null) continue;
+    await recordJobFailed(env.DB, failedJob, completion);
+    await recordOutcome(env, failedJob, completion, null);
   }
 
   if (plan.start.length === 0) return plan;

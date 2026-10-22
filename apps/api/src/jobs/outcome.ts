@@ -11,6 +11,7 @@ import {
   validateSolveResult,
 } from "@clearfea/spec";
 import { chargeFor, type JobCharge } from "../billing/cost";
+import { recordJobFailed, recordJobRetried } from "../db/events";
 import { recordImportOutcome } from "../db/geometries";
 import { type Completion, failLostJob, type Job, lostJobs, requeueJob, type StopReason } from "../db/jobs";
 import { recordMeshOutcome } from "../db/meshes";
@@ -115,6 +116,7 @@ export async function retryJob(env: Env, job: Job, completion: Completion): Prom
   if (requeued !== null && job.claimedBy !== null) {
     await endTry(env.DB, job.claimedBy, job, completion, await modelSize(env.DB, job, completion));
   }
+  if (requeued !== null) await recordJobRetried(env.DB, job, completion.failureCause, MAX_ATTEMPTS);
   return requeued;
 }
 
@@ -278,6 +280,7 @@ export async function sweepLostJobs(env: Env, claimingWorker: string | null = nu
     const job = await failLostJob(env.DB, lost, completion, billableMs, charge);
     if (job === null) continue; // it checked in or completed meanwhile
     if (lost.claimedBy !== null) await endTry(env.DB, lost.claimedBy, job, completion, await modelSize(env.DB, job, completion));
+    await recordJobFailed(env.DB, lost, completion);
     await recordOutcome(env, job, completion, charge);
     failed += 1;
   }

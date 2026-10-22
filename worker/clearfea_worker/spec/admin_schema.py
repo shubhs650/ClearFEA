@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 type Admin = Annotated[Any, Field(title="Admin")]
 """
-Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) and the solver machines started on AWS (M10.7). Only the admin reaches them. Each message is a definition under $defs.
+Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) and the event log (M13.1). Only the admin reaches them. Each message is a definition under $defs.
 """
 
 
@@ -324,6 +324,62 @@ class HostLoadResponse(BaseModel):
         populate_by_name=True,
     )
     samples: list[HostLoadSample]
+
+
+class AdminEvent(BaseModel):
+    """
+    One entry of the event log (M13.1, ADR-113, ADR-125): what happened, to whom and how serious it is. For support: ids and plain words, never a project's name, model or results.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: Annotated[int, Field(ge=1)]
+    at: str
+    """
+    ISO 8601 UTC.
+    """
+    kind: Literal[
+        "sign_in",
+        "sign_in_refused",
+        "job_failed",
+        "job_retried",
+        "host_online",
+        "host_offline",
+        "manager_started",
+        "admin_action",
+    ]
+    """
+    sign_in and sign_in_refused: a sign-in, or one refused (Google, a local password or the verification token); job_failed: a job ended failed, through the user's setup (info) or a fault in ClearFEA (error); job_retried: a machine fault ended a try and the job was queued again; host_online and host_offline: the solver host checked in after a silence (or for the first time), or has been silent for 120 s; manager_started: its compute manager restarted while the host stayed online; admin_action: the admin changed something.
+    """
+    level: Literal["info", "warning", "error"]
+    user_id: Annotated[str | None, Field(alias="userId")]
+    """
+    The user it is about: who signed in, whose job it was, the admin who acted.
+    """
+    job_id: Annotated[str | None, Field(alias="jobId")]
+    host: str | None
+    message: str
+    """
+    One line in plain words.
+    """
+    detail: dict[str, Any] | None
+    """
+    The particulars as named values, such as the failure cause, the try, or the address refused.
+    """
+
+
+class EventsResponse(BaseModel):
+    """
+    Answer of GET /api/admin/events: events newest first, filtered by ?kind=, ?level=, ?user=, ?since= and ?before= (times), at most ?limit= (up to 500).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    events: list[AdminEvent]
 
 
 class SwitchCloudSizeRequest(BaseModel):

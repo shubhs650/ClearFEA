@@ -149,6 +149,10 @@ export interface HostCheckIn {
    */
   host: string;
   managerVersion?: string;
+  /**
+   * ISO 8601 UTC: when the compute manager started (M13.1, ADR-125). A new value while the host stays online is recorded as a restart of the manager.
+   */
+  startedAt?: string;
   load?: HostLoad;
 }
 /**
