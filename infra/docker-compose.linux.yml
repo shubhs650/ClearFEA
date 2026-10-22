@@ -12,3 +12,10 @@ services:
     extra_hosts: !reset []
     environment:
       CLEARFEA_API_URL: ${CLEARFEA_API_URL:-http://127.0.0.1:8787}
+  manager:
+    network_mode: host
+    extra_hosts: !reset []
+    environment:
+      CLEARFEA_API_URL: ${CLEARFEA_API_URL:-http://127.0.0.1:8787}
+      # The job containers reach the API on the host's loopback too.
+      CLEARFEA_JOB_NETWORK: host

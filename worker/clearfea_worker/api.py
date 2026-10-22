@@ -218,8 +218,13 @@ class ApiClient:
                 f"(packages/spec/schemas/jobs.schema.json): {error}"
             ) from None
 
-    def claim(self, job_types: list[JobType]) -> ClaimedJob | None:
-        extra: dict[str, Any] = {} if self._software is None else {"software": self._software}
+    def claim(
+        self, job_types: list[JobType], software: WorkerSoftware | None = None
+    ) -> ClaimedJob | None:
+        """Claims a job of one of these types. ``software`` replaces the client's own for this
+        claim: the compute manager names the software of the image that will run the job."""
+        software = software or self._software
+        extra: dict[str, Any] = {} if software is None else {"software": software}
         if self._machine_size is not None:
             extra["machine_size"] = self._machine_size
         request = ClaimRequest(worker_id=self._worker_id, job_types=job_types, **extra)
