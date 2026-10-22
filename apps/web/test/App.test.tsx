@@ -231,6 +231,39 @@ function overview(paused = false, alerts: unknown[] = []) {
   };
 }
 
+/** The Settings tab's answer: the free storage and the monthly hours cap (M13.3). */
+function settings(hoursCap: number) {
+  return {
+    status: 200,
+    body: {
+      settings: [
+        {
+          name: "storage_free_bytes",
+          group: "storage",
+          label: "Free storage per user",
+          description: "Stored files above this are charged once a day.",
+          unit: "GiB",
+          scale: 2 ** 30,
+          min: 0,
+          max: 1024 * 2 ** 30,
+          value: 5 * 2 ** 30,
+        },
+        {
+          name: "machine_hours_cap",
+          group: "machines",
+          label: "Monthly limit of machine hours",
+          description: "Cloud machines only.",
+          unit: "h",
+          scale: 1,
+          min: 0,
+          max: 744,
+          value: hoursCap,
+        },
+      ],
+    },
+  };
+}
+
 describe("admin page (M10.3)", () => {
   const admin = { status: 200, body: { user: { ...alice, admin: true } } };
   const view = (allowed: string[], largeOn = false, hoursCap = 60) => ({
@@ -246,6 +279,8 @@ describe("admin page (M10.3)", () => {
           createdAt: "2026-10-19T05:00:00.000Z",
           lastSignIn: null,
           machineSecondsThisMonth: 3900,
+          jobsThisMonth: 7,
+          failedJobsThisMonth: 2,
           allowed: true,
         },
       ],
@@ -298,10 +333,13 @@ describe("admin page (M10.3)", () => {
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
-    fireEvent.click(await screen.findByRole("tab", { name: "Access and machines" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Users" }));
     const page = await screen.findByRole("region", { name: "Admin" });
     expect(await within(page).findByText("Nobody else is invited yet.")).toBeTruthy();
     expect(within(page).getByText("1 h 05 min")).toBeTruthy();
+    const users = within(page).getByRole("table", { name: "Users" });
+    expect(within(users).getByText("7")).toBeTruthy();
+    expect(within(users).getByText("2")).toBeTruthy();
     fireEvent.change(within(page).getByLabelText("Email address"), { target: { value: "colleague@gmail.com" } });
     fireEvent.click(within(page).getByRole("button", { name: "Add" }));
     expect(await within(page).findByText("colleague@gmail.com")).toBeTruthy();
@@ -323,11 +361,12 @@ describe("admin page (M10.3)", () => {
       "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/admin": view([]),
       "GET /api/admin/overview": overview(),
+      "GET /api/admin/settings": settings(60),
       "PUT /api/admin/machine-sizes/large": view([], true),
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
-    fireEvent.click(await screen.findByRole("tab", { name: "Access and machines" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Settings" }));
     const sizes = await screen.findByRole("region", { name: "Machine sizes" });
     const medium = within(sizes).getByRole("checkbox", { name: "medium" }) as HTMLInputElement;
     const large = within(sizes).getByRole("checkbox", { name: "large" }) as HTMLInputElement;
@@ -342,7 +381,42 @@ describe("admin page (M10.3)", () => {
     );
   });
 
-  it("shows the solver machines and sets the monthly hours limit (M10.7)", async () => {
+  it("shows the solver machines and sets the monthly hours limit under Settings (M10.7, M13.3)", async () => {
+    let cap = 60;
+    const fetchMock = serve({
+      "GET /api/health": healthy,
+      "GET /api/session": admin,
+      "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
+      "GET /api/admin": () => view([], false, cap),
+      "GET /api/admin/overview": overview(),
+      "GET /api/admin/settings": () => settings(cap),
+      "PUT /api/admin/settings/machine_hours_cap": () => {
+        cap = 0;
+        return settings(cap);
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Settings" }));
+    const machines = await screen.findByRole("region", { name: "Solver machines" });
+    expect(within(machines).getByText(/of 60 h used this month/)).toBeTruthy();
+    expect(within(machines).getByText("2.3 h")).toBeTruthy();
+    expect(within(machines).getByText("Running")).toBeTruthy();
+    expect(within(machines).getByText("Did not start: AWS refused RunTask: AccessDeniedException: not authorized")).toBeTruthy();
+    const cloud = await screen.findByRole("region", { name: "Cloud machines" });
+    const field = within(cloud).getByLabelText("Monthly limit of machine hours") as HTMLInputElement;
+    expect(field.value).toBe("60");
+    fireEvent.change(field, { target: { value: "0" } });
+    fireEvent.click(within(cloud).getByRole("button", { name: "Save Monthly limit of machine hours" }));
+    expect(await within(machines).findByText(/of 0 h used this month/)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/settings/machine_hours_cap",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ value: 0 }) }),
+    );
+  });
+
+  it("shows a setting in its unit and saves it in stored units, or says why it was refused (M13.3)", async () => {
     const fetchMock = serve({
       "GET /api/health": healthy,
       "GET /api/session": admin,
@@ -350,23 +424,71 @@ describe("admin page (M10.3)", () => {
       "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/admin": view([]),
       "GET /api/admin/overview": overview(),
-      "PUT /api/admin/machine-hours-cap": view([], false, 0),
+      "GET /api/admin/settings": settings(60),
+      "PUT /api/admin/settings/storage_free_bytes": {
+        status: 400,
+        body: { error: 'Give "Free storage per user" a value from 0 GiB to 1024 GiB. Nothing was changed.' },
+      },
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
-    fireEvent.click(await screen.findByRole("tab", { name: "Access and machines" }));
-    const machines = await screen.findByRole("region", { name: "Solver machines" });
-    expect(within(machines).getByText(/of 60 h used this month/)).toBeTruthy();
-    expect(within(machines).getByText("2.3 h")).toBeTruthy();
-    expect(within(machines).getByText("Running")).toBeTruthy();
-    expect(within(machines).getByText("Did not start: AWS refused RunTask: AccessDeniedException: not authorized")).toBeTruthy();
-    fireEvent.change(within(machines).getByLabelText("Monthly limit in hours"), { target: { value: "0" } });
-    fireEvent.click(within(machines).getByRole("button", { name: "Set limit" }));
-    expect(await within(machines).findByText(/of 0 h used this month/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("tab", { name: "Settings" }));
+    const storage = await screen.findByRole("region", { name: "Storage" });
+    const field = within(storage).getByLabelText("Free storage per user") as HTMLInputElement;
+    expect(field.value).toBe("5");
+    expect(within(storage).getByText("GiB")).toBeTruthy();
+    fireEvent.change(field, { target: { value: "2000.5" } });
+    fireEvent.click(within(storage).getByRole("button", { name: "Save Free storage per user" }));
+    expect((await within(storage).findByRole("alert")).textContent).toContain("from 0 GiB to 1024 GiB");
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/admin/machine-hours-cap",
-      expect.objectContaining({ method: "PUT", body: JSON.stringify({ hours: 0 }) }),
+      "/api/admin/settings/storage_free_bytes",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ value: 2000.5 * 2 ** 30 }) }),
     );
+  });
+});
+
+describe("admin Costs tab (M13.3)", () => {
+  it("shows the month's use beside the fixed costs, per hour and per run", async () => {
+    serve({
+      "GET /api/health": healthy,
+      "GET /api/session": { status: 200, body: { user: { ...alice, admin: true } } },
+      "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
+      "GET /api/admin/overview": overview(),
+      [`GET /api/admin/costs?month=${new Date().toISOString().slice(0, 7)}`]: {
+        status: 200,
+        body: {
+          month: "2026-10",
+          solverHostCents: 1700,
+          platformCents: 500,
+          totals: { jobs: 12, solveRuns: 4, machineSeconds: 7200, jobMicroCredits: 1_500_000, storageMicroCredits: 20_000 },
+          byUser: [
+            {
+              userId: "b",
+              name: "Bob (test user)",
+              email: "bob@clearfea.test",
+              jobs: 12,
+              solveRuns: 4,
+              machineSeconds: 7200,
+              jobMicroCredits: 1_500_000,
+              storageMicroCredits: 20_000,
+            },
+          ],
+          byType: [{ type: "solve", jobs: 4, machineSeconds: 6000, jobMicroCredits: 1_250_000 }],
+        },
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Costs" }));
+    const page = await screen.findByRole("region", { name: "Admin" });
+    expect((await within(page).findByTestId("costs-fixed")).textContent).toBe("$22.00 a month");
+    expect(within(page).getByText("$11.00")).toBeTruthy(); // per machine hour: $22 over 2 h
+    expect(within(page).getByText("$5.50")).toBeTruthy(); // per run: $22 over 4 runs
+    const byUser = within(page).getByRole("table", { name: "Costs by user" });
+    expect(within(byUser).getByText("bob@clearfea.test")).toBeTruthy();
+    expect(within(byUser).getByText("100 %")).toBeTruthy();
+    expect(within(page).getByRole("table", { name: "Costs by job type" }).textContent).toContain("1.25 credits");
   });
 });
 
@@ -407,11 +529,11 @@ describe("admin page on the solver host (M12.4)", () => {
         "GET /api/geometries?projectId=p1": noGeometries,
         "GET /api/admin": view(online),
         "GET /api/admin/overview": overview(),
+        "GET /api/admin/settings": { status: 200, body: { settings: [] } },
       });
       render(<App />);
       fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
-    fireEvent.click(await screen.findByRole("tab", { name: "Access and machines" }));
-      fireEvent.click(await screen.findByRole("tab", { name: "Access and machines" }));
+      fireEvent.click(await screen.findByRole("tab", { name: "Settings" }));
       const card = await screen.findByRole("region", { name: "Solver host" });
       expect(card.textContent).toContain(text);
       expect(screen.queryByRole("region", { name: "Solver machines" })).toBeNull();

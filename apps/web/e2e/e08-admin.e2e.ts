@@ -2,12 +2,13 @@
 // E-08 (docs/VERIFICATION.md): sign-in and the admin page of the live closed beta (M10.3,
 // ADR-097). The stack signs in locally; the live site's sign-in screen is shown by answering
 // /api/session/options as the live site does, and its refusal by the address Google's callback
-// returns to. Alice, the admin here, invites an address, sees it listed and removes it, and
-// switches the large machine size on and off (M10.6); on the dashboard (M13.2) she pauses the
-// queue, sees a job wait in the light lane, cancels it from Jobs and runs, resumes the queue and
-// reads both in the event log; bob sees no Admin and the admin routes answer him as unknown
-// addresses. Real Google sign-in is checked
-// on the live site, with the maintainer's OAuth client.
+// returns to. Alice, the admin here, invites an address on Users, sees it listed and removes it,
+// and on Settings (M13.3) switches the large machine size on and off (M10.6) and sets the monthly
+// hours limit; on the dashboard (M13.2) she pauses the queue, sees a job wait in the light lane,
+// cancels it from Jobs and runs, resumes the queue and reads both and the setting she changed in
+// the event log, then reads the month on Costs (M13.3); bob sees no Admin and the admin routes
+// answer him as unknown addresses. Real Google sign-in is checked on the live site, with the
+// maintainer's OAuth client.
 import { expect, type Page, test } from "@playwright/test";
 
 const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
@@ -43,7 +44,7 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await status.getByRole("button", { name: "Admin" }).click();
     const admin = page.getByRole("region", { name: "Admin" });
     await expect(admin.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
-    await admin.getByRole("tab", { name: "Access and machines" }).click();
+    await admin.getByRole("tab", { name: "Users" }).click();
     await expect(admin.getByText("alice@clearfea.test")).toHaveCount(2);
     await admin.getByLabel("Email address").fill("  Colleague.One@Example.com ");
     await admin.getByRole("button", { name: "Add" }).click();
@@ -52,7 +53,13 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await admin.getByRole("button", { name: "Add" }).click();
     await expect(admin.getByText("colleague.two@example.com")).toBeVisible();
     await expect(admin.getByRole("table", { name: "Users" }).getByText("Bob (test user)")).toBeVisible();
+    await expect(admin.getByText("Machine time, jobs and failed jobs count this calendar month (UTC).", { exact: false })).toBeVisible();
     await page.screenshot({ path: `${OUT}/e08-admin.png` });
+
+    // Settings (M13.3): every setting in its group; the machine sizes and solver machines below them.
+    await admin.getByRole("tab", { name: "Settings" }).click();
+    await expect(admin.getByRole("region", { name: "Storage" }).getByLabel("Free storage per user", { exact: true })).toHaveValue("5");
+    await page.screenshot({ path: `${OUT}/e08-dashboard-settings.png` });
 
     // The cloud size list (M10.6): standard (medium) always on, large switched on and off again.
     const sizes = admin.getByRole("region", { name: "Machine sizes" });
@@ -71,14 +78,22 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     const machines = admin.getByRole("region", { name: "Solver machines" });
     await expect(machines.getByText("Jobs here run on the local worker")).toBeVisible();
     await expect(machines.getByText("No machine started yet.")).toBeVisible();
-    await machines.getByLabel("Monthly limit in hours").fill("45");
-    await machines.getByRole("button", { name: "Set limit" }).click();
+    const cloud = admin.getByRole("region", { name: "Cloud machines" });
+    const limit = cloud.getByLabel("Monthly limit of machine hours", { exact: true });
+    await expect(limit).toHaveValue("60");
+    await limit.fill("1000");
+    await cloud.getByRole("button", { name: "Save Monthly limit of machine hours" }).click();
+    await expect(cloud.getByRole("alert")).toContainText("from 0 h to 744 h. Nothing was changed.");
+    await limit.fill("45");
+    await cloud.getByRole("button", { name: "Save Monthly limit of machine hours" }).click();
     await expect(machines.getByText("of 45 h used this month")).toBeVisible();
+    await expect(cloud.getByRole("alert")).toHaveCount(0);
     await machines.screenshot({ path: `${OUT}/e08-solver-machines.png` });
-    await machines.getByLabel("Monthly limit in hours").fill("60");
-    await machines.getByRole("button", { name: "Set limit" }).click();
+    await limit.fill("60");
+    await cloud.getByRole("button", { name: "Save Monthly limit of machine hours" }).click();
     await expect(machines.getByText("of 60 h used this month")).toBeVisible();
 
+    await admin.getByRole("tab", { name: "Users" }).click();
     await admin.getByRole("button", { name: "Remove colleague.one@example.com" }).click();
     await expect(admin.getByText("colleague.one@example.com")).toHaveCount(0);
     await admin.getByRole("button", { name: "Remove colleague.two@example.com" }).click();
@@ -127,7 +142,16 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await expect(events.getByText("Paused the queue: no job starts until it is resumed.")).toBeVisible();
     await admin.getByLabel("Kind").selectOption("admin_action");
     await expect(events.getByText("Invited colleague.one@example.com.")).toBeVisible();
+    await expect(events.getByText('Changed "Monthly limit of machine hours" from 60 h to 45 h.')).toBeVisible();
     await page.screenshot({ path: `${OUT}/e08-dashboard-events.png` });
+
+    // Costs (M13.3): this month's use beside the solver host's and Cloudflare's monthly costs; alice's
+    // cancelled job counts in it.
+    await admin.getByRole("tab", { name: "Costs" }).click();
+    await expect(admin.getByTestId("costs-fixed")).toHaveText("$22.00 a month");
+    await expect(admin.getByRole("table", { name: "Costs by user" }).getByText("alice@clearfea.test")).toBeVisible();
+    await expect(admin.getByRole("table", { name: "Costs by job type" }).getByText("No-op")).toBeVisible();
+    await page.screenshot({ path: `${OUT}/e08-dashboard-costs.png` });
 
     await admin.getByRole("button", { name: "Close" }).click();
     await expect(admin).toHaveCount(0);
@@ -150,6 +174,9 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     expect((await bob.request.get("/api/admin/overview")).status()).toBe(404);
     expect((await bob.request.put("/api/admin/queue-paused", { data: { paused: true } })).status()).toBe(404);
     expect((await bob.request.get("/api/admin/jobs")).status()).toBe(404);
+    expect((await bob.request.get("/api/admin/settings")).status()).toBe(404);
+    expect((await bob.request.put("/api/admin/settings/machine_hours_cap", { data: { value: 0 } })).status()).toBe(404);
+    expect((await bob.request.get("/api/admin/costs")).status()).toBe(404);
     await context.close();
   });
 });

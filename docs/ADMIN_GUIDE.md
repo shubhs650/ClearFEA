@@ -26,7 +26,7 @@ The admin is the Google account named by the `ADMIN_EMAIL` variable (DEPLOYMENT.
 
 An invitation takes three steps, all needed. Ask for the exact Gmail address they will sign in with; many people have a second Google account (a work one, say) that would be refused.
 
-1. **ClearFEA:** admin page → **Allowed addresses** → type the address → **Add**. It is listed in lower case with the time it was added.
+1. **ClearFEA:** admin page → **Users** → **Allowed addresses** → type the address → **Add**. It is listed in lower case with the time it was added.
 2. **Google:** <https://console.cloud.google.com> → project `ClearFEA` → **Google Auth Platform** (or **APIs & Services** → **OAuth consent screen**) → **Audience** → **Test users** → **Add users** → the same address → **Save**. While the Google client is in Testing, Google itself refuses anyone not on this list, before ClearFEA sees them (DEPLOYMENT.md section 2.2). Google allows up to 100 test users.
 3. **The invitation:** send them the message below. They need nothing else: no install, no password.
 
@@ -44,13 +44,13 @@ An address is compared exactly after lower-casing, so `first.last@gmail.com` and
 
 ## 2. Remove someone
 
-Admin page → **Allowed addresses** → **Remove** next to the address. They are signed out at once and cannot sign in again. Their projects, runs and files stay. Adding the address again lets them back in to the same account, with the same projects and wallet.
+Admin page → **Users** → **Allowed addresses** → **Remove** next to the address. They are signed out at once and cannot sign in again. Their projects, runs and files stay. Adding the address again lets them back in to the same account, with the same projects and wallet.
 
 You can also remove them from Google's test users, but ClearFEA's list alone is enough.
 
 ## 3. Who uses it
 
-The **Users** table lists everyone who has signed in at least once: name and email from Google, first and last sign-in (UTC), the machine time their jobs used this month, and whether they can still sign in. An invited engineer appears here only after their first sign-in, so an address on the allowed list that has no user row has not tried yet.
+The **Users** tab's table lists everyone who has signed in at least once: name and email from Google, first and last sign-in (UTC), the machine time their jobs used this month, their jobs and failed jobs this month, and whether they can still sign in. The **Costs** tab shows a month's jobs, machine time and charges per user and per job type beside what the solver host and Cloudflare cost a month (set those two on **Settings** → **Costs**). An invited engineer appears here only after their first sign-in, so an address on the allowed list that has no user row has not tried yet.
 
 The test users `alice` and `bob` appear only on a local `make dev` server; the live site has no password sign-in.
 
@@ -72,7 +72,7 @@ There is no button to give an account more credits yet. If someone runs out, ask
 Standard is always on. To switch on large, do both steps in this order:
 
 1. AWS → **CloudFormation** → `clearfea` → **Update** → **Replace existing template** → upload the current `clearfea.yaml` from the repository → `LargeSizeEnabled` = `true` → **Next** to the end → **Submit** (DEPLOYMENT.md section 7.3).
-2. Admin page → **Machine sizes** → tick **large**.
+2. Admin page → **Settings** → **Machine sizes** → tick **large**.
 
 Runs then offer large next to standard. Until it is benchmarked it allows no bigger model, only a faster machine, so leave it off unless an engineer needs it. To switch it off, untick it: queued jobs for it fail without charge if no large machine is running, and a running one finishes its work.
 
@@ -89,7 +89,7 @@ A typical session of one engineer starts one machine, keeps it while they work a
 
 Three things keep the bill bounded:
 
-- **The monthly limit.** Admin page → **Solver machines** shows the machine hours used this month (UTC) against the limit, 60 hours by default (about $14 on standard). When it is reached, no machine starts and new runs and meshes are refused until the 1st. Change it under **Monthly limit in hours**; 0 pauses the solver while the site stays up (ADR-100 item 7). A large-machine hour counts as one hour here, though it costs twice as much.
+- **The monthly limit.** Admin page → **Settings** → **Solver machines** shows the machine hours used this month (UTC) against the limit, 60 hours by default (about $14 on standard). When it is reached, no machine starts and new runs and meshes are refused until the 1st. Change it under **Cloud machines** → **Monthly limit of machine hours** → **Save**; 0 pauses the solver while the site stays up (ADR-100 item 7). A large-machine hour counts as one hour here, though it costs twice as much.
 - **The budget email.** AWS emails `AlertEmail` when the month is forecast to pass 80% of `MonthlyBudgetUsd` and when it passes it (DEPLOYMENT.md section 4.3).
 - **Nothing runs when nobody works.** The same card lists the latest machine starts and how each went. With no one working, nothing should be starting or running; DEPLOYMENT.md section 7.5 shows how to check in AWS.
 
@@ -126,7 +126,7 @@ Gate item 8 is met when two or three engineers complete the tutorial case unaide
 | A job failed saying no solver machine came up | Three starts failed; the admin page lists why. DEPLOYMENT.md section 8 has the causes. |
 | Runs are refused for machine hours | The monthly limit was reached: raise it (section 6). |
 | Runs are refused for their balance | Their credits ran out: section 4. |
-| "You already have 2 … waiting to start", "The solver queue is full", "You have started 30 runs today" | The queue limits (M11.3): per account, 2 jobs waiting in each lane (runs; imports, meshes and reports) and 30 runs a day (UTC); 20 jobs waiting in all. One job per account runs at a time in each lane. They are rows of the `settings` table: `queue_waiting_per_user`, `runs_per_user_per_day`, `queue_total_cap`, `queue_running_per_user`. To raise one, open Cloudflare, **Storage & databases**, **D1**, `clearfea`, **Console**, and run `UPDATE settings SET value = 50 WHERE name = 'runs_per_user_per_day'` (the admin dashboard's Settings tab takes this over in M13). |
+| "You already have 2 … waiting to start", "The solver queue is full", "You have started 30 runs today" | The queue limits (M11.3): per account, 2 jobs waiting in each lane (runs; imports, meshes and reports) and 30 runs a day (UTC); 20 jobs waiting in all. One job per account runs at a time in each lane. Change them on the admin page → **Settings** → **Queue and workers**; each change is listed under **Events**. |
 | "Your account sent more than 120 requests in the last minute" | Workers rate limiting (M11.3). A page that keeps doing it is a bug: note the page and report it. The limit is in `apps/api/scripts/productionConfig.mjs` and changes with a deploy. |
 | A run stopped at "the 12-hour ceiling" | No run is let run longer than 12 hours (M11.3), whatever its stop limit; a coarser mesh or a faster solver shortens it. |
 | "Google sign-in could not start: the server answered HTTP 403 (Internet Security by Zscaler …)" (or another company filter's name) | Their company's web filter blocks the site, not ClearFEA. Ask their IT to allow `clearfea.triyalabs.com`; meanwhile they can sign in from a phone on mobile data or a home network. |

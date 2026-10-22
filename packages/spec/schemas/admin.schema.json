@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Admin",
-  "description": "Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) the event log (M13.1) and the dashboard's overview and jobs (M13.2). Only the admin reaches them. Each message is a definition under $defs.",
+  "description": "Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) the event log (M13.1) the dashboard's overview and jobs (M13.2), and its settings and costs (M13.3). Only the admin reaches them. Each message is a definition under $defs.",
   "$defs": {
     "AllowedEmail": {
       "type": "object",
@@ -15,7 +15,17 @@
     "AdminUser": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "email", "createdAt", "lastSignIn", "machineSecondsThisMonth", "allowed"],
+      "required": [
+        "id",
+        "name",
+        "email",
+        "createdAt",
+        "lastSignIn",
+        "machineSecondsThisMonth",
+        "jobsThisMonth",
+        "failedJobsThisMonth",
+        "allowed"
+      ],
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
@@ -32,6 +42,16 @@
           "type": "integer",
           "minimum": 0,
           "description": "Billed machine seconds of their jobs that finished this calendar month (UTC)."
+        },
+        "jobsThisMonth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Their jobs that finished this calendar month (UTC), whatever the outcome."
+        },
+        "failedJobsThisMonth": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Of those, the ones that failed, whoever's fault."
         },
         "allowed": {
           "type": "boolean",
@@ -661,6 +681,270 @@
           "minLength": 3,
           "maxLength": 254,
           "pattern": "^\\s*[^@\\s]+@[^@\\s]+\\.[^@\\s]+\\s*$"
+        }
+      }
+    },
+    "AdminSetting": {
+      "description": "One setting the admin may change on the Settings tab (M13.3, ADR-128). The stored value is a whole number; the dashboard shows it divided by scale, in unit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "group",
+        "label",
+        "description",
+        "unit",
+        "scale",
+        "min",
+        "max",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The row of the settings table."
+        },
+        "group": {
+          "enum": [
+            "accounts",
+            "queue",
+            "storage",
+            "machines",
+            "costs"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "description": "What it does, in plain words."
+        },
+        "unit": {
+          "type": "string",
+          "description": "The unit it is shown in, such as GiB, days or USD."
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Stored units per shown unit, such as 1073741824 bytes per GiB."
+        },
+        "min": {
+          "type": "integer",
+          "description": "The smallest stored value allowed."
+        },
+        "max": {
+          "type": "integer",
+          "description": "The largest stored value allowed."
+        },
+        "value": {
+          "type": "integer",
+          "description": "The stored value now."
+        }
+      }
+    },
+    "SettingsResponse": {
+      "description": "Answer of GET /api/admin/settings and PUT /api/admin/settings/{name}.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "settings"
+      ],
+      "properties": {
+        "settings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdminSetting"
+          }
+        }
+      }
+    },
+    "SetSettingRequest": {
+      "description": "Body of PUT /api/admin/settings/{name}: the new stored value, which must be a whole number from the setting's min to its max.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer"
+        }
+      }
+    },
+    "CostsUser": {
+      "description": "One user's usage in the month.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userId",
+        "name",
+        "email",
+        "jobs",
+        "solveRuns",
+        "machineSeconds",
+        "jobMicroCredits",
+        "storageMicroCredits"
+      ],
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jobs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Jobs that finished in the month."
+        },
+        "solveRuns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Solve jobs that finished in the month."
+        },
+        "machineSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Their billed machine seconds."
+        },
+        "jobMicroCredits": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Micro-credits charged for jobs in the month."
+        },
+        "storageMicroCredits": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Micro-credits charged for storage in the month."
+        }
+      }
+    },
+    "CostsJobType": {
+      "description": "One job type's usage in the month.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "jobs",
+        "machineSeconds",
+        "jobMicroCredits"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "noop",
+            "import",
+            "mesh",
+            "solve",
+            "report"
+          ]
+        },
+        "jobs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Jobs that finished in the month."
+        },
+        "machineSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Their billed machine seconds."
+        },
+        "jobMicroCredits": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Micro-credits charged for jobs in the month."
+        }
+      }
+    },
+    "CostsTotals": {
+      "description": "The month's usage over all users.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jobs",
+        "solveRuns",
+        "machineSeconds",
+        "jobMicroCredits",
+        "storageMicroCredits"
+      ],
+      "properties": {
+        "jobs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Jobs that finished in the month."
+        },
+        "solveRuns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Solve jobs that finished in the month."
+        },
+        "machineSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Their billed machine seconds."
+        },
+        "jobMicroCredits": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Micro-credits charged for jobs in the month."
+        },
+        "storageMicroCredits": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Micro-credits charged for storage in the month."
+        }
+      }
+    },
+    "CostsResponse": {
+      "description": "Answer of GET /api/admin/costs?month=YYYY-MM (M13.3, ADR-128): one calendar month's (UTC) usage by user and by job type, and the beta's monthly costs from the settings.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "month",
+        "solverHostCents",
+        "platformCents",
+        "totals",
+        "byUser",
+        "byType"
+      ],
+      "properties": {
+        "month": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$"
+        },
+        "solverHostCents": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "What the solver host costs a month, in US cents (setting solver_host_monthly_cents)."
+        },
+        "platformCents": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "What Cloudflare costs a month, in US cents (setting platform_monthly_cents)."
+        },
+        "totals": {
+          "$ref": "#/$defs/CostsTotals"
+        },
+        "byUser": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CostsUser"
+          },
+          "description": "Users with any job or charge in the month, the most machine time first."
+        },
+        "byType": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CostsJobType"
+          },
+          "description": "Job types with any job in the month, the most machine time first."
         }
       }
     }
