@@ -266,7 +266,7 @@ Statistics (M12.3, ADR-109, ADR-123): the API keeps one `job_stats` row per try 
 
 Hono on Cloudflare Workers, TypeScript.
 
-- **Public routes** (`/api/...`): session login, projects and folders (`/api/projects`, `/api/folders`: the home with every folder and project, create, rename, move, duplicate, trash and restore, M14.2, ADR-124; `PUT` and `GET /api/projects/:id/thumbnail`, the project's picture for the home, M14.3, ADR-125; `/api/project`, the user's oldest project outside the trash, is no longer used by the web app), geometries, simulations, meshes, runs, materials, wallet, share links. JSON in and out, validated against the shared schemas.
+- **Public routes** (`/api/...`): session login, projects and folders (`/api/projects`, `/api/folders`: the home with every folder and project, create, rename, move, duplicate, trash and restore, M14.2, ADR-124; `PUT` and `GET /api/projects/:id/thumbnail`, the project's picture for the home, M14.3, ADR-126; `/api/project`, the user's oldest project outside the trash, is no longer used by the web app), geometries, simulations, meshes, runs, materials, wallet, share links. JSON in and out, validated against the shared schemas.
 - **Internal routes** (`/internal/...`): job claim, heartbeat, completion, file transfer. Authenticated by worker token, never by user session.
 - **Data-access layer:** every function takes the acting user id and applies `owner_id` filtering. Route handlers do not write SQL.
 - **Pre-run validation:** a pure function over the spec and topology that returns a list of problems in plain language (`preRunProblems` in `packages/spec`, ADR-034). The API refuses a run with it before any job is queued, and the UI shows the same list beside the disabled Run button.
