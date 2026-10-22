@@ -953,6 +953,10 @@ class SolveResult(BaseModel):
     """
     Nodes with results; every node of the mesh.
     """
+    solver: Solver | None = None
+    """
+    The equation solver that solved the run (M12.2, ADR-108). It differs from the frozen spec's when PaStiX crashed and the run was solved again with SPOOLES. Absent for runs solved before M12.2, which used the spec's.
+    """
     displacement: Displacement | None = None
     """
     Largest displacement magnitude.
@@ -1583,6 +1587,10 @@ class SolveParams(BaseModel):
     """
     spec: SimulationSpec
     machine: SimulatedMachine | None = None
+    fallback_solver: Annotated[Solver | None, Field(alias="fallbackSolver")] = None
+    """
+    The solver the worker solves the run with again when its own solver crashes (M12.2, ADR-108): SPOOLES for a PaStiX run within SPOOLES's element limit, since both give the same answers (ADR-048). Absent when there is none, and for jobs queued before M12.2.
+    """
 
 
 class RunView(BaseModel):

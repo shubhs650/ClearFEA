@@ -46,6 +46,8 @@ function job(overrides: Partial<Job> = {}): Job {
     stopRequested: null,
     stopMultiplier: null,
     stopAfterSeconds: null,
+    attempt: 1,
+    peakMemoryBytes: null,
     createdAt: "2026-10-19 07:00:00",
     claimedAt: "2026-10-19 07:00:01",
     finishedAt: null,

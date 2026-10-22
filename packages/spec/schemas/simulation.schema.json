@@ -757,7 +757,11 @@
       "properties": {
         "meshId": { "description": "The mesh whose mesh.bin the job reads.", "type": "string" },
         "spec": { "$ref": "#/$defs/SimulationSpec" },
-        "machine": { "$ref": "#/$defs/SimulatedMachine" }
+        "machine": { "$ref": "#/$defs/SimulatedMachine" },
+        "fallbackSolver": {
+          "description": "The solver the worker solves the run with again when its own solver crashes (M12.2, ADR-108): SPOOLES for a PaStiX run within SPOOLES's element limit, since both give the same answers (ADR-048). Absent when there is none, and for jobs queued before M12.2.",
+          "$ref": "#/$defs/Solver"
+        }
       }
     },
     "SimulatedMachine": {
@@ -851,6 +855,10 @@
       "required": ["nodes", "software"],
       "properties": {
         "nodes": { "description": "Nodes with results; every node of the mesh.", "type": "integer", "minimum": 4 },
+        "solver": {
+          "description": "The equation solver that solved the run (M12.2, ADR-108). It differs from the frozen spec's when PaStiX crashed and the run was solved again with SPOOLES. Absent for runs solved before M12.2, which used the spec's.",
+          "$ref": "#/$defs/Solver"
+        },
         "displacement": {
           "description": "Largest displacement magnitude.",
           "type": "object",

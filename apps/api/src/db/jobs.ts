@@ -36,6 +36,10 @@ export interface Job {
   /** A run's stop limit (M8.3, ADR-087): the multiplier of its estimate and the seconds it gives; null without one. */
   stopMultiplier: number | null;
   stopAfterSeconds: number | null;
+  /** Which try this is, 1 for the first: a job a machine fault ended is queued again (M12.2, ADR-108). */
+  attempt: number;
+  /** The largest memory the job's worker measured, or the container limit the kernel stopped it at. */
+  peakMemoryBytes: number | null;
   createdAt: string;
   claimedAt: string | null;
   finishedAt: string | null;
@@ -64,6 +68,8 @@ interface JobRow {
   stop_requested: StopReason | null;
   stop_multiplier: number | null;
   stop_after_seconds: number | null;
+  attempt: number;
+  peak_memory_bytes: number | null;
   created_at: string;
   claimed_at: string | null;
   finished_at: string | null;
@@ -93,6 +99,8 @@ function toJob(row: JobRow): Job {
     stopRequested: row.stop_requested,
     stopMultiplier: row.stop_multiplier,
     stopAfterSeconds: row.stop_after_seconds,
+    attempt: row.attempt,
+    peakMemoryBytes: row.peak_memory_bytes,
     createdAt: row.created_at,
     claimedAt: row.claimed_at,
     finishedAt: row.finished_at,
@@ -354,6 +362,7 @@ export async function completeJob(
   completion: Completion,
   billableMs: number,
   charge: JobCharge | null,
+  peakMemoryBytes: number | null = null,
 ): Promise<Job | null> {
   const succeeded = completion.status === "succeeded";
   const failed = completion.status === "failed" ? completion : null;
@@ -362,7 +371,7 @@ export async function completeJob(
       `UPDATE jobs
           SET status = ?, result = ?, failure_category = ?, failure_cause = ?,
               failure_message = ?, finished_at = ${NOW}, heartbeat_at = ${NOW},
-              billable_ms = ?, billed_seconds = ?, cost = ?
+              billable_ms = ?, billed_seconds = ?, cost = ?, peak_memory_bytes = ?
         WHERE id = ? AND claimed_by = ? AND status IN ${ACTIVE}
         RETURNING *`,
     )
@@ -375,6 +384,7 @@ export async function completeJob(
       billableMs,
       charge?.billedSeconds ?? null,
       charge?.cost ?? null,
+      peakMemoryBytes,
       jobId,
       workerId,
     );
@@ -442,6 +452,38 @@ export async function failLostJob(
     )
     .first<JobRow>();
   return row === null ? null : toJob(row);
+}
+
+/**
+ * Queues a job again after a fault of the machine it ran on (M12.2, ADR-108): its claim, stage
+ * and heartbeat are cleared, its attempt counted up and `note` added to its log, and nothing is
+ * charged. Only while `job.claimedBy` still holds it, it was not asked to stop and it has had no
+ * heartbeat since `job` was read, so a worker that checks in again keeps it. Its creation time is
+ * kept, so it goes back to the front of the queue. Returns the queued job, or null when it was not
+ * changed.
+ */
+export async function requeueJob(db: D1Database, job: Job, note: string): Promise<Job | null> {
+  const [requeued] = await db.batch<JobRow>([
+    db
+      .prepare(
+        `UPDATE jobs
+            SET status = 'queued', stage = NULL, claimed_by = NULL, claimed_at = NULL,
+                heartbeat_at = NULL, software = NULL, attempt = attempt + 1
+          WHERE id = ? AND status IN ${ACTIVE} AND claimed_by IS ? AND heartbeat_at IS ?
+            AND stop_requested IS NULL AND attempt = ?
+          RETURNING *`,
+      )
+      .bind(job.id, job.claimedBy, job.heartbeatAt, job.attempt),
+    db
+      .prepare(
+        `INSERT INTO job_logs (job_id, seq, text)
+         SELECT ?, COALESCE(MAX(seq), 0) + 1, ? FROM job_logs
+          WHERE job_id = ? AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND status = 'queued' AND attempt = ?)`,
+      )
+      .bind(job.id, note, job.id, job.id, job.attempt + 1),
+  ]);
+  const row = requeued?.results[0];
+  return row === undefined ? null : toJob(row);
 }
 
 /**

@@ -77,15 +77,19 @@ class _Meter:
         self._start = clock()
         self._end: int | None = None
 
-    def stop(self) -> None:
+    def stop(self, uncharged_ns: int = 0) -> None:
         if self._end is None:
             self._end = self._clock()
+            self.uncharged_ns = uncharged_ns
+
+    #: Time within the handler that is ClearFEA's fault and is left out (M12.2, ADR-108).
+    uncharged_ns: int = 0
 
     @property
     def billable_ms(self) -> int:
         """Whole milliseconds, rounded up, so a started millisecond counts."""
         end = self._end if self._end is not None else self._clock()
-        return -(-(end - self._start) // 1_000_000)
+        return -(-max(0, end - self._start - self.uncharged_ns) // 1_000_000)
 
 
 def run_job(
@@ -110,12 +114,16 @@ def run_job(
         try:
             result = handler(job, context)
         except JobStopped:
-            meter.stop()
+            meter.stop(context.uncharged_ns)
             log.info("Job %s (%s) stopped as the API asked", job.id, job.type)
-            client.stopped(job.id, billable_ms=meter.billable_ms)
+            client.stopped(
+                job.id,
+                billable_ms=meter.billable_ms,
+                peak_memory_bytes=context.peak_memory_bytes,
+            )
             return "stopped"
         except JobFailure as failure:
-            meter.stop()
+            meter.stop(context.uncharged_ns)
             log.info("Job %s (%s) failed: %s", job.id, job.type, failure.message)
             client.fail(
                 job.id,
@@ -123,23 +131,26 @@ def run_job(
                 failure.cause,
                 failure.message,
                 billable_ms=meter.billable_ms,
+                peak_memory_bytes=context.peak_memory_bytes,
             )
             return "failed"
         except ApiError as error:
-            meter.stop()
+            meter.stop(context.uncharged_ns)
             log.warning("Job %s (%s): %s", job.id, job.type, error)
             client.fail(job.id, "platform_fault", "transfer_failed", billable_ms=meter.billable_ms)
             return "failed"
         except Exception:
-            meter.stop()
+            meter.stop(context.uncharged_ns)
             log.exception("Job %s (%s) raised an error", job.id, job.type)
             client.fail(job.id, "platform_fault", "internal_error", billable_ms=meter.billable_ms)
             return "failed"
-        meter.stop()
+        meter.stop(context.uncharged_ns)
     # A handler that finished before it saw a cancel reports its result all the same: the work
     # is done. Only a job the API has already ended refuses it.
     try:
-        client.succeed(job.id, result, meter.billable_ms)
+        client.succeed(
+            job.id, result, meter.billable_ms, peak_memory_bytes=context.peak_memory_bytes
+        )
     except ApiError as error:
         if not context.cancelled.is_set():
             raise

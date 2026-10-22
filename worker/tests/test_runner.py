@@ -759,3 +759,117 @@ def test_log_text_past_the_stream_limit_is_cut_with_one_note() -> None:
     while context.has_log():
         text += context.take_log()
     assert text == "x" * (LOG_STREAM_CHARS - 1) + "y" + LOG_CUT_NOTE
+
+
+# Crash handling (M12.2, ADR-108) ----------------------------------------------------------------
+
+
+def crash_then_solve(decks: list[str], peaks: tuple[int, int] = (3 * 2**30, 5 * 2**30)) -> Any:
+    """Stands in for run_calculix: the first solve crashes with SIGSEGV, as the 32-bit PaStiX
+    build did at 331,000 nodes (ADR-048), and the next one solves. Keeps each deck it was given."""
+    calls: list[int] = []
+
+    def run(
+        deck: Path, on_output: Any, cancelled: threading.Event, machine: Any = None
+    ) -> SolverRun:
+        decks.append(deck.read_text())
+        log = deck.with_name("solver.log")
+        calls.append(len(calls))
+        if len(calls) == 1:
+            log.write_text("Factoring the system of equations using pastix\n")
+            on_output("Factoring the system of equations using pastix\n")
+            return SolverRun(-11, log, peak_memory_bytes=peaks[0])
+        log.write_text("Job finished\n")
+        on_output("Job finished\n")
+        for suffix in (".frd", ".dat"):
+            shutil.copy(SOLVE / f"job{suffix}", deck.with_suffix(suffix))
+        return SolverRun(0, log, peak_memory_bytes=peaks[1])
+
+    return run
+
+
+def pastix_solve_job(api: FakeApi, tmp_path: Path, fallback: str | None) -> None:
+    spec = fixture_spec()
+    spec["solver"] = "pastix"
+    solve_job(api, tmp_path, spec)
+    if fallback is not None:
+        api.jobs["j1"]["params"]["fallbackSolver"] = fallback
+
+
+def test_a_pastix_crash_is_solved_again_with_spooles_and_the_result_names_it(
+    tmp_path: Path, no_calculix: Any
+) -> None:
+    decks: list[str] = []
+    no_calculix.setattr(solver, "run_calculix", crash_then_solve(decks))
+    with FakeApi() as api:
+        pastix_solve_job(api, tmp_path, "spooles")
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        job = api.jobs["j1"]
+        assert job["status"] == "succeeded", job.get("outcome")
+        assert job["outcome"]["result"]["solver"] == "spooles"
+        # The larger of the two solves' peaks.
+        assert job["outcome"]["metering"]["peakMemoryBytes"] == 5 * 2**30
+        # Each deck names its solver on the step line; the stored one is the deck that solved it.
+        assert "SOLVER=PASTIX" in decks[0] and "SOLVER=SPOOLES" in decks[1]
+        assert api.uploads[("j1", "deck.inp")].decode() == decks[1]
+        assert "PaStiX stopped with signal 11, a crash in the solver" in job["log"]
+        assert "Solving again with SPOOLES" in job["log"]
+
+
+def test_a_pastix_crash_without_a_fallback_is_a_solver_error(
+    tmp_path: Path, no_calculix: Any
+) -> None:
+    decks: list[str] = []
+    no_calculix.setattr(solver, "run_calculix", crash_then_solve(decks))
+    with FakeApi() as api:
+        pastix_solve_job(api, tmp_path, None)
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        outcome = api.jobs["j1"]["outcome"]
+        assert outcome["failureCause"] == "solver_error"
+        assert outcome["metering"]["peakMemoryBytes"] == 3 * 2**30
+    assert len(decks) == 1
+
+
+def test_a_solve_reports_its_peak_memory(tmp_path: Path, no_calculix: Any) -> None:
+    def run(deck: Path, on_output: Any, cancelled: threading.Event, machine: Any = None) -> Any:
+        log = deck.with_name("solver.log")
+        log.write_text("")
+        for suffix in (".frd", ".dat"):
+            shutil.copy(SOLVE / f"job{suffix}", deck.with_suffix(suffix))
+        return SolverRun(0, log, peak_memory_bytes=123456789)
+
+    no_calculix.setattr(solver, "run_calculix", run)
+    with FakeApi() as api:
+        solve_job(api, tmp_path, fixture_spec())
+        settings = settings_for(api)
+        run_once(client_for(settings), settings, HANDLERS)
+        assert api.jobs["j1"]["outcome"]["metering"]["peakMemoryBytes"] == 123456789
+
+
+def test_time_that_is_clearfeas_fault_is_left_out_of_the_billable_time() -> None:
+    def crashed_first(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
+        context.uncharged_ns = 2_000_000_000
+        return {}
+
+    with FakeApi() as api:
+        client = client_for(settings_for(api))
+        job = _claimed(api, client)
+        clock = _clock(1_000_000_000, 4_500_000_001)
+        assert run_job(client, job, {"noop": crashed_first}, 0.01, clock=clock) == "succeeded"
+        assert api.jobs["j1"]["outcome"]["metering"] == {"billableMs": 1501}
+
+
+def test_a_worker_whose_job_was_queued_again_gives_it_up() -> None:
+    def slow(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
+        for _ in range(500):
+            context.check_stopped()
+            threading.Event().wait(0.01)
+        return {}
+
+    with FakeApi() as api:
+        api.heartbeat_gone = True
+        client = client_for(settings_for(api))
+        job = _claimed(api, client)
+        assert run_job(client, job, {"noop": slow}, 0.01) == "stopped"

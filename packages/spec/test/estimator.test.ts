@@ -7,6 +7,7 @@ import {
   elementLimitProblem,
   estimateMesh,
   estimatorTable,
+  fallbackSolver,
   maxElements,
   memoryFits,
   MAX_MODES,
@@ -152,5 +153,20 @@ describe("a modal run (M6.3)", () => {
   it("leaves a solver that cannot solve it to pre-run validation", () => {
     expect(elementLimitProblem("iterative_cholesky", 2, 10_000_000, modal(10))).toBeNull();
     expect(() => estimateMesh(1000, 2, "iterative_cholesky", modal(10))).toThrow("cannot solve a modal analysis");
+  });
+});
+
+describe("the solver a crashed PaStiX run is solved again with (M12.2, ADR-108)", () => {
+  it("is SPOOLES within SPOOLES's element limit", () => {
+    expect(fallbackSolver("pastix", 2, maxElements("pastix", 2))).toBe("spooles");
+    expect(fallbackSolver("pastix", 1, maxElements("spooles", 1))).toBe("spooles");
+    expect(fallbackSolver("pastix", 1, maxElements("spooles", 1) + 1)).toBeNull();
+    expect(fallbackSolver("pastix", 2, 1000, { analysis: "steady_thermal" })).toBe("spooles");
+  });
+
+  it("is none for the other solvers", () => {
+    for (const solver of ["spooles", "iterative_cholesky", "iterative_scaling"] as const) {
+      expect(fallbackSolver(solver, 2, 1000)).toBeNull();
+    }
   });
 });

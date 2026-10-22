@@ -24,6 +24,7 @@ import type {
   SimulationSpec,
   SolveParams,
   SolveResult,
+  Solver,
   StopLimit,
 } from "@clearfea/spec";
 import { getJob, type Job, newJob } from "./jobs";
@@ -238,10 +239,13 @@ export async function createRun(
     stopLimit: StopLimit;
     /** The run whose frozen spec and mesh this one solves again (M8.6). */
     rerunOf?: string;
+    /** The solver the worker solves it with again when its own crashes (M12.2, ADR-108). */
+    fallbackSolver?: Solver | null;
   },
 ): Promise<{ run: Run; job: Job } | null> {
   const id = crypto.randomUUID();
   const params: SolveParams = { meshId: request.meshId, spec: request.spec, machine: request.machine };
+  if (request.fallbackSolver) params.fallbackSolver = request.fallbackSolver;
   const job = newJob(db, userId, "solve", id, { ...params }, request.machine.size);
   const [, , inserted] = await db.batch([
     job.statement,

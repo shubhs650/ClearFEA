@@ -62,6 +62,14 @@ class SolverRun:
     def cancelled(self) -> bool:
         return self.returncode is None and not self.out_of_memory
 
+    @property
+    def crashed(self) -> bool:
+        """Whether the solver was ended by a signal it did not get from the worker or the kernel's
+        out-of-memory killer: a crash, such as the 32-bit PaStiX build's SIGSEGV at about 331,000
+        nodes (ADR-048) or its heap assertion on a frequency step (ADR-072). A deck CalculiX
+        refuses ends with an exit status and ``*ERROR`` lines instead (ADR-030)."""
+        return self.returncode is not None and self.returncode < 0
+
     def singular(self) -> bool:
         """Whether the equation solver found the stiffness matrix singular (M8.4): the supports
         and bonds leave part of the model free to move, which the deck generator's rigid-body

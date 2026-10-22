@@ -31,7 +31,12 @@ from clearfea_worker.manager.containers import (
     encode_job,
 )
 from clearfea_worker.manager.docker import DockerError, demux_logs
-from clearfea_worker.manager.manager import IMAGE_RETRY_SECONDS, Manager, _Clocks
+from clearfea_worker.manager.manager import (
+    DISK_RETRY_SECONDS,
+    IMAGE_RETRY_SECONDS,
+    Manager,
+    _Clocks,
+)
 
 from .fake_api import FakeApi
 
@@ -266,6 +271,7 @@ def test_the_lanes_start_at_adr_107s_values_and_can_be_changed() -> None:
     assert (light.name, light.cpus, light.memory_bytes) == ("light", 1.0, 4 * 1024**3)
     assert set(light.job_types) == {"noop", "import", "mesh", "report"}
     assert settings.network == "bridge" and settings.image == "clearfea-worker"
+    assert settings.scratch_path is None and settings.scratch_min_free_bytes == 20 * 1024**3
 
     changed = load_manager_settings(
         {
@@ -274,8 +280,11 @@ def test_the_lanes_start_at_adr_107s_values_and_can_be_changed() -> None:
             "CLEARFEA_LIGHT_MEMORY": "2048m",
             "CLEARFEA_LIGHT_CPUS": "0.5",
             "CLEARFEA_JOB_NETWORK": "host",
+            "CLEARFEA_SCRATCH_PATH": "/docker",
+            "CLEARFEA_SCRATCH_MIN_FREE": "30g",
         }
     )
+    assert (changed.scratch_path, changed.scratch_min_free_bytes) == ("/docker", 30 * 1024**3)
     assert changed.lanes[0].cpuset == "0-5"
     assert changed.lanes[1].memory_bytes == 2 * 1024**3 and changed.lanes[1].cpus == 0.5
     assert changed.network == "host"
@@ -288,6 +297,7 @@ def test_the_lanes_start_at_adr_107s_values_and_can_be_changed() -> None:
         {"CLEARFEA_SOLVE_CPUSET": "zero"},
         {"CLEARFEA_LIGHT_MEMORY": "lots"},
         {"CLEARFEA_SOLVE_CPUS": "-1"},
+        {"CLEARFEA_SCRATCH_MIN_FREE": "plenty"},
     ],
 )
 def test_bad_manager_settings_are_refused(env: dict[str, str]) -> None:
@@ -364,7 +374,9 @@ def test_a_container_that_ends_without_reporting_fails_its_job(oom: bool, cause:
         "platform_fault",
         cause,
     )
-    assert body["metering"] == {"billableMs": 2500}
+    # Killed at its memory limit, which was its peak (M12.2, ADR-108).
+    peak = {"peakMemoryBytes": DEFAULT_SOLVE.memory_bytes} if oom else {}
+    assert body["metering"] == {"billableMs": 2500, **peak}
     assert docker.jobs() == {} and docker.volumes == set()
 
 
@@ -492,3 +504,33 @@ def test_the_software_command_prints_what_a_claim_reports(
     assert main(["software"]) == 0
     printed = json.loads(capsys.readouterr().out)
     assert set(printed) >= {"clearfea", "deckFormat", "calculix", "gmsh"}
+
+
+def test_a_scratch_disk_under_its_free_space_claims_nothing() -> None:  # M12.2, ADR-108
+    docker = FakeDocker()
+    free = {"bytes": 19 * 1024**3}
+    with FakeApi() as api:
+        api.enqueue("s1", "solve")
+        manager, clock = started(api, docker, scratch_path="/docker")
+        manager.free_bytes = lambda path: free["bytes"]
+        manager.tick()
+        assert claims(api) == []
+        assert all(s.next_claim == clock.now + DISK_RETRY_SECONDS for s in manager.lanes)
+        free["bytes"] = 21 * 1024**3
+        clock.now += DISK_RETRY_SECONDS
+        manager.tick()
+    assert [b["workerId"] for b in claims(api)] == ["vps1-solve", "vps1-light"]
+    assert set(docker.jobs()) == {"s1"}
+
+
+def test_a_scratch_disk_that_cannot_be_read_claims_nothing() -> None:
+    def unreadable(path: str) -> int:
+        raise FileNotFoundError(path)
+
+    docker = FakeDocker()
+    with FakeApi() as api:
+        api.enqueue("s1", "solve")
+        manager, _ = started(api, docker, scratch_path="/missing")
+        manager.free_bytes = unreadable
+        manager.tick()
+    assert claims(api) == []

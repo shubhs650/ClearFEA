@@ -408,6 +408,13 @@ def test_modal_run_lists_frequencies() -> None:
     assert "A modal analysis applies no loads" in text
 
 
+def test_the_solver_is_the_one_that_solved_the_run() -> None:  # M12.2, ADR-108
+    assert "Equation solver | PaStiX" in texts(build(static_params()))
+    params = static_params()
+    params["run"]["result"]["solver"] = "spooles"
+    assert "Equation solver | SPOOLES (after PaStiX crashed)" in texts(build(params))
+
+
 def test_notes_print_before_the_closing_statements() -> None:
     note = {"id": "tiedInterfaces", "title": "Stresses near bonded faces", "text": "Ties."}
     document = build(static_params(notes=[note]))

@@ -2,6 +2,7 @@
 """Job handlers, one per job type."""
 
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -70,6 +71,11 @@ class JobContext:
     stage: str | None = None
     cancelled: threading.Event = field(default_factory=threading.Event)
     files: Files | None = None
+    #: The largest resident memory of the job's solver, reported with its outcome (M12.2).
+    peak_memory_bytes: int | None = None
+    #: Time on the machine that is ClearFEA's fault, left out of the billable time: a solve that
+    #: crashed before the run was solved again with another solver (M12.2, ADR-108).
+    uncharged_ns: int = 0
     _log: list[str] = field(default_factory=list)
     _logged: int = 0
     _log_lock: threading.Lock = field(default_factory=threading.Lock)
@@ -204,7 +210,9 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     """Solves a run: deck from the frozen spec and the mesh, CalculiX, results (M1.8), and the
     viewer's surface and field files (M1.9) and the fields at every node for cut planes (M3.4)."""
     from .deck import DeckError, generate_deck
+    from .deck.generator import DEFAULT_SOLVER, SOLVER_NAMES
     from .meshing.volume import read_volume_mesh
+    from .report.labels import SOLVER_LABELS
     from .results import DatError, FrdError, read_results, write_viewer_files
     from .solver import run_calculix
     from .spec.simulation_schema import SolveParams
@@ -235,7 +243,37 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     deck.write_text(deck_text, encoding="utf-8")
     context.check_stopped()
     context.set_stage("solving")
+    solver = params.spec.solver or DEFAULT_SOLVER
+    started = time.monotonic_ns()
     run = run_calculix(deck, context.log, context.cancelled, machine=params.machine)
+    context.peak_memory_bytes = run.peak_memory_bytes
+    fallback = params.fallback_solver
+    if run.crashed and fallback is not None and fallback != solver:
+        # A crash, not the setup: solved again with the fallback solver, which gives the same
+        # answers (ADR-048), in a folder of its own; the crashed solve's time is not charged
+        # (M12.2, ADR-108). The run record names the solver that solved it.
+        context.uncharged_ns += time.monotonic_ns() - started
+        context.log(
+            f"\n[ClearFEA] {SOLVER_LABELS[solver]} stopped with signal {-(run.returncode or 0)}, "
+            f"a crash in the solver, not a problem in your setup. Solving again with "
+            f"{SOLVER_LABELS[fallback]}, which gives the same results; the time of the crashed "
+            "solve is not charged.\n"
+        )
+        try:
+            deck_text = generate_deck(params.spec, mesh, solver=SOLVER_NAMES[fallback])
+        except DeckError as error:
+            raise JobFailure("user_fault", "setup_invalid", str(error)) from None
+        work = files.workdir / f"solve-{fallback}"
+        work.mkdir()
+        deck = work / "job.inp"
+        deck.write_text(deck_text, encoding="utf-8")
+        context.check_stopped()
+        solver = fallback
+        run = run_calculix(deck, context.log, context.cancelled, machine=params.machine)
+        context.peak_memory_bytes = max(
+            (m for m in (context.peak_memory_bytes, run.peak_memory_bytes) if m is not None),
+            default=None,
+        )
     if run.cancelled:
         # The deck and the log so far stay with the cancelled run, for its owner to look at.
         context.set_stage("uploading")
@@ -286,6 +324,7 @@ def run_solve(job: ClaimedJob, context: JobContext) -> dict[str, Any]:
     files.upload("surface.bin", viewer.surface_path)
     files.upload("fields.bin", viewer.fields_path)
     files.upload("nodes.bin", viewer.nodes_path)
+    result.solver = solver
     # Optional parts of the summary (the safety factor) are left out when absent, not null.
     return result.model_dump(mode="json", by_alias=True, exclude_none=True)
 

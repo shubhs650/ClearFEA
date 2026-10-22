@@ -75,7 +75,11 @@ describe("internal job routes", () => {
   });
 
   it("gives a worker that names its machine size only that size's jobs, and the default size the unsized ones (M10.6)", async () => {
-    const claimOn = (machineSize: string) => post("/jobs/claim", { workerId: "w1", jobTypes: ["noop"], machineSize });
+    // One worker per claim: a worker that asks again while it holds a job lost it (M8.4), and since
+    // M12.2 that job is queued again.
+    let workers = 0;
+    const claimOn = (machineSize: string) =>
+      post("/jobs/claim", { workerId: `w${++workers}`, jobTypes: ["noop"], machineSize });
     const unsized = await createJob(env.DB, "alice", "noop");
     const forLarge = await createJob(env.DB, "bob", "noop");
     await env.DB.prepare("UPDATE jobs SET machine_size = 'large' WHERE id = ?").bind(forLarge.id).run();

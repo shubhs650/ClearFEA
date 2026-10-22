@@ -121,6 +121,12 @@ describe("the statements a run's report prints", () => {
     );
   });
 
+  it("name the solver that solved the run, which its result records since M12.2", () => {
+    const run = { spec: { ...empty(), solver: "pastix" as const }, software, result: { solver: "spooles" as const } };
+    expect(frozenRunSolver(run.spec, run.result)).toBe("spooles");
+    expect(byId(runReportStatements(run), "softwareVersions")).toContain("with the SPOOLES equation solver");
+  });
+
   it("carry the accuracy note when the run used an iterative solver", () => {
     const versions = byId(
       runReportStatements({ spec: { ...empty(), solver: "iterative_scaling" }, software }),

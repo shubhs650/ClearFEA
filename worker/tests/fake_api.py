@@ -37,6 +37,9 @@ class FakeApi:
         self.jobs: dict[str, dict[str, Any]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.heartbeat_action = "continue"
+        #: When set, heartbeats answer 404: the job was queued again and this worker no longer
+        #: holds it (M12.2).
+        self.heartbeat_gone = False
         #: Files the API serves to jobs, and files jobs uploaded, keyed by (job id, name).
         self.files: dict[tuple[str, str], bytes] = {}
         self.uploads: dict[tuple[str, str], bytes] = {}
@@ -107,6 +110,8 @@ class FakeApi:
         job = self.jobs[parts[3]]
         if parts[4] == "heartbeat":
             HeartbeatRequest.model_validate(body)
+            if self.heartbeat_gone:
+                return 404, {"error": "This worker holds no job with that id."}
             job["status"] = "running"
             job["log"] = job.get("log", "") + body.get("log", "")
             return 200, _checked(HeartbeatResponse, {"action": self.heartbeat_action})

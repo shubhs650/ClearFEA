@@ -8,6 +8,7 @@ import {
   checkSimulationSpec,
   DEFAULT_STOP_MULTIPLIER,
   elementLimitProblem,
+  fallbackSolver,
   elementOrder,
   type EstimateResponse,
   localScopes,
@@ -428,6 +429,7 @@ simulations.post("/:id/runs", launchesMachines, async (c) => {
     machine: simulatedMachine(size),
     estimate,
     stopLimit: { multiplier, seconds: stopLimitSeconds(estimate.seconds, multiplier) },
+    fallbackSolver: fallbackSolver(solver, mesh.order, mesh.elementCount, kind),
   });
   if (created === null) {
     return c.json({ error: "The mesh or the machine sizes changed meanwhile. Check the mesh, then run again." }, 409);

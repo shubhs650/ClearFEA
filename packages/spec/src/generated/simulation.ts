@@ -946,6 +946,10 @@ export interface SolveParams {
   meshId: string;
   spec: SimulationSpec;
   machine?: SimulatedMachine;
+  /**
+   * The solver the worker solves the run with again when its own solver crashes (M12.2, ADR-108): SPOOLES for a PaStiX run within SPOOLES's element limit, since both give the same answers (ADR-048). Absent when there is none, and for jobs queued before M12.2.
+   */
+  fallbackSolver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
 }
 /**
  * How the worker simulates the run's machine size on one physical machine (M8.5, ADR-082): the solver process is held to `cores` processors and is stopped as out of memory when its resident memory passes memoryLimitBytes, the size's usable memory (the estimator's usableMemoryFraction of it). Jobs queued before M8.5 have none and run unlimited.
@@ -1053,6 +1057,10 @@ export interface SolveResult {
    * Nodes with results; every node of the mesh.
    */
   nodes: number;
+  /**
+   * The equation solver that solved the run (M12.2, ADR-108). It differs from the frozen spec's when PaStiX crashed and the run was solved again with SPOOLES. Absent for runs solved before M12.2, which used the spec's.
+   */
+  solver?: "pastix" | "spooles" | "iterative_cholesky" | "iterative_scaling";
   /**
    * Largest displacement magnitude.
    */

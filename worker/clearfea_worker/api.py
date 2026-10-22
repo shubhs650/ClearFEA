@@ -37,8 +37,20 @@ from .spec.jobs_schema import (
 __all__ = ["AccessBlocked", "ApiClient", "ApiError", "ClaimedJob", "HeartbeatAction"]
 
 
+def _metering(billable_ms: int, peak_memory_bytes: int | None) -> Metering:
+    """The job's measured time, with its peak memory only where it was measured (M12.2)."""
+    if peak_memory_bytes is None:
+        return Metering(billable_ms=billable_ms)
+    return Metering(billable_ms=billable_ms, peak_memory_bytes=peak_memory_bytes)
+
+
 class ApiError(Exception):
-    """The API could not be reached or answered with an error."""
+    """The API could not be reached or answered with an error; ``status`` is its HTTP status
+    when it answered."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class AccessBlocked(ApiError):
@@ -203,7 +215,9 @@ class ApiClient:
                 message = json.loads(raw).get("error", raw.decode(errors="replace"))
             except (ValueError, AttributeError):
                 message = raw.decode(errors="replace")
-            raise ApiError(f"The API answered {error.code} on {path}: {message}") from None
+            raise ApiError(
+                f"The API answered {error.code} on {path}: {message}", error.code
+            ) from None
         except (urllib.error.URLError, OSError) as error:
             reason = getattr(error, "reason", error)
             raise ApiError(
@@ -247,15 +261,29 @@ class ApiClient:
         path = f"/jobs/{job_id}/heartbeat"
         extra = {"log": log} if log else {}
         request = HeartbeatRequest(worker_id=self._worker_id, stage=stage, **extra)
-        _, body = self._post(path, request)
+        try:
+            _, body = self._post(path, request)
+        except ApiError as error:
+            if error.status != 404:
+                raise
+            # This worker no longer holds the job: it was queued again after the worker went
+            # silent (M12.2, ADR-108) and may be another's now, so this worker gives up on it.
+            return "cancel"
         return self._parse(HeartbeatResponse, path, body).action
 
-    def succeed(self, job_id: str, result: dict[str, Any], billable_ms: int) -> None:
+    def succeed(
+        self,
+        job_id: str,
+        result: dict[str, Any],
+        billable_ms: int,
+        *,
+        peak_memory_bytes: int | None = None,
+    ) -> None:
         """Reports success with the job's measured time on the machine (ADR-033)."""
         request = CompleteSucceeded(
             worker_id=self._worker_id,
             status="succeeded",
-            metering=Metering(billable_ms=billable_ms),
+            metering=_metering(billable_ms, peak_memory_bytes),
             result=result,
         )
         self._post(f"/jobs/{job_id}/complete", request)
@@ -268,23 +296,29 @@ class ApiClient:
         message: str | None = None,
         *,
         billable_ms: int,
+        peak_memory_bytes: int | None = None,
     ) -> None:
-        """Reports failure with the job's measured time; the API decides who pays (ADR-033)."""
+        """Reports failure with the job's measured time, and its peak memory where it was
+        measured (M12.2); the API decides who pays (ADR-033)."""
         extra = {} if message is None else {"failure_message": message}
         request = CompleteFailed(
             worker_id=self._worker_id,
             status="failed",
             failure_category=category,
             failure_cause=cause,
-            metering=Metering(billable_ms=billable_ms),
+            metering=_metering(billable_ms, peak_memory_bytes),
             **extra,
         )
         self._post(f"/jobs/{job_id}/complete", request)
 
-    def stopped(self, job_id: str, *, billable_ms: int) -> None:
+    def stopped(
+        self, job_id: str, *, billable_ms: int, peak_memory_bytes: int | None = None
+    ) -> None:
         """Reports that the job ended because a heartbeat asked it to (M8.2), with the time it
         used; the API records it as cancelled or stopped at its limit and charges the time."""
         request = CompleteStopped(
-            worker_id=self._worker_id, status="stopped", metering=Metering(billable_ms=billable_ms)
+            worker_id=self._worker_id,
+            status="stopped",
+            metering=_metering(billable_ms, peak_memory_bytes),
         )
         self._post(f"/jobs/{job_id}/complete", request)
