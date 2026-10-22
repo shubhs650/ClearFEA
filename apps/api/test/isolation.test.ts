@@ -16,6 +16,7 @@ import fixture from "@clearfea/spec/fixtures/simulation-v1.json";
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { getJob } from "../src/db/jobs";
+import { userProject } from "../src/db/projects";
 import { reportKey } from "../src/db/reports";
 import { app } from "../src/index";
 import { jobFiles } from "../src/jobs/files";
@@ -114,6 +115,7 @@ async function ownedRecords(ownerId: string, marker: string): Promise<Owned> {
   const spec: SimulationSpec = { ...(JSON.parse(JSON.stringify(fixture)) as SimulationSpec), geometryId: ids.geometryId };
   const runSpec = JSON.stringify(spec);
   const prefix = `owners/${ownerId}`;
+  const { id: projectId } = await userProject(env.DB, ownerId);
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO jobs (id, owner_id, type, target_id, status, params) VALUES
@@ -140,18 +142,18 @@ async function ownedRecords(ownerId: string, marker: string): Promise<Owned> {
     ),
     env.DB.prepare(`INSERT INTO job_logs (job_id, seq, text) VALUES (?, 0, ?)`).bind(solveJob, `${marker} solver log`),
     env.DB.prepare(
-      `INSERT INTO geometries (id, owner_id, name, size_bytes, status, detected_unit, reading_factor,
+      `INSERT INTO geometries (id, owner_id, project_id, name, size_bytes, status, detected_unit, reading_factor,
          confirmed_unit, scaling, body_count, face_count, import_job_id)
-       VALUES (?, ?, ?, 100, 'ready', 'mm', 0.001, 'mm', 1, 1, 3, ?)`,
-    ).bind(ids.geometryId, ownerId, `${marker}-bracket.step`, importJob),
+       VALUES (?, ?, ?, ?, 100, 'ready', 'mm', 0.001, 'mm', 1, 1, 3, ?)`,
+    ).bind(ids.geometryId, ownerId, projectId, `${marker}-bracket.step`, importJob),
     env.DB.prepare(
       `INSERT INTO meshes (id, owner_id, geometry_id, size, element_order, status, node_count, element_count, job_id)
        VALUES (?, ?, ?, '{"value":5,"unit":"mm"}', 2, 'ready', 100, 40, ?)`,
     ).bind(ids.meshId, ownerId, ids.geometryId, meshJob),
     env.DB.prepare(
-      `INSERT INTO simulations (id, owner_id, geometry_id, name, analysis_type, spec_version, spec, mesh_id)
-       VALUES (?, ?, ?, ?, 'linear_static', 1, ?, ?)`,
-    ).bind(ids.simulationId, ownerId, ids.geometryId, `${marker} simulation`, runSpec, ids.meshId),
+      `INSERT INTO simulations (id, owner_id, geometry_id, project_id, name, analysis_type, spec_version, spec, mesh_id)
+       VALUES (?, ?, ?, ?, ?, 'linear_static', 1, ?, ?)`,
+    ).bind(ids.simulationId, ownerId, ids.geometryId, projectId, `${marker} simulation`, runSpec, ids.meshId),
     env.DB.prepare(
       `INSERT INTO runs (id, owner_id, simulation_id, mesh_id, spec, status, job_id, files, result, finished_at)
        VALUES (?, ?, ?, ?, ?, 'succeeded', ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,

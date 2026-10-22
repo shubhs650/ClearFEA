@@ -50,7 +50,7 @@ describe("the user's project", () => {
 
   it("is made on first use with the table's default unit system, once", async () => {
     const first = await projectOf(await call("GET", "/api/project", { cookie: alice }));
-    expect(first).toMatchObject({ name: "My project", unitSystem: unitsTable.defaultSystem });
+    expect(first).toMatchObject({ name: "My first project", unitSystem: unitsTable.defaultSystem });
     const again = await projectOf(await call("GET", "/api/project", { cookie: alice }));
     expect(again.id).toBe(first.id);
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM projects").first<{ n: number }>();

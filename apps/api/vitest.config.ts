@@ -7,6 +7,8 @@ export default defineConfig({
     cloudflareTest(async () => ({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
+        // An empty database for migration tests that load data between migrations (M14.1).
+        d1Databases: { MIGRATION_DB: "migration-test" },
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations("./migrations"),
           // The seed folder is read like a migrations folder: one entry per file, split into statements.

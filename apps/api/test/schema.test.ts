@@ -11,7 +11,8 @@ async function columns(table: string): Promise<string[]> {
 
 describe("migration 0001", () => {
   it("creates users and projects", async () => {
-    // password_hash is added by migration 0003; email to updated_at by 0022 (Google sign-in).
+    // password_hash is added by migration 0003; email to updated_at by 0022 (Google sign-in);
+    // folder_id to thumbnail_at by 0029 (projects home).
     expect(await columns("users")).toEqual([
       "id",
       "login",
@@ -31,6 +32,10 @@ describe("migration 0001", () => {
       "visibility",
       "created_at",
       "updated_at",
+      "folder_id",
+      "deleted_at",
+      "last_opened_at",
+      "thumbnail_at",
     ]);
   });
 

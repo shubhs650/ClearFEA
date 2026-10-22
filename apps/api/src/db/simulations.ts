@@ -7,6 +7,8 @@ import type { SimulationSpec } from "@clearfea/spec";
 export interface Simulation {
   id: string;
   ownerId: string;
+  /** Always the project of the geometry (migration 0029). */
+  projectId: string;
   geometryId: string;
   name: string;
   spec: SimulationSpec;
@@ -17,6 +19,7 @@ export interface Simulation {
 interface SimulationRow {
   id: string;
   owner_id: string;
+  project_id: string;
   geometry_id: string;
   name: string;
   spec: string;
@@ -28,6 +31,7 @@ function toSimulation(row: SimulationRow): Simulation {
   return {
     id: row.id,
     ownerId: row.owner_id,
+    projectId: row.project_id,
     geometryId: row.geometry_id,
     name: row.name,
     spec: JSON.parse(row.spec),
@@ -39,7 +43,7 @@ function toSimulation(row: SimulationRow): Simulation {
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
 /**
- * Creates a simulation on one of the user's geometries. The insert happens only while the
+ * Creates a simulation on one of the user's geometries, in the geometry's project. The insert happens only while the
  * geometry is ready, in the same statement, so a unit change cannot slip in between the
  * check and the insert; returns null if the geometry is not (or no longer) ready.
  */
@@ -51,8 +55,8 @@ export async function createSimulation(
   const { spec } = simulation;
   const result = await db
     .prepare(
-      `INSERT INTO simulations (id, owner_id, geometry_id, name, analysis_type, spec_version, spec)
-       SELECT ?, ?, id, ?, ?, ?, ? FROM geometries
+      `INSERT INTO simulations (id, owner_id, geometry_id, project_id, name, analysis_type, spec_version, spec)
+       SELECT ?, ?, id, project_id, ?, ?, ?, ? FROM geometries
         WHERE id = ? AND owner_id = ? AND status = 'ready'`,
     )
     .bind(

@@ -23,6 +23,7 @@ import {
   getGeometry,
   listGeometries,
 } from "../db/geometries";
+import { userProject } from "../db/projects";
 import { launchesMachines, queueRefusal, refused } from "../jobs/limits";
 import { jobWait } from "../jobs/wait";
 import { requireUser, type SessionEnv } from "../session";
@@ -164,8 +165,11 @@ geometries.post("/", launchesMachines, async (c) => {
       400,
     );
   }
+  // Until the home page opens a chosen project (M14.3), uploads go into the user's first project.
+  const project = await userProject(c.env.DB, c.var.userId);
   const { geometry } = await createGeometry(c.env.DB, c.var.userId, {
     id,
+    projectId: project.id,
     name,
     sizeBytes: declared,
   });
