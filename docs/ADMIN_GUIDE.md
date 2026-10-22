@@ -126,6 +126,9 @@ Gate item 8 is met when two or three engineers complete the tutorial case unaide
 | A job failed saying no solver machine came up | Three starts failed; the admin page lists why. DEPLOYMENT.md section 8 has the causes. |
 | Runs are refused for machine hours | The monthly limit was reached: raise it (section 6). |
 | Runs are refused for their balance | Their credits ran out: section 4. |
+| "You already have 2 … waiting to start", "The solver queue is full", "You have started 30 runs today" | The queue limits (M11.3): per account, 2 jobs waiting in each lane (runs; imports, meshes and reports) and 30 runs a day (UTC); 20 jobs waiting in all. One job per account runs at a time in each lane. They are rows of the `settings` table: `queue_waiting_per_user`, `runs_per_user_per_day`, `queue_total_cap`, `queue_running_per_user`. To raise one, open Cloudflare, **Storage & databases**, **D1**, `clearfea`, **Console**, and run `UPDATE settings SET value = 50 WHERE name = 'runs_per_user_per_day'` (the admin dashboard's Settings tab takes this over in M13). |
+| "Your account sent more than 120 requests in the last minute" | Workers rate limiting (M11.3). A page that keeps doing it is a bug: note the page and report it. The limit is in `apps/api/wrangler.jsonc` and changes with a deploy. |
+| A run stopped at "the 12-hour ceiling" | No run is let run longer than 12 hours (M11.3), whatever its stop limit; a coarser mesh or a faster solver shortens it. |
 | "Google sign-in could not start: the server answered HTTP 403 (Internet Security by Zscaler …)" (or another company filter's name) | Their company's web filter blocks the site, not ClearFEA. Ask their IT to allow `clearfea.triyalabs.com`; meanwhile they can sign in from a phone on mobile data or a home network. |
 
 For anything about deploys, keys or the AWS stack, see DEPLOYMENT.md section 8.

@@ -24,6 +24,7 @@ import type { Run } from "../db/runs";
 import { getRun } from "../db/runs";
 import { getSimulation } from "../db/simulations";
 import { jobWait } from "../jobs/wait";
+import { launchesMachines, queueRefusal, refused } from "../jobs/limits";
 import { requireUser, type SessionEnv } from "../session";
 import { projectUnitSystem } from "./projects";
 import { runView } from "./runs";
@@ -90,7 +91,7 @@ reports.get("/:id/report", async (c) => {
 });
 
 /** Queues a report of a solved run, unless one is already being made. */
-reports.post("/:id/report", async (c) => {
+reports.post("/:id/report", launchesMachines, async (c) => {
   const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
   if (run === null) return c.json({ error: NOT_FOUND }, 404);
   if (run.status !== "succeeded") {
@@ -105,6 +106,8 @@ reports.post("/:id/report", async (c) => {
   }
   const params = await reportParams(c.env.DB, c.var.userId, run);
   if (params === null) return c.json({ error: "The run's simulation or geometry is no longer in your account." }, 409);
+  const full = await queueRefusal(c.env, c.var.userId, "report");
+  if (full !== null) return refused(c, full);
   const job = await queueReport(c.env.DB, c.var.userId, run.id, params);
   return c.json({ report: reportView(job) } satisfies RunReportResponse, 202);
 });

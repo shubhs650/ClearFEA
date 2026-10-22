@@ -7,6 +7,8 @@ export default defineConfig({
     cloudflareTest(async () => ({
       wrangler: { configPath: "./wrangler.jsonc" },
       miniflare: {
+        // The tests send far more than a user's 120 requests a minute (M11.3); rate limiting has its own test.
+        ratelimits: { API_RATE_LIMIT: { namespace_id: "1001", simple: { limit: 1_000_000, period: 60 } } },
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations("./migrations"),
           // The seed folder is read like a migrations folder: one entry per file, split into statements.

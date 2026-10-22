@@ -1011,7 +1011,7 @@ solving while the solve job is queued or running; succeeded, failed, cancelled (
 
 class StopLimit(BaseModel):
     """
-    When a run is stopped (M8.3, ADR-087): once its solve job has had the machine for seconds, which is the estimated time times multiplier, rounded up, and never less than 30 s.
+    When a run is stopped (M8.3, ADR-087): once its solve job has had the machine for seconds, which is the estimated time times multiplier, rounded up, never less than 30 s and never more than 12 hours (M11.3, ADR-112).
     """
 
     model_config = ConfigDict(

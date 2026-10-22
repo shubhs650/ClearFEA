@@ -84,8 +84,9 @@ internal.post("/jobs/claim", async (c) => {
   const { workerId } = body.value;
   // A machine the launcher started is alive while it asks (M10.7, ADR-100).
   await recordContact(c.env.DB, workerId);
-  // Jobs whose worker is lost, this one's included (it asks only when it holds none), are failed
-  // first, so a restarted or dead worker never leaves a run solving (M8.4).
+  // A job this worker still holds was lost when it restarted (it asks only when it holds none),
+  // so it is failed first and never left solving (M8.4). Silent workers' jobs are failed by the
+  // per-minute cron only (M11.3, ADR-112).
   await sweepLostJobs(c.env, workerId);
   const { machineSize } = body.value;
   if (machineSize !== undefined && !(await machineSizeExists(c.env.DB, machineSize))) {

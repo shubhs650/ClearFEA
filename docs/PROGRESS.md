@@ -34,6 +34,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M11 Fix the live beta
 
 - [x] M11.1 Cloudflare Access service token (ADR-111): worker, deploy health check, Live checks and harness send it; AWS image job removed from the deploy. Works on the live site once the maintainer adds the service token, its Service Auth policy and the secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (DEPLOYMENT.md 1.8)
+- [x] M11.3 Server protections (ADR-112): launcher only after routes that queue a job, lost-job sweep only in the per-minute cron (`make dev` now calls it each minute), queue limits as settings (2 waiting and 1 running per user per lane, 30 runs per user per day, 20 waiting in all), 120 requests per user per minute with Workers rate limiting, a 12-hour stop-limit ceiling
 
 ### M9 Gate
 
@@ -199,6 +200,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M11.3 (2026-10-22): the queue limits are `queueRefusal` in `apps/api/src/jobs/limits.ts`; every route that queues a job calls it and is wrapped in `launchesMachines`, the only way a request runs the launcher now. A new route that queues a job must do both. Refusals answer 429 with the reason. "1 running per user per lane" lives in `claimJob`, so M12's manager gets it for free, but the M11.2 queue position does not know about it (a job passed over still counts as ahead). The verification account is exempt from the daily run count, and `infra/stack.sh` raises it to 1000 for `make verify`/`make e2e`, which run everything as alice. The API tests lift the rate limit in `vitest.config.ts`; `test/limits.test.ts` checks the 429 with a stub binding. A claim no longer fails other workers' silent jobs; only the per-minute cron does, so locally that needs `make dev`'s new per-minute call (or `/__scheduled?cron=*+*+*+*+*`).
 
 > M11.2 (2026-10-22): every screen that follows a job polls through `apps/web/src/jobs/usePolling.ts` (ADR-112); do not add a `setInterval` poll again. The job's `wait` (`JobWait` in jobs.schema.json) rides on the polled GET answers, and `MachineStartNote` takes it as a prop; `GET /api/jobs/machine-wait` is gone. The queue position counts by machine size, the lanes of today; M12's VPS lanes (ADR-107) may need it per lane. M11.3 (launcher only after queuing routes, lost-job sweep only in cron, queue limits, rate limiting) is next in this thread's line.
 
@@ -481,6 +484,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-22
 
+- M11.3 server protections (ADR-112): the launcher runs only after routes that queue a job, and only the per-minute cron looks for silent workers; queue limits as `settings` rows (migration 0027) refuse a job with 429 and the reason; a claim passes over a user's job while one of theirs runs in its lane; Workers rate limiting (120 per user per minute) in `requireUser`; no stop limit above 12 hours.
 - M11.2 polling discipline (ADR-112): one polling hook (`usePolling`, 2 s doubling to 30 s, paused in hidden tabs, one request in flight) replaces the geometry, mesh, run, report and worker-check timers; the polled answers carry the job's `wait` (queue position, machine starting, `retryAfter`), which replaces `GET /api/jobs/machine-wait` and its 5 s poll. A long solve's log now updates at worst every 30 s.
 - M11.1 Cloudflare Access service token: worker, harness, deploy health check and Live checks send CF-Access-Client-Id/Secret; the worker backs off on Access's sign-in page instead of crashing; the web app names an expired Access sign-in; the AWS solver image job left deploy.yml (ADR-111, ADR-106). Learned: urllib follows Access's 302 on a POST as a GET and gets a 200 HTML page, so the check has to be on the content type, not the status.
 

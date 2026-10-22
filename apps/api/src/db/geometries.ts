@@ -148,7 +148,21 @@ export type UnitChange =
   | { kind: "locked"; geometry: Geometry };
 
 /** Statuses in which the user may set the unit: the file has been read and is not busy. */
-const UNIT_SETTABLE: readonly GeometryStatus[] = ["needs_unit", "unconfirmed", "ready"];
+export const UNIT_SETTABLE: readonly GeometryStatus[] = ["needs_unit", "unconfirmed", "ready"];
+
+/**
+ * Whether setting this unit imports the file again: the current topology was not made at it.
+ * Only meaningful when the unit may be set (UNIT_SETTABLE, not locked).
+ */
+export function unitNeedsImport(geometry: Geometry, unit: string): boolean {
+  const current =
+    geometry.status === "ready"
+      ? geometry.confirmedUnit
+      : geometry.scaling === 1
+        ? geometry.detectedUnit
+        : null;
+  return current !== unit;
+}
 
 /**
  * Sets the unit the user says the file is in. If the current topology was already made at
@@ -169,13 +183,7 @@ export async function confirmUnit(
       ? { kind: "confirmed", geometry }
       : { kind: "locked", geometry };
   }
-  const current =
-    geometry.status === "ready"
-      ? geometry.confirmedUnit
-      : geometry.scaling === 1
-        ? geometry.detectedUnit
-        : null;
-  if (current === unit) {
+  if (!unitNeedsImport(geometry, unit)) {
     await db
       .prepare(
         `UPDATE geometries SET status = 'ready', confirmed_unit = ?, updated_at = ${NOW}

@@ -4,6 +4,11 @@
 export interface Env {
   DB: D1Database;
   FILES: R2Bucket;
+  /**
+   * Counts each signed-in user's requests (M11.3, ADR-112): REQUESTS_PER_MINUTE, set in
+   * wrangler.jsonc. Unset only where a test leaves it out.
+   */
+  API_RATE_LIMIT?: RateLimit;
   /** Shared secret the job worker sends on /internal routes. Unset means those routes refuse. */
   WORKER_TOKEN?: string;
   /** Key that signs session cookies (ADR-022). Unset means signed-in routes refuse. */

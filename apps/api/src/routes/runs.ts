@@ -41,6 +41,7 @@ import {
 } from "../db/runs";
 import { selfHosted } from "../selfHosting";
 import { jobWait } from "../jobs/wait";
+import { launchesMachines, queueRefusal, refused } from "../jobs/limits";
 import { requireUser, type SessionEnv } from "../session";
 
 export const runs = new Hono<SessionEnv>();
@@ -358,7 +359,7 @@ runs.put("/:id/pin", async (c) => {
  * that size exists, else the recommended one, and refused when the wallet cannot cover it. It
  * keeps the run's stop-limit multiplier, or takes the default for a run from before M8.3.
  */
-runs.post("/:id/rerun", async (c) => {
+runs.post("/:id/rerun", launchesMachines, async (c) => {
   const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
   if (run === null) return c.json({ error: NOT_FOUND }, 404);
   if (run.status === "solving") {
@@ -386,6 +387,8 @@ runs.post("/:id/rerun", async (c) => {
   // On the live site, no machine may be startable or the month's machine hours used up (M10.7).
   const noMachine = await machineRefusal(c.env);
   if (noMachine !== null) return c.json({ error: noMachine }, 409);
+  const full = await queueRefusal(c.env, c.var.userId, "solve");
+  if (full !== null) return refused(c, full);
   const multiplier = run.stopLimit?.multiplier ?? DEFAULT_STOP_MULTIPLIER;
   const created = await createRun(c.env.DB, c.var.userId, {
     simulationId: run.simulationId,

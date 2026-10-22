@@ -179,11 +179,50 @@ export async function listJobs(db: D1Database, userId: string, limit = 20): Prom
 }
 
 /**
+ * The lane a job type runs in (M11.3, ADR-107, ADR-112): solve jobs in the solve lane, the rest
+ * in the light lane. As SQL over a column holding the type, for queries that compare lanes.
+ */
+export type Lane = "solve" | "light";
+
+export function laneOf(type: JobType): Lane {
+  return type === "solve" ? "solve" : "light";
+}
+
+const laneSql = (column: string) => `CASE WHEN ${column} = 'solve' THEN 'solve' ELSE 'light' END`;
+
+/** What the queue holds, for the limits a new job is checked against (M11.3, ADR-112). */
+export interface QueueCounts {
+  /** The user's jobs waiting in the lane. */
+  userWaiting: number;
+  /** Every user's waiting jobs, over both lanes. Only counted: nothing of other users' records is read. */
+  allWaiting: number;
+  /** The user's solve jobs queued since midnight UTC. */
+  runsToday: number;
+}
+
+export async function queueCounts(db: D1Database, userId: string, lane: Lane): Promise<QueueCounts> {
+  const row = await db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM jobs WHERE owner_id = ? AND status = 'queued' AND ${laneSql("type")} = ?) AS user_waiting,
+         (SELECT COUNT(*) FROM jobs WHERE status = 'queued') AS all_waiting,
+         (SELECT COUNT(*) FROM jobs WHERE owner_id = ? AND type = 'solve'
+            AND created_at >= strftime('%Y-%m-%dT00:00:00Z', 'now')) AS runs_today`,
+    )
+    .bind(userId, lane, userId)
+    .first<{ user_waiting: number; all_waiting: number; runs_today: number }>();
+  if (row === null) throw new Error("Counting the queue returned no row.");
+  return { userWaiting: row.user_waiting, allWaiting: row.all_waiting, runsToday: row.runs_today };
+}
+
+/**
  * Marks the oldest queued job of one of the given types as claimed by this
  * worker and returns it, or null when nothing is queued. A single UPDATE
  * statement, so two workers can never claim the same job. A worker that names
  * its machine size (M10.6, ADR-099) gets only jobs queued for that size, and the
  * default size's worker also gets the jobs that have no size (import, report).
+ * A job whose owner already has `queue_running_per_user` jobs claimed or running in its lane is
+ * passed over, so it waits behind other users' jobs (M11.3, ADR-107 item 4, ADR-112).
  */
 export async function claimJob(
   db: D1Database,
@@ -208,8 +247,12 @@ export async function claimJob(
          SET status = 'claimed', claimed_by = ?, claimed_at = ${NOW}, heartbeat_at = ${NOW},
              software = ?
        WHERE id = (
-         SELECT id FROM jobs
+         SELECT id FROM jobs candidate
           WHERE status = 'queued' AND type IN (${placeholders}) ${forSize.sql}
+            AND (SELECT COUNT(*) FROM jobs held
+                  WHERE held.owner_id = candidate.owner_id AND held.status IN ${ACTIVE}
+                    AND ${laneSql("held.type")} = ${laneSql("candidate.type")})
+                < (SELECT value FROM settings WHERE name = 'queue_running_per_user')
           ORDER BY created_at, id
           LIMIT 1
        )
@@ -330,20 +373,26 @@ export async function completeJob(
 }
 
 /**
- * Claimed or running jobs whose worker is lost (M8.4): no heartbeat for `timeoutSeconds`, or
- * held by `claimingWorker`, which asks for a job only when it holds none, so a job it still
- * holds was lost when it restarted. Used by the sweep, which goes over every owner.
+ * Claimed or running jobs whose worker is lost (M8.4). Without `claimingWorker`: those with no
+ * heartbeat for `timeoutSeconds`, from the per-minute cron. With it: only those held by that
+ * worker, which asks for a job only when it holds none, so a job it still holds was lost when
+ * it restarted (M11.3, ADR-112: a claim no longer looks over every worker's jobs). Used by the
+ * sweep, which goes over every owner.
  */
 export async function lostJobs(db: D1Database, timeoutSeconds: number, claimingWorker: string | null): Promise<Job[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT * FROM jobs
-        WHERE status IN ${ACTIVE}
-          AND ((julianday('now') - julianday(heartbeat_at)) * 86400 >= ? OR claimed_by = ?)
-        ORDER BY created_at, id`,
-    )
-    .bind(timeoutSeconds, claimingWorker)
-    .all<JobRow>();
+  const query =
+    claimingWorker === null
+      ? db
+          .prepare(
+            `SELECT * FROM jobs
+              WHERE status IN ${ACTIVE} AND (julianday('now') - julianday(heartbeat_at)) * 86400 >= ?
+              ORDER BY created_at, id`,
+          )
+          .bind(timeoutSeconds)
+      : db
+          .prepare(`SELECT * FROM jobs WHERE status IN ${ACTIVE} AND claimed_by = ? ORDER BY created_at, id`)
+          .bind(claimingWorker);
+  const { results } = await query.all<JobRow>();
   return results.map(toJob);
 }
 

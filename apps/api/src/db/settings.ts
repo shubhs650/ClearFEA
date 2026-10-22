@@ -87,3 +87,36 @@ export async function machineSettings(db: D1Database): Promise<MachineSettings> 
 export async function setMachineHoursCap(db: D1Database, hours: number): Promise<void> {
   await db.prepare("UPDATE settings SET value = ? WHERE name = ?").bind(hours, MACHINE_NAMES.hoursCap).run();
 }
+
+/** What one user, and everyone together, may queue (M11.3, ADR-112). */
+export interface QueueLimits {
+  /** Jobs one user may have waiting in each lane. */
+  waitingPerUser: number;
+  /** Runs one user may start per calendar day (UTC). */
+  runsPerDay: number;
+  /** Jobs waiting over all users and lanes. */
+  totalCap: number;
+}
+
+const QUEUE_NAMES = {
+  waitingPerUser: "queue_waiting_per_user",
+  runsPerDay: "runs_per_user_per_day",
+  totalCap: "queue_total_cap",
+} as const satisfies Record<keyof QueueLimits, string>;
+
+export async function queueLimits(db: D1Database): Promise<QueueLimits> {
+  const { results } = await db
+    .prepare("SELECT name, value FROM settings WHERE name IN (?, ?, ?)")
+    .bind(QUEUE_NAMES.waitingPerUser, QUEUE_NAMES.runsPerDay, QUEUE_NAMES.totalCap)
+    .all<{ name: string; value: number }>();
+  const value = (name: string) => {
+    const row = results.find((r) => r.name === name);
+    if (row === undefined) throw new Error(`The setting ${name} is missing; apply the migrations.`);
+    return row.value;
+  };
+  return {
+    waitingPerUser: value(QUEUE_NAMES.waitingPerUser),
+    runsPerDay: value(QUEUE_NAMES.runsPerDay),
+    totalCap: value(QUEUE_NAMES.totalCap),
+  };
+}

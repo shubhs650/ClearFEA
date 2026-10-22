@@ -16,7 +16,18 @@ export const MAX_STOP_MULTIPLIER = 20;
  */
 export const MIN_STOP_SECONDS = 30;
 
+/**
+ * No run is let run longer than this, whatever its estimate and multiplier (M11.3, ADR-112): one
+ * solve lane serves every user, so one run may hold it for half a day at most.
+ */
+export const MAX_STOP_SECONDS = 12 * 60 * 60;
+
 /** The stop limit in whole seconds for a run estimated to take `estimatedSeconds`. */
 export function stopLimitSeconds(estimatedSeconds: number, multiplier: number): number {
-  return Math.max(MIN_STOP_SECONDS, Math.ceil(estimatedSeconds * multiplier));
+  return Math.min(MAX_STOP_SECONDS, Math.max(MIN_STOP_SECONDS, Math.ceil(estimatedSeconds * multiplier)));
+}
+
+/** Whether a stop limit of `seconds` is the ceiling rather than the multiple of the estimate. */
+export function atStopCeiling(seconds: number): boolean {
+  return seconds >= MAX_STOP_SECONDS;
 }

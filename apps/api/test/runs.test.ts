@@ -834,7 +834,7 @@ describe("a worker that stops checking in (M8.4)", () => {
       .run();
   }
 
-  /** Another worker asking for work, which sweeps for lost jobs first. */
+  /** Another worker asking for work, which since M11.3 fails only its own lost jobs. */
   async function otherWorkerClaims(): Promise<void> {
     const response = await call("POST", "/internal/jobs/claim", {
       json: { workerId: "w2", jobTypes: ["noop"] },
@@ -854,7 +854,10 @@ describe("a worker that stops checking in (M8.4)", () => {
   it("fails the run as a fault in ClearFEA after the timeout, without a charge", async () => {
     const { run, job } = await solving();
     await silentFor(job.id, 121);
+    // Only the per-minute cron looks for silent workers (M11.3, ADR-112), not another worker's claim.
     await otherWorkerClaims();
+    expect((await readRun(run.id)).status).toBe("solving");
+    expect(await sweepLostJobs(env)).toBe(1);
     const failed = await readRun(run.id);
     expect(failed).toMatchObject({
       status: "failed",
@@ -873,7 +876,7 @@ describe("a worker that stops checking in (M8.4)", () => {
   it("leaves a run whose worker checked in within the timeout", async () => {
     const { run, job } = await solving();
     await silentFor(job.id, 100);
-    await otherWorkerClaims();
+    expect(await sweepLostJobs(env)).toBe(0);
     expect((await readRun(run.id)).status).toBe("solving");
   });
 
