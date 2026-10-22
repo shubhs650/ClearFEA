@@ -5,6 +5,7 @@
 
 import type { JobStatus, JobWait } from "@clearfea/spec";
 import { getJob, queuePlace } from "../db/jobs";
+import { vpsMachines } from "../db/machines";
 import type { Env } from "../env";
 import { machineStarting } from "../launcher";
 
@@ -28,7 +29,7 @@ export async function jobWait(env: Env, userId: string, jobId: string | null): P
   if (jobId === null) return undefined;
   const job = await getJob(env.DB, userId, jobId);
   if (job === null || !ACTIVE.includes(job.status)) return undefined;
-  const place = job.status === "queued" ? await queuePlace(env.DB, userId, job.id) : null;
+  const place = job.status === "queued" ? await queuePlace(env.DB, userId, job.id, vpsMachines(env)) : null;
   const starting = place?.machineSize ? await machineStarting(env, place.machineSize) : false;
   const queuePosition = place?.position ?? null;
   return { status: job.status, queuePosition, machineStarting: starting, retryAfter: retryAfter(job.status, queuePosition, starting) };

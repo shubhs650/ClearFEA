@@ -26,7 +26,7 @@ import { runFundsProblem } from "../billing/wallet";
 import { readBody } from "../body";
 import { readJobLog } from "../db/jobs";
 import { machineRefusal } from "../launcher";
-import { cloudMachines, listMachineSizes } from "../db/machines";
+import { listMachineSizes, switchedSizesOnly } from "../db/machines";
 import { getMesh, meshKey } from "../db/meshes";
 import {
   cancelRun,
@@ -39,7 +39,7 @@ import {
   runKey,
   setRunPinned,
 } from "../db/runs";
-import { selfHosted } from "../selfHosting";
+import { balanceRefuses } from "../selfHosting";
 import { jobWait } from "../jobs/wait";
 import { launchesMachines, queueRefusal, refused } from "../jobs/limits";
 import { requireUser, type SessionEnv } from "../session";
@@ -377,12 +377,12 @@ runs.post("/:id/rerun", launchesMachines, async (c) => {
   const kind = specRunKind(run.spec);
   const cannot = runSolverProblem(solver, kind) ?? elementLimitProblem(solver, mesh.order, mesh.elementCount, kind);
   if (cannot !== null) return c.json({ error: cannot }, 409);
-  const estimate = estimateRun(mesh.nodeCount, mesh.order, await listMachineSizes(c.env.DB, cloudMachines(c.env)), solver, kind);
+  const estimate = estimateRun(mesh.nodeCount, mesh.order, await listMachineSizes(c.env.DB, switchedSizesOnly(c.env)), solver, kind);
   const size = (run.machine === null ? undefined : runSize(estimate, run.machine.size)) ?? runSize(estimate);
   if (size === undefined) throw new Error("No machine sizes are configured.");
-  const noFunds = selfHosted(c.env)
-    ? null
-    : runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size);
+  const noFunds = balanceRefuses(c.env)
+    ? runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size)
+    : null;
   if (noFunds !== null) return c.json({ error: noFunds }, 409);
   // On the live site, no machine may be startable or the month's machine hours used up (M10.7).
   const noMachine = await machineRefusal(c.env);

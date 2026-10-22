@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The admin page (M10.3, ADR-097): who may sign in with Google, and who has, and which cloud
 // machine sizes are switched on (M10.6, ADR-099), and the solver machines with their monthly
-// hours cap (M10.7, ADR-100). Only the admin
+// hours cap (M10.7, ADR-100), or, with MACHINES=vps, the solver host (M12.4, ADR-120). Only the admin
 // (ADMIN_EMAIL) sees it. Drawn over the workbench like the wallet page, which stays as it was.
 
-import type { AdminResponse, MachineStart, SolverMachines } from "@clearfea/spec";
+import type { AdminResponse, MachineStart, SolverHost, SolverMachines } from "@clearfea/spec";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { addAllowed, fetchAdmin, removeAllowed, setMachineHoursCap, switchCloudSize } from "../api/admin";
 import type { ApiResult } from "../api/request";
@@ -162,9 +162,7 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
           <section className="admin-card" aria-label="Machine sizes">
             <h3 className="wallet-subtitle">Machine sizes</h3>
             <p className="wallet-note">
-              {state.admin.machines === "cloud"
-                ? "Runs can choose the sizes switched on here. Switch a size on only after it is switched on in the AWS stack too (docs/DEPLOYMENT.md section 7.3); until it is benchmarked, a larger size keeps the 16 GB element limits."
-                : "Jobs here run on the local worker, which simulates every size, so this list changes nothing on this server. It decides which sizes the live site offers."}
+              {SIZE_NOTES[state.admin.machines]}
             </p>
             <ul className="admin-allowed">
               {state.admin.cloudSizes.map((size) => (
@@ -186,6 +184,9 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
               ))}
             </ul>
           </section>
+          {state.admin.machines === "vps" ? (
+            <SolverHostCard host={state.admin.solverHost} />
+          ) : (
           <section className="admin-card" aria-label="Solver machines">
             <h3 className="wallet-subtitle">Solver machines</h3>
             <p className="wallet-note">{launcherNote(state.admin.solverMachines)}</p>
@@ -239,7 +240,41 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
               </table>
             )}
           </section>
+          )}
         </div>
+      )}
+    </section>
+  );
+}
+
+const SIZE_NOTES: Record<AdminResponse["machines"], string> = {
+  cloud:
+    "Runs can choose the sizes switched on here. Switch a size on only after it is switched on in the AWS stack too (docs/DEPLOYMENT.md section 7.3); until it is benchmarked, a larger size keeps the 16 GB element limits.",
+  vps: "Runs can choose the sizes switched on here. On the solver host every run goes into its solve lane; the size sets the run's estimate and rate, and keeps the 16 GB element limits until the host is benchmarked.",
+  local:
+    "Jobs here run on the local worker, which simulates every size, so this list changes nothing on this server. It decides which sizes the live site offers.",
+};
+
+/** The always-on solver host (M12.4, ADR-120): online or offline, from its check-ins. */
+function SolverHostCard({ host }: { host: SolverHost | null }) {
+  return (
+    <section className="admin-card" aria-label="Solver host">
+      <h3 className="wallet-subtitle">Solver host</h3>
+      {host === null ? (
+        <p className="form-problem" role="alert">
+          No solver host has checked in yet, so new jobs are refused. Start the compute manager on the VPS
+          (docs/DEPLOYMENT.md).
+        </p>
+      ) : host.online ? (
+        <p className="wallet-note" data-testid="solver-host-state">
+          <strong>{host.host}</strong> is online: last check-in {utc(host.lastSeenAt)} UTC, up since{" "}
+          {utc(host.firstSeenAt)} UTC{host.managerVersion === null ? "" : `, manager ${host.managerVersion}`}.
+        </p>
+      ) : (
+        <p className="form-problem" role="alert" data-testid="solver-host-state">
+          <strong>{host.host}</strong> is offline: no check-in since {utc(host.lastSeenAt)} UTC, so new jobs are
+          refused and queued work waits. Restart the VPS by hand (docs/DEPLOYMENT.md); nothing starts a new one.
+        </p>
       )}
     </section>
   );

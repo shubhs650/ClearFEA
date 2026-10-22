@@ -138,6 +138,29 @@ export interface HeartbeatResponse {
   action: HeartbeatAction;
 }
 /**
+ * Body of POST /internal/hosts/check-in (M12.4, ADR-120): the solver host's compute manager says it is up, at start and every intervalSeconds whatever its lanes are doing. With MACHINES=vps the API refuses new jobs while no host has checked in for 120 s.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "HostCheckIn".
+ */
+export interface HostCheckIn {
+  /**
+   * The host's name, as the admin page shows it.
+   */
+  host: string;
+  managerVersion?: string;
+}
+/**
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "HostCheckInResponse".
+ */
+export interface HostCheckInResponse {
+  /**
+   * Seconds until the next check-in is due.
+   */
+  intervalSeconds: number;
+}
+/**
  * What the worker measured of a job (ADR-033): billableMs is the wall-clock time from the start to the end of the job's handler on the machine, in whole milliseconds. Queue time and the worker's start-up are outside it. Sent for every job; the API charges only metered job types.
  *
  * This interface was referenced by `Jobs`'s JSON-Schema
@@ -296,6 +319,8 @@ export const validateClaimRequest = validator<ClaimRequest>(schema, "ClaimReques
 export const validateClaimResponse = validator<ClaimResponse>(schema, "ClaimResponse");
 export const validateHeartbeatRequest = validator<HeartbeatRequest>(schema, "HeartbeatRequest");
 export const validateHeartbeatResponse = validator<HeartbeatResponse>(schema, "HeartbeatResponse");
+export const validateHostCheckIn = validator<HostCheckIn>(schema, "HostCheckIn");
+export const validateHostCheckInResponse = validator<HostCheckInResponse>(schema, "HostCheckInResponse");
 export const validateMetering = validator<Metering>(schema, "Metering");
 export const validateCompleteSucceeded = validator<CompleteSucceeded>(schema, "CompleteSucceeded");
 export const validateCompleteFailed = validator<CompleteFailed>(schema, "CompleteFailed");

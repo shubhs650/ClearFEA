@@ -73,6 +73,25 @@
         }
       }
     },
+    "SolverHost": {
+      "description": "The always-on solver host (M12.4, ADR-120), from its compute manager's check-ins.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "online", "lastSeenAt", "firstSeenAt", "managerVersion"],
+      "properties": {
+        "host": { "type": "string" },
+        "online": {
+          "type": "boolean",
+          "description": "True when it checked in within the last 120 s; while no host is online, new jobs are refused."
+        },
+        "lastSeenAt": { "type": "string", "description": "ISO 8601 UTC." },
+        "firstSeenAt": {
+          "type": "string",
+          "description": "ISO 8601 UTC: when this run of check-ins began, after a silence of more than 120 s or the first ever."
+        },
+        "managerVersion": { "type": ["string", "null"] }
+      }
+    },
     "SolverMachines": {
       "description": "The live site's solver machines and their monthly cap (M10.7, ADR-100).",
       "type": "object",
@@ -101,7 +120,7 @@
       "description": "Answer to GET /api/admin and to adding or removing an address.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["adminEmail", "allowed", "users", "machines", "cloudSizes", "solverMachines"],
+      "required": ["adminEmail", "allowed", "users", "machines", "cloudSizes", "solverMachines", "solverHost"],
       "properties": {
         "adminEmail": {
           "type": "string",
@@ -110,11 +129,15 @@
         "allowed": { "type": "array", "items": { "$ref": "#/$defs/AllowedEmail" } },
         "users": { "type": "array", "items": { "$ref": "#/$defs/AdminUser" } },
         "machines": {
-          "enum": ["cloud", "local"],
-          "description": "Where jobs run: cloud machines (the live site, MACHINES=cloud) or the local worker, which simulates every size and ignores the cloud size list."
+          "enum": ["cloud", "vps", "local"],
+          "description": "Where jobs run: cloud machines started on AWS (MACHINES=cloud), the always-on solver host (MACHINES=vps, M12.4, ADR-120) or the local worker, which simulates every size and ignores the cloud size list."
         },
         "cloudSizes": { "type": "array", "items": { "$ref": "#/$defs/CloudMachineSize" } },
-        "solverMachines": { "$ref": "#/$defs/SolverMachines" }
+        "solverMachines": { "$ref": "#/$defs/SolverMachines" },
+        "solverHost": {
+          "description": "The solver host that checked in last; null when none ever has.",
+          "oneOf": [{ "$ref": "#/$defs/SolverHost" }, { "type": "null" }]
+        }
       }
     },
     "SwitchCloudSizeRequest": {

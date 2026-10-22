@@ -13,7 +13,8 @@ import {
 import { Hono, type MiddlewareHandler } from "hono";
 import { readBody } from "../body";
 import { addAllowed, isAdminEmail, listAllowed, listUsers, normalEmail, removeAllowed } from "../db/allowlist";
-import { cloudMachines, listCloudSizes, switchCloudSize } from "../db/machines";
+import { latestHost } from "../db/hosts";
+import { listCloudSizes, machineMode, switchCloudSize } from "../db/machines";
 import { setMachineHoursCap } from "../db/settings";
 import { getUser } from "../db/users";
 import type { Env } from "../env";
@@ -35,11 +36,12 @@ admin.use("*", requireUser, requireAdmin);
 
 async function view(db: D1Database, env: Env): Promise<AdminResponse> {
   const adminEmail = env.ADMIN_EMAIL ?? "";
-  const [allowed, users, cloudSizes, machines] = await Promise.all([
+  const [allowed, users, cloudSizes, machines, solverHost] = await Promise.all([
     listAllowed(db),
     listUsers(db),
     listCloudSizes(db),
     solverMachines(env),
+    latestHost(db),
   ]);
   const invited = new Set(allowed.map((a) => a.email));
   return {
@@ -49,9 +51,10 @@ async function view(db: D1Database, env: Env): Promise<AdminResponse> {
       ...u,
       allowed: u.email !== null && (invited.has(normalEmail(u.email)) || isAdminEmail(u.email, adminEmail)),
     })),
-    machines: cloudMachines(env) ? "cloud" : "local",
+    machines: machineMode(env),
     cloudSizes,
     solverMachines: machines,
+    solverHost,
   };
 }
 

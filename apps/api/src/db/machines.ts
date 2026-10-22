@@ -14,12 +14,34 @@ interface MachineSizeRow {
 }
 
 /**
- * True when jobs run on cloud machines (`MACHINES=cloud`, the live site): runs are offered only
- * the cloud sizes that are switched on. Unset or anything else is the local worker, which
- * simulates every size.
+ * Where jobs run: `cloud`, machines the launcher starts on AWS (M10.7, parked until production,
+ * ADR-106); `vps`, the always-on solver host whose compute manager checks in (M12.4, ADR-120);
+ * `local`, the local worker of `make dev`, which simulates every size. Unset or anything else is
+ * local.
  */
+export type MachineMode = "cloud" | "vps" | "local";
+
+export function machineMode(env: Pick<Env, "MACHINES">): MachineMode {
+  const value = env.MACHINES?.trim().toLowerCase();
+  return value === "cloud" || value === "vps" ? value : "local";
+}
+
+/** True when the launcher starts cloud machines (`MACHINES=cloud`). */
 export function cloudMachines(env: Pick<Env, "MACHINES">): boolean {
-  return env.MACHINES?.trim().toLowerCase() === "cloud";
+  return machineMode(env) === "cloud";
+}
+
+/** True when jobs run on the always-on solver host (`MACHINES=vps`). */
+export function vpsMachines(env: Pick<Env, "MACHINES">): boolean {
+  return machineMode(env) === "vps";
+}
+
+/**
+ * True when runs are offered only the cloud sizes switched on: on cloud machines and on the
+ * solver host, where a size sets a run's estimate and rate (ADR-107 item 5). Locally every size.
+ */
+export function switchedSizesOnly(env: Pick<Env, "MACHINES">): boolean {
+  return machineMode(env) !== "local";
 }
 
 /** Every machine size a run may go on: on cloud machines, only the cloud sizes switched on. */

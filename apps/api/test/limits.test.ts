@@ -116,9 +116,11 @@ describe("queue limits (M11.3)", () => {
       await createJob(env.DB, ALICE, "solve");
       expect(await claim(`w${i}`, ["solve"])).not.toBeNull();
     }
-    expect(await queueRefusal(env, ALICE, "solve")).toBe(
-      "You have started 2 runs today, the most one account may start in a day. Runs can be started again after midnight UTC.",
-    );
+    expect(await queueRefusal(env, ALICE, "solve")).toEqual({
+      error:
+        "You have started 2 runs today, the most one account may start in a day. Runs can be started again after midnight UTC.",
+      status: 429,
+    });
     // Imports, meshes and reports are not runs.
     expect(await queueRefusal(env, ALICE, "mesh")).toBeNull();
     // Yesterday's runs do not count.

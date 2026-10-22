@@ -94,6 +94,28 @@ export interface MachineStart {
   problem: string | null;
 }
 /**
+ * The always-on solver host (M12.4, ADR-120), from its compute manager's check-ins.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "SolverHost".
+ */
+export interface SolverHost {
+  host: string;
+  /**
+   * True when it checked in within the last 120 s; while no host is online, new jobs are refused.
+   */
+  online: boolean;
+  /**
+   * ISO 8601 UTC.
+   */
+  lastSeenAt: string;
+  /**
+   * ISO 8601 UTC: when this run of check-ins began, after a silence of more than 120 s or the first ever.
+   */
+  firstSeenAt: string;
+  managerVersion: string | null;
+}
+/**
  * The live site's solver machines and their monthly cap (M10.7, ADR-100).
  *
  * This interface was referenced by `Admin`'s JSON-Schema
@@ -132,11 +154,15 @@ export interface AdminResponse {
   allowed: AllowedEmail[];
   users: AdminUser[];
   /**
-   * Where jobs run: cloud machines (the live site, MACHINES=cloud) or the local worker, which simulates every size and ignores the cloud size list.
+   * Where jobs run: cloud machines started on AWS (MACHINES=cloud), the always-on solver host (MACHINES=vps, M12.4, ADR-120) or the local worker, which simulates every size and ignores the cloud size list.
    */
-  machines: "cloud" | "local";
+  machines: "cloud" | "vps" | "local";
   cloudSizes: CloudMachineSize[];
   solverMachines: SolverMachines;
+  /**
+   * The solver host that checked in last; null when none ever has.
+   */
+  solverHost: SolverHost | null;
 }
 /**
  * Body of PUT /api/admin/machine-sizes/{name}.
@@ -173,6 +199,7 @@ export const validateAllowedEmail = validator<AllowedEmail>(schema, "AllowedEmai
 export const validateAdminUser = validator<AdminUser>(schema, "AdminUser");
 export const validateCloudMachineSize = validator<CloudMachineSize>(schema, "CloudMachineSize");
 export const validateMachineStart = validator<MachineStart>(schema, "MachineStart");
+export const validateSolverHost = validator<SolverHost>(schema, "SolverHost");
 export const validateSolverMachines = validator<SolverMachines>(schema, "SolverMachines");
 export const validateAdminResponse = validator<AdminResponse>(schema, "AdminResponse");
 export const validateSwitchCloudSizeRequest = validator<SwitchCloudSizeRequest>(schema, "SwitchCloudSizeRequest");
