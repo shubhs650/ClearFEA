@@ -17,7 +17,7 @@ import {
 import { Hono } from "hono";
 import { getGeometry } from "../db/geometries";
 import { getMesh } from "../db/meshes";
-import { userProject } from "../db/projects";
+import { getProject } from "../db/projects";
 import { getBranding, getReportOptions, listFigures } from "../db/report";
 import { latestReportJob, queueReport, type ReportFormat, reportKey, reportView } from "../db/reports";
 import type { Run } from "../db/runs";
@@ -42,16 +42,18 @@ function reportUnitSystem(saved: string | undefined, projectSystem: string): str
 
 /** Everything the report job prints, frozen now so a later change to the setup cannot reach it. */
 async function reportParams(db: D1Database, userId: string, run: Run): Promise<ReportJobParams | null> {
-  const [simulation, geometry, mesh, project, branding, saved, figures] = await Promise.all([
+  const [simulation, geometry, mesh, branding, saved, figures] = await Promise.all([
     getSimulation(db, userId, run.simulationId),
     getGeometry(db, userId, run.spec.geometryId),
     getMesh(db, userId, run.meshId),
-    userProject(db, userId),
     getBranding(db, userId),
     getReportOptions(db, userId, run.simulationId),
     listFigures(db, userId, run.id),
   ]);
   if (simulation === null || geometry === null) return null;
+  // The simulation's own project (ADR-114): its name and unit system.
+  const project = await getProject(db, userId, simulation.projectId);
+  if (project === null) return null;
   const projectSystem = projectUnitSystem(project);
   const options = saved?.options ?? defaultReportOptions(simulation.name, projectSystem);
   const printed = new Set(options.sections);

@@ -181,7 +181,7 @@ let bobId = "";
 let mine: Owned;
 let bobs: Owned;
 /** Ids of alice's records that only the API's answers to her could hold. */
-const extra = { noopJobId: "", materialId: "", viewId: "", reportJobId: "", shareToken: "" };
+const extra = { noopJobId: "", materialId: "", viewId: "", reportJobId: "", shareToken: "", projectId: "", folderId: "" };
 
 beforeAll(async () => {
   const statements = env.TEST_SEED.flatMap((file) => file.queries);
@@ -220,7 +220,8 @@ beforeAll(async () => {
       201,
     )
   ).material?.id as string;
-  await ok("PATCH", { path: "/api/project", json: { unitSystem: "us-in" } });
+  extra.projectId = (await ok("PATCH", { path: "/api/project", json: { unitSystem: "us-in" } })).project?.id as string;
+  extra.folderId = (await ok("POST", { path: "/api/folders", json: { name: `${ALICE_MARKER} folder` } }, 201)).folder?.id as string;
   await ok("PUT", { path: "/api/report-branding", json: { companyName: `${ALICE_MARKER} Engineering` } });
   await ok("POST", { path: "/api/report-branding/logo", bytes: png(320, 80) });
   extra.viewId = (
@@ -327,9 +328,18 @@ interface Ids {
   jobId: string;
   materialId: string;
   viewId: string;
+  projectId: string;
+  folderId: string;
 }
 
-const aliceIds = (): Ids => ({ ...mine, jobId: extra.noopJobId, materialId: extra.materialId, viewId: extra.viewId });
+const aliceIds = (): Ids => ({
+  ...mine,
+  jobId: extra.noopJobId,
+  materialId: extra.materialId,
+  viewId: extra.viewId,
+  projectId: extra.projectId,
+  folderId: extra.folderId,
+});
 
 const nobodysIds = (): Ids => ({
   geometryId: crypto.randomUUID(),
@@ -340,11 +350,15 @@ const nobodysIds = (): Ids => ({
   jobId: crypto.randomUUID(),
   materialId: crypto.randomUUID(),
   viewId: crypto.randomUUID(),
+  projectId: crypto.randomUUID(),
+  folderId: crypto.randomUUID(),
 });
 
 const g = (i: Ids) => `/api/geometries/${i.geometryId}`;
 const s = (i: Ids) => `/api/simulations/${i.simulationId}`;
 const r = (i: Ids) => `/api/runs/${i.runId}`;
+const p = (i: Ids) => `/api/projects/${i.projectId}`;
+const f = (i: Ids) => `/api/folders/${i.folderId}`;
 
 /**
  * Every route the app serves, by method and path as Hono lists them. An owned route acts on one
@@ -376,6 +390,20 @@ const ROUTES: Record<string, Route> = {
 
   "GET /api/project": { area: "account" },
   "PATCH /api/project": { area: "account" },
+  "GET /api/projects": { area: "account" },
+  "POST /api/projects": { area: "account" },
+  // In an order alice's own calls at the end can all succeed in: the trash before the restore.
+  "GET /api/projects/:id": { area: "owned", owned: (i) => ({ path: p(i) }) },
+  "PATCH /api/projects/:id": { area: "owned", owned: (i) => ({ path: p(i), json: { name: "Taken", unitSystem: "si" } }) },
+  "POST /api/projects/:id/opened": { area: "owned", owned: (i) => ({ path: `${p(i)}/opened` }) },
+  "POST /api/projects/:id/duplicate": { area: "owned", owned: (i) => ({ path: `${p(i)}/duplicate`, json: {} }) },
+  "POST /api/projects/:id/trash": { area: "owned", owned: (i) => ({ path: `${p(i)}/trash` }) },
+  "POST /api/projects/:id/restore": { area: "owned", owned: (i) => ({ path: `${p(i)}/restore` }) },
+  "POST /api/folders": { area: "account" },
+  "PATCH /api/folders/:id": { area: "owned", owned: (i) => ({ path: f(i), json: { name: "Taken" } }) },
+  "POST /api/folders/:id/duplicate": { area: "owned", owned: (i) => ({ path: `${f(i)}/duplicate` }) },
+  "POST /api/folders/:id/trash": { area: "owned", owned: (i) => ({ path: `${f(i)}/trash` }) },
+  "POST /api/folders/:id/restore": { area: "owned", owned: (i) => ({ path: `${f(i)}/restore` }) },
 
   "POST /api/geometries": { area: "account" },
   "GET /api/geometries": { area: "account" },
@@ -480,6 +508,9 @@ const ACCOUNT_CALLS: Record<string, Request> = {
   "GET /api/jobs": { path: "/api/jobs" },
   "GET /api/project": { path: "/api/project" },
   "PATCH /api/project": { path: "/api/project", json: { unitSystem: "si" } },
+  "GET /api/projects": { path: "/api/projects" },
+  "POST /api/projects": { path: "/api/projects", json: { name: "Bob's pumps" } },
+  "POST /api/folders": { path: "/api/folders", json: { name: "Bob's folder" } },
   "POST /api/geometries": { path: "/api/geometries?name=bob.step", bytes: new TextEncoder().encode("ISO-10303-21;\nbob") },
   "GET /api/geometries": { path: "/api/geometries" },
   "GET /api/simulations": { path: "/api/simulations" },

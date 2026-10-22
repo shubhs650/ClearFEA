@@ -301,7 +301,7 @@ class GeometryResponse(BaseModel):
 
 class GeometryListResponse(BaseModel):
     """
-    Answer to GET /api/geometries: the signed-in user's geometries, newest first.
+    Answer to GET /api/geometries[?projectId=]: the signed-in user's geometries, newest first, those of one project when it is named.
     """
 
     model_config = ConfigDict(

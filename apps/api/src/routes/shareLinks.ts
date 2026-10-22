@@ -14,7 +14,7 @@ import type {
 import { type Context, Hono } from "hono";
 import type { Env } from "../env";
 import { geometryKey } from "../db/geometries";
-import { userProject } from "../db/projects";
+import { getProject } from "../db/projects";
 import { getRun, type Run } from "../db/runs";
 import { createShareLink, getShareLink, newShareToken, resolveShareLink, revokeShareLink } from "../db/shareLinks";
 import { getSimulation } from "../db/simulations";
@@ -93,10 +93,9 @@ function sharedView(run: Run): SharedRunView {
 shared.get("/:token", async (c) => {
   const run = await sharedRun(c);
   if (run instanceof Response) return run;
-  const [simulation, project] = await Promise.all([
-    getSimulation(c.env.DB, run.ownerId, run.simulationId),
-    userProject(c.env.DB, run.ownerId),
-  ]);
+  const simulation = await getSimulation(c.env.DB, run.ownerId, run.simulationId);
+  // The unit system of the simulation's own project (ADR-114).
+  const project = simulation === null ? null : await getProject(c.env.DB, run.ownerId, simulation.projectId);
   return c.json({
     run: sharedView(run),
     simulationName: simulation?.name ?? "Simulation",

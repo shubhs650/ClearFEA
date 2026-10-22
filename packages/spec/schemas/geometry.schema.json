@@ -217,7 +217,7 @@
       }
     },
     "GeometryListResponse": {
-      "description": "Answer to GET /api/geometries: the signed-in user's geometries, newest first.",
+      "description": "Answer to GET /api/geometries[?projectId=]: the signed-in user's geometries, newest first, those of one project when it is named.",
       "type": "object",
       "additionalProperties": false,
       "required": ["geometries"],

@@ -283,7 +283,7 @@ export interface GeometryResponse {
   wait?: {};
 }
 /**
- * Answer to GET /api/geometries: the signed-in user's geometries, newest first.
+ * Answer to GET /api/geometries[?projectId=]: the signed-in user's geometries, newest first, those of one project when it is named.
  *
  * This interface was referenced by `Geometry`'s JSON-Schema
  * via the `definition` "GeometryListResponse".
