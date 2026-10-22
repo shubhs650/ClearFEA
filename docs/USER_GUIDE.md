@@ -37,7 +37,7 @@ Developers can write the same file with the script it comes from, `docs/tutorial
 
 ## 2. Sign in and upload the geometry
 
-Open <https://clearfea.triyalabs.com> and choose **Sign in with Google**, then **Sign in with Google** again on the sign-in card. Google asks which account to use: pick the one you were invited with. The first time, Google says that ClearFEA will see your name and email address, which is all it reads; it may also warn that Google has not verified the app, because ClearFEA is registered with Google in testing for the beta. Choose **Continue**. You then land in the workbench, already signed in the next time you open the site.
+Open <https://clearfea.triyalabs.com> and choose **Sign in with Google**, then **Sign in with Google** again on the sign-in card. Google asks which account to use: pick the one you were invited with. The first time, Google says that ClearFEA will see your name and email address, which is all it reads; it may also warn that Google has not verified the app, because ClearFEA is registered with Google in testing for the beta. Choose **Continue**. You then land on your projects home, already signed in the next time you open the site.
 
 ![The sign-in card](images/guide/00-sign-in.png)
 
@@ -48,6 +48,8 @@ On a company network, the company's web filter (Zscaler, for example) can block 
 On a self-hosted ClearFEA, open <http://localhost:5173/app> instead and sign in as `alice`, password `alice-local`.
 
 Each account starts with 100 credits of play money, which is enough for many hours of solving; see [Wallet](#10-share-wallet-and-storage).
+
+**Your projects.** The home lists your work: **Recent** for the projects you opened last, **My projects** with your folders on the left, and the **Trash**. Choose **New project**, name it (say "Plate with hole") and choose **Create and open**; the project's workbench opens. Choose a project or folder once to see its details on the right, where you can open, rename, duplicate, move or trash it; double-click a project to open it. **Projects** in the header of the workbench takes you back. Items in the trash can be restored for 30 days; after that they are removed for good with their files. A duplicate holds the geometries and setups, not meshes, runs or reports. The home shows each project with a picture of its geometry, taken once its file is imported.
 
 Under **Geometry** on the right, choose **Upload a STEP file** and pick `plate-with-hole.step`. The file is imported on the server; the model then appears in the viewer.
 
@@ -67,7 +69,7 @@ Choose **Start setup**. Across the top are the header (the file, whether it is s
 - **Viewer** in the middle. Drag to orbit, right-drag to pan, scroll to zoom; press F to frame the model, choose **Reset view** for the isometric view, or click a face of the view cube at the top right to look from the front, top or a side. The tools under the cube pick a display **Style** (shaded, see-through or hidden lines), a **Cut plane**, which bodies are shown and saved **Views**. Hover over a face to see its number, type and area; click it to select it. Click again to unselect, or use **Clear** at the bottom.
 - **Settings** on the right, for the item picked in the tree.
 
-Every change is saved by itself a moment after you make it; "All changes saved." in the header says when it is. The **Unit system** in the header picks the units offered first and used for results (see [Units](#12-units)). The workbench shows your most recent upload; uploading another file starts a new setup for it.
+Every change is saved by itself a moment after you make it; "All changes saved." in the header says when it is. The **Unit system** in the header picks the units offered first and used for results (see [Units](#12-units)). The workbench shows the project's most recent upload; uploading another file starts a new setup for it.
 
 ## 4. Analysis type and material
 
