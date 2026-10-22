@@ -7,7 +7,7 @@
 import table from "../report-notes.json";
 import { ITERATIVE_ACCURACY_NOTE, isIterative, SOLVER_LABELS } from "./estimator";
 import { type ReportNote, type ReportNoteCondition, type ReportNotes, validateReportNotes } from "./generated/report-notes";
-import type { RunSoftware, SimulationSpec, Solver } from "./generated/simulation";
+import type { RunSoftware, SimulationSpec, SolveResult, Solver } from "./generated/simulation";
 import { bondIsTied } from "./simulation";
 
 /** The names a statement can hold in braces, filled from the run by `runReportStatements`. */
@@ -60,17 +60,20 @@ export function runReportNotes(spec: SimulationSpec, notes: ReportNotes = report
 }
 
 /**
- * The equation solver a run with this frozen setup used. Runs frozen before ADR-063 name none and
- * were solved with SPOOLES, the packaged build's default; specs saved since name theirs.
+ * The equation solver a run with this frozen setup used. Its result names it since M12.2, which
+ * differs from the setup's when PaStiX crashed and the run was solved again with SPOOLES
+ * (ADR-108). Runs frozen before ADR-063 name none and were solved with SPOOLES, the packaged
+ * build's default; specs saved since name theirs.
  */
-export function frozenRunSolver(spec: SimulationSpec): Solver {
-  return spec.solver ?? "spooles";
+export function frozenRunSolver(spec: SimulationSpec, result: Pick<SolveResult, "solver"> | null = null): Solver {
+  return result?.solver ?? spec.solver ?? "spooles";
 }
 
-/** What a report needs of a run to fill its statements: the frozen setup and recorded versions. */
+/** What a report needs of a run to fill its statements: the frozen setup, recorded versions and result. */
 export interface StatementRun {
   spec: SimulationSpec;
   software: RunSoftware;
+  result?: Pick<SolveResult, "solver"> | null;
 }
 
 /** A statement as printed: its names filled from the run. */
@@ -89,7 +92,7 @@ export const NOT_RECORDED = "(not recorded)";
  * accuracy note when the run used one (ADR-063 item 8).
  */
 export function runReportStatements(run: StatementRun, notes: ReportNotes = reportNotes): FilledStatement[] {
-  const solver = frozenRunSolver(run.spec);
+  const solver = frozenRunSolver(run.spec, run.result ?? null);
   const recorded = (value: string | number | null) => (value === null ? NOT_RECORDED : String(value));
   const values: Record<StatementField, string> = {
     clearfea: recorded(run.software.clearfea),
