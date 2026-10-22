@@ -184,9 +184,6 @@ class AdminResponse(BaseModel):
     """
 
 
-type StageMsAdditionalProperty = Annotated[int, Field(ge=0)]
-
-
 class JobTry(BaseModel):
     """
     One try of a job (M12.3, ADR-109, ADR-123), for support: queue wait, stage times, model size, solver and what its container used. Admin only.
@@ -232,7 +229,7 @@ class JobTry(BaseModel):
     Null while the try runs.
     """
     queue_wait_ms: Annotated[int, Field(alias="queueWaitMs", ge=0)]
-    stage_ms: Annotated[dict[str, StageMsAdditionalProperty], Field(alias="stageMs")]
+    stage_ms: Annotated[dict[str, int], Field(alias="stageMs")]
     """
     Milliseconds in each stage the worker reported, as seen by its heartbeats every 5 s; "starting" is from the claim to the first heartbeat.
     """

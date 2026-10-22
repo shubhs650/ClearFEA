@@ -159,7 +159,7 @@
         "claimedAt": { "type": "string" },
         "endedAt": { "type": ["string", "null"], "description": "Null while the try runs." },
         "queueWaitMs": { "type": "integer", "minimum": 0 },
-        "stageMs": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 }, "description": "Milliseconds in each stage the worker reported, as seen by its heartbeats every 5 s; \"starting\" is from the claim to the first heartbeat." },
+        "stageMs": { "type": "object", "additionalProperties": { "type": "integer" }, "description": "Milliseconds in each stage the worker reported, as seen by its heartbeats every 5 s; \"starting\" is from the claim to the first heartbeat." },
         "lastStage": { "type": ["string", "null"], "description": "The stage the try was in when it ended, or is in now." },
         "status": { "type": ["string", "null"], "enum": ["succeeded", "failed", "cancelled", "stopped_at_limit", null], "description": "How the try ended; null while it runs." },
         "failureCategory": { "type": ["string", "null"], "enum": ["user_fault", "platform_fault", null] },
