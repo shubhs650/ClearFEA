@@ -480,3 +480,45 @@ describe("a simulation's own project", () => {
     expect(await errorOf(await upload(alice, housing.id), 404)).toMatch(/outside the trash/);
   });
 });
+
+describe("the thumbnail", () => {
+  /** A PNG of the given size: signature and IHDR are all the API reads. */
+  function png(width: number, height: number): Uint8Array {
+    const bytes = new Uint8Array(33);
+    bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52]);
+    const view = new DataView(bytes.buffer);
+    view.setUint32(16, width);
+    view.setUint32(20, height);
+    return bytes;
+  }
+  const put = (cookie: string, id: string, body: Uint8Array, type = "application/octet-stream") =>
+    exports.default.fetch(`http://localhost/api/projects/${id}/thumbnail`, {
+      method: "PUT",
+      headers: { Cookie: cookie, "Content-Type": type },
+      body,
+    });
+
+  it("is stored as a PNG, served back to its owner and stamped on the project", async () => {
+    const housing = await newProject(alice, "Housing");
+    expect(housing.thumbnailAt).toBeNull();
+    expect((await call("GET", `/api/projects/${housing.id}/thumbnail`, alice)).status).toBe(404);
+    const stored = await json(await put(alice, housing.id, png(320, 200)), 200, validateProjectResponse);
+    expect(stored.project.thumbnailAt).not.toBeNull();
+    const served = await call("GET", `/api/projects/${housing.id}/thumbnail`, alice);
+    expect(served.status).toBe(200);
+    expect(served.headers.get("Content-Type")).toBe("image/png");
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(png(320, 200));
+    expect(await env.FILES.head(`owners/${aliceId}/projects/${housing.id}/thumbnail.png`)).not.toBeNull();
+    expect((await call("GET", `/api/projects/${housing.id}/thumbnail`, bob)).status).toBe(404);
+    expect((await put(bob, housing.id, png(320, 200))).status).toBe(404);
+  });
+
+  it("refuses anything but a small PNG, and a project in the trash", async () => {
+    const housing = await newProject(alice, "Housing");
+    expect((await put(alice, housing.id, png(320, 200), "image/png")).status).toBe(415);
+    expect(await errorOf(await put(alice, housing.id, new TextEncoder().encode("not a picture")), 400)).toMatch(/PNG/);
+    expect(await errorOf(await put(alice, housing.id, png(2000, 200)), 400)).toMatch(/1024 pixels/);
+    await project(alice, housing.id, "trash");
+    expect(await errorOf(await put(alice, housing.id, png(320, 200)), 409)).toMatch(/Restore it first/);
+  });
+});

@@ -15,6 +15,7 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { newProject } from "./home";
 
 const MODEL = process.env.CLEARFEA_E2E_ASSEMBLY ?? "";
 const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
@@ -82,6 +83,7 @@ test("E-03: a model of two bonded bodies from upload to results", async ({ page 
     await page.getByLabel("Login").fill("bob");
     await page.getByLabel("Password").fill("bob-local");
     await page.getByRole("button", { name: "Sign in" }).click();
+    await newProject(page, "E-03 assembly");
   });
 
   const geometry = page.getByRole("region", { name: "Geometry", exact: true });

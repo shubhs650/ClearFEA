@@ -11,6 +11,7 @@ import {
   ITERATIVE_ACCURACY_NOTE,
   materialLibrary,
   maxElements,
+  type ProjectView,
   type RunEstimate,
   type RunProgress,
   type RunView,
@@ -178,20 +179,40 @@ const ESTIMATE: RunEstimate = {
   recommended: "small",
 };
 
+/**
+ * The open project, /app/p/p1 (M14.3). Its thumbnail is newer than the test geometry, so the
+ * workbench does not draw another.
+ */
+function project(over: Partial<ProjectView> = {}): ProjectView {
+  return {
+    id: "p1",
+    name: "My project",
+    unitSystem: "metric-mm",
+    folderId: null,
+    deletedAt: null,
+    lastOpenedAt: "2026-10-20T08:00:00.000Z",
+    thumbnailAt: "2026-10-20T08:00:00.000Z",
+    createdAt: "2026-10-14T12:00:00.000Z",
+    updatedAt: "2026-10-14T12:00:00.000Z",
+    ...over,
+  };
+}
+
 /** The routes of a signed-in user with one ready geometry and the given simulations. */
 function routes(simulations: SimulationView[], extra: Record<string, Route> = {}): Record<string, Route> {
   return {
     "GET /api/health": { status: 200, json: { status: "ok", database: "ok", storage: "ok", commit: "development" } },
     "GET /api/session": { status: 200, json: { user: { id: "a", login: "alice", name: "Alice", admin: false } } },
     "GET /api/jobs": { status: 200, json: { jobs: [] } },
-    "GET /api/geometries": { status: 200, json: { geometries: [geometry()] } },
+    "GET /api/geometries?projectId=p1": { status: 200, json: { geometries: [geometry()] } },
     "GET /api/geometries/g1/display": { status: 200, bytes: display },
     "GET /api/geometries/g1/topology": { status: 200, json: topology },
     "GET /api/simulations?geometryId=g1": { status: 200, json: { simulations } },
     "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: null } },
     "GET /api/simulations/s1/runs": { status: 200, json: { runs: [] } },
     "GET /api/simulations/s1/estimate?solver=pastix&analysis=linear_static": { status: 200, json: { estimate: ESTIMATE } },
-    "GET /api/project": { status: 200, json: { project: { id: "p1", name: "My project", unitSystem: "metric-mm" } } },
+    "GET /api/projects/p1": { status: 200, json: { project: project() } },
+    "POST /api/projects/p1/opened": { status: 200, json: { project: project() } },
     "GET /api/materials": { status: 200, json: { library: materialLibrary.materials, custom: [] } },
     ...extra,
   };
@@ -214,6 +235,7 @@ const header = () => within(screen.getByRole("banner"));
 const settings = () => within(screen.getByRole("complementary", { name: "Settings" }));
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/app/p/p1");
   scene.events.length = 0;
   scene.selections.length = 0;
   scene.edges.length = 0;
@@ -239,14 +261,14 @@ describe("setup tree", () => {
     expect(tree().getByRole("button", { name: "Loads, incomplete" })).toBeTruthy();
     expect(tree().getByRole("button", { name: "Geometry, complete" })).toBeTruthy();
     expect(await screen.findByText(/is locked, because a simulation uses this geometry/)).toBeTruthy();
-    const create = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+    const create = fetchMock.mock.calls.find(([url, init]) => init?.method === "POST" && url === "/api/simulations");
     expect(JSON.parse(String(create?.[1]?.body))).toEqual({ geometryId: "g1", name: "Static structural" });
   });
 
   it("asks for the unit before setup can start", async () => {
     serve({
       ...routes([]),
-      "GET /api/geometries": { status: 200, json: { geometries: [geometry({ status: "unconfirmed", confirmedUnit: null })] } },
+      "GET /api/geometries?projectId=p1": { status: 200, json: { geometries: [geometry({ status: "unconfirmed", confirmedUnit: null })] } },
     });
     render(<App />);
     expect(await screen.findByText("Confirm the geometry's length unit to start the setup.")).toBeTruthy();
@@ -405,7 +427,7 @@ describe("setup tree", () => {
     const { sent, route } = saves();
     serve(
       routes([simulation(spec)], {
-        "GET /api/geometries": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
+        "GET /api/geometries?projectId=p1": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
         "GET /api/geometries/g1/topology": { status: 200, json: assembly },
         "PUT /api/simulations/s1/spec": route,
       }),
@@ -461,7 +483,7 @@ describe("setup tree", () => {
     const { sent, route } = saves();
     serve(
       routes([simulation(spec)], {
-        "GET /api/geometries": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
+        "GET /api/geometries?projectId=p1": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
         "GET /api/geometries/g1/topology": { status: 200, json: assembly },
         "PUT /api/simulations/s1/spec": route,
       }),
@@ -511,7 +533,7 @@ describe("setup tree", () => {
     const spec: SimulationSpec = { ...emptySpec, bodies: [{ tag: 1, material: null }, { tag: 2, material: null }] };
     serve(
       routes([simulation(spec)], {
-        "GET /api/geometries": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
+        "GET /api/geometries?projectId=p1": { status: 200, json: { geometries: [geometry({ bodyCount: 2 })] } },
         "GET /api/geometries/g1/topology": { status: 200, json: older },
       }),
     );
@@ -1720,7 +1742,7 @@ describe("unit system", () => {
     const route = (init?: RequestInit): Reply => {
       const body = JSON.parse(String(init?.body)) as { unitSystem: string };
       sent.push(body);
-      return { status: 200, json: { project: { id: "p1", name: "My project", unitSystem: body.unitSystem } } };
+      return { status: 200, json: { project: project({ unitSystem: body.unitSystem }) } };
     };
     return { sent, route };
   }
@@ -1731,7 +1753,7 @@ describe("unit system", () => {
       ...supported,
       loads: [{ id: "pressure-1", type: "pressure", name: "Top", faces: [7], magnitude: null }],
     };
-    serve(routes([simulation(unloaded)], { "PATCH /api/project": route }));
+    serve(routes([simulation(unloaded)], { "PATCH /api/projects/p1": route }));
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Top, incomplete" }));
     await waitFor(() => expect(unitSystem().value).toBe("metric-mm"));
@@ -1749,7 +1771,7 @@ describe("unit system", () => {
 
   it("shows result figures and the legend in the chosen system without running again", async () => {
     const { route } = patches();
-    const fetchMock = serve(routes([simulation(supported)], { ...finishedRun(), "PATCH /api/project": route }));
+    const fetchMock = serve(routes([simulation(supported)], { ...finishedRun(), "PATCH /api/projects/p1": route }));
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Run, complete" }));
     const legend = await screen.findByLabelText("Legend");
@@ -1768,7 +1790,8 @@ describe("unit system", () => {
     expect(legend.textContent).toContain("Von Mises stress (Pa)");
     expect(figures.getByText("240000000 Pa")).toBeTruthy();
     expect(figures.getByText("0.00012 m")).toBeTruthy();
-    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(false);
+    // Opening the project records it for Recent; nothing else is sent.
+    expect(fetchMock.mock.calls.some(([url, init]) => init?.method === "POST" && !String(url).endsWith("/opened"))).toBe(false);
   });
 
   it("shows results in units picked in the result view, kept for the user and put back on request", async () => {
@@ -1792,7 +1815,11 @@ describe("unit system", () => {
     expect(figures.getByText("(0, 0, -0.4) kN")).toBeTruthy();
     // The unit system still sets the units offered first for input; it stays as it was.
     expect(unitSystem().value).toBe("metric-mm");
-    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST" || init?.method === "PATCH")).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) => (init?.method === "POST" && !String(url).endsWith("/opened")) || init?.method === "PATCH",
+      ),
+    ).toBe(false);
 
     // Kept in this browser for the user: still there after the page is opened again.
     unmount();
@@ -1846,7 +1873,7 @@ describe("unit system", () => {
   it("puts the system back and says why when the API refuses the change", async () => {
     serve(
       routes([simulation()], {
-        "PATCH /api/project": { status: 400, json: { error: "'us-in' is not a unit system." } },
+        "PATCH /api/projects/p1": { status: 400, json: { error: "'us-in' is not a unit system." } },
       }),
     );
     render(<App />);
@@ -1858,20 +1885,20 @@ describe("unit system", () => {
 
   it("keeps a system chosen before the project has loaded, and the reason it was refused", async () => {
     let loadProject: (reply: Reply) => void = () => {};
-    const project = new Promise<Reply>((resolve) => {
+    const loading = new Promise<Reply>((resolve) => {
       loadProject = resolve;
     });
     serve(
       routes([simulation()], {
-        "GET /api/project": () => project,
-        "PATCH /api/project": { status: 400, json: { error: "'us-in' is not a unit system." } },
+        "GET /api/projects/p1": () => loading,
+        "PATCH /api/projects/p1": { status: 400, json: { error: "'us-in' is not a unit system." } },
       }),
     );
     render(<App />);
     fireEvent.change(await waitFor(() => unitSystem()), { target: { value: "us-in" } });
     const refused = "The unit system was not changed: 'us-in' is not a unit system.";
     expect(await header().findByText(refused)).toBeTruthy();
-    loadProject({ status: 200, json: { project: { id: "p1", name: "My project", unitSystem: "si" } } });
+    loadProject({ status: 200, json: { project: project({ unitSystem: "si" }) } });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(header().getByText(refused)).toBeTruthy();
     expect(unitSystem().value).toBe("metric-mm");

@@ -79,7 +79,7 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await expect(admin.getByText("colleague.one@example.com")).toHaveCount(0);
     await admin.getByRole("button", { name: "Remove colleague.two@example.com" }).click();
     await expect(admin.getByText("Nobody else is invited yet.")).toBeVisible();
-    await admin.getByRole("button", { name: "Back to the workbench" }).click();
+    await admin.getByRole("button", { name: "Close" }).click();
     await expect(admin).toHaveCount(0);
   });
 

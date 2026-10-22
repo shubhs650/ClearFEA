@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 
 type Reply = { status: number; body?: unknown } | Error;
@@ -11,6 +11,18 @@ const alice = { id: "a", login: "alice", name: "Alice (test user)", admin: false
 const signedIn = { status: 200, body: { user: alice } };
 const signedOut = { status: 401, body: { error: "You are not signed in." } };
 const noGeometries = { status: 200, body: { geometries: [] } };
+// The workbench opens a project, /app/p/p1 (M14.3); the home page has tests of its own.
+const project = {
+  id: "p1",
+  name: "My first project",
+  unitSystem: "metric-mm",
+  folderId: null,
+  deletedAt: null,
+  lastOpenedAt: null,
+  thumbnailAt: null,
+  createdAt: "2026-10-14T12:00:00.000Z",
+  updatedAt: "2026-10-14T12:00:00.000Z",
+};
 
 function job(status: string) {
   return {
@@ -33,7 +45,12 @@ function job(status: string) {
  * asks how to sign in; it is the password form unless a test says otherwise.
  */
 function serve(listed: Routes) {
-  const routes: Routes = { "GET /api/session/options": { status: 200, body: { signIn: "password" } }, ...listed };
+  const routes: Routes = {
+    "GET /api/session/options": { status: 200, body: { signIn: "password" } },
+    "GET /api/projects/p1": { status: 200, body: { project } },
+    "POST /api/projects/p1/opened": { status: 200, body: { project } },
+    ...listed,
+  };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const key = `${init?.method ?? "GET"} ${String(input)}`;
     const route = routes[key];
@@ -47,6 +64,10 @@ function serve(listed: Routes) {
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
+
+beforeEach(() => {
+  window.history.replaceState(null, "", "/app/p/p1");
+});
 
 afterEach(() => {
   cleanup();
@@ -68,7 +89,7 @@ describe("sign-in", () => {
       "GET /api/session": signedOut,
       "POST /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
     });
     render(<App />);
     fireEvent.change(await screen.findByLabelText("Login"), { target: { value: "alice" } });
@@ -103,7 +124,7 @@ describe("sign-in", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
       "DELETE /api/session": { status: 204 },
     });
     render(<App />);
@@ -238,7 +259,7 @@ describe("admin page (M10.3)", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
     });
     render(<App />);
     expect(await screen.findByRole("button", { name: "Sign out" })).toBeTruthy();
@@ -250,7 +271,7 @@ describe("admin page (M10.3)", () => {
       "GET /api/health": healthy,
       "GET /api/session": admin,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/admin": view([]),
       "POST /api/admin/allowed": view(["colleague@gmail.com"]),
       "DELETE /api/admin/allowed/colleague%40gmail.com": view([]),
@@ -269,7 +290,7 @@ describe("admin page (M10.3)", () => {
     );
     fireEvent.click(within(page).getByRole("button", { name: "Remove colleague@gmail.com" }));
     expect(await within(page).findByText("Nobody else is invited yet.")).toBeTruthy();
-    fireEvent.click(within(page).getByRole("button", { name: "Back to the workbench" }));
+    fireEvent.click(within(page).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("region", { name: "Admin" })).toBeNull();
   });
 
@@ -278,7 +299,7 @@ describe("admin page (M10.3)", () => {
       "GET /api/health": healthy,
       "GET /api/session": admin,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/admin": view([]),
       "PUT /api/admin/machine-sizes/large": view([], true),
     });
@@ -303,7 +324,7 @@ describe("admin page (M10.3)", () => {
       "GET /api/health": healthy,
       "GET /api/session": admin,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/admin": view([]),
       "PUT /api/admin/machine-hours-cap": view([], false, 0),
     });
@@ -358,7 +379,7 @@ describe("admin page on the solver host (M12.4)", () => {
         "GET /api/health": healthy,
         "GET /api/session": admin,
         "GET /api/jobs": { status: 200, body: { jobs: [] } },
-        "GET /api/geometries": noGeometries,
+        "GET /api/geometries?projectId=p1": noGeometries,
         "GET /api/admin": view(online),
       });
       render(<App />);
@@ -376,7 +397,7 @@ describe("layout shell", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
     });
     render(<App />);
     expect(await screen.findByRole("navigation", { name: "Simulation tree" })).toBeTruthy();
@@ -393,7 +414,7 @@ describe("worker check", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": () => ({ status: 200, body: { jobs } }),
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
       "POST /api/jobs": () => {
         jobs = [job("queued")];
         return { status: 201, body: { job: job("queued") } };
@@ -412,7 +433,7 @@ describe("worker check", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 401, body: { error: "Your sign-in has expired. Sign in again." } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
     });
     render(<App />);
     expect(await screen.findByRole("main", { name: "Sign in" })).toBeTruthy();
@@ -486,7 +507,7 @@ describe("wallet page (M8.1)", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/storage": { status: 200, body: storageBody },
       "GET /api/wallet": {
         status: 200,
@@ -577,7 +598,7 @@ describe("wallet page (M8.1)", () => {
     expect(kinds[3]).toEqual(["Raw solver output (.frd, .dat)", "2", "6 GiB"]);
     const raw = within(screen.getByRole("table", { name: "Raw solver output" })).getAllByRole("row")[1];
     expect(raw?.textContent).toContain("Until 2026-11-16");
-    fireEvent.click(screen.getByRole("button", { name: "Back to the workbench" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("region", { name: "Wallet" })).toBeNull();
     expect(screen.getByRole("navigation", { name: "Simulation tree" })).toBeTruthy();
   });
@@ -587,7 +608,7 @@ describe("wallet page (M8.1)", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/storage": { status: 200, body: storageBody },
       "GET /api/wallet": {
         status: 200,
@@ -606,7 +627,7 @@ describe("wallet page (M8.1)", () => {
       "GET /api/health": healthy,
       "GET /api/session": signedIn,
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
-      "GET /api/geometries": noGeometries,
+      "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/storage": { status: 200, body: storageBody },
       "GET /api/wallet": {
         status: 200,

@@ -14,6 +14,7 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { newProject } from "./home";
 
 const MODEL = process.env.CLEARFEA_E2E_MODEL ?? "";
 const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
@@ -80,6 +81,7 @@ async function slowRun(page: Page): Promise<Locator> {
     await page.getByLabel("Login").fill("bob");
     await page.getByLabel("Password").fill("bob-local");
     await page.getByRole("button", { name: "Sign in" }).click();
+    await newProject(page, "E-06 running job");
   });
 
   await test.step("upload the block and start the setup", async () => {
@@ -189,7 +191,7 @@ test("E-06: a running job shows its progress, can be cancelled, and stops at its
     const ledger = page.getByRole("region", { name: "Wallet" }).getByRole("table", { name: "Ledger" });
     await expect(ledger.getByRole("row", { name: /Run of “.*\(cancelled\)/ }).first()).toBeVisible();
     await page.screenshot({ path: `${OUT}/e06-wallet.png` });
-    await page.getByRole("region", { name: "Wallet" }).getByRole("button", { name: "Back to the workbench" }).click();
+    await page.getByRole("region", { name: "Wallet" }).getByRole("button", { name: "Close" }).click();
   });
 
   await test.step("run again with the stop limit at a quarter of the estimate", async () => {

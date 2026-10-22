@@ -11,8 +11,10 @@ import {
 import { type Followed, readWait } from "./jobs";
 import { type ApiResult, apiBinary, apiRequest, apiUpload } from "./request";
 
-export async function listGeometries(): Promise<ApiResult<GeometryView[]>> {
-  const result = await apiRequest("GET", "/api/geometries", validateGeometryListResponse);
+/** The user's geometries, newest first; with a project id, those of that project only (M14.3). */
+export async function listGeometries(projectId?: string): Promise<ApiResult<GeometryView[]>> {
+  const path = projectId === undefined ? "/api/geometries" : `/api/geometries?projectId=${encodeURIComponent(projectId)}`;
+  const result = await apiRequest("GET", path, validateGeometryListResponse);
   return result.kind === "ok" ? { kind: "ok", value: result.value.geometries } : result;
 }
 
@@ -29,8 +31,10 @@ export async function followGeometry(id: string): Promise<ApiResult<Followed<Geo
   return result.kind === "ok" ? { kind: "ok", value: { value: result.value.geometry, wait: readWait(result.value.wait) } } : result;
 }
 
-export async function uploadGeometry(file: File): Promise<ApiResult<GeometryView>> {
-  const path = `/api/geometries?name=${encodeURIComponent(file.name)}`;
+/** Uploads a STEP file into the project, or without one into the user's oldest project. */
+export async function uploadGeometry(file: File, projectId?: string): Promise<ApiResult<GeometryView>> {
+  const into = projectId === undefined ? "" : `&projectId=${encodeURIComponent(projectId)}`;
+  const path = `/api/geometries?name=${encodeURIComponent(file.name)}${into}`;
   const result = await apiUpload(path, validateGeometryResponse, file);
   return result.kind === "ok" ? { kind: "ok", value: result.value.geometry } : result;
 }

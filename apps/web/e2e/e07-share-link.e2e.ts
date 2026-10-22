@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { type Browser, expect, type Locator, type Page, test } from "@playwright/test";
+import { newProject } from "./home";
 
 const MODEL = process.env.CLEARFEA_E2E_MODEL ?? "";
 const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
@@ -83,6 +84,7 @@ test("E-07: a second user cannot open the first user's project, and a revoked sh
 
   await test.step("sign in as alice", async () => {
     await signIn(page, "alice", "alice-local");
+    await newProject(page, "E-07 shared block");
   });
 
   await test.step("upload the block and start the setup", async () => {
