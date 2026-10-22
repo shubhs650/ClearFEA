@@ -76,9 +76,10 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | Table | Holds |
 | --- | --- |
 | `users` | Id, name, login, wallet balance (not stored: the last ledger entry's balance, ADR-080) |
-| `projects` | Name, default unit system, visibility. Phase 0 makes one per user on first use (ADR-038) |
-| `geometries` | Project, original file key, length unit as read and as confirmed, import status, counts of bodies and faces |
-| `simulations` | Project, geometry, analysis type, current `SimulationSpec` JSON, spec schema version |
+| `folders` | A user's folders on the home page: parent folder (null at the top), name, when it went to the trash (ADR-114) |
+| `projects` | Name, default unit system, visibility, folder (null at the top of the home), when it went to the trash, when it was last opened, when its thumbnail was stored. A user's first project ("My first project") is made on first use (ADR-038, ADR-114) |
+| `geometries` | Project (always one of the owner's; migration 0029's triggers refuse anything else), original file key, length unit as read and as confirmed, import status, counts of bodies and faces |
+| `simulations` | Project (always its geometry's), geometry, analysis type, current `SimulationSpec` JSON, spec schema version |
 | `meshes` | Geometry, mesh-settings hash, element and node counts, quality summary, file keys |
 | `runs` | Simulation, frozen spec JSON, mesh id, machine size, status, estimate, final cost, failure category, software versions, pinned flag, when the raw output was removed, the run it reran (ADR-086) |
 | `jobs` | Type (`import`, `mesh`, `solve`, `report`), target record, status, stage, claimed-by, heartbeat, start and end times, metering figures |

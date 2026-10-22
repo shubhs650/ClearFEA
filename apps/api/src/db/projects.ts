@@ -1,44 +1,155 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Projects (docs/ARCHITECTURE.md section 4, ADR-038). In Phase 0 each user has one project, made
-// the first time it is asked for; it holds the default unit system. Every function takes the
-// acting user's id and filters on owner_id.
+// Projects and the folders that hold them (docs/ARCHITECTURE.md section 4, ADR-038, ADR-114).
+// A project holds the default unit system, its geometries and their simulations. Every
+// function takes the acting user's id and filters on owner_id; migration 0029's triggers also
+// refuse a folder, project, geometry or simulation placed in another user's folder or project.
 
 export interface Project {
   id: string;
   name: string;
   /** Unit system id from packages/spec/units.json, or null for the table's default. */
   unitSystem: string | null;
+  /** Null for a project at the top of the home. */
+  folderId: string | null;
+  /** Set while the project is in the trash. */
+  deletedAt: string | null;
+  lastOpenedAt: string | null;
+  /** When the viewer last stored the thumbnail; null for none. */
+  thumbnailAt: string | null;
+  createdAt: string;
 }
 
 interface ProjectRow {
   id: string;
   name: string;
   default_unit_system: string | null;
+  folder_id: string | null;
+  deleted_at: string | null;
+  last_opened_at: string | null;
+  thumbnail_at: string | null;
+  created_at: string;
 }
 
-const DEFAULT_NAME = "My project";
+function toProject(row: ProjectRow): Project {
+  return {
+    id: row.id,
+    name: row.name,
+    unitSystem: row.default_unit_system,
+    folderId: row.folder_id,
+    deletedAt: row.deleted_at,
+    lastOpenedAt: row.last_opened_at,
+    thumbnailAt: row.thumbnail_at,
+    createdAt: row.created_at,
+  };
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  /** Null for a folder at the top of the home. */
+  parentId: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+}
+
+interface FolderRow {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  deleted_at: string | null;
+  created_at: string;
+}
+
+function toFolder(row: FolderRow): Folder {
+  return {
+    id: row.id,
+    name: row.name,
+    parentId: row.parent_id,
+    deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+  };
+}
+
+const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+const PROJECT_COLUMNS =
+  "id, name, default_unit_system, folder_id, deleted_at, last_opened_at, thumbnail_at, created_at";
+
+/** The name of the project made for a user who has none. */
+export const FIRST_PROJECT_NAME = "My first project";
 
 /**
- * The user's project, created if they have none. The insert runs only when no project of the
- * user exists, in the same statement, so two first requests cannot make two projects.
+ * The user's oldest project outside the trash, created if they have none. The insert runs only
+ * when no such project exists, in the same statement, so two first requests cannot make two
+ * projects. Until the home page lets the user pick one (M14.3), new geometries go here.
  */
 export async function userProject(db: D1Database, userId: string): Promise<Project> {
   await db
     .prepare(
       `INSERT INTO projects (id, owner_id, name)
-       SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM projects WHERE owner_id = ?)`,
+       SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM projects WHERE owner_id = ? AND deleted_at IS NULL)`,
     )
-    .bind(crypto.randomUUID(), userId, DEFAULT_NAME, userId)
+    .bind(crypto.randomUUID(), userId, FIRST_PROJECT_NAME, userId)
     .run();
   const row = await db
     .prepare(
-      `SELECT id, name, default_unit_system FROM projects
-        WHERE owner_id = ? ORDER BY created_at, id LIMIT 1`,
+      `SELECT ${PROJECT_COLUMNS} FROM projects
+        WHERE owner_id = ? AND deleted_at IS NULL ORDER BY created_at, id LIMIT 1`,
     )
     .bind(userId)
     .first<ProjectRow>();
   if (row === null) throw new Error("The project was not created.");
-  return { id: row.id, name: row.name, unitSystem: row.default_unit_system };
+  return toProject(row);
+}
+
+/** One of the user's projects, in the trash or not; null if they own no project of that id. */
+export async function getProject(db: D1Database, userId: string, projectId: string): Promise<Project | null> {
+  const row = await db
+    .prepare(`SELECT ${PROJECT_COLUMNS} FROM projects WHERE id = ? AND owner_id = ?`)
+    .bind(projectId, userId)
+    .first<ProjectRow>();
+  return row === null ? null : toProject(row);
+}
+
+/** The user's projects outside the trash, oldest first. */
+export async function listProjects(db: D1Database, userId: string): Promise<Project[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT ${PROJECT_COLUMNS} FROM projects
+        WHERE owner_id = ? AND deleted_at IS NULL ORDER BY created_at, id`,
+    )
+    .bind(userId)
+    .all<ProjectRow>();
+  return results.map(toProject);
+}
+
+/**
+ * Makes a project, at the top of the home or in one of the user's folders outside the trash.
+ * Returns null when the folder is not such a folder.
+ */
+export async function createProject(
+  db: D1Database,
+  userId: string,
+  project: { id: string; name: string; folderId: string | null },
+): Promise<Project | null> {
+  const result = await db
+    .prepare(
+      `INSERT INTO projects (id, owner_id, name, folder_id)
+       SELECT ?, ?, ?, ? WHERE ? IS NULL
+          OR EXISTS (SELECT 1 FROM folders WHERE id = ? AND owner_id = ? AND deleted_at IS NULL)`,
+    )
+    .bind(project.id, userId, project.name, project.folderId, project.folderId, project.folderId, userId)
+    .run();
+  if (result.meta.changes !== 1) return null;
+  return getProject(db, userId, project.id);
+}
+
+/** Records that the user opened the project, for Recent. False if they own no such project. */
+export async function markProjectOpened(db: D1Database, userId: string, projectId: string): Promise<boolean> {
+  const result = await db
+    .prepare(`UPDATE projects SET last_opened_at = ${NOW} WHERE id = ? AND owner_id = ?`)
+    .bind(projectId, userId)
+    .run();
+  return result.meta.changes === 1;
 }
 
 /** Sets the default unit system of the user's project. The caller checks the id against units.json. */
@@ -46,10 +157,52 @@ export async function setProjectUnitSystem(db: D1Database, userId: string, unitS
   const project = await userProject(db, userId);
   await db
     .prepare(
-      `UPDATE projects SET default_unit_system = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      `UPDATE projects SET default_unit_system = ?, updated_at = ${NOW}
         WHERE id = ? AND owner_id = ?`,
     )
     .bind(unitSystem, project.id, userId)
     .run();
   return { ...project, unitSystem };
+}
+
+/** One of the user's folders, in the trash or not; null if they own no folder of that id. */
+export async function getFolder(db: D1Database, userId: string, folderId: string): Promise<Folder | null> {
+  const row = await db
+    .prepare("SELECT id, name, parent_id, deleted_at, created_at FROM folders WHERE id = ? AND owner_id = ?")
+    .bind(folderId, userId)
+    .first<FolderRow>();
+  return row === null ? null : toFolder(row);
+}
+
+/** The user's folders outside the trash, oldest first. */
+export async function listFolders(db: D1Database, userId: string): Promise<Folder[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, name, parent_id, deleted_at, created_at FROM folders
+        WHERE owner_id = ? AND deleted_at IS NULL ORDER BY created_at, id`,
+    )
+    .bind(userId)
+    .all<FolderRow>();
+  return results.map(toFolder);
+}
+
+/**
+ * Makes a folder, at the top of the home or inside another of the user's folders outside the
+ * trash. Returns null when the parent is not such a folder.
+ */
+export async function createFolder(
+  db: D1Database,
+  userId: string,
+  folder: { id: string; name: string; parentId: string | null },
+): Promise<Folder | null> {
+  const result = await db
+    .prepare(
+      `INSERT INTO folders (id, owner_id, name, parent_id)
+       SELECT ?, ?, ?, ? WHERE ? IS NULL
+          OR EXISTS (SELECT 1 FROM folders WHERE id = ? AND owner_id = ? AND deleted_at IS NULL)`,
+    )
+    .bind(folder.id, userId, folder.name, folder.parentId, folder.parentId, folder.parentId, userId)
+    .run();
+  if (result.meta.changes !== 1) return null;
+  return getFolder(db, userId, folder.id);
 }

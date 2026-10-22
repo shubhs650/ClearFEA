@@ -42,6 +42,10 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [ ] M12.6 Benchmark on the VPS
 - [ ] M12.7 Go live on the VPS
 
+### M14 Projects home (independent of M12, started under the autodrive while the VPS waits)
+
+- [x] M14.1 Data model (ADR-114, migration 0029): `folders`; projects gain a folder, `deleted_at`, `last_opened_at` and `thumbnail_at`; every geometry and simulation belongs to a project of its owner, enforced by triggers; each user's work moved into "My first project"; data-access functions for folders and projects; migration, trigger and isolation tests
+
 ### M11 Fix the live beta
 
 - [x] M11.1 Cloudflare Access service token (ADR-111): worker, deploy health check, Live checks and harness send it; AWS image job removed from the deploy. Works on the live site once the maintainer adds the service token, its Service Auth policy and the secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (DEPLOYMENT.md 1.8)
@@ -212,6 +216,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M14.1 (2026-10-22): migration 0029 is the projects home's data model; the details are in ADR-114's "As built in M14.1". `apps/api/src/db/projects.ts` has `createFolder`, `createProject`, `getFolder`, `getProject`, `listFolders`, `listProjects` and `markProjectOpened`, all owner-scoped and refusing a parent folder outside the user's or in the trash; there are no routes yet (M14.2). Three places still read the unit system from `userProject` (the user's oldest live project) rather than the simulation's own project: report options in `routes/simulations.ts`, `reportParams` in `routes/reports.ts` and the share link in `routes/shareLinks.ts`; switch them to `getProject(simulation.projectId)` when M14.2 lets a user have a second project. `GET /api/geometries` still lists all of a user's geometries; M14.2 or M14.3 filters by project. Test fixtures that insert geometries or simulations must now give a `project_id` (`userProject` first); `test/projectsHome.test.ts` tests migration 0029 on its own `MIGRATION_DB`, loading data between migrations 0028 and 0029, a pattern for later data migrations.
 
 > M12.1 (2026-10-22): the compute manager is `worker/clearfea_worker/manager/` (ADR-121). Each lane claims under its own worker id, because a claim fails what that id still holds; never share one id between lanes. The job reaches its container in `CLEARFEA_JOB` (gzip, base64) and the container runs `python -m clearfea_worker job`, so the container reports its own outcome; the manager only reports a container that ended without reporting (`container_exited`, `out_of_memory`, `job_timeout`, `container_start_failed`), with no retry yet: M12.2 adds attempts and re-queues there (`Manager._finish`). The image now creates `/scratch` owned by the worker user, which Docker copies to each job's new volume; copying a file into a created container's volume was tried and lost the file. The manager runs in its own container as root with the Docker socket (Compose profile `manager`); M12.5 decides how it runs on the VPS (systemd around `docker run`, the CPU pinning `CLEARFEA_SOLVE_CPUSET=0-5`, `CLEARFEA_LIGHT_CPUSET=6`). The manager checks in to M12.4's `POST /internal/hosts/check-in` at start and every `intervalSeconds` (30 s), through the solve lane's client, whatever its lanes are doing. Checked for real: `make e2e` E-01 to E-09 and the full verification tier through the manager, with a manager restart in the middle of a solve that it followed to the end.
 
@@ -502,6 +508,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-22
 
+- M14.1 projects data model (ADR-114): folders, project folder, trash time, last opened and thumbnail columns, "My first project" holding each user's existing work, triggers refusing work in another user's project or folder. Learned: a data migration can be tested by applying the migrations before it to a second D1 binding, loading rows, then applying the rest.
 - M12.1 compute manager (ADR-121): one hardened container per job in a solve lane and a light lane, claims as `<host>-<lane>`, follows its containers after a restart, idle claims back off to 15 s; the claim lets users take turns in a lane. E-01 to E-09 and the full tier green through it (full tier 314 of 314 in 27 cases, 81 jobs, with a manager restart during a solve that it followed to the end).
 - M12.4 API VPS mode (ADR-120): host check-ins, a 503 while the host is silent for 2 minutes, the queue position per lane, a usage-only wallet and a Solver host card on the admin page. Learned: the claim cannot double as the host's check-in, since a manager with both lanes busy claims nothing for hours.
 - Close M11: phase-end run on main green ([run 39802374738](https://github.com/shubhs650/ClearFEA/actions/runs/39802374738), full tier 314 of 314, E-01 to E-09); deploys green behind Access; the exit's request count is now a test (54 status checks for a 20-minute solve); the run log answer says `more`, so a solving run's check reads the log once instead of twice. The Live checks behind Access move to M12's exit. Learned: count every request a poll makes, not only the one the hook schedules; the log read hid a second request per check.
