@@ -3,8 +3,10 @@
 // ADR-097). The stack signs in locally; the live site's sign-in screen is shown by answering
 // /api/session/options as the live site does, and its refusal by the address Google's callback
 // returns to. Alice, the admin here, invites an address, sees it listed and removes it, and
-// switches the large machine size on and off (M10.6); bob sees
-// no Admin and the admin routes answer him as unknown addresses. Real Google sign-in is checked
+// switches the large machine size on and off (M10.6); on the dashboard (M13.2) she pauses the
+// queue, sees a job wait in the light lane, cancels it from Jobs and runs, resumes the queue and
+// reads both in the event log; bob sees no Admin and the admin routes answer him as unknown
+// addresses. Real Google sign-in is checked
 // on the live site, with the maintainer's OAuth client.
 import { expect, type Page, test } from "@playwright/test";
 
@@ -40,6 +42,8 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     const status = page.getByRole("contentinfo", { name: "Status" });
     await status.getByRole("button", { name: "Admin" }).click();
     const admin = page.getByRole("region", { name: "Admin" });
+    await expect(admin.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    await admin.getByRole("tab", { name: "Access and machines" }).click();
     await expect(admin.getByText("alice@clearfea.test")).toHaveCount(2);
     await admin.getByLabel("Email address").fill("  Colleague.One@Example.com ");
     await admin.getByRole("button", { name: "Add" }).click();
@@ -79,6 +83,52 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await expect(admin.getByText("colleague.one@example.com")).toHaveCount(0);
     await admin.getByRole("button", { name: "Remove colleague.two@example.com" }).click();
     await expect(admin.getByText("Nobody else is invited yet.")).toBeVisible();
+  });
+
+  await test.step("the dashboard: a paused queue, a waiting job cancelled, and the event log (M13.2)", async () => {
+    const admin = page.getByRole("region", { name: "Admin" });
+    await admin.getByRole("tab", { name: "Overview" }).click();
+    const queue = admin.getByRole("region", { name: "Queue" });
+    await expect(queue.getByTestId("queue-state")).toContainText("Running");
+    await queue.getByRole("button", { name: "Pause the queue" }).click();
+    await expect(queue.getByTestId("queue-state")).toContainText("Paused");
+    await expect(admin.getByRole("alert").filter({ hasText: "The queue is paused" })).toBeVisible();
+
+    // While paused a new job queues and waits; the Overview checks again by itself.
+    const created = await page.request.post("/api/jobs", { data: { type: "noop" } });
+    expect(created.status()).toBe(201);
+    const jobId = ((await created.json()) as { job: { id: string } }).job.id;
+    const light = admin.getByRole("region", { name: "Light lane" });
+    const row = light.getByRole("row").filter({ hasText: jobId.slice(0, 8) });
+    await expect(row).toContainText("Queued");
+    await expect(row).toContainText("in the queue");
+    await page.screenshot({ path: `${OUT}/e08-dashboard-overview.png` });
+
+    await admin.getByRole("tab", { name: "Jobs and runs" }).click();
+    await admin.getByRole("button", { name: `Details of job ${jobId}` }).click();
+    const details = admin.getByRole("region", { name: "Job details" });
+    await expect(details.getByTestId("job-status")).toContainText("Queued");
+    await expect(details.getByText("No worker has taken it yet.")).toBeVisible();
+    await details.getByRole("button", { name: "Cancel job" }).click();
+    await details.getByRole("button", { name: "Yes, cancel it" }).click();
+    await expect(details.getByTestId("job-status")).toHaveText("Failed");
+    await expect(details.getByText("stopped by the ClearFEA administrator")).toBeVisible();
+    await page.screenshot({ path: `${OUT}/e08-dashboard-jobs.png` });
+
+    await admin.getByRole("tab", { name: "Overview" }).click();
+    await queue.getByRole("button", { name: "Resume the queue" }).click();
+    await expect(queue.getByTestId("queue-state")).toContainText("Running");
+    await expect(admin.getByRole("alert").filter({ hasText: "The queue is paused" })).toHaveCount(0);
+
+    await admin.getByRole("tab", { name: "Events" }).click();
+    const events = admin.getByRole("table", { name: "Events" });
+    await expect(events.getByText("Resumed the queue.")).toBeVisible();
+    await expect(events.getByText("Cancelled a no-op job (queued, try 1); nothing is charged.")).toBeVisible();
+    await expect(events.getByText("Paused the queue: no job starts until it is resumed.")).toBeVisible();
+    await admin.getByLabel("Kind").selectOption("admin_action");
+    await expect(events.getByText("Invited colleague.one@example.com.")).toBeVisible();
+    await page.screenshot({ path: `${OUT}/e08-dashboard-events.png` });
+
     await admin.getByRole("button", { name: "Close" }).click();
     await expect(admin).toHaveCount(0);
   });
@@ -97,6 +147,9 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     expect(size.status()).toBe(404);
     const cap = await bob.request.put("/api/admin/machine-hours-cap", { data: { hours: 0 } });
     expect(cap.status()).toBe(404);
+    expect((await bob.request.get("/api/admin/overview")).status()).toBe(404);
+    expect((await bob.request.put("/api/admin/queue-paused", { data: { paused: true } })).status()).toBe(404);
+    expect((await bob.request.get("/api/admin/jobs")).status()).toBe(404);
     await context.close();
   });
 });

@@ -212,6 +212,25 @@ describe("Google sign-in (M10.3)", () => {
   });
 });
 
+/** The dashboard's Overview (M13.2): nothing running, nothing waiting. */
+function overview(paused = false, alerts: unknown[] = []) {
+  return {
+    status: 200,
+    body: {
+      machines: "local",
+      paused,
+      pausedAt: paused ? "2026-10-22T18:00:00.000Z" : null,
+      host: null,
+      load: null,
+      lanes: [
+        { lane: "solve", running: [], queued: [] },
+        { lane: "light", running: [], queued: [] },
+      ],
+      alerts,
+    },
+  };
+}
+
 describe("admin page (M10.3)", () => {
   const admin = { status: 200, body: { user: { ...alice, admin: true } } };
   const view = (allowed: string[], largeOn = false, hoursCap = 60) => ({
@@ -273,11 +292,13 @@ describe("admin page (M10.3)", () => {
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
       "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/admin": view([]),
+      "GET /api/admin/overview": overview(),
       "POST /api/admin/allowed": view(["colleague@gmail.com"]),
       "DELETE /api/admin/allowed/colleague%40gmail.com": view([]),
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Access and machines" }));
     const page = await screen.findByRole("region", { name: "Admin" });
     expect(await within(page).findByText("Nobody else is invited yet.")).toBeTruthy();
     expect(within(page).getByText("1 h 05 min")).toBeTruthy();
@@ -301,10 +322,12 @@ describe("admin page (M10.3)", () => {
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
       "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/admin": view([]),
+      "GET /api/admin/overview": overview(),
       "PUT /api/admin/machine-sizes/large": view([], true),
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Access and machines" }));
     const sizes = await screen.findByRole("region", { name: "Machine sizes" });
     const medium = within(sizes).getByRole("checkbox", { name: "medium" }) as HTMLInputElement;
     const large = within(sizes).getByRole("checkbox", { name: "large" }) as HTMLInputElement;
@@ -326,10 +349,12 @@ describe("admin page (M10.3)", () => {
       "GET /api/jobs": { status: 200, body: { jobs: [] } },
       "GET /api/geometries?projectId=p1": noGeometries,
       "GET /api/admin": view([]),
+      "GET /api/admin/overview": overview(),
       "PUT /api/admin/machine-hours-cap": view([], false, 0),
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Access and machines" }));
     const machines = await screen.findByRole("region", { name: "Solver machines" });
     expect(within(machines).getByText(/of 60 h used this month/)).toBeTruthy();
     expect(within(machines).getByText("2.3 h")).toBeTruthy();
@@ -381,14 +406,144 @@ describe("admin page on the solver host (M12.4)", () => {
         "GET /api/jobs": { status: 200, body: { jobs: [] } },
         "GET /api/geometries?projectId=p1": noGeometries,
         "GET /api/admin": view(online),
+        "GET /api/admin/overview": overview(),
       });
       render(<App />);
       fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Access and machines" }));
+      fireEvent.click(await screen.findByRole("tab", { name: "Access and machines" }));
       const card = await screen.findByRole("region", { name: "Solver host" });
       expect(card.textContent).toContain(text);
       expect(screen.queryByRole("region", { name: "Solver machines" })).toBeNull();
     });
   }
+});
+
+describe("admin dashboard (M13.2)", () => {
+  const admin = { status: 200, body: { user: { ...alice, admin: true } } };
+  const base = {
+    "GET /api/health": healthy,
+    "GET /api/session": admin,
+    "GET /api/jobs": { status: 200, body: { jobs: [] } },
+    "GET /api/geometries": noGeometries,
+  };
+  const adminJob = (status: string) => ({
+    id: "11111111-2222-4333-8444-555555555555",
+    type: "solve",
+    lane: "solve",
+    status,
+    stage: status === "running" ? "solving" : null,
+    ownerId: "b",
+    ownerEmail: "bob@clearfea.test",
+    targetId: "run-1",
+    attempt: 1,
+    machineSize: "medium",
+    claimedBy: status === "queued" ? null : "vps-1-solve",
+    stopRequested: null,
+    createdAt: "2026-10-22T18:00:00.000Z",
+    claimedAt: status === "queued" ? null : "2026-10-22T18:00:05.000Z",
+    heartbeatAt: null,
+    finishedAt: status === "failed" ? "2026-10-22T18:01:00.000Z" : null,
+    failureCategory: status === "failed" ? "platform_fault" : null,
+    failureCause: status === "failed" ? "cancelled_by_admin" : null,
+    failureMessage: status === "failed" ? "The run was stopped by the ClearFEA administrator (cancelled_by_admin)." : null,
+    peakMemoryBytes: null,
+    billedSeconds: null,
+    queuePosition: null,
+  });
+
+  it("shows the alerts and lanes, and pauses the queue", async () => {
+    const running = overview(false);
+    running.body.lanes[0] = { lane: "solve", running: [adminJob("running")] as never[], queued: [] };
+    const fetchMock = serve({
+      ...base,
+      "GET /api/admin/overview": running,
+      "PUT /api/admin/queue-paused": overview(true, [
+        { kind: "queue_paused", level: "warning", message: "The queue is paused, so no job starts; 0 jobs wait." },
+      ]),
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    const lane = await screen.findByRole("region", { name: "Solve lane" });
+    expect(await within(lane).findByText("Running: solving")).toBeTruthy();
+    expect(within(lane).getByText("bob@clearfea.test")).toBeTruthy();
+    expect(within(lane).getByText("vps-1-solve")).toBeTruthy();
+    const queue = screen.getByRole("region", { name: "Queue" });
+    fireEvent.click(within(queue).getByRole("button", { name: "Pause the queue" }));
+    expect(await within(queue).findByRole("button", { name: "Resume the queue" })).toBeTruthy();
+    expect(within(queue).getByTestId("queue-state").textContent).toContain("Paused since 2026-10-22 18:00 UTC");
+    const alerts = within(screen.getByRole("list", { name: "Alerts" })).getAllByRole("alert");
+    expect(alerts.map((a) => a.textContent)).toEqual(["The queue is paused, so no job starts; 0 jobs wait."]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/queue-paused",
+      expect.objectContaining({ method: "PUT", body: JSON.stringify({ paused: true }) }),
+    );
+  });
+
+  it("lists jobs, shows one's tries and log, and cancels it after asking", async () => {
+    const fetchMock = serve({
+      ...base,
+      "GET /api/admin/overview": overview(),
+      "GET /api/admin/jobs?limit=50": { status: 200, body: { jobs: [adminJob("running")] } },
+      "GET /api/admin/stats/jobs?job=11111111-2222-4333-8444-555555555555": { status: 200, body: { tries: [] } },
+      "GET /api/admin/jobs/11111111-2222-4333-8444-555555555555/log?after=0": {
+        status: 200,
+        body: { text: "CalculiX started\n", next: 1, more: false },
+      },
+      "POST /api/admin/jobs/11111111-2222-4333-8444-555555555555/cancel": {
+        status: 200,
+        body: { job: adminJob("failed") },
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Jobs and runs" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Details of job 11111111-2222-4333-8444-555555555555" }));
+    const details = await screen.findByRole("region", { name: "Job details" });
+    expect((await within(details).findByRole("log", { name: "Job log" })).textContent).toBe("CalculiX started\n");
+    expect(within(details).getByText("No worker has taken it yet.")).toBeTruthy();
+    fireEvent.click(within(details).getByRole("button", { name: "Cancel job" }));
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining("/cancel"), expect.anything());
+    fireEvent.click(within(details).getByRole("button", { name: "Yes, cancel it" }));
+    await waitFor(() => expect(within(details).getByTestId("job-status").textContent).toBe("Failed"));
+    expect(within(details).getByText(/The user was told: The run was stopped by the ClearFEA administrator/)).toBeTruthy();
+    expect(within(details).queryByRole("button", { name: "Cancel job" })).toBeNull();
+  });
+
+  it("reads the event log and filters it by kind", async () => {
+    const event = (id: number, kind: string, message: string) => ({
+      id,
+      at: "2026-10-22T18:00:00.000Z",
+      kind,
+      level: kind === "host_offline" ? "error" : "info",
+      userId: null,
+      jobId: null,
+      host: null,
+      message,
+      detail: null,
+    });
+    serve({
+      ...base,
+      "GET /api/admin/overview": overview(),
+      "GET /api/admin/events?limit=100": {
+        status: 200,
+        body: { events: [event(2, "host_offline", "The solver host vps-1 has not checked in."), event(1, "admin_action", "Resumed the queue.")] },
+      },
+      "GET /api/admin/events?kind=admin_action&limit=100": {
+        status: 200,
+        body: { events: [event(1, "admin_action", "Resumed the queue.")] },
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Events" }));
+    const table = await screen.findByRole("table", { name: "Events" });
+    expect(within(table).getByText("The solver host vps-1 has not checked in.")).toBeTruthy();
+    expect(within(table).getByText("Host offline")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "admin_action" } });
+    await waitFor(() => expect(screen.queryByText("The solver host vps-1 has not checked in.")).toBeNull());
+    expect(screen.getByText("Resumed the queue.")).toBeTruthy();
+  });
 });
 
 describe("layout shell", () => {

@@ -129,3 +129,24 @@ export async function trashRetentionDays(db: D1Database): Promise<number> {
   if (row === null) throw new Error("The setting trash_retention_days is missing; apply the migrations.");
   return row.value;
 }
+
+/**
+ * Whether the admin has paused the queue (M13.2, ADR-127): no worker claims a job while it is, so
+ * nothing new starts; running jobs finish and new jobs still queue. As SQL for the claim.
+ */
+export const QUEUE_PAUSED_SQL = "(SELECT value FROM settings WHERE name = 'queue_paused')";
+
+export async function queuePaused(db: D1Database): Promise<boolean> {
+  const row = await db.prepare(`SELECT ${QUEUE_PAUSED_SQL} AS value`).first<{ value: number | null }>();
+  if (row === null || row.value === null) throw new Error("The setting queue_paused is missing; apply the migrations.");
+  return row.value !== 0;
+}
+
+/** Pauses or resumes the queue, from the dashboard. Returns false when it already was so. */
+export async function setQueuePaused(db: D1Database, paused: boolean): Promise<boolean> {
+  const result = await db
+    .prepare("UPDATE settings SET value = ? WHERE name = 'queue_paused' AND value != ?")
+    .bind(paused ? 1 : 0, paused ? 1 : 0)
+    .run();
+  return result.meta.changes === 1;
+}
