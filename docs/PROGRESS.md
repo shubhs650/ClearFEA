@@ -31,6 +31,10 @@ Status values: Not started, In progress, Verifying, Done.
 
 Copy the task list for the current milestone from `PLAN.md` here when the milestone starts, and tick tasks as they merge.
 
+### M11 Fix the live beta
+
+- [x] M11.1 Cloudflare Access service token (ADR-111): worker, deploy health check, Live checks and harness send it; AWS image job removed from the deploy. Works on the live site once the maintainer adds the service token, its Service Auth policy and the secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (DEPLOYMENT.md 1.8)
+
 ### M9 Gate
 
 - [x] M9.1 Run a model at each solver's element limit (ADR-063) in the development environment; fix what breaks (`python -m harness.limits`, ADR-093)
@@ -178,6 +182,7 @@ Things only the maintainer can do.
 - [x] Review ADR-091 to ADR-104: all accepted (2026-10-21)
 - [x] Decide V-23 (NAFEMS LE10): build it, with the edge supports it needs (2026-10-21)
 - [x] M9.9: sign off the gate walk (2026-10-21)
+- [ ] M11.1: create the Access service token `clearfea-machines`, add a Service Auth policy for it to the site's Access application, and add the GitHub secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (`docs/DEPLOYMENT.md` section 1.8). Until then every deploy fails its last step, the health check, with "Cloudflare Access refused the health check"
 - [ ] At the next AWS stack change, update the `clearfea` stack with **Replace existing template** and the current `infra/aws/clearfea.yaml` (DEPLOYMENT.md 4.3), so the stack holds PR #134's deploy role fixes; do it while no job is running
 
 ## Verification status
@@ -194,6 +199,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M11.1 (2026-10-22): every program that calls the site sends the Access service token when it has one: the worker (`CLEARFEA_ACCESS_CLIENT_ID`/`CLEARFEA_ACCESS_CLIENT_SECRET`, only to the API's own address, never to signed R2 links), the harness (same variables), the deploy health check and the Live checks (secrets `CF_ACCESS_CLIENT_ID`/`CF_ACCESS_CLIENT_SECRET`). A web page where the API should answer JSON is `AccessBlocked` in the worker, which backs off from 2x the poll to 300 s instead of crashing. The web app's requests no longer follow redirects (the API sends none), so an expired Access sign-in shows as "Your Cloudflare Access sign-in for this site has expired. Reload the page…" instead of "server did not answer". The deploy has no Solver image job any more; `infra/aws/worker-image.sh` and its tests stay for production. M12's manager must pass the two worker variables into each job container. The maintainer still has to create the token (to-do above); until then deploys go red on the health check only.
 
 > M9 closed (2026-10-21): Shubham signed off the gate walk below ("I sign off M9", 08:21 UTC). The phase-end run on main 71621c5 ([run 39568682383](https://github.com/shubhs650/ClearFEA/actions/runs/39568682383)) is green: full tier 314 of 314 checks in all 27 cases, V-23 included, and E-01 to E-09. The verification page is rebuilt from it (ADR-092), and the landing page's counts follow it (27 cases, 314 checks). ADR-105 (edge supports, M9.10) was accepted under the M9 autodrive and has not had his review. Phase 0's gate is met; nothing after it is planned yet.
 
@@ -471,6 +478,8 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-22
+
+- M11.1 Cloudflare Access service token: worker, harness, deploy health check and Live checks send CF-Access-Client-Id/Secret; the worker backs off on Access's sign-in page instead of crashing; the web app names an expired Access sign-in; the AWS solver image job left deploy.yml (ADR-111, ADR-106). Learned: urllib follows Access's 302 on a POST as a GET and gets a 200 HTML page, so the check has to be on the content type, not the status.
 
 - Closed beta redesign planned (docs only): M11 to M17 added to PLAN.md as proposed, ADR-106 to ADR-119; Shubham approved the plan and accepted all fourteen ADRs the same day, with his answers recorded in them (AWS to be deleted, VPS on a monthly plan restarted by hand, private repository so the worker image goes through R2, dashboard-only alerts, PaStiX to SPOOLES retry, any change makes a new run, usage only). Learned from the Machine logs run 39760502011: since Cloudflare Access was turned on, every solver machine's first claim got Access's login page and the worker crashed on the JSON parse; the launcher then started a new machine every 420 s, three times per queued job. Deploy runs 27 to 29 failed their health check on Access's 302; the site itself was deployed.
 
