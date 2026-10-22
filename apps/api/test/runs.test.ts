@@ -25,7 +25,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { listLedger } from "../src/billing/ledger";
 import { app } from "../src/index";
 import { getJob, LOG_CHUNKS_PER_READ } from "../src/db/jobs";
-import { sweepLostJobs } from "../src/jobs/outcome";
+import { MAX_ATTEMPTS, sweepLostJobs } from "../src/jobs/outcome";
 
 const TOKEN = "test-worker-token";
 
@@ -848,6 +848,11 @@ describe("a worker that stops checking in (M8.4)", () => {
       .run();
   }
 
+  /** Makes the job's current try its last (M12.2, ADR-108), so a lost worker fails it. */
+  async function lastTry(jobId: string): Promise<void> {
+    await env.DB.prepare("UPDATE jobs SET attempt = ? WHERE id = ?").bind(MAX_ATTEMPTS, jobId).run();
+  }
+
   /** Another worker asking for work, which since M11.3 fails only its own lost jobs. */
   async function otherWorkerClaims(): Promise<void> {
     const response = await call("POST", "/internal/jobs/claim", {
@@ -865,10 +870,33 @@ describe("a worker that stops checking in (M8.4)", () => {
     return { run, job };
   }
 
-  it("fails the run as a fault in ClearFEA after the timeout, without a charge", async () => {
+  it("queues the run's job again after the timeout, uncharged, and the next try solves it (M12.2)", async () => {
     const { run, job } = await solving();
     await silentFor(job.id, 121);
     // Only the per-minute cron looks for silent workers (M11.3, ADR-112), not another worker's claim.
+    await otherWorkerClaims();
+    expect(await sweepLostJobs(env)).toBe(1);
+    expect(await readRun(run.id)).toMatchObject({ status: "solving", stage: "queued", problem: null, failure: null });
+    expect(await getJob(env.DB, aliceId, job.id)).toMatchObject({ status: "queued", attempt: 2, claimedBy: null });
+    expect((await readLog(run.id, 0)).text).toContain(
+      "[ClearFEA] Try 1 of 3 stopped because the machine working on it stopped responding (worker_lost), " +
+        "a fault in ClearFEA, not in your setup. Nothing is charged for it, and the job is queued again.",
+    );
+    // The worker that went silent is told to give up, and its late result is refused.
+    const beat = await call("POST", `/internal/jobs/${job.id}/heartbeat`, { json: { workerId: "w1" }, token: TOKEN });
+    expect(beat.status).toBe(404);
+    const again = await claim("solve");
+    expect(again.id).toBe(job.id);
+    await upload(again, RUN_FILES);
+    await complete(again.id, { status: "succeeded", result: SOLVED });
+    expect(await readRun(run.id)).toMatchObject({ status: "succeeded", cost: { billedSeconds: 3, charged: true } });
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh", "solve"]);
+  });
+
+  it("fails the run as a fault in ClearFEA on its last try, without a charge", async () => {
+    const { run, job } = await solving();
+    await lastTry(job.id);
+    await silentFor(job.id, 121);
     await otherWorkerClaims();
     expect((await readRun(run.id)).status).toBe("solving");
     expect(await sweepLostJobs(env)).toBe(1);
@@ -882,9 +910,18 @@ describe("a worker that stops checking in (M8.4)", () => {
     });
     expect(failed.problem).toBe(
       "The run stopped because the machine working on it stopped responding (no check-in for 120 s). " +
-        "This is a fault in ClearFEA, not in your setup, so nothing is charged. Run it again; if it fails again, report it.",
+        "This is a fault in ClearFEA, not in your setup, so nothing is charged. It stopped this way on all 3 tries. " +
+        "Run it again; if it fails again, report it.",
     );
     expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+  });
+
+  it("fails a run that was asked to stop rather than queue it again", async () => {
+    const { run, job } = await solving();
+    expect((await call("POST", `/api/runs/${run.id}/cancel`, { cookie: alice })).status).toBe(200);
+    await silentFor(job.id, 121);
+    expect(await sweepLostJobs(env)).toBe(1);
+    expect((await readRun(run.id)).failure).toEqual({ category: "platform_fault", cause: "worker_lost" });
   });
 
   it("leaves a run whose worker checked in within the timeout", async () => {
@@ -894,8 +931,17 @@ describe("a worker that stops checking in (M8.4)", () => {
     expect((await readRun(run.id)).status).toBe("solving");
   });
 
-  it("fails a job at once when its own worker asks for another, as after a restart", async () => {
-    const { run } = await solving();
+  it("queues a job again at once when its own worker asks for another, as after a restart", async () => {
+    const { run, job } = await solving();
+    const response = await call("POST", "/internal/jobs/claim", { json: { workerId: "w1", jobTypes: ["noop"] }, token: TOKEN });
+    expect(response.status).toBe(204);
+    expect((await readRun(run.id)).status).toBe("solving");
+    expect(await getJob(env.DB, aliceId, job.id)).toMatchObject({ status: "queued", attempt: 2 });
+  });
+
+  it("fails a job at once on its last try when its own worker asks for another", async () => {
+    const { run, job } = await solving();
+    await lastTry(job.id);
     const response = await call("POST", "/internal/jobs/claim", { json: { workerId: "w1", jobTypes: ["noop"] }, token: TOKEN });
     expect(response.status).toBe(204);
     expect((await readRun(run.id)).failure).toEqual({ category: "platform_fault", cause: "worker_lost" });
@@ -903,6 +949,7 @@ describe("a worker that stops checking in (M8.4)", () => {
 
   it("tells a worker that comes back to give up, and refuses its late result", async () => {
     const { run, job } = await solving();
+    await lastTry(job.id);
     await silentFor(job.id, 121);
     await sweepLostJobs(env);
     const beat = await call("POST", `/internal/jobs/${job.id}/heartbeat`, { json: { workerId: "w1" }, token: TOKEN });
@@ -916,18 +963,114 @@ describe("a worker that stops checking in (M8.4)", () => {
     expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
   });
 
-  it("fails a lost mesh job and says so on the mesh", async () => {
+  it("queues a lost mesh job again, and fails it on its last try and says so on the mesh", async () => {
     const id = await simulation();
     await requestMesh(id);
     const job = await claim("mesh");
     await silentFor(job.id, 121);
     expect(await sweepLostJobs(env)).toBe(1);
-    const mesh = await env.DB.prepare("SELECT status, problem FROM meshes WHERE job_id = ?")
-      .bind(job.id)
-      .first<{ status: string; problem: string }>();
+    const status = () =>
+      env.DB.prepare("SELECT status, problem FROM meshes WHERE job_id = ?")
+        .bind(job.id)
+        .first<{ status: string; problem: string }>();
+    expect((await status())?.status).toBe("meshing");
+    const again = await claim("mesh");
+    await lastTry(again.id);
+    await silentFor(again.id, 121);
+    expect(await sweepLostJobs(env)).toBe(1);
+    const mesh = await status();
     expect(mesh?.status).toBe("failed");
     expect(mesh?.problem).toContain("Meshing stopped because the machine working on it stopped responding");
     expect(await charges(aliceId)).toEqual([]);
+  });
+});
+
+describe("a job container that ends without reporting (M12.2, ADR-108)", () => {
+  async function solving(): Promise<{ run: RunView; job: ClaimResponse["job"] }> {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await heartbeat(job.id, "PaStiX: factorising\n");
+    return { run, job };
+  }
+
+  /** The compute manager reporting the container's end, as `w1`, the lane's worker id. */
+  async function managerReports(jobId: string, cause: string, metering: Record<string, number> = { billableMs: 60_000 }) {
+    return call("POST", `/internal/jobs/${jobId}/complete`, {
+      json: { workerId: "w1", status: "failed", failureCategory: "platform_fault", failureCause: cause, metering },
+      token: TOKEN,
+    });
+  }
+
+  it("queues the job again twice, uncharged, then fails it with what happened", async () => {
+    const { run, job } = await solving();
+    for (const attempt of [2, 3]) {
+      const response = await managerReports(job.id, "container_exited");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ job: { id: job.id, type: "solve", targetId: run.id, status: "queued" } });
+      expect(await getJob(env.DB, aliceId, job.id)).toMatchObject({ status: "queued", attempt, billableMs: null });
+      expect((await readRun(run.id)).status).toBe("solving");
+      expect((await claim("solve")).id).toBe(job.id);
+    }
+    expect((await managerReports(job.id, "container_exited")).status).toBe(200);
+    const failed = await readRun(run.id);
+    expect(failed).toMatchObject({
+      status: "failed",
+      failure: { category: "platform_fault", cause: "container_exited" },
+      cost: { billedSeconds: 60, amount: 0, charged: false },
+    });
+    expect(failed.problem).toBe(
+      "The run stopped because the machine working on it stopped unexpectedly (container_exited). " +
+        "This is a fault in ClearFEA, not in your setup, so nothing is charged. It stopped this way on all 3 tries. " +
+        "Run it again; if it fails again, report it.",
+    );
+    const log = (await readLog(run.id, 0)).text;
+    expect(log).toContain("PaStiX: factorising");
+    expect(log).toContain("Try 1 of 3 stopped because the machine working on it stopped unexpectedly (container_exited)");
+    expect(log).toContain("Try 2 of 3 stopped");
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+  });
+
+  it("queues a job whose container did not start again", async () => {
+    const { job } = await solving();
+    expect((await managerReports(job.id, "container_start_failed")).status).toBe(200);
+    expect(await getJob(env.DB, aliceId, job.id)).toMatchObject({ status: "queued", attempt: 2 });
+  });
+
+  it("does not retry running out of memory, and records the peak memory", async () => {
+    const { run, job } = await solving();
+    expect((await managerReports(job.id, "out_of_memory", { billableMs: 60_000, peakMemoryBytes: 17 * 2 ** 30 })).status).toBe(200);
+    expect(await getJob(env.DB, aliceId, job.id)).toMatchObject({ status: "failed", attempt: 1, peakMemoryBytes: 17 * 2 ** 30 });
+    const failed = await readRun(run.id);
+    expect(failed.failure?.cause).toBe("out_of_memory");
+    expect(failed.problem).toContain("It used 17 GiB at its peak.");
+  });
+
+  it("does not retry a fault the worker reported, or the 13-hour limit", async () => {
+    for (const cause of ["solver_error", "job_timeout"]) {
+      const { run, job } = await solving();
+      expect((await managerReports(job.id, cause)).status).toBe(200);
+      expect((await readRun(run.id)).failure).toEqual({ category: "platform_fault", cause });
+    }
+  });
+
+  it("does not retry a run that was asked to stop", async () => {
+    const { run, job } = await solving();
+    expect((await call("POST", `/api/runs/${run.id}/cancel`, { cookie: alice })).status).toBe(200);
+    expect((await managerReports(job.id, "container_exited")).status).toBe(200);
+    expect((await readRun(run.id)).failure).toEqual({ category: "platform_fault", cause: "container_exited" });
+  });
+});
+
+describe("the solver a PaStiX run falls back to (M12.2, ADR-108)", () => {
+  it("is SPOOLES for a PaStiX run, frozen in the job, and the run says which solver solved it", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    expect(job.params).toMatchObject({ fallbackSolver: "spooles" });
+    await upload(job, RUN_FILES);
+    await complete(job.id, { status: "succeeded", result: { ...SOLVED, solver: "spooles" } });
+    expect((await readRun(run.id)).result?.solver).toBe("spooles");
   });
 });
 

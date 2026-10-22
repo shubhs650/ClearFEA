@@ -38,7 +38,12 @@ __all__ = ["AccessBlocked", "ApiClient", "ApiError", "ClaimedJob", "HeartbeatAct
 
 
 class ApiError(Exception):
-    """The API could not be reached or answered with an error."""
+    """The API could not be reached or answered with an error; ``status`` is its HTTP status
+    when it answered."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class AccessBlocked(ApiError):
@@ -203,7 +208,7 @@ class ApiClient:
                 message = json.loads(raw).get("error", raw.decode(errors="replace"))
             except (ValueError, AttributeError):
                 message = raw.decode(errors="replace")
-            raise ApiError(f"The API answered {error.code} on {path}: {message}") from None
+            raise ApiError(f"The API answered {error.code} on {path}: {message}", error.code) from None
         except (urllib.error.URLError, OSError) as error:
             reason = getattr(error, "reason", error)
             raise ApiError(
@@ -247,7 +252,14 @@ class ApiClient:
         path = f"/jobs/{job_id}/heartbeat"
         extra = {"log": log} if log else {}
         request = HeartbeatRequest(worker_id=self._worker_id, stage=stage, **extra)
-        _, body = self._post(path, request)
+        try:
+            _, body = self._post(path, request)
+        except ApiError as error:
+            if error.status != 404:
+                raise
+            # This worker no longer holds the job: it was queued again after the worker went
+            # silent (M12.2, ADR-108) and may be another's now, so this worker gives up on it.
+            return "cancel"
         return self._parse(HeartbeatResponse, path, body).action
 
     def succeed(self, job_id: str, result: dict[str, Any], billable_ms: int) -> None:
