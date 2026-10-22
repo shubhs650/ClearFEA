@@ -6,8 +6,8 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** none open. M9 Gate closed 2026-10-21 on the maintainer's sign-off and a green phase-end run; Phase 0's gate is met. The site is live at https://clearfea.triyalabs.com
-- **Next task:** the closed beta redesign (M11 to M17 in PLAN.md, ADR-106 to ADR-119), proposed 2026-10-22; nothing starts before the maintainer approves it
-- **Blocked on:** the maintainer's approval of the redesign plan and his answers to its questions. The live site cannot solve anything meanwhile: Cloudflare Access blocks the solver machines (M11.1), and the deploy health check has failed since 2026-10-21 for the same reason
+- **Next task:** the closed beta redesign (M11 to M17 in PLAN.md, ADR-106 to ADR-119), approved by Shubham on 2026-10-22 with an autodrive; M11.1 and M11.2 first
+- **Blocked on:** nothing for M11.2. M11.1 needs the Access service token and its two GitHub secrets from the maintainer. The live site solves nothing until M12.7: AWS is off and is being deleted (his decision, 2026-10-22), and the deploy health check has failed since 2026-10-21 on Cloudflare Access
 
 ## Milestones
 
@@ -472,7 +472,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-22
 
-- Closed beta redesign planned (docs only): M11 to M17 added to PLAN.md as proposed, ADR-106 to ADR-119 as proposed. Learned from the Machine logs run 39760502011: since Cloudflare Access was turned on, every solver machine's first claim got Access's login page and the worker crashed on the JSON parse; the launcher then started a new machine every 420 s, three times per queued job. Deploy runs 27 to 29 failed their health check on Access's 302; the site itself was deployed.
+- Closed beta redesign planned (docs only): M11 to M17 added to PLAN.md as proposed, ADR-106 to ADR-119; Shubham approved the plan and accepted all fourteen ADRs the same day, with his answers recorded in them (AWS to be deleted, VPS on a monthly plan restarted by hand, private repository so the worker image goes through R2, dashboard-only alerts, PaStiX to SPOOLES retry, any change makes a new run, usage only). Learned from the Machine logs run 39760502011: since Cloudflare Access was turned on, every solver machine's first claim got Access's login page and the worker crashed on the JSON parse; the launcher then started a new machine every 420 s, three times per queued job. Deploy runs 27 to 29 failed their health check on Access's 302; the site itself was deployed.
 
 ### 2026-10-21
 

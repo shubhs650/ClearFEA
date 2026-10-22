@@ -1346,22 +1346,23 @@ NAFEMS LE10 (V-23) holds a thick plate in z on one line, the mid-plane line of i
 Not done: supports on vertices (points), and edges on frictionless or elastic supports. Edge loads (a force on a line) are not part of this.
 
 ### ADR-106: The closed beta's solver runs on one always-on VPS; the AWS launcher is parked until production
-2026-10-22 · Proposed (closed beta redesign plan); not accepted until Shubham approves.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
 Shubham decided on 2026-10-22 to move the closed beta's solver off AWS: light use cost more than $1.50 a day on Fargate, and machines were started repeatedly while a job waited. The proposal:
 
-1. **One Contabo Cloud VPS** (8 vCPU, 24 GB, NVMe), always on, about $17 a month. It pulls work from the API; it opens no inbound port except SSH by key.
+1. **One Contabo Cloud VPS 8** (8 vCPU, 24 GB, NVMe), monthly plan paid in advance, always on, about $17 a month. It pulls work from the API; it opens no inbound port except SSH by key. Nothing creates or replaces a VPS automatically (Shubham, 2026-10-22): when the VPS stops checking in, the admin dashboard raises an alert and the admin restarts it by hand.
 2. **Cloudflare stays.** The Worker, D1 and R2 keep the site, API, records and files; the job protocol, presigned file links, metering and the run record do not change.
 3. **A third machine mode, `MACHINES=vps`,** beside local and cloud: no launcher; a job is refused with a plain message when the VPS has not checked in for 2 minutes.
-4. **AWS is parked.** The launcher, the stack template and the image workflow stay in the repository, switched off (machine-hours cap 0). Any code that starts AWS machines is reviewed by the maintainer before the public beta.
+4. **AWS is off and deleted.** Shubham turned AWS solving off until the VPS is live and asked for the AWS resources to be deleted (2026-10-22); he deletes the `clearfea` stack and its images in the AWS console (DEPLOYMENT.md), since the repository's only AWS access is the deploy role inside that stack. The launcher code and the stack template stay in the repository, unused, for production later; `deploy.yml` no longer builds or registers an AWS image. Any code that starts AWS machines is reviewed by the maintainer before it is used again.
 5. **Product text changes.** "Beta compute: one fresh on-demand machine per job, destroyed afterwards" becomes "one fresh container per job on a shared solver host"; "Hosted closed beta" names the VPS instead of AWS Fargate. Amends ADR-095 items 6 to 8, ADR-099 and ADR-100.
+6. **Usage only.** During the closed beta the wallet shows usage (machine time, storage) and refuses nothing for its balance, as self-hosting mode does (ADR-084); metering and the ledger keep running.
 
 Why the machines kept starting (from the Machine logs run 39760502011 and the code): since Cloudflare Access was turned on, each worker's first claim got Access's login page, crashed on the JSON parse and exited; the launcher counted the start as pending for `machine_start_wait_seconds` (420 s), then as failed, and started another, three times per queued job. Nothing stops a task that never checks in; a job that waits 180 s behind a busy machine starts another (up to 3); imports and reports start a 16 GB machine; the hours cap counts a never-seen start as 420 s whatever AWS billed.
 
 Risks: a single machine (mitigated by a rebuild script, an offline alert and jobs waiting in the queue), shared vCPUs (limits and estimates measured on the VPS, steal time shown), untrusted STEP files parsed on the host (container hardening, ADR-107).
 
 ### ADR-107: A compute manager runs one hardened container per job in a light lane and a solve lane
-2026-10-22 · Proposed.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
 1. **Manager.** A small Python service in `worker/` (about 0.5 vCPU, 512 MB) claims jobs through the existing claim API (ADR-004) and runs the existing worker for that one job in a fresh container; the container does file transfers and heartbeats as today. The manager holds no state of record.
 2. **Lanes.** Light lane: import, mesh and report jobs, 1 vCPU, 4 GB, one at a time. Solve lane: solve jobs, 6 vCPU, 17 GB, one at a time. 0.5 vCPU and 2.5 GB stay with the OS, Docker and the page cache. CPUs are pinned per lane (`cpuset`); memory limits are hard, with no swap for job containers. Starting values; M12.6 measures them.
@@ -1372,61 +1373,61 @@ Risks: a single machine (mitigated by a rebuild script, an offline alert and job
 Considered: three long-running services with fixed cores (a crash or leak in one solve would affect the next, and users' files would share a process); several small solve lanes (decided after the benchmark, since SPOOLES must stay single-threaded and PaStiX's thread scaling is not measured).
 
 ### ADR-108: Crashes are classified and only platform faults are retried
-2026-10-22 · Proposed.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
-Each job keeps an attempt count. A container killed from outside, a manager restart or a VPS reboot re-queues the job, at most twice, uncharged; then it fails as a platform fault. Setup errors and Gmsh failures on the user's geometry are not retried. Out of memory inside the lane limit is not retried ("more RAM" does not exist on one host): it is recorded with the peak memory and charged by ADR-033's rule. A PaStiX crash may be retried once with SPOOLES, which gives the same answers (ADR-048), recorded on the run, only if the maintainer approves. The manager stops claiming when the scratch disk has under 20 GB free. Extends ADR-033's failure classes.
+Each job keeps an attempt count. A container killed from outside, a manager restart or a VPS reboot re-queues the job, at most twice, uncharged; then it fails as a platform fault. Setup errors and Gmsh failures on the user's geometry are not retried. Out of memory inside the lane limit is not retried ("more RAM" does not exist on one host): it is recorded with the peak memory and charged by ADR-033's rule. A PaStiX crash is retried once with SPOOLES when the model is under SPOOLES's element limit, since it gives the same answers (ADR-048); the run record names the solver actually used (approved by Shubham, 2026-10-22). The manager stops claiming when the scratch disk has under 20 GB free. Extends ADR-033's failure classes.
 
 ### ADR-109: Each job attempt keeps its statistics, and the host reports its load
-2026-10-22 · Proposed.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
 `job_stats` holds one row per attempt: queue wait, time per stage, nodes, elements, degrees of freedom, solver, peak memory, average and peak CPU, disk written, exit code or signal, out-of-memory flag, attempt, host and image version. Container stats are sampled every 5 s and sent with the heartbeats; the summary is written at the end. `host_stats` holds CPU, steal time, load, memory, disk and containers every 30 s, kept 14 days. Admin-only, like the admin page.
 
 ### ADR-110: The worker image reaches the VPS from a registry and updates between jobs
-2026-10-22 · Proposed.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
-`deploy.yml` builds the worker image when `worker/` or `packages/spec/` changes (as M10.8 does for ECR) and pushes it to the registry the maintainer picks (GitHub's container registry if the repository is public, else ECR or a private registry). The API publishes the expected image; the manager pulls it between jobs. Each job starts a fresh container, so an update never interrupts a running job. A pinned tag in the manager's environment rolls back.
+`deploy.yml` builds the worker image when `worker/` or `packages/spec/` changes (as M10.8 does for ECR) and stores it as a compressed `docker save` archive in R2 under the image's content hash. The repository stays private and AWS is deleted, so neither GitHub's free public registry nor ECR fits; R2 charges no egress and is already in use. The API publishes the expected image and hands the manager a presigned link; the manager downloads and loads it between jobs. Each job starts a fresh container, so an update never interrupts a running job. A pinned tag in the manager's environment rolls back.
 
 ### ADR-111: Machines and CI get through Cloudflare Access with one service token
-2026-10-22 · Proposed.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
 Shubham put `clearfea.triyalabs.com` behind Cloudflare Access to keep the beta out of crawlers' sight. Since then the deploy health check (runs 27 to 29) and every solver machine got Access's login page. A Service Auth policy on the Access application admits one service token; the worker, the manager, the deploy health check, the Live checks workflow and the harness send `CF-Access-Client-Id` and `CF-Access-Client-Secret`. The worker treats a non-JSON answer as "blocked by Cloudflare Access" and backs off instead of crashing. Share links work only for people Access admits until the public beta. The web app says when the Access sign-in has expired.
 
 ### ADR-112: Polling backs off, and the API limits what one user can queue
-2026-10-22 · Proposed.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
 Four screens polled every 1.5 to 2 s with no back-off, also from hidden tabs and while a job only waited; the machine-wait note added a poll every 5 s that read four tables; every request that was not a GET ran the launcher; every claim ran the lost-job sweep. Instead: one polling hook (2 s doubling to 30 s, reset on change, paused in hidden tabs, one request in flight, stopped at a final state), a `retryAfter` hint and the queue position in the job status answer, the launcher only after routes that queue a job, the lost-job sweep only in the cron. Limits as settings: 2 jobs waiting per user per lane, 1 running per user per lane, 30 runs per user per day, a queue cap of 20, 120 requests per user per minute (Workers rate limiting), a 12-hour ceiling on any stop limit.
 
 ### ADR-113: The admin page becomes a dashboard with an event log and exports
-2026-10-22 · Proposed.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
-Tabs: Overview, Jobs and runs, Users, Events, Settings, Costs. An `events` table records sign-ins and refusals, job failures and retries, manager and host events, and every admin action. Every table filters by date, user and status and exports to CSV and .xlsx (a small permissively licensed library, pinned). Alerts show as a banner and optionally go to one outside channel. The dashboard shows run statistics and failure messages, not users' project names, models or results, under the privacy rule in this file, unless the maintainer decides otherwise.
+Tabs: Overview, Jobs and runs, Users, Events, Settings, Costs. An `events` table records sign-ins and refusals, job failures and retries, manager and host events, and every admin action. Every table filters by date, user and status and exports to CSV and .xlsx (a small permissively licensed library, pinned). Alerts show on the dashboard only (Shubham, 2026-10-22). The dashboard shows run statistics and failure messages for support, not users' project names, models or results, under the privacy rule in this file (confirmed by Shubham, 2026-10-22).
 
 ### ADR-114: Users have projects in folders, and deleted items go to a trash
-2026-10-22 · Proposed. Supersedes ADR-038's "one project per user holds the system".
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions). Supersedes ADR-038's "one project per user holds the system".
 
 A `folders` table (owner, parent, name); projects gain a folder, `deleted_at`, `last_opened_at` and a thumbnail captured in the viewer; geometries and simulations always belong to a project. A migration moves each user's work into "My first project". Delete is soft; the storage sweep purges items in the trash after 30 days and removes their R2 files. The unit system stays per project. No sharing between users (team workspaces are a non-goal).
 
 ### ADR-115: The workbench tree follows the SimScale flow, with many meshes and many runs per simulation
-2026-10-22 · Proposed. Amends ADR-027 and ADR-047.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions). Amends ADR-027 and ADR-047.
 
-Project, Geometries, Simulations; under each simulation: Geometry, Analysis type, Coordinate systems, Materials, Bonds, Boundary conditions, Meshes, Simulation control, Runs, with Results under each run, and a job status strip. A simulation has named meshes with their own settings (still reused by settings hash); a run picks a mesh and its simulation control. A change to loads or materials makes a new simulation (Duplicate), so runs of one simulation share their physics and compare side by side.
+Project, Geometries, Simulations; under each simulation: Geometry, Analysis type, Coordinate systems, Materials, Bonds, Boundary conditions, Meshes, Simulation control, Runs, with Results under each run, and a job status strip. A simulation has named meshes with their own settings (still reused by settings hash); a run picks a mesh and its simulation control. Any change, to the mesh, the simulation control, loads, supports or materials, followed by Run makes a new run of the same simulation (Shubham, 2026-10-22); each run keeps its frozen snapshot as before, and the run list shows what changed from the previous run beside its maximum values.
 
 ### ADR-116: Local coordinate systems in the spec, the deck and the results
-2026-10-22 · Proposed. Physics-critical.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions). Physics-critical.
 
 Cartesian systems (origin and two directions) give load and support directions; result components can be shown in a Cartesian or cylindrical system (radial and hoop stress). A spec version bump; the deck generator rotates directions itself or writes CalculiX's transform for held directions (checked against the CalculiX manual before building); new verification cases and coverage rows land with it.
 
 ### ADR-117: STEP files are previewed in the browser; the server import stays the face authority
-2026-10-22 · Proposed.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
 The upload screen opens the STEP file in a web worker with OpenCASCADE compiled to WebAssembly (occt-import-js, LGPL, pinned) for an instant picture, the unit from the header, bodies, bounding box and volume, and refuses a broken or empty file before upload. Loads and supports stay attached to the faces of the server's Gmsh import, since a second OpenCASCADE build can number faces differently; STEP import and meshing stay on the server. A spike checks whether face numbers match on every test model, as information only.
 
 ### ADR-118: The results ribbon groups filters, animation, view, capture and result tools
-2026-10-22 · Proposed.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
 Animation of the deformed shape for static runs and of each mode (play, pause, speed, scale), legend control (fixed range, band count, colour map), statistics with locations, cut plane, iso-surface and threshold, probes, screenshot and video capture (the browser's MediaRecorder), saved views, downloads. Display only: no result value is computed differently.
 
 ### ADR-119: One set of design tokens and components for the web app
-2026-10-22 · Proposed.
+2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions).
 
 Colours, type, spacing and radii as tokens for light and dark; one icon set under a permissive licence, pinned; shared empty states, loading skeletons and toasts. Screenshots of every changed screen go to the maintainer for review.
