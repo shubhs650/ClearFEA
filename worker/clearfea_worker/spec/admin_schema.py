@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 type Admin = Annotated[Any, Field(title="Admin")]
 """
-Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) and the event log (M13.1). Only the admin reaches them. Each message is a definition under $defs.
+Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) the event log (M13.1) and the dashboard's overview and jobs (M13.2). Only the admin reaches them. Each message is a definition under $defs.
 """
 
 
@@ -380,6 +380,189 @@ class EventsResponse(BaseModel):
         populate_by_name=True,
     )
     events: list[AdminEvent]
+
+
+class AdminJob(BaseModel):
+    """
+    A job of any user as the dashboard's Overview and Jobs and runs tabs show it (M13.2, ADR-113, ADR-127): its state, tries and failure, for support. Ids and an address, never a project's name, model or results.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    id: str
+    type: Literal["noop", "import", "mesh", "solve", "report"]
+    lane: Literal["solve", "light"]
+    """
+    Solve jobs run in the solve lane, the rest in the light lane (ADR-107).
+    """
+    status: Literal[
+        "queued", "claimed", "running", "succeeded", "failed", "cancelled", "stopped_at_limit"
+    ]
+    stage: str | None
+    """
+    The stage its worker reported last.
+    """
+    owner_id: Annotated[str, Field(alias="ownerId")]
+    owner_email: Annotated[str | None, Field(alias="ownerEmail")]
+    """
+    The owner's address; null for a local test user without one.
+    """
+    target_id: Annotated[str | None, Field(alias="targetId")]
+    """
+    The geometry, mesh or run the job works on: a run id for a solve job.
+    """
+    attempt: Annotated[int, Field(ge=1)]
+    machine_size: Annotated[str | None, Field(alias="machineSize")]
+    claimed_by: Annotated[str | None, Field(alias="claimedBy")]
+    """
+    The worker id holding it, or that last held it.
+    """
+    stop_requested: Annotated[
+        Literal["cancelled", "stopped_at_limit"] | None, Field(alias="stopRequested")
+    ]
+    """
+    How its owner or its stop limit asked it to end, while it still runs.
+    """
+    created_at: Annotated[str, Field(alias="createdAt")]
+    """
+    ISO 8601 UTC.
+    """
+    claimed_at: Annotated[str | None, Field(alias="claimedAt")]
+    heartbeat_at: Annotated[str | None, Field(alias="heartbeatAt")]
+    finished_at: Annotated[str | None, Field(alias="finishedAt")]
+    failure_category: Annotated[
+        Literal["user_fault", "platform_fault"] | None, Field(alias="failureCategory")
+    ]
+    failure_cause: Annotated[str | None, Field(alias="failureCause")]
+    failure_message: Annotated[str | None, Field(alias="failureMessage")]
+    """
+    What its owner was told, for support.
+    """
+    peak_memory_bytes: Annotated[int | None, Field(alias="peakMemoryBytes")]
+    billed_seconds: Annotated[int | None, Field(alias="billedSeconds")]
+    queue_position: Annotated[int | None, Field(alias="queuePosition", ge=1)]
+    """
+    Its place among the queued jobs of its lane, oldest first; null unless queued.
+    """
+
+
+class AdminJobsResponse(BaseModel):
+    """
+    Answer of GET /api/admin/jobs: jobs newest first, filtered by ?status=, ?type=, ?user= and ?before= (a creation time, to page on), at most ?limit= (up to 500).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    jobs: list[AdminJob]
+
+
+class AdminJobResponse(BaseModel):
+    """
+    Answer of POST /api/admin/jobs/{id}/cancel and /requeue: the job as it is now.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    job: AdminJob
+
+
+class AdminJobLogResponse(BaseModel):
+    """
+    Answer of GET /api/admin/jobs/{id}/log?after={n}: the job's log written after chunk n, the n to ask with next time, and whether more chunks are already written.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    text: str
+    next: Annotated[int, Field(ge=0)]
+    more: bool
+
+
+class AdminLane(BaseModel):
+    """
+    One lane of the solver host (ADR-107): the jobs running in it and the jobs waiting for it, oldest first.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    lane: Literal["solve", "light"]
+    running: list[AdminJob]
+    """
+    Claimed or running.
+    """
+    queued: list[AdminJob]
+
+
+class AdminAlert(BaseModel):
+    """
+    Something the admin should act on, shown on the dashboard only (Shubham, 2026-10-22).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    kind: Literal["no_host", "host_offline", "queue_paused"]
+    level: Literal["warning", "error"]
+    message: str
+    """
+    What is wrong and what to do, in plain words.
+    """
+
+
+class OverviewResponse(BaseModel):
+    """
+    Answer of GET /api/admin/overview and PUT /api/admin/queue-paused: the solver host and its latest load, the lanes and their queues, whether the queue is paused, and the alerts.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    machines: Literal["cloud", "vps", "local"]
+    paused: bool
+    """
+    True while the admin has paused the queue: no job starts, running jobs finish, new jobs still queue.
+    """
+    paused_at: Annotated[str | None, Field(alias="pausedAt")]
+    """
+    When the admin paused it, ISO 8601 UTC; null while it runs.
+    """
+    host: SolverHost | None
+    """
+    The solver host that checked in last; null when none ever has.
+    """
+    load: HostLoadSample | None
+    """
+    That host's latest load sample in the last 10 minutes, or null.
+    """
+    lanes: list[AdminLane]
+    """
+    The solve lane, then the light lane.
+    """
+    alerts: list[AdminAlert]
+
+
+class SetQueuePausedRequest(BaseModel):
+    """
+    Body of PUT /api/admin/queue-paused.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    paused: bool
 
 
 class SwitchCloudSizeRequest(BaseModel):

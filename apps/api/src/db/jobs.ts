@@ -7,6 +7,7 @@
 import type { FailureCategory, HeartbeatAction, JobStatus, JobType, WorkerSoftware } from "@clearfea/spec";
 import { chargeStatement } from "../billing/ledger";
 import { isMetered, type JobCharge } from "../billing/cost";
+import { QUEUE_PAUSED_SQL } from "./settings";
 
 export interface Job {
   id: string;
@@ -177,6 +178,15 @@ export async function getJob(db: D1Database, userId: string, jobId: string): Pro
   return row === null ? null : toJob(row);
 }
 
+/**
+ * Any user's job, for the admin dashboard's cancel and re-queue (M13.2, ADR-127), which act on
+ * every owner's jobs; the routes behind it answer the admin only.
+ */
+export async function jobForAdmin(db: D1Database, jobId: string): Promise<Job | null> {
+  const row = await db.prepare("SELECT * FROM jobs WHERE id = ?").bind(jobId).first<JobRow>();
+  return row === null ? null : toJob(row);
+}
+
 /** The user's most recent jobs, newest first. */
 export async function listJobs(db: D1Database, userId: string, limit = 20): Promise<Job[]> {
   const { results } = await db
@@ -196,7 +206,7 @@ export function laneOf(type: JobType): Lane {
   return type === "solve" ? "solve" : "light";
 }
 
-const laneSql = (column: string) => `CASE WHEN ${column} = 'solve' THEN 'solve' ELSE 'light' END`;
+export const laneSql = (column: string) => `CASE WHEN ${column} = 'solve' THEN 'solve' ELSE 'light' END`;
 
 /** What the queue holds, for the limits a new job is checked against (M11.3, ADR-112). */
 export interface QueueCounts {
@@ -232,7 +242,7 @@ export async function queueCounts(db: D1Database, userId: string, lane: Lane): P
  * A job whose owner already has `queue_running_per_user` jobs claimed or running in its lane is
  * passed over, so it waits behind other users' jobs (M11.3, ADR-107 item 4, ADR-112). Among the
  * rest, users with nothing running come first and users take turns, oldest job first within a
- * user (M12.1, ADR-121).
+ * user (M12.1, ADR-121). Nothing is claimed while the admin has paused the queue (M13.2, ADR-127).
  */
 export async function claimJob(
   db: D1Database,
@@ -259,6 +269,7 @@ export async function claimJob(
        WHERE id = (
          SELECT id FROM jobs candidate
           WHERE status = 'queued' AND type IN (${placeholders}) ${forSize.sql}
+            AND ${QUEUE_PAUSED_SQL} = 0
             AND (SELECT COUNT(*) FROM jobs held
                   WHERE held.owner_id = candidate.owner_id AND held.status IN ${ACTIVE}
                     AND ${laneSql("held.type")} = ${laneSql("candidate.type")})

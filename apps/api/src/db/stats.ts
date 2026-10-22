@@ -345,7 +345,23 @@ export async function listHostLoad(db: D1Database, since: string): Promise<HostL
     .prepare("SELECT * FROM host_stats WHERE at >= ? ORDER BY at, host LIMIT ?")
     .bind(since, HOST_SAMPLES_PER_READ)
     .all<HostRow>();
-  return results.map((row) => ({
+  return results.map(toSample);
+}
+
+/** The host's latest load sample from the last 10 minutes, for the dashboard (M13.2), or null. */
+export async function latestHostLoad(db: D1Database, host: string): Promise<HostLoadSample | null> {
+  const row = await db
+    .prepare(
+      `SELECT * FROM host_stats WHERE host = ? AND at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-10 minutes')
+        ORDER BY at DESC LIMIT 1`,
+    )
+    .bind(host)
+    .first<HostRow>();
+  return row === null ? null : toSample(row);
+}
+
+function toSample(row: HostRow): HostLoadSample {
+  return {
     host: row.host,
     at: row.at,
     cpu: row.cpu,
@@ -358,7 +374,7 @@ export async function listHostLoad(db: D1Database, since: string): Promise<HostL
     diskTotalBytes: row.disk_total_bytes,
     diskFreeBytes: row.disk_free_bytes,
     containers: row.containers,
-  }));
+  };
 }
 
 /** Removes host load samples older than HOST_STATS_DAYS. Returns how many. */

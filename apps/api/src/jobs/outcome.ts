@@ -13,7 +13,15 @@ import {
 import { chargeFor, type JobCharge } from "../billing/cost";
 import { recordJobFailed, recordJobRetried } from "../db/events";
 import { recordImportOutcome } from "../db/geometries";
-import { type Completion, failLostJob, type Job, lostJobs, requeueJob, type StopReason } from "../db/jobs";
+import {
+  type Completion,
+  failLostJob,
+  failQueuedJob,
+  type Job,
+  lostJobs,
+  requeueJob,
+  type StopReason,
+} from "../db/jobs";
 import { recordMeshOutcome } from "../db/meshes";
 import { recordRunOutcome } from "../db/runs";
 import { endTry, modelSize } from "../db/stats";
@@ -147,8 +155,12 @@ function tries(job: Job): string {
   return job.attempt > 1 ? ` It stopped this way on all ${job.attempt} tries.` : "";
 }
 
+/** The API's cause codes for a job the admin ended or queued again from the dashboard (M13.2, ADR-127). */
+export const CANCELLED_BY_ADMIN = "cancelled_by_admin";
+export const REQUEUED_BY_ADMIN = "requeued_by_admin";
+
 /** Causes the API itself explains, whoever pays: its message replaces the generic fault text. */
-const EXPLAINED_BY_API = [OUT_OF_MEMORY, NO_MACHINE, MACHINE_HOURS_CAP, ...RETRIED_CAUSES];
+const EXPLAINED_BY_API = [OUT_OF_MEMORY, NO_MACHINE, MACHINE_HOURS_CAP, CANCELLED_BY_ADMIN, ...RETRIED_CAUSES];
 
 /**
  * What the owner is told about a failed job: the worker's message when it is their fault, and
@@ -285,4 +297,66 @@ export async function sweepLostJobs(env: Env, claimingWorker: string | null = nu
     failed += 1;
   }
   return failed;
+}
+
+/** The completion of a job the admin cancelled: not the owner's doing, so never charged. */
+export function adminCancelCompletion(job: Job): Extract<Completion, { status: "failed" }> {
+  return {
+    status: "failed",
+    failureCategory: "platform_fault",
+    failureCause: CANCELLED_BY_ADMIN,
+    failureMessage:
+      `${WORK[job.type]} was stopped by the ClearFEA administrator (${CANCELLED_BY_ADMIN}). ` +
+      `This is not a fault in your setup, so nothing is charged.${AGAIN[job.type]}`,
+  };
+}
+
+/**
+ * Ends a queued, claimed or running job of any owner from the dashboard (M13.2, ADR-127): at once,
+ * as a fault in ClearFEA, uncharged, with its record told why. A worker still on it is told to stop
+ * by its next heartbeat. Returns the ended job, or null when it had ended or changed meanwhile.
+ */
+export async function cancelAsAdmin(env: Env, job: Job): Promise<Job | null> {
+  const completion = adminCancelCompletion(job);
+  if (job.status === "queued") {
+    const ended = await failQueuedJob(env.DB, job.id, completion);
+    if (ended !== null) await recordOutcome(env, ended, completion, null);
+    return ended;
+  }
+  if (job.status !== "claimed" && job.status !== "running") return null;
+  const billableMs = lostBillableMs(job);
+  const charge = job.ratePerHour === null ? null : chargeFor(billableMs, job.ratePerHour, completion);
+  const ended = await failLostJob(env.DB, job, completion, billableMs, charge);
+  if (ended === null) return null;
+  if (job.claimedBy !== null) {
+    await endTry(env.DB, job.claimedBy, ended, completion, await modelSize(env.DB, ended, completion));
+  }
+  await recordOutcome(env, ended, completion, charge);
+  return ended;
+}
+
+/**
+ * Takes a claimed or running job from its worker and queues it again from the dashboard (M13.2,
+ * ADR-127), for a worker that hangs: uncharged, with a line in its log, its try ended and the
+ * retry recorded. Its record keeps waiting. Returns the queued job, or null when it had ended,
+ * been asked to stop or changed meanwhile.
+ */
+export async function requeueAsAdmin(env: Env, job: Job): Promise<Job | null> {
+  if (job.status !== "claimed" && job.status !== "running") return null;
+  const note =
+    `\n[ClearFEA] The administrator stopped try ${job.attempt} and queued the job again, so it starts over. ` +
+    "Nothing is charged for the stopped try.\n";
+  const requeued = await requeueJob(env.DB, job, note);
+  if (requeued === null) return null;
+  const completion: Completion = {
+    status: "failed",
+    failureCategory: "platform_fault",
+    failureCause: REQUEUED_BY_ADMIN,
+    failureMessage: null,
+  };
+  if (job.claimedBy !== null) {
+    await endTry(env.DB, job.claimedBy, job, completion, await modelSize(env.DB, job, completion));
+  }
+  await recordJobRetried(env.DB, job, REQUEUED_BY_ADMIN, MAX_ATTEMPTS);
+  return requeued;
 }

@@ -39,14 +39,26 @@ export async function recordEvent(db: D1Database, event: NewEvent): Promise<void
   await eventStatement(db, event).run();
 }
 
-/** An action of the admin, for the audit trail. */
+/** An action of the admin, for the audit trail, with the job it acted on if any (M13.2). */
 export async function recordAdminAction(
   db: D1Database,
   adminId: string,
   message: string,
   detail: Record<string, unknown>,
+  jobId: string | null = null,
 ): Promise<void> {
-  await recordEvent(db, { kind: "admin_action", level: "info", userId: adminId, message, detail });
+  await recordEvent(db, { kind: "admin_action", level: "info", userId: adminId, jobId, message, detail });
+}
+
+/** When the admin last paused the queue (M13.2, ADR-127), or null when never. */
+export async function lastPausedAt(db: D1Database): Promise<string | null> {
+  const row = await db
+    .prepare(
+      `SELECT at FROM events WHERE kind = 'admin_action' AND json_extract(detail, '$.action') = 'queue_pause'
+        ORDER BY at DESC, id DESC LIMIT 1`,
+    )
+    .first<{ at: string }>();
+  return row?.at ?? null;
 }
 
 const JOB_NAME: Record<Job["type"], string> = {
@@ -90,7 +102,8 @@ export async function recordJobRetried(db: D1Database, job: Job, cause: string, 
     level: "warning",
     userId: job.ownerId,
     jobId: job.id,
-    message: `${JOB_NAME[job.type]} was queued again after try ${job.attempt} of ${maxAttempts} stopped (${cause}).`,
+    // The admin may queue a job again after its last automatic try (M13.2, ADR-127).
+    message: `${JOB_NAME[job.type]} was queued again after try ${job.attempt}${job.attempt <= maxAttempts ? ` of ${maxAttempts}` : ""} stopped (${cause}).`,
     detail: { type: job.type, targetId: job.targetId, attempt: job.attempt, worker: job.claimedBy, cause },
   });
 }

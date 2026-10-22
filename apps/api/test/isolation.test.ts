@@ -15,7 +15,7 @@ import {
 import fixture from "@clearfea/spec/fixtures/simulation-v1.json";
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { getJob } from "../src/db/jobs";
+import { createJob, getJob } from "../src/db/jobs";
 import { userProject } from "../src/db/projects";
 import { reportKey } from "../src/db/reports";
 import { app } from "../src/index";
@@ -386,6 +386,12 @@ const ROUTES: Record<string, Route> = {
   "GET /api/admin/stats/jobs": { area: "admin" },
   "GET /api/admin/stats/host": { area: "admin" },
   "GET /api/admin/events": { area: "admin" },
+  "GET /api/admin/overview": { area: "admin" },
+  "PUT /api/admin/queue-paused": { area: "admin" },
+  "GET /api/admin/jobs": { area: "admin" },
+  "GET /api/admin/jobs/:id/log": { area: "admin" },
+  "POST /api/admin/jobs/:id/requeue": { area: "admin" },
+  "POST /api/admin/jobs/:id/cancel": { area: "admin" },
 
   "POST /api/jobs": { area: "account" },
   "GET /api/jobs": { area: "account" },
@@ -551,6 +557,13 @@ const ADMIN_CALLS: Record<string, Request> = {
   "GET /api/admin/stats/jobs": { path: "/api/admin/stats/jobs" },
   "GET /api/admin/stats/host": { path: "/api/admin/stats/host" },
   "GET /api/admin/events": { path: "/api/admin/events" },
+  "GET /api/admin/overview": { path: "/api/admin/overview" },
+  "PUT /api/admin/queue-paused": { path: "/api/admin/queue-paused", json: { paused: true } },
+  "GET /api/admin/jobs": { path: "/api/admin/jobs" },
+  // :job is a job of alice's that a worker holds, made by the test that reaches these as the admin.
+  "GET /api/admin/jobs/:id/log": { path: "/api/admin/jobs/:job/log" },
+  "POST /api/admin/jobs/:id/requeue": { path: "/api/admin/jobs/:job/requeue" },
+  "POST /api/admin/jobs/:id/cancel": { path: "/api/admin/jobs/:job/cancel" },
 };
 
 /** The allowlist, the cloud size list and the settings as they stand, to show a refused call changed nothing. */
@@ -728,13 +741,23 @@ describe("alice, on her own records", () => {
   }, SWEEP_TIMEOUT_MS);
 
   it("reaches every admin route bob could not find, as the admin", async () => {
+    // A job of alice's that a worker holds, for the dashboard's log, re-queue and cancel (M13.2).
+    const held = await createJob(env.DB, aliceId, "noop");
+    await env.DB.prepare(
+      `UPDATE jobs SET status = 'running', claimed_by = 'w-admin', claimed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+              heartbeat_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?`,
+    )
+      .bind(held.id)
+      .run();
     for (const [key] of routesIn("admin")) {
       const method = key.split(" ")[0] ?? "";
       const request = ADMIN_CALLS[key];
       if (request === undefined) throw new Error(key);
-      const response = await call(method, request, alice);
+      const response = await call(method, { ...request, path: request.path.replace(":job", held.id) }, alice);
       expect(response.status, `${key}: ${await textOf(response.clone())}`).toBe(200);
     }
+    // The admin's pause above must not hold up the tests after this one.
+    await env.DB.prepare("UPDATE settings SET value = 0 WHERE name = 'queue_paused'").run();
   });
 });
 
