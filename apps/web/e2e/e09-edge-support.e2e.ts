@@ -8,6 +8,7 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { newProject } from "./home";
 
 const MODEL = process.env.CLEARFEA_E2E_MODEL ?? "";
 const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
@@ -70,6 +71,7 @@ test("E-09: a fixed support on edges picked in the viewer", async ({ page }) => 
     await page.getByLabel("Login").fill("alice");
     await page.getByLabel("Password").fill("alice-local");
     await page.getByRole("button", { name: "Sign in" }).click();
+    await newProject(page, "E-09 edge support");
     const geometry = page.getByRole("region", { name: "Geometry", exact: true });
     await geometry.locator('input[type="file"]').setInputFiles({
       name: basename(MODEL),

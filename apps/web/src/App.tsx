@@ -18,18 +18,20 @@ import {
   type SimulationSpec,
   specBonds,
 } from "@clearfea/spec";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminPage } from "./admin/AdminPage";
 import { fetchSession, signOut } from "./api/session";
 import { WalletPage } from "./billing/WalletPage";
 import { GeometryPanel } from "./geometry/GeometryPanel";
+import { HomePage } from "./home/HomePage";
+import { storeThumbnail } from "./home/thumbnail";
 import { TestJobs } from "./jobs/TestJobs";
 import { AppHeader } from "./layout/AppHeader";
 import { Ribbon } from "./layout/Ribbon";
 import { SettingsPanel } from "./layout/SettingsPanel";
 import { SimulationTree } from "./layout/SimulationTree";
 import { StatusBar } from "./layout/StatusBar";
-import { useTheme } from "./layout/theme";
+import { type Theme, useTheme } from "./layout/theme";
 import { Viewer } from "./layout/Viewer";
 import { SignIn } from "./session/SignIn";
 import { BodiesPanel, BodyPanel } from "./setup/BodyPanels";
@@ -76,11 +78,17 @@ import {
 } from "./viewer/resultFields";
 import { UNIT_SYSTEMS, UnitSystemProvider } from "./units/system";
 import { useProject } from "./units/useProject";
+import { type Page, pageOf, projectPath, WORKBENCH_PATH } from "./pages";
 
 type SessionState =
   | { kind: "checking" }
   | { kind: "signedOut"; notice?: string }
   | { kind: "signedIn"; user: SessionUser };
+
+/** The page the address names, as far as this component draws it: a project, else the home. */
+function currentPage(): Page {
+  return pageOf(window.location.pathname);
+}
 
 const GROUPS: readonly string[] = ["materials", "supports", "loads"] satisfies Group[];
 
@@ -93,12 +101,147 @@ function groupOf(spec: SimulationSpec, id: string): Group | null {
 }
 
 /**
- * Sign-in form until a user is signed in, then the layout shell: the header and ribbon across
- * the top (UI redesign, ADR-094), tree on the left, viewer in the centre, settings on the right,
- * status bar along the bottom.
+ * Sign-in form until a user is signed in, then the projects home at /app (M14.3) or a project's
+ * workbench at /app/p/<id>. Moving between them changes the address without loading the page
+ * again; the browser's back button goes back. The wallet and admin pages are drawn over either.
  */
 export function App() {
   const [session, setSession] = useState<SessionState>({ kind: "checking" });
+  const [page, setPage] = useState<Page>(currentPage);
+  // The wallet page (M8.1), drawn over the page so the page keeps its state.
+  const [walletOpen, setWalletOpen] = useState(false);
+  // The admin page (M10.3), drawn over the page the same way, for the admin only.
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [theme, setTheme] = useTheme();
+
+  useEffect(() => {
+    let current = true;
+    fetchSession().then((result) => {
+      if (!current) return;
+      if (result.kind === "ok") setSession({ kind: "signedIn", user: result.value });
+      else if (result.kind === "signedOut") setSession({ kind: "signedOut" });
+      else setSession({ kind: "signedOut", notice: result.problem });
+    });
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const back = () => setPage(currentPage());
+    window.addEventListener("popstate", back);
+    return () => window.removeEventListener("popstate", back);
+  }, []);
+
+  const navigate = useCallback((path: string) => {
+    window.history.pushState(null, "", path);
+    setPage(currentPage());
+    setWalletOpen(false);
+    setAdminOpen(false);
+  }, []);
+
+  const signedOut = useCallback((notice?: string) => {
+    setSession({ kind: "signedOut", notice });
+    setWalletOpen(false);
+    setAdminOpen(false);
+  }, []);
+
+  async function leave() {
+    await signOut();
+    signedOut();
+  }
+
+  if (session.kind !== "signedIn") {
+    return (
+      <div className="signin-page">
+        {session.kind === "signedOut" && (
+          <SignIn
+            notice={session.notice}
+            onSignedIn={(user) => setSession({ kind: "signedIn", user })}
+          />
+        )}
+        <StatusBar />
+      </div>
+    );
+  }
+
+  const { user } = session;
+  const statusBar = (
+    <StatusBar
+      user={user}
+      onSignOut={leave}
+      onWallet={() => {
+        setAdminOpen(false);
+        setWalletOpen(true);
+      }}
+      onAdmin={
+        user.admin
+          ? () => {
+              setWalletOpen(false);
+              setAdminOpen(true);
+            }
+          : undefined
+      }
+    />
+  );
+  const overlays = (
+    <>
+      {walletOpen && <WalletPage onClose={() => setWalletOpen(false)} onSignedOut={signedOut} />}
+      {adminOpen && <AdminPage onClose={() => setAdminOpen(false)} onSignedOut={signedOut} />}
+    </>
+  );
+
+  if (page.kind === "project") {
+    return (
+      <Workbench
+        key={page.id}
+        projectId={page.id}
+        user={user}
+        theme={theme}
+        onTheme={setTheme}
+        onHome={() => navigate(WORKBENCH_PATH)}
+        onSignedOut={signedOut}
+        statusBar={statusBar}
+        overlays={overlays}
+      />
+    );
+  }
+  return (
+    <HomePage
+      user={user}
+      theme={theme}
+      onTheme={setTheme}
+      onOpenProject={(id) => navigate(projectPath(id))}
+      onSignedOut={signedOut}
+      statusBar={statusBar}
+      overlays={overlays}
+    />
+  );
+}
+
+/**
+ * One project's workbench: the header and ribbon across the top (UI redesign, ADR-094), tree on
+ * the left, viewer in the centre, settings on the right, status bar along the bottom.
+ */
+function Workbench({
+  projectId,
+  user,
+  theme,
+  onTheme: setTheme,
+  onHome,
+  onSignedOut: signedOut,
+  statusBar,
+  overlays,
+}: {
+  projectId: string;
+  user: SessionUser;
+  theme: Theme;
+  onTheme: (next: Theme) => void;
+  onHome: () => void;
+  onSignedOut: (notice?: string) => void;
+  statusBar: ReactNode;
+  overlays: ReactNode;
+}) {
   const [geometry, setGeometry] = useState<GeometryView | null>(null);
   const [selection, setSelection] = useState<ReadonlySet<number>>(new Set());
   // Edges picked in the viewer while a local size on edges is open (M2.8), or a support picking
@@ -109,11 +252,6 @@ export function App() {
   // The tree item whose settings are shown: "geometry", a group, or a spec item's id.
   const [selected, setSelected] = useState("geometry");
   const [geometryRefresh, setGeometryRefresh] = useState(0);
-  // The wallet page (M8.1), drawn over the workbench so the workbench keeps its state.
-  const [walletOpen, setWalletOpen] = useState(false);
-  // The admin page (M10.3), drawn over the workbench the same way, for the admin only.
-  const [adminOpen, setAdminOpen] = useState(false);
-  const [theme, setTheme] = useTheme();
   // The side panels can be folded away to give the viewer the whole width.
   const [treeShown, setTreeShown] = useState(true);
   const [settingsShown, setSettingsShown] = useState(true);
@@ -132,26 +270,6 @@ export function App() {
     setEdgeSelection(new Set());
     setSelected("geometry");
   }, [geometryId]);
-
-  useEffect(() => {
-    let current = true;
-    fetchSession().then((result) => {
-      if (!current) return;
-      if (result.kind === "ok") setSession({ kind: "signedIn", user: result.value });
-      else if (result.kind === "signedOut") setSession({ kind: "signedOut" });
-      else setSession({ kind: "signedOut", notice: result.problem });
-    });
-    return () => {
-      current = false;
-    };
-  }, []);
-
-  const signedOut = useCallback((notice?: string) => {
-    setSession({ kind: "signedOut", notice });
-    setGeometry(null);
-    setWalletOpen(false);
-    setAdminOpen(false);
-  }, []);
 
   const simulation = useSimulation(geometry, signedOut);
   const { setup, edit } = simulation;
@@ -172,12 +290,27 @@ export function App() {
   // What the result view shows: the chosen quantity and shape, as far as the run has them (a
   // steady-state thermal run, M5.1, has the temperature alone, undeformed).
   const shownChoice = run?.status === "succeeded" ? runChoice(run, resultChoice) : resultChoice;
-  const project = useProject(session.kind === "signedIn", signedOut);
+  const project = useProject(projectId, true, signedOut);
+  // The project's thumbnail on the home page (M14.3): drawn from the geometry once it is ready,
+  // when the stored picture is older than the geometry, once per geometry.
+  const thumbnailDrawn = useRef<string | null>(null);
+  const openProject = project.state.kind === "open" ? project.state.project : null;
+  const replaceProject = project.replace;
+  useEffect(() => {
+    if (openProject === null || geometry === null || geometry.status !== "ready") return;
+    if (thumbnailDrawn.current === geometry.id) return;
+    if (openProject.thumbnailAt !== null && openProject.thumbnailAt >= geometry.createdAt) return;
+    thumbnailDrawn.current = geometry.id;
+    void storeThumbnail(projectId, geometry.id).then((result) => {
+      // A thumbnail is a convenience: the home shows an icon without one, so a failure is not shown.
+      if (result.kind === "ok") replaceProject(result.value);
+    });
+  }, [openProject, geometry, projectId, replaceProject]);
   const materials = useMaterials(setup.kind === "open", signedOut);
   const { unitSystem } = project;
   // The result view's display units (M3.7): one object per choice, so the viewer does not redraw
   // the results on every render.
-  const displayUnits = useDisplayUnits(session.kind === "signedIn" ? session.user.id : null, unitSystem);
+  const displayUnits = useDisplayUnits(user.id, unitSystem);
   const resultUnits = displayUnits.units;
   // What each body is called (M4.1): its part name from the STEP file, or "Body <tag>".
   const bodyLabels = useMemo(
@@ -225,11 +358,6 @@ export function App() {
       }
     }
     return blockers;
-  }
-
-  async function leave() {
-    await signOut();
-    signedOut();
   }
 
   /** The faces of the bodies a local size on bodies applies to, to show them in the viewer. */
@@ -548,16 +676,17 @@ export function App() {
       </>
     ) : null;
 
-  if (session.kind !== "signedIn") {
+  if (project.state.kind === "unavailable") {
     return (
       <div className="signin-page">
-        {session.kind === "signedOut" && (
-          <SignIn
-            notice={session.notice}
-            onSignedIn={(user) => setSession({ kind: "signedIn", user })}
-          />
-        )}
-        <StatusBar />
+        <main className="project-unavailable" aria-label="Project not available">
+          <h1>This project cannot be opened</h1>
+          <p role="alert">{project.state.problem}</p>
+          <button type="button" className="link-button" onClick={onHome}>
+            Go to your projects
+          </button>
+        </main>
+        {statusBar}
       </div>
     );
   }
@@ -573,6 +702,8 @@ export function App() {
     <UnitSystemProvider value={unitSystem}>
     <div className={`shell${treeShown ? "" : " shell-no-tree"}${settingsShown ? "" : " shell-no-settings"}`}>
       <AppHeader
+        project={project.state.kind === "open" ? project.state.project.name : null}
+        onHome={onHome}
         geometry={geometry}
         setup={setup}
         save={simulation.save}
@@ -654,29 +785,13 @@ export function App() {
       <SettingsPanel>
         {/* Kept mounted while hidden: it loads the geometry and follows its import. */}
         <div hidden={!showGeometry}>
-          <GeometryPanel onSignedOut={signedOut} onGeometryChange={setGeometry} refresh={geometryRefresh} />
+          <GeometryPanel projectId={projectId} onSignedOut={signedOut} onGeometryChange={setGeometry} refresh={geometryRefresh} />
           {showGeometry && <TestJobs onSignedOut={signedOut} />}
         </div>
         {itemPanel}
       </SettingsPanel>
-      {walletOpen && <WalletPage onClose={() => setWalletOpen(false)} onSignedOut={signedOut} />}
-      {adminOpen && <AdminPage onClose={() => setAdminOpen(false)} onSignedOut={signedOut} />}
-      <StatusBar
-        user={session.user}
-        onSignOut={leave}
-        onWallet={() => {
-          setAdminOpen(false);
-          setWalletOpen(true);
-        }}
-        onAdmin={
-          session.user.admin
-            ? () => {
-                setWalletOpen(false);
-                setAdminOpen(true);
-              }
-            : undefined
-        }
-      />
+      {overlays}
+      {statusBar}
     </div>
     </UnitSystemProvider>
   );

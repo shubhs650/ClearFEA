@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Upload a STEP file and confirm its length unit (M1.2). Shows the user's most recent
-// geometry; projects, and so a choice of geometry, come later in M1.
+// Upload a STEP file and confirm its length unit (M1.2). Shows the project's most recent
+// geometry (M14.3); a choice of geometry comes with the workbench tree (M15.1).
 
 import { type GeometryStatus, type GeometryView, type JobWait, unitsTable } from "@clearfea/spec";
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -47,10 +47,13 @@ function sizeInFile(geometry: GeometryView): string | null {
 }
 
 export function GeometryPanel({
+  projectId,
   onSignedOut,
   onGeometryChange,
   refresh = 0,
 }: {
+  /** The open project, whose geometries are listed and which uploads go into. */
+  projectId?: string;
   onSignedOut: (problem: string) => void;
   /** Called with each new state of the shown geometry, so the viewer can follow it. */
   onGeometryChange?: (geometry: GeometryView) => void;
@@ -86,12 +89,12 @@ export function GeometryPanel({
   );
 
   useEffect(() => {
-    void listGeometries().then((result) => {
+    void listGeometries(projectId).then((result) => {
       const list = handle(result);
       const latest = list?.[0];
       if (latest) show(latest);
     });
-  }, [handle, show]);
+  }, [projectId, handle, show]);
 
   const importing = geometry?.status === "importing";
   const id = geometry?.id;
@@ -129,7 +132,7 @@ export function GeometryPanel({
     event.target.value = "";
     if (!file) return;
     setBusy(true);
-    const created = handle(await uploadGeometry(file));
+    const created = handle(await uploadGeometry(file, projectId));
     setBusy(false);
     if (created) show(created);
   }

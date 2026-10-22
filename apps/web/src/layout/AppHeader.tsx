@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The bar across the top of the workbench (UI redesign, ADR-094): the ClearFEA mark, the open
-// geometry's file and whether the setup is saved, the project's unit system and the light or
-// dark theme.
+// The bar across the top of the workbench (UI redesign, ADR-094): the ClearFEA mark with the
+// way back to the projects home (M14.3), the project's name, the open geometry's file and
+// whether the setup is saved, the project's unit system and the light or dark theme.
 
 import type { GeometryView } from "@clearfea/spec";
-import { CircleAlert, CircleCheck, FileBox, LoaderCircle, Moon, PanelLeft, PanelRight, Sun } from "lucide-react";
+import { ChevronRight, CircleAlert, CircleCheck, FileBox, House, LoaderCircle, Moon, PanelLeft, PanelRight, Sun } from "lucide-react";
 import type { ReactNode } from "react";
 import type { SaveState, Setup } from "../setup/useSimulation";
 import type { Theme } from "./theme";
@@ -40,6 +40,8 @@ function saveText(save: SaveState): string {
 }
 
 export function AppHeader({
+  project,
+  onHome,
   geometry,
   setup,
   save,
@@ -51,6 +53,9 @@ export function AppHeader({
   onToggleTree,
   onToggleSettings,
 }: {
+  /** The open project's name, once it has loaded. */
+  project: string | null;
+  onHome: () => void;
   geometry: GeometryView | null;
   setup: Setup;
   save: SaveState;
@@ -84,6 +89,18 @@ export function AppHeader({
         <PanelLeft size={17} aria-hidden="true" />
       </button>
       <div className="app-document">
+        <button type="button" className="app-home-link" title="Go to your projects" onClick={onHome}>
+          <House size={15} aria-hidden="true" />
+          Projects
+        </button>
+        {project !== null && (
+          <>
+            <ChevronRight size={14} aria-hidden="true" className="app-crumb" />
+            <span className="app-project" title={project}>
+              {project}
+            </span>
+          </>
+        )}
         {geometry !== null && (
           <span className="app-file" title={geometry.name}>
             <FileBox size={15} aria-hidden="true" />

@@ -22,6 +22,7 @@ import {
 } from "@clearfea/spec";
 import { type Context, Hono } from "hono";
 import { readBody } from "../body";
+import { imageInfo } from "../logo";
 import { type DuplicateRefusal, duplicateFolder, duplicateProject, MAX_DUPLICATED_GEOMETRIES } from "../db/duplicate";
 import {
   changeFolder,
@@ -33,7 +34,9 @@ import {
   isRefusal,
   listHome,
   markProjectOpened,
+  markProjectThumbnail,
   type Project,
+  projectThumbnailKey,
   restoreFolder,
   restoreProject,
   setProjectUnitSystem,
@@ -219,6 +222,54 @@ home.post("/:id/opened", async (c) => {
   const project = await getProject(c.env.DB, c.var.userId, id);
   if (project === null) return refusal(c, "project", "notFound");
   return c.json({ project: projectView(project) } satisfies ProjectResponse);
+});
+
+/** The most a thumbnail may hold: the home shows it a few hundred pixels wide. */
+export const MAX_THUMBNAIL_BYTES = 500 * 1000;
+export const MAX_THUMBNAIL_PIXELS = 1024;
+
+/**
+ * Stores the project's thumbnail (M14.3): a PNG the browser draws with the viewer, sent as the
+ * raw body like a report figure, so a cross-site form cannot send it without the browser asking.
+ */
+home.put("/:id/thumbnail", async (c) => {
+  if ((c.req.header("Content-Type") ?? "").split(";")[0]?.trim() !== "application/octet-stream") {
+    return c.json({ error: "Send the thumbnail as the request body with Content-Type: application/octet-stream." }, 415);
+  }
+  const tooLarge = `The thumbnail is larger than ${MAX_THUMBNAIL_BYTES / 1000} kB. Send a smaller picture.`;
+  if (Number(c.req.header("Content-Length") ?? Number.NaN) > MAX_THUMBNAIL_BYTES) return c.json({ error: tooLarge }, 413);
+  const id = c.req.param("id");
+  const project = await getProject(c.env.DB, c.var.userId, id);
+  if (project === null) return refusal(c, "project", "notFound");
+  if (project.deletedAt !== null) return refusal(c, "project", "inTrash");
+  const content = new Uint8Array(await c.req.arrayBuffer());
+  if (content.byteLength > MAX_THUMBNAIL_BYTES) return c.json({ error: tooLarge }, 413);
+  const info = imageInfo(content);
+  if (info?.contentType !== "image/png") return c.json({ error: "A thumbnail must be a PNG image." }, 400);
+  if (info.width > MAX_THUMBNAIL_PIXELS || info.height > MAX_THUMBNAIL_PIXELS) {
+    return c.json({ error: `A thumbnail must be at most ${MAX_THUMBNAIL_PIXELS} pixels wide and high.` }, 400);
+  }
+  await c.env.FILES.put(projectThumbnailKey(c.var.userId, id), content, { httpMetadata: { contentType: "image/png" } });
+  const result = await markProjectThumbnail(c.env.DB, c.var.userId, id);
+  if (isRefusal(result)) return refusal(c, "project", result);
+  return c.json({ project: projectView(result) } satisfies ProjectResponse);
+});
+
+home.get("/:id/thumbnail", async (c) => {
+  const id = c.req.param("id");
+  const project = await getProject(c.env.DB, c.var.userId, id);
+  if (project === null) return refusal(c, "project", "notFound");
+  const object = project.thumbnailAt === null ? null : await c.env.FILES.get(projectThumbnailKey(c.var.userId, id));
+  if (object === null) return c.json({ error: "This project has no thumbnail yet. Open it and show its geometry." }, 404);
+  return new Response(object.body, {
+    headers: {
+      "Content-Type": "image/png",
+      "Content-Length": String(object.size),
+      // The home asks with ?at=<thumbnailAt>, so a new picture has a new address.
+      "Cache-Control": "private, max-age=86400",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 });
 
 home.post("/:id/duplicate", async (c) => {

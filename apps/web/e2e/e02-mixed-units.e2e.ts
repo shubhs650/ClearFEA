@@ -13,6 +13,7 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { newProject } from "./home";
 
 const MODEL = process.env.CLEARFEA_E2E_MODEL ?? "";
 const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
@@ -100,10 +101,9 @@ test("E-02: values entered in mixed units", async ({ page }) => {
     await page.goto("/app");
     await page.getByLabel("Login").fill("alice");
     await page.getByLabel("Password").fill("alice-local");
-    // The project's system loads after sign-in; a choice made before it lands would be drawn over.
-    const project = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/project" && r.ok());
     await page.getByRole("button", { name: "Sign in" }).click();
-    await project;
+    // The new project's system loads with it; newProject waits for it, so a choice is not drawn over.
+    await newProject(page, "E-02 mixed units");
     await expect(system).toHaveValue("metric-mm");
     await system.selectOption("us-in");
     await expect(system).toHaveValue("us-in");

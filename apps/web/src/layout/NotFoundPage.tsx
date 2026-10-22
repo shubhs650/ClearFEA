@@ -16,7 +16,7 @@ export function NotFoundPage() {
           <p className="form-problem" role="alert">
             There is no page at this address. Check the link you followed, or open the workbench.
           </p>
-          <a href={WORKBENCH_PATH}>Open the workbench</a>
+          <a href={WORKBENCH_PATH}>Go to your projects</a>
         </div>
       </main>
     </div>

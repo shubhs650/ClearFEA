@@ -222,6 +222,7 @@ beforeAll(async () => {
   ).material?.id as string;
   extra.projectId = (await ok("PATCH", { path: "/api/project", json: { unitSystem: "us-in" } })).project?.id as string;
   extra.folderId = (await ok("POST", { path: "/api/folders", json: { name: `${ALICE_MARKER} folder` } }, 201)).folder?.id as string;
+  await ok("PUT", { path: `/api/projects/${extra.projectId}/thumbnail`, bytes: png(64, 40) });
   await ok("PUT", { path: "/api/report-branding", json: { companyName: `${ALICE_MARKER} Engineering` } });
   await ok("POST", { path: "/api/report-branding/logo", bytes: png(320, 80) });
   extra.viewId = (
@@ -405,6 +406,8 @@ const ROUTES: Record<string, Route> = {
   "GET /api/projects/:id": { area: "owned", owned: (i) => ({ path: p(i) }) },
   "PATCH /api/projects/:id": { area: "owned", owned: (i) => ({ path: p(i), json: { name: "Taken", unitSystem: "si" } }) },
   "POST /api/projects/:id/opened": { area: "owned", owned: (i) => ({ path: `${p(i)}/opened` }) },
+  "PUT /api/projects/:id/thumbnail": { area: "owned", owned: (i) => ({ path: `${p(i)}/thumbnail`, bytes: png(64, 40) }) },
+  "GET /api/projects/:id/thumbnail": { area: "owned", owned: (i) => ({ path: `${p(i)}/thumbnail` }) },
   "POST /api/projects/:id/duplicate": { area: "owned", owned: (i) => ({ path: `${p(i)}/duplicate`, json: {} }) },
   "POST /api/projects/:id/trash": { area: "owned", owned: (i) => ({ path: `${p(i)}/trash` }) },
   "POST /api/projects/:id/restore": { area: "owned", owned: (i) => ({ path: `${p(i)}/restore` }) },

@@ -129,7 +129,7 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await expect(events.getByText("Invited colleague.one@example.com.")).toBeVisible();
     await page.screenshot({ path: `${OUT}/e08-dashboard-events.png` });
 
-    await admin.getByRole("button", { name: "Back to the workbench" }).click();
+    await admin.getByRole("button", { name: "Close" }).click();
     await expect(admin).toHaveCount(0);
   });
 

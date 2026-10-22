@@ -159,6 +159,30 @@ export async function markProjectOpened(db: D1Database, userId: string, projectI
   return result.meta.changes === 1;
 }
 
+/**
+ * Records that the viewer stored the project's thumbnail now (M14.3). Refused for a project in
+ * the trash, which changes nothing until it is restored.
+ */
+export async function markProjectThumbnail(
+  db: D1Database,
+  userId: string,
+  projectId: string,
+): Promise<Project | "notFound" | "inTrash"> {
+  const project = await getProject(db, userId, projectId);
+  if (project === null) return "notFound";
+  if (project.deletedAt !== null) return "inTrash";
+  await db
+    .prepare(`UPDATE projects SET thumbnail_at = ${NOW} WHERE id = ? AND owner_id = ? AND deleted_at IS NULL`)
+    .bind(projectId, userId)
+    .run();
+  return (await getProject(db, userId, projectId)) ?? "notFound";
+}
+
+/** The R2 key of the project's thumbnail, in its own folder. */
+export function projectThumbnailKey(ownerId: string, projectId: string): string {
+  return `${projectFolderKey(ownerId, projectId)}thumbnail.png`;
+}
+
 /** Sets the default unit system of the user's project. The caller checks the id against units.json. */
 export async function setProjectUnitSystem(db: D1Database, userId: string, unitSystem: string): Promise<Project> {
   const project = await userProject(db, userId);

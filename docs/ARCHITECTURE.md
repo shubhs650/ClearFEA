@@ -270,7 +270,7 @@ Admin dashboard (M13.2, ADR-113, ADR-127): the admin page's tabs are Overview, J
 
 Hono on Cloudflare Workers, TypeScript.
 
-- **Public routes** (`/api/...`): session login, projects and folders (`/api/projects`, `/api/folders`: the home with every folder and project, create, rename, move, duplicate, trash and restore, M14.2, ADR-124; `/api/project` is the user's oldest project outside the trash until the home page opens a chosen one), geometries, simulations, meshes, runs, materials, wallet, share links. JSON in and out, validated against the shared schemas.
+- **Public routes** (`/api/...`): session login, projects and folders (`/api/projects`, `/api/folders`: the home with every folder and project, create, rename, move, duplicate, trash and restore, M14.2, ADR-124; `PUT` and `GET /api/projects/:id/thumbnail`, the project's picture for the home, M14.3, ADR-126; `/api/project`, the user's oldest project outside the trash, is no longer used by the web app), geometries, simulations, meshes, runs, materials, wallet, share links. JSON in and out, validated against the shared schemas.
 - **Internal routes** (`/internal/...`): job claim, heartbeat, completion, file transfer. Authenticated by worker token, never by user session.
 - **Data-access layer:** every function takes the acting user id and applies `owner_id` filtering. Route handlers do not write SQL.
 - **Pre-run validation:** a pure function over the spec and topology that returns a list of problems in plain language (`preRunProblems` in `packages/spec`, ADR-034). The API refuses a run with it before any job is queued, and the UI shows the same list beside the disabled Run button.
@@ -319,7 +319,7 @@ As decided in ADR-095. Setup steps for the maintainer are in `DEPLOYMENT.md`.
                              +----------------------------------+      +--------------------------+
 ```
 
-**Request routing.** The Worker's static assets hold the built web app: `/` is the landing page, `/app` the workbench, `/share/<token>` a shared run; `/api/*` and `/internal/*` run the Worker first. Unknown app paths fall back to the app's page.
+**Request routing.** The Worker's static assets hold the built web app: `/` is the landing page, `/app` the projects home and `/app/p/<id>` a project's workbench (M14.3), `/share/<token>` a shared run; `/api/*` and `/internal/*` run the Worker first. Unknown app paths fall back to the app's page.
 
 **Sign-in** (ADR-097). Better Auth handles `/api/auth/*` with Google as its only provider and D1 for its tables: ClearFEA's own `users` (Google users get their address as login) and `auth_sessions`, `auth_accounts` and `auth_verifications`. Database hooks refuse a user or a session whose verified email is neither `ADMIN_EMAIL` nor on the `allowed_emails` table, and give a new user the sign-up grant (`settings.signup_grant_micro_credits`). `requireUser` reads the Better Auth session and sets `c.var.userId` as before. The admin page (opened from the status bar, admin only) adds and removes allowlist rows, removing a row ends that user's sessions, and lists users with their machine time this month; `/api/admin/*` answers anyone else as an unknown address. `AUTH_MODE=local` (the default) keeps the seeded password login for `make dev`, `make verify` and `make e2e`; the production configuration sets `AUTH_MODE=google`, where the password route refuses. A verification account for live checks signs in with a secret token (M10.9).
 
