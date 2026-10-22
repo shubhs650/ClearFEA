@@ -6,16 +6,20 @@ import {
   type AdminJobResponse,
   type AdminJobsResponse,
   type AdminResponse,
+  type CostsResponse,
   type EventsResponse,
   type JobTriesResponse,
   type OverviewResponse,
+  type SettingsResponse,
   validateAdminJobLogResponse,
   validateAdminJobResponse,
   validateAdminJobsResponse,
   validateAdminResponse,
+  validateCostsResponse,
   validateEventsResponse,
   validateJobTriesResponse,
   validateOverviewResponse,
+  validateSettingsResponse,
 } from "@clearfea/spec";
 import { type ApiResult, apiRequest } from "./request";
 
@@ -33,10 +37,6 @@ export function removeAllowed(email: string): Promise<ApiResult<AdminResponse>> 
 
 export function switchCloudSize(name: string, enabled: boolean): Promise<ApiResult<AdminResponse>> {
   return apiRequest("PUT", `/api/admin/machine-sizes/${encodeURIComponent(name)}`, validateAdminResponse, { enabled });
-}
-
-export function setMachineHoursCap(hours: number): Promise<ApiResult<AdminResponse>> {
-  return apiRequest("PUT", "/api/admin/machine-hours-cap", validateAdminResponse, { hours });
 }
 
 // The dashboard (M13.2, ADR-127): the Overview with pause and resume, every user's jobs with their
@@ -100,4 +100,19 @@ export function fetchEvents(filter: {
     `/api/admin/events${query({ ...rest, limit: limit === undefined ? undefined : String(limit) })}`,
     validateEventsResponse,
   );
+}
+
+// The Settings and Costs tabs (M13.3, ADR-128).
+
+export function fetchSettings(): Promise<ApiResult<SettingsResponse>> {
+  return apiRequest("GET", "/api/admin/settings", validateSettingsResponse);
+}
+
+/** Sets a setting's stored value (bytes, seconds, micro-credits, cents), not the value as shown. */
+export function setSetting(name: string, value: number): Promise<ApiResult<SettingsResponse>> {
+  return apiRequest("PUT", `/api/admin/settings/${encodeURIComponent(name)}`, validateSettingsResponse, { value });
+}
+
+export function fetchCosts(month: string): Promise<ApiResult<CostsResponse>> {
+  return apiRequest("GET", `/api/admin/costs${query({ month })}`, validateCostsResponse);
 }

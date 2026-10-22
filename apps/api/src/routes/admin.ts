@@ -4,7 +4,8 @@
 // their monthly hours cap (M10.7, ADR-100), and the statistics of each try of a job and of the solver
 // host's load (M12.3, ADR-109), and the event log, where each change made here is recorded (M13.1,
 // ADR-113, ADR-125), and the dashboard's Overview with pause and resume, and every user's jobs with
-// their logs, cancel and re-queue (M13.2, ADR-127). Only the admin (ADMIN_EMAIL) reaches them; to
+// their logs, cancel and re-queue (M13.2, ADR-127), and every setting and each month's costs
+// (M13.3, ADR-128). Only the admin (ADMIN_EMAIL) reaches them; to
 // anyone else they answer as if they did not exist. Shapes: packages/spec/schemas/admin.schema.json.
 
 import {
@@ -15,24 +16,36 @@ import {
   type AdminJobResponse,
   type AdminJobsResponse,
   type AdminResponse,
+  type CostsResponse,
   type EventsResponse,
   type HostLoadResponse,
   type JobTriesResponse,
   type OverviewResponse,
+  type SettingsResponse,
   validateAddAllowedRequest,
   validateSetMachineHoursCapRequest,
   validateSetQueuePausedRequest,
+  validateSetSettingRequest,
   validateSwitchCloudSizeRequest,
 } from "@clearfea/spec";
 import { Hono, type MiddlewareHandler } from "hono";
 import { readBody } from "../body";
 import { addAllowed, isAdminEmail, listAllowed, listUsers, normalEmail, removeAllowed } from "../db/allowlist";
 import { adminJob, laneJobs, listAdminJobs } from "../db/adminJobs";
+import { currentMonth, monthCosts } from "../db/costs";
 import { lastPausedAt, listEvents, recordAdminAction } from "../db/events";
 import { latestHost } from "../db/hosts";
 import { jobForAdmin, readJobLog } from "../db/jobs";
 import { listCloudSizes, machineMode, switchCloudSize } from "../db/machines";
-import { queuePaused, setMachineHoursCap, setQueuePaused } from "../db/settings";
+import {
+  listSettings,
+  queuePaused,
+  SETTINGS,
+  type SettingDefinition,
+  setMachineHoursCap,
+  setQueuePaused,
+  setSetting,
+} from "../db/settings";
 import { latestHostLoad, listHostLoad, listTries } from "../db/stats";
 import { getUser } from "../db/users";
 import type { Env } from "../env";
@@ -421,4 +434,49 @@ admin.post("/jobs/:id/requeue", async (c) => {
     job.id,
   );
   return c.json({ job: (await adminJob(c.env.DB, job.id)) as AdminJob } satisfies AdminJobResponse);
+});
+
+/** A stored value as the dashboard shows it, such as "5 GiB" or "17 USD". */
+function shown(definition: SettingDefinition, value: number): string {
+  return `${Number((value / definition.scale).toPrecision(6))} ${definition.unit}`;
+}
+
+const settingsView = async (db: D1Database): Promise<SettingsResponse> => ({ settings: await listSettings(db) });
+
+/** Every setting the dashboard edits, with its stored value and what it allows (M13.3, ADR-128). */
+admin.get("/settings", async (c) => c.json(await settingsView(c.env.DB)));
+
+/** Changes one setting and records the change; an unchanged value records nothing. */
+admin.put("/settings/:name", async (c) => {
+  const definition = SETTINGS.find((entry) => entry.name === c.req.param("name"));
+  if (definition === undefined) return c.json({ error: "There is no setting of that name. Reload the dashboard." }, 404);
+  const body = await readBody(c.req.raw, validateSetSettingRequest, "SetSettingRequest", "admin.schema.json");
+  const { value } = "error" in body ? { value: Number.NaN } : body.value;
+  if (!Number.isInteger(value) || value < definition.min || value > definition.max) {
+    return c.json(
+      {
+        error: `Give "${definition.label}" a value from ${shown(definition, definition.min)} to ${shown(definition, definition.max)}. Nothing was changed.`,
+      },
+      400,
+    );
+  }
+  const previous = await setSetting(c.env.DB, definition.name, value);
+  if (previous !== null) {
+    await recordAdminAction(
+      c.env.DB,
+      c.var.userId,
+      `Changed "${definition.label}" from ${shown(definition, previous)} to ${shown(definition, value)}.`,
+      { action: "setting", name: definition.name, from: previous, to: value },
+    );
+  }
+  return c.json(await settingsView(c.env.DB));
+});
+
+/** One calendar month's (UTC) usage and the beta's monthly costs, ?month=YYYY-MM, this month by default. */
+admin.get("/costs", async (c) => {
+  const month = c.req.query("month") ?? currentMonth();
+  if (!/^[0-9]{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    return c.json({ error: "Give ?month= as a year and month, such as 2026-10." }, 400);
+  }
+  return c.json((await monthCosts(c.env.DB, month)) satisfies CostsResponse);
 });

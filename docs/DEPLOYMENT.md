@@ -265,7 +265,7 @@ After this, you never need to run it by hand: every merge to `main` runs it.
 
 `ADMIN_GUIDE.md` section 1 has these steps with a message to send them.
 
-1. Admin page → **Allowed addresses** → type the colleague's Gmail address → **Add**.
+1. Admin page → **Users** → **Allowed addresses** → type the colleague's Gmail address → **Add**.
 2. Check the same address is a **Test user** on the Google consent screen (2.2 step 7).
 3. Send them the link `https://clearfea.triyalabs.com` and the user guide's tutorial. They sign in with Google; there is nothing to install.
 
@@ -290,7 +290,7 @@ GitHub → **Actions** → **Deploy** → **Run workflow**, and in **Use workflo
 ### 7.3 Switch on the large machine (8 vCPU / 32 GB)
 
 1. AWS → **CloudFormation** → `clearfea` → **Update** → **Replace existing template** → upload the current `clearfea.yaml` (4.3) → set `LargeSizeEnabled` to `true` → **Next** to the end → **Submit**.
-2. ClearFEA admin page → **Machine sizes** → switch **Large** on.
+2. ClearFEA admin page → **Settings** → **Machine sizes** → switch **Large** on.
 
 Until the large machine is benchmarked it keeps the 16 GB element limits, so it does not yet allow bigger models (ADR-095 item 5).
 
@@ -298,7 +298,7 @@ Until the large machine is benchmarked it keeps the 16 GB element limits, so it 
 
 - AWS → **Billing and Cost Management** → **Bills** (this month so far) or **Cost Explorer** (by service: Fargate is "Elastic Container Service").
 - Cloudflare → **Manage account** → **Billing**.
-- ClearFEA admin page → **Solver machines**: machine hours used this month against the monthly limit, and the latest machines started with how each went.
+- ClearFEA admin page → **Settings** → **Solver machines**: machine hours used this month against the monthly limit, and the latest machines started with how each went.
 
 ### 7.5 Make sure nothing is left running
 
@@ -306,7 +306,7 @@ AWS → **Elastic Container Service** → **Clusters** → `clearfea` → **Task
 
 ### 7.6 Pause or shut down
 
-- **Pause the solver**: admin page → **Solver machines** → set the monthly limit to 0. No machine starts and new runs are refused; the site stays up. Set it back (for example to 60) to resume.
+- **Pause the solver**: admin page → **Settings** → **Cloud machines** → set the monthly limit of machine hours to 0. No machine starts and new runs are refused; the site stays up. Set it back (for example to 60) to resume.
 - **Shut AWS down completely**: CloudFormation → `clearfea` → **Delete**. The image store must be emptied first (ECR → `clearfea-worker` → select all images → **Delete**).
 - **Take the site down**: Cloudflare → **Compute (Workers)** → `clearfea` → **Settings** → **Domains & Routes** → remove `clearfea.triyalabs.com`.
 

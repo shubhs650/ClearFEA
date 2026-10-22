@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 type Admin = Annotated[Any, Field(title="Admin")]
 """
-Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) the event log (M13.1) and the dashboard's overview and jobs (M13.2). Only the admin reaches them. Each message is a definition under $defs.
+Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) the event log (M13.1) the dashboard's overview and jobs (M13.2), and its settings and costs (M13.3). Only the admin reaches them. Each message is a definition under $defs.
 """
 
 
@@ -48,6 +48,14 @@ class AdminUser(BaseModel):
     machine_seconds_this_month: Annotated[int, Field(alias="machineSecondsThisMonth", ge=0)]
     """
     Billed machine seconds of their jobs that finished this calendar month (UTC).
+    """
+    jobs_this_month: Annotated[int, Field(alias="jobsThisMonth", ge=0)]
+    """
+    Their jobs that finished this calendar month (UTC), whatever the outcome.
+    """
+    failed_jobs_this_month: Annotated[int, Field(alias="failedJobsThisMonth", ge=0)]
+    """
+    Of those, the ones that failed, whoever's fault.
     """
     allowed: bool
     """
@@ -609,3 +617,186 @@ class AddAllowedRequest(BaseModel):
             pattern="^\\s*[^@\\s]+@[^@\\s]+\\.[^@\\s]+\\s*$",
         ),
     ]
+
+
+class AdminSetting(BaseModel):
+    """
+    One setting the admin may change on the Settings tab (M13.3, ADR-128). The stored value is a whole number; the dashboard shows it divided by scale, in unit.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    name: str
+    """
+    The row of the settings table.
+    """
+    group: Literal["accounts", "queue", "storage", "machines", "costs"]
+    label: str
+    description: str
+    """
+    What it does, in plain words.
+    """
+    unit: str
+    """
+    The unit it is shown in, such as GiB, days or USD.
+    """
+    scale: Annotated[int, Field(ge=1)]
+    """
+    Stored units per shown unit, such as 1073741824 bytes per GiB.
+    """
+    min: int
+    """
+    The smallest stored value allowed.
+    """
+    max: int
+    """
+    The largest stored value allowed.
+    """
+    value: int
+    """
+    The stored value now.
+    """
+
+
+class SettingsResponse(BaseModel):
+    """
+    Answer of GET /api/admin/settings and PUT /api/admin/settings/{name}.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    settings: list[AdminSetting]
+
+
+class SetSettingRequest(BaseModel):
+    """
+    Body of PUT /api/admin/settings/{name}: the new stored value, which must be a whole number from the setting's min to its max.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    value: int
+
+
+class CostsUser(BaseModel):
+    """
+    One user's usage in the month.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    user_id: Annotated[str, Field(alias="userId")]
+    name: str
+    email: str | None
+    jobs: Annotated[int, Field(ge=0)]
+    """
+    Jobs that finished in the month.
+    """
+    solve_runs: Annotated[int, Field(alias="solveRuns", ge=0)]
+    """
+    Solve jobs that finished in the month.
+    """
+    machine_seconds: Annotated[int, Field(alias="machineSeconds", ge=0)]
+    """
+    Their billed machine seconds.
+    """
+    job_micro_credits: Annotated[int, Field(alias="jobMicroCredits", ge=0)]
+    """
+    Micro-credits charged for jobs in the month.
+    """
+    storage_micro_credits: Annotated[int, Field(alias="storageMicroCredits", ge=0)]
+    """
+    Micro-credits charged for storage in the month.
+    """
+
+
+class CostsJobType(BaseModel):
+    """
+    One job type's usage in the month.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    type: Literal["noop", "import", "mesh", "solve", "report"]
+    jobs: Annotated[int, Field(ge=0)]
+    """
+    Jobs that finished in the month.
+    """
+    machine_seconds: Annotated[int, Field(alias="machineSeconds", ge=0)]
+    """
+    Their billed machine seconds.
+    """
+    job_micro_credits: Annotated[int, Field(alias="jobMicroCredits", ge=0)]
+    """
+    Micro-credits charged for jobs in the month.
+    """
+
+
+class CostsTotals(BaseModel):
+    """
+    The month's usage over all users.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    jobs: Annotated[int, Field(ge=0)]
+    """
+    Jobs that finished in the month.
+    """
+    solve_runs: Annotated[int, Field(alias="solveRuns", ge=0)]
+    """
+    Solve jobs that finished in the month.
+    """
+    machine_seconds: Annotated[int, Field(alias="machineSeconds", ge=0)]
+    """
+    Their billed machine seconds.
+    """
+    job_micro_credits: Annotated[int, Field(alias="jobMicroCredits", ge=0)]
+    """
+    Micro-credits charged for jobs in the month.
+    """
+    storage_micro_credits: Annotated[int, Field(alias="storageMicroCredits", ge=0)]
+    """
+    Micro-credits charged for storage in the month.
+    """
+
+
+class CostsResponse(BaseModel):
+    """
+    Answer of GET /api/admin/costs?month=YYYY-MM (M13.3, ADR-128): one calendar month's (UTC) usage by user and by job type, and the beta's monthly costs from the settings.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    month: Annotated[str, Field(pattern="^[0-9]{4}-(0[1-9]|1[0-2])$")]
+    solver_host_cents: Annotated[int, Field(alias="solverHostCents", ge=0)]
+    """
+    What the solver host costs a month, in US cents (setting solver_host_monthly_cents).
+    """
+    platform_cents: Annotated[int, Field(alias="platformCents", ge=0)]
+    """
+    What Cloudflare costs a month, in US cents (setting platform_monthly_cents).
+    """
+    totals: CostsTotals
+    by_user: Annotated[list[CostsUser], Field(alias="byUser")]
+    """
+    Users with any job or charge in the month, the most machine time first.
+    """
+    by_type: Annotated[list[CostsJobType], Field(alias="byType")]
+    """
+    Job types with any job in the month, the most machine time first.
+    """
