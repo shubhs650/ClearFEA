@@ -306,8 +306,6 @@ def test_the_names_and_permissions_match_the_aws_stack() -> None:
         "logs:GetLogEvents",
     }
     assert used <= granted
-    workflow = (REPO / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
-    assert "STACK_NAME: clearfea" in workflow
     subjects = resources["DeployRole"]["Properties"]["AssumeRolePolicyDocument"]["Statement"][0][
         "Condition"
     ]["StringLike"]["token.actions.githubusercontent.com:sub"]

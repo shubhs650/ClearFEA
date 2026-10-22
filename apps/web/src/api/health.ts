@@ -2,6 +2,7 @@
 // Client for GET /api/health. The response shape is checked against packages/spec.
 
 import { validateHealthResponse } from "@clearfea/spec";
+import { accessExpired, isAccessRedirect } from "./request";
 
 export type HealthState =
   | { kind: "checking" }
@@ -18,11 +19,12 @@ const noAnswer = import.meta.env.DEV ? "The API did not answer on port 8787" : "
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthState> {
   let response: Response;
   try {
-    response = await fetch("/api/health", { signal });
+    response = await fetch("/api/health", { signal, redirect: "manual" });
   } catch (error) {
     if (signal?.aborted) throw error;
     return { kind: "unreachable", problems: [`The API did not answer. ${startApi}`] };
   }
+  if (isAccessRedirect(response)) return { kind: "unreachable", problems: [accessExpired] };
 
   const checked = validateHealthResponse(await response.json().catch(() => undefined));
   if (!checked.ok) {

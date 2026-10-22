@@ -55,3 +55,21 @@ def test_rejects_a_malformed_machine_size_or_idle_time() -> None:
         load_settings({"CLEARFEA_WORKER_TOKEN": "x", "CLEARFEA_MACHINE_SIZE": "Large Machine"})
     with pytest.raises(ConfigError, match="CLEARFEA_IDLE_EXIT_SECONDS"):
         load_settings({"CLEARFEA_WORKER_TOKEN": "x", "CLEARFEA_IDLE_EXIT_SECONDS": "-1"})
+
+
+def test_reads_the_access_service_token() -> None:
+    settings = load_settings(
+        {
+            "CLEARFEA_WORKER_TOKEN": "x",
+            "CLEARFEA_ACCESS_CLIENT_ID": "id.access",
+            "CLEARFEA_ACCESS_CLIENT_SECRET": "secret",
+        }
+    )
+    assert (settings.access_client_id, settings.access_client_secret) == ("id.access", "secret")
+    local = load_settings({"CLEARFEA_WORKER_TOKEN": "x"})
+    assert local.access_client_id is None and local.access_client_secret is None
+
+
+def test_rejects_half_an_access_service_token() -> None:
+    with pytest.raises(ConfigError, match="CLEARFEA_ACCESS_CLIENT_SECRET"):
+        load_settings({"CLEARFEA_WORKER_TOKEN": "x", "CLEARFEA_ACCESS_CLIENT_ID": "id.access"})

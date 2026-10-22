@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from clearfea_worker import solver, versions
-from clearfea_worker.api import USER_AGENT, ApiClient, ApiError, ClaimedJob
+from clearfea_worker.api import USER_AGENT, AccessBlocked, ApiClient, ApiError, ClaimedJob
 from clearfea_worker.config import Settings
 from clearfea_worker.geometry.importer import import_geometry
 from clearfea_worker.jobs import (
@@ -139,6 +139,58 @@ def test_unreachable_api_names_the_fix() -> None:
     client = ApiClient("http://127.0.0.1:9", "t", "w1", timeout=2)
     with pytest.raises(ApiError, match="pnpm --filter @clearfea/api dev"):
         client.claim(["noop"])
+
+
+def test_sends_the_access_service_token_to_the_api() -> None:
+    with FakeApi(access=("id.access", "secret")) as api:
+        api.enqueue("j1", downloads={"in.txt": b"data"})
+        client = ApiClient(api.url, "t", "w1", access=("id.access", "secret"))
+        job = client.claim(["noop"])
+        assert job is not None and job.id == "j1"
+        client.heartbeat("j1", None)
+
+
+def test_the_access_token_goes_only_to_the_apis_address() -> None:
+    client = ApiClient("https://api.example", "t", "w1", access=("id.access", "secret"))
+    assert client._headers("https://api.example/internal/jobs/claim")["CF-Access-Client-Id"]
+    elsewhere = client._headers("https://bucket.r2.example/file?X-Amz-Signature=1")
+    assert set(elsewhere) == {"User-Agent"}
+
+
+@pytest.mark.parametrize("access", [None, ("id.access", "wrong")])
+def test_the_access_sign_in_page_is_a_plain_error_not_a_crash(
+    access: tuple[str, str] | None,
+) -> None:
+    with FakeApi(access=("id.access", "secret")) as api:
+        client = ApiClient(api.url, "t", "w1", access=access)
+        with pytest.raises(AccessBlocked, match="Cloudflare Access") as raised:
+            client.claim(["noop"])
+        hint = "CLEARFEA_ACCESS_CLIENT_ID" if access is None else "Service Auth policy"
+        assert hint in str(raised.value)
+
+
+def test_a_download_of_the_access_sign_in_page_is_refused(tmp_path: Path) -> None:
+    with FakeApi(access=("id.access", "secret")) as api:
+        client = ApiClient(api.url, "t", "w1")
+        with pytest.raises(AccessBlocked):
+            client.download(f"{api.url}/internal/jobs/j1/files/in.txt", tmp_path / "in.txt")
+        assert not (tmp_path / "in.txt").exists()
+
+
+def test_backs_off_while_access_blocks_the_claims() -> None:
+    with FakeApi(access=("id.access", "secret")) as api:
+        settings = replace(settings_for(api), poll_seconds=2.0)
+        waits: list[float] = []
+
+        class Stop(threading.Event):
+            def wait(self, timeout: float | None = None) -> bool:
+                waits.append(timeout or 0.0)
+                if len(waits) == 9:
+                    self.set()
+                return self.is_set()
+
+        assert run_forever(settings, stop=Stop()) == "stopped"
+        assert waits == [4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256.0, 300.0, 300.0]
 
 
 def test_run_forever_keeps_polling_and_stops_cleanly() -> None:

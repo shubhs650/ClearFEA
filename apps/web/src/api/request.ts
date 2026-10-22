@@ -14,6 +14,18 @@ const unreachable = import.meta.env.DEV
   ? "The API did not answer. Start it with `pnpm --filter @clearfea/api dev` and try again."
   : "ClearFEA's server did not answer. Check your internet connection and try again in a minute.";
 
+/**
+ * The live site is behind Cloudflare Access (ADR-111). Once its sign-in expires, Access answers
+ * every request with a redirect to its own sign-in page. The API never redirects, so requests do
+ * not follow redirects, and one that comes back is that expired sign-in.
+ */
+export const accessExpired =
+  "Your Cloudflare Access sign-in for this site has expired. Reload the page to sign in again; your work is saved.";
+
+export function isAccessRedirect(response: Response): boolean {
+  return response.type === "opaqueredirect";
+}
+
 export function apiRequest<T>(
   method: string,
   path: string,
@@ -48,10 +60,11 @@ async function send<T>(
 ): Promise<ApiResult<T>> {
   let response: Response;
   try {
-    response = await fetch(path, { ...init, credentials: "same-origin" });
+    response = await fetch(path, { ...init, credentials: "same-origin", redirect: "manual" });
   } catch {
     return { kind: "error", problem: unreachable };
   }
+  if (isAccessRedirect(response)) return { kind: "error", problem: accessExpired };
   const json: unknown = await response.json().catch(() => undefined);
   if (!response.ok) {
     const error = validateErrorResponse(json);
@@ -73,10 +86,11 @@ async function send<T>(
 export async function apiBinary(path: string): Promise<ApiResult<ArrayBuffer>> {
   let response: Response;
   try {
-    response = await fetch(path, { credentials: "same-origin" });
+    response = await fetch(path, { credentials: "same-origin", redirect: "manual" });
   } catch {
     return { kind: "error", problem: unreachable };
   }
+  if (isAccessRedirect(response)) return { kind: "error", problem: accessExpired };
   if (!response.ok) {
     const json: unknown = await response.json().catch(() => undefined);
     const error = validateErrorResponse(json);
