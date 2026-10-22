@@ -93,7 +93,7 @@ D1 tables (SQLite). Every table except configuration has `owner_id`.
 | `report_figures` | A run's report figures, drawn in the browser: kind (support, load or view), item id, caption, order, pixel size; the PNGs are in R2 under the run (ADR-011, ADR-075) |
 | `share_links` | Run, token hash, revoked flag |
 | `machine_sizes` | Name, cores, memory, hourly rate. Configuration |
-| `settings` | Free storage quota, retention days, storage rate (M8.6, ADR-086), stop-limit multiplier, queue limits (M11.3, ADR-112). Configuration |
+| `settings` | Free storage quota, retention days, storage rate (M8.6, ADR-086), stop-limit multiplier, queue limits (M11.3, ADR-112), trash retention days (M14.2, ADR-124). Configuration |
 
 Files in R2, keyed by owner and record id:
 
@@ -105,8 +105,9 @@ Files in R2, keyed by owner and record id:
 | Solver input (`.inp`), solver log | Permanently |
 | Viewer result files | Permanently |
 | Raw solver output (`.frd`, `.dat`) | Retention period, unless the run is pinned |
+| Everything of a project in the trash | Until the trash retention period after it went there (M14.2) |
 
-Since M8.6 (ADR-086) a user's storage is measured by listing these files under `owners/<id>/` (`GET /api/storage`), and a daily sweep (the Worker's cron trigger; `make dev` calls it every hour) removes unpinned raw output past the retention period and charges what is above the free allowance once a day, as a ledger entry with reason `storage`. `POST /api/runs/:id/rerun` solves a run's frozen spec on its mesh again as a new run, which regenerates removed raw output.
+Since M8.6 (ADR-086) a user's storage is measured by listing these files under `owners/<id>/` (`GET /api/storage`), and a daily sweep (the Worker's cron trigger; `make dev` calls it every hour) removes unpinned raw output past the retention period and charges what is above the free allowance once a day, as a ledger entry with reason `storage`. Since M14.2 (ADR-124) the sweep first purges projects and folders in the trash past the trash retention period: a project's runs, simulations, meshes, geometries and the project row go, with every file under their R2 folders and the project's own (`owners/<id>/projects/<project>/`, the thumbnail); its jobs and ledger entries stay as the record of what was charged. `POST /api/runs/:id/rerun` solves a run's frozen spec on its mesh again as a new run, which regenerates removed raw output.
 | Report files and figures | Permanently |
 | A user's report logo | Until replaced or removed |
 
@@ -263,7 +264,7 @@ Settings (environment): the worker's `CLEARFEA_API_URL`, `CLEARFEA_WORKER_TOKEN`
 
 Hono on Cloudflare Workers, TypeScript.
 
-- **Public routes** (`/api/...`): session login, projects, geometries, simulations, meshes, runs, materials, wallet, share links. JSON in and out, validated against the shared schemas.
+- **Public routes** (`/api/...`): session login, projects and folders (`/api/projects`, `/api/folders`: the home with every folder and project, create, rename, move, duplicate, trash and restore, M14.2, ADR-124; `/api/project` is the user's oldest project outside the trash until the home page opens a chosen one), geometries, simulations, meshes, runs, materials, wallet, share links. JSON in and out, validated against the shared schemas.
 - **Internal routes** (`/internal/...`): job claim, heartbeat, completion, file transfer. Authenticated by worker token, never by user session.
 - **Data-access layer:** every function takes the acting user id and applies `owner_id` filtering. Route handlers do not write SQL.
 - **Pre-run validation:** a pure function over the spec and topology that returns a list of problems in plain language (`preRunProblems` in `packages/spec`, ADR-034). The API refuses a run with it before any job is queued, and the UI shows the same list beside the disabled Run button.
