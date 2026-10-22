@@ -222,7 +222,9 @@ export async function queueCounts(db: D1Database, userId: string, lane: Lane): P
  * its machine size (M10.6, ADR-099) gets only jobs queued for that size, and the
  * default size's worker also gets the jobs that have no size (import, report).
  * A job whose owner already has `queue_running_per_user` jobs claimed or running in its lane is
- * passed over, so it waits behind other users' jobs (M11.3, ADR-107 item 4, ADR-112).
+ * passed over, so it waits behind other users' jobs (M11.3, ADR-107 item 4, ADR-112). Among the
+ * rest, users with nothing running come first and users take turns, oldest job first within a
+ * user (M12.1, ADR-121).
  */
 export async function claimJob(
   db: D1Database,
@@ -253,7 +255,17 @@ export async function claimJob(
                   WHERE held.owner_id = candidate.owner_id AND held.status IN ${ACTIVE}
                     AND ${laneSql("held.type")} = ${laneSql("candidate.type")})
                 < (SELECT value FROM settings WHERE name = 'queue_running_per_user')
-          ORDER BY created_at, id
+          ORDER BY
+            -- A user with a job active in either lane goes behind the others (ADR-107 item 4),
+            EXISTS (SELECT 1 FROM jobs busy
+                     WHERE busy.owner_id = candidate.owner_id AND busy.status IN ${ACTIVE}),
+            -- then the user this lane served least recently goes first, so one user's queued
+            -- jobs take turns with other users' (M12.1, ADR-121); a user never served is first,
+            (SELECT MAX(served.claimed_at) FROM jobs served
+              WHERE served.owner_id = candidate.owner_id AND served.claimed_at IS NOT NULL
+                AND ${laneSql("served.type")} = ${laneSql("candidate.type")}),
+            -- then first in, first out.
+            created_at, id
           LIMIT 1
        )
        RETURNING *`,

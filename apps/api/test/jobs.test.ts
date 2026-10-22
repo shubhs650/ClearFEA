@@ -113,6 +113,50 @@ describe("internal job routes", () => {
     expect((await claim("w3")).status).toBe(204);
   });
 
+  /** Jobs created in this order, a second apart, so their queue order is explicit. */
+  async function queued(...owners: string[]): Promise<string[]> {
+    const ids: string[] = [];
+    for (const [i, owner] of owners.entries()) {
+      const job = await createJob(env.DB, owner, "noop");
+      await env.DB.prepare("UPDATE jobs SET created_at = ? WHERE id = ?")
+        .bind(`2026-01-01T00:00:0${i}.000Z`, job.id)
+        .run();
+      ids.push(job.id);
+    }
+    return ids;
+  }
+
+  async function claimedId(workerId: string): Promise<string> {
+    return (await (await claim(workerId)).json<{ job: { id: string } }>()).job.id;
+  }
+
+  async function finish(workerId: string, jobId: string) {
+    const done = await post(`/jobs/${jobId}/complete`, { workerId, metering: { billableMs: 1 }, status: "succeeded" });
+    expect(done.status).toBe(200);
+  }
+
+  it("lets users take turns in a lane rather than serving one user's queue first (M12.1)", async () => {
+    const [a1, a2, b1] = await queued("alice", "alice", "bob");
+    const first = await claimedId("lane");
+    expect(first).toBe(a1);
+    await finish("lane", first);
+    // alice was served last, so bob's job, queued after her second, goes first.
+    const second = await claimedId("lane");
+    expect(second).toBe(b1);
+    await finish("lane", second);
+    expect(await claimedId("lane")).toBe(a2);
+  });
+
+  it("puts a user with a job running in the other lane behind other users (ADR-107 item 4)", async () => {
+    await createJob(env.DB, "alice", "solve");
+    expect((await claim("solve-lane", ["solve"])).status).toBe(200);
+    const [a1, b1] = await queued("alice", "bob");
+    const first = await claimedId("light-lane");
+    expect(first).toBe(b1);
+    await finish("light-lane", first);
+    expect(await claimedId("light-lane")).toBe(a1);
+  });
+
   it("only claims job types the worker offers", async () => {
     await createJob(env.DB, "alice", "solve");
     expect((await claim("w1", ["noop"])).status).toBe(204);

@@ -27,6 +27,8 @@ from .spec.jobs_schema import (
     HeartbeatAction,
     HeartbeatRequest,
     HeartbeatResponse,
+    HostCheckIn,
+    HostCheckInResponse,
     JobType,
     Metering,
     WorkerSoftware,
@@ -218,8 +220,13 @@ class ApiClient:
                 f"(packages/spec/schemas/jobs.schema.json): {error}"
             ) from None
 
-    def claim(self, job_types: list[JobType]) -> ClaimedJob | None:
-        extra: dict[str, Any] = {} if self._software is None else {"software": self._software}
+    def claim(
+        self, job_types: list[JobType], software: WorkerSoftware | None = None
+    ) -> ClaimedJob | None:
+        """Claims a job of one of these types. ``software`` replaces the client's own for this
+        claim: the compute manager names the software of the image that will run the job."""
+        software = software or self._software
+        extra: dict[str, Any] = {} if software is None else {"software": software}
         if self._machine_size is not None:
             extra["machine_size"] = self._machine_size
         request = ClaimRequest(worker_id=self._worker_id, job_types=job_types, **extra)
@@ -227,6 +234,13 @@ class ApiClient:
         if status == 204 or body is None:
             return None
         return self._parse(ClaimResponse, "/jobs/claim", body).job
+
+    def check_in(self, host: str, manager_version: str | None = None) -> int:
+        """Says the solver host is up (M12.4, ADR-120). Returns the seconds until the next
+        check-in is due."""
+        extra = {} if manager_version is None else {"manager_version": manager_version}
+        _, body = self._post("/hosts/check-in", HostCheckIn(host=host, **extra))
+        return self._parse(HostCheckInResponse, "/hosts/check-in", body).interval_seconds
 
     def heartbeat(self, job_id: str, stage: str | None, log: str = "") -> HeartbeatAction:
         """Reports the job alive at ``stage``, with any log text written since the last one."""
