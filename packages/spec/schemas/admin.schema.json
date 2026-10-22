@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Admin",
-  "description": "Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) and the event log (M13.1). Only the admin reaches them. Each message is a definition under $defs.",
+  "description": "Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) the event log (M13.1) and the dashboard's overview and jobs (M13.2). Only the admin reaches them. Each message is a definition under $defs.",
   "$defs": {
     "AllowedEmail": {
       "type": "object",
@@ -255,6 +255,379 @@
       "additionalProperties": false,
       "required": ["events"],
       "properties": { "events": { "type": "array", "items": { "$ref": "#/$defs/AdminEvent" } } }
+    },
+    "AdminJob": {
+      "description": "A job of any user as the dashboard's Overview and Jobs and runs tabs show it (M13.2, ADR-113, ADR-127): its state, tries and failure, for support. Ids and an address, never a project's name, model or results.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "lane",
+        "status",
+        "stage",
+        "ownerId",
+        "ownerEmail",
+        "targetId",
+        "attempt",
+        "machineSize",
+        "claimedBy",
+        "stopRequested",
+        "createdAt",
+        "claimedAt",
+        "heartbeatAt",
+        "finishedAt",
+        "failureCategory",
+        "failureCause",
+        "failureMessage",
+        "peakMemoryBytes",
+        "billedSeconds",
+        "queuePosition"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "noop",
+            "import",
+            "mesh",
+            "solve",
+            "report"
+          ]
+        },
+        "lane": {
+          "enum": [
+            "solve",
+            "light"
+          ],
+          "description": "Solve jobs run in the solve lane, the rest in the light lane (ADR-107)."
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "claimed",
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled",
+            "stopped_at_limit"
+          ]
+        },
+        "stage": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The stage its worker reported last."
+        },
+        "ownerId": {
+          "type": "string"
+        },
+        "ownerEmail": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The owner's address; null for a local test user without one."
+        },
+        "targetId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The geometry, mesh or run the job works on: a run id for a solve job."
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "machineSize": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "claimedBy": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The worker id holding it, or that last held it."
+        },
+        "stopRequested": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "cancelled",
+            "stopped_at_limit",
+            null
+          ],
+          "description": "How its owner or its stop limit asked it to end, while it still runs."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO 8601 UTC."
+        },
+        "claimedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "heartbeatAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "finishedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "failureCategory": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "user_fault",
+            "platform_fault",
+            null
+          ]
+        },
+        "failureCause": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "failureMessage": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "What its owner was told, for support."
+        },
+        "peakMemoryBytes": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "billedSeconds": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "queuePosition": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "description": "Its place among the queued jobs of its lane, oldest first; null unless queued."
+        }
+      }
+    },
+    "AdminJobsResponse": {
+      "description": "Answer of GET /api/admin/jobs: jobs newest first, filtered by ?status=, ?type=, ?user= and ?before= (a creation time, to page on), at most ?limit= (up to 500).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jobs"
+      ],
+      "properties": {
+        "jobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdminJob"
+          }
+        }
+      }
+    },
+    "AdminJobResponse": {
+      "description": "Answer of POST /api/admin/jobs/{id}/cancel and /requeue: the job as it is now.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job"
+      ],
+      "properties": {
+        "job": {
+          "$ref": "#/$defs/AdminJob"
+        }
+      }
+    },
+    "AdminJobLogResponse": {
+      "description": "Answer of GET /api/admin/jobs/{id}/log?after={n}: the job's log written after chunk n, the n to ask with next time, and whether more chunks are already written.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "next",
+        "more"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "next": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "more": {
+          "type": "boolean"
+        }
+      }
+    },
+    "AdminLane": {
+      "description": "One lane of the solver host (ADR-107): the jobs running in it and the jobs waiting for it, oldest first.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lane",
+        "running",
+        "queued"
+      ],
+      "properties": {
+        "lane": {
+          "enum": [
+            "solve",
+            "light"
+          ]
+        },
+        "running": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdminJob"
+          },
+          "description": "Claimed or running."
+        },
+        "queued": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdminJob"
+          }
+        }
+      }
+    },
+    "AdminAlert": {
+      "description": "Something the admin should act on, shown on the dashboard only (Shubham, 2026-10-22).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "level",
+        "message"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "no_host",
+            "host_offline",
+            "queue_paused"
+          ]
+        },
+        "level": {
+          "enum": [
+            "warning",
+            "error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "What is wrong and what to do, in plain words."
+        }
+      }
+    },
+    "OverviewResponse": {
+      "description": "Answer of GET /api/admin/overview and PUT /api/admin/queue-paused: the solver host and its latest load, the lanes and their queues, whether the queue is paused, and the alerts.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "machines",
+        "paused",
+        "pausedAt",
+        "host",
+        "load",
+        "lanes",
+        "alerts"
+      ],
+      "properties": {
+        "machines": {
+          "enum": [
+            "cloud",
+            "vps",
+            "local"
+          ]
+        },
+        "paused": {
+          "type": "boolean",
+          "description": "True while the admin has paused the queue: no job starts, running jobs finish, new jobs still queue."
+        },
+        "pausedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "When the admin paused it, ISO 8601 UTC; null while it runs."
+        },
+        "host": {
+          "description": "The solver host that checked in last; null when none ever has.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SolverHost"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "load": {
+          "description": "That host's latest load sample in the last 10 minutes, or null.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/HostLoadSample"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lanes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdminLane"
+          },
+          "description": "The solve lane, then the light lane."
+        },
+        "alerts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AdminAlert"
+          }
+        }
+      }
+    },
+    "SetQueuePausedRequest": {
+      "description": "Body of PUT /api/admin/queue-paused.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "paused"
+      ],
+      "properties": {
+        "paused": {
+          "type": "boolean"
+        }
+      }
     },
     "SwitchCloudSizeRequest": {
       "description": "Body of PUT /api/admin/machine-sizes/{name}.",

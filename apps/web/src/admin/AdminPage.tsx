@@ -1,17 +1,69 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The admin page (M10.3, ADR-097): who may sign in with Google, and who has, and which cloud
-// machine sizes are switched on (M10.6, ADR-099), and the solver machines with their monthly
-// hours cap (M10.7, ADR-100), or, with MACHINES=vps, the solver host (M12.4, ADR-120). Only the admin
-// (ADMIN_EMAIL) sees it. Drawn over the workbench like the wallet page, which stays as it was.
+// The admin dashboard (M13.2, ADR-113, ADR-127), drawn over the workbench like the wallet page:
+// the Overview of the solver host, its lanes and queues, with pause and resume; every user's Jobs
+// and runs with their statistics, logs, cancel and re-queue; the Events log (M13.1); and Access and
+// machines (M10.3, ADR-097): who may sign in with Google, and who has, which cloud machine sizes
+// are switched on (M10.6, ADR-099), and the solver machines with their monthly hours cap (M10.7,
+// ADR-100), or, with MACHINES=vps, the solver host (M12.4, ADR-120), until M13.3 splits it into
+// Users and Settings. Only the admin (ADMIN_EMAIL) sees it.
 
 import type { AdminResponse, MachineStart, SolverHost, SolverMachines } from "@clearfea/spec";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { addAllowed, fetchAdmin, removeAllowed, setMachineHoursCap, switchCloudSize } from "../api/admin";
 import type { ApiResult } from "../api/request";
+import { EventsTab } from "./EventsTab";
+import { hours, utc } from "./format";
+import { JobsTab } from "./JobsTab";
+import { OverviewTab } from "./OverviewTab";
 
 type AdminState = { kind: "loading" } | { kind: "loaded"; admin: AdminResponse } | { kind: "problem"; problem: string };
 
+type Tab = "overview" | "jobs" | "events" | "access";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" },
+  { id: "jobs", label: "Jobs and runs" },
+  { id: "events", label: "Events" },
+  { id: "access", label: "Access and machines" },
+];
+
 export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSignedOut: (notice?: string) => void }) {
+  const [tab, setTab] = useState<Tab>("overview");
+  return (
+    <section className="pane wallet-page admin-page" aria-label="Admin">
+      <header className="wallet-header">
+        <h2 className="wallet-title">Admin</h2>
+        <button type="button" onClick={onClose}>
+          Back to the workbench
+        </button>
+      </header>
+      <div className="admin-tabs" role="tablist" aria-label="Dashboard">
+        {TABS.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            id={`admin-tab-${id}`}
+            aria-selected={tab === id}
+            aria-controls="admin-panel"
+            className="admin-tab"
+            onClick={() => setTab(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="admin-panel" id="admin-panel" role="tabpanel" aria-labelledby={`admin-tab-${tab}`}>
+        {tab === "overview" && <OverviewTab onSignedOut={onSignedOut} />}
+        {tab === "jobs" && <JobsTab onSignedOut={onSignedOut} />}
+        {tab === "events" && <EventsTab onSignedOut={onSignedOut} />}
+        {tab === "access" && <AccessAndMachines onSignedOut={onSignedOut} />}
+      </div>
+    </section>
+  );
+}
+
+function AccessAndMachines({ onSignedOut }: { onSignedOut: (notice?: string) => void }) {
   const [state, setState] = useState<AdminState>({ kind: "loading" });
   const [email, setEmail] = useState("");
   const [problem, setProblem] = useState<string | undefined>();
@@ -66,13 +118,7 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
   }
 
   return (
-    <section className="pane wallet-page admin-page" aria-label="Admin">
-      <header className="wallet-header">
-        <h2 className="wallet-title">Admin</h2>
-        <button type="button" onClick={onClose}>
-          Back to the workbench
-        </button>
-      </header>
+    <>
       {state.kind === "loading" && <p className="pane-empty">Loading…</p>}
       {state.kind === "problem" && (
         <p className="form-problem" role="alert">
@@ -243,7 +289,7 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
           )}
         </div>
       )}
-    </section>
+    </>
   );
 }
 
@@ -300,16 +346,4 @@ const START_STATES: Record<MachineStart["state"], string> = {
 
 function startText(start: MachineStart): string {
   return start.problem === null ? START_STATES[start.state] : `${START_STATES[start.state]}: ${start.problem}`;
-}
-
-/** Machine time in hours and minutes, such as "1 h 05 min", or seconds under a minute. */
-function hours(seconds: number): string {
-  if (seconds < 60) return `${seconds} s`;
-  const minutes = Math.round(seconds / 60);
-  return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, "0")} min`;
-}
-
-/** An API timestamp as a fixed, unambiguous UTC time, as the wallet writes it. */
-function utc(timestamp: string): string {
-  return timestamp.slice(0, 16).replace("T", " ");
 }

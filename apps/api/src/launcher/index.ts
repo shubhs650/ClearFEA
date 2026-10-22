@@ -13,7 +13,7 @@ import { recordJobFailed } from "../db/events";
 import type { Completion } from "../db/jobs";
 import { failQueuedJob, type QueuedJob, queuedJobs } from "../db/jobs";
 import { cloudMachines } from "../db/machines";
-import { type MachineSettings, machineSettings } from "../db/settings";
+import { type MachineSettings, machineSettings, queuePaused } from "../db/settings";
 import {
   ALIVE_SECONDS,
   iso,
@@ -245,7 +245,8 @@ export async function machineRefusal(env: Env): Promise<string | null> {
  * plan it applied. Does nothing locally.
  */
 export async function ensureMachines(env: Env, fetcher: Fetch = fetch): Promise<MachinePlan> {
-  if (!cloudMachines(env)) return { start: [], fail: [] };
+  // Nothing would claim the work of a machine started while the queue is paused (M13.2, ADR-127).
+  if (!cloudMachines(env) || (await queuePaused(env.DB))) return { start: [], fail: [] };
   const state = await readMachineState(env, fetcher);
   const plan = planMachines(state);
 

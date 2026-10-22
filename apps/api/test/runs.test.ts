@@ -481,6 +481,88 @@ describe("a solving run's progress (M8.2)", () => {
   });
 });
 
+describe("the admin's cancel and re-queue of a run (M13.2, ADR-127)", () => {
+  const adminCall = (jobId: string, action: "cancel" | "requeue") =>
+    call("POST", `/api/admin/jobs/${jobId}/${action}`, { cookie: alice });
+
+  async function beat(jobId: string): Promise<Response> {
+    return call("POST", `/internal/jobs/${jobId}/heartbeat`, { json: { workerId: "w1", stage: "solving" }, token: TOKEN });
+  }
+
+  const jobOf = async (runId: string) =>
+    (await env.DB.prepare("SELECT job_id FROM runs WHERE id = ?").bind(runId).first<{ job_id: string }>())?.job_id ?? "";
+
+  it("ends a queued run at once, uncharged, and says the administrator stopped it", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const jobId = await jobOf(run.id);
+    const response = await adminCall(jobId, "cancel");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ job: { status: "failed", failureCause: "cancelled_by_admin" } });
+    const ended = await readRun(run.id);
+    expect(ended).toMatchObject({ status: "failed", progress: null });
+    expect(ended.problem).toBe(
+      "The run was stopped by the ClearFEA administrator (cancelled_by_admin). This is not a fault in your setup, so nothing is charged. Run it again; if it fails again, report it.",
+    );
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+    const none = await call("POST", "/internal/jobs/claim", { json: { workerId: "w1", jobTypes: ["solve"] }, token: TOKEN });
+    expect(none.status).toBe(204);
+    // Once ended, there is nothing left to cancel or queue again.
+    expect((await adminCall(jobId, "cancel")).status).toBe(409);
+    expect((await adminCall(jobId, "requeue")).status).toBe(409);
+  });
+
+  it("ends a running run uncharged, and the worker's next heartbeat tells it to stop", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    expect((await beat(job.id)).status).toBe(200);
+    expect((await adminCall(job.id, "cancel")).status).toBe(200);
+    expect(await (await beat(job.id)).json()).toEqual({ action: "cancel" });
+    // The worker's report of its stop comes too late and changes nothing.
+    const late = await call("POST", `/internal/jobs/${job.id}/complete`, {
+      json: { workerId: "w1", status: "stopped", metering: { billableMs: 9000 } },
+      token: TOKEN,
+    });
+    expect(late.status).toBe(409);
+    const ended = await readRun(run.id);
+    expect(ended.status).toBe("failed");
+    expect(ended.cost?.charged).toBe(false);
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+    const tries = await env.DB.prepare("SELECT status, failure_cause FROM job_stats WHERE job_id = ?")
+      .bind(job.id)
+      .all();
+    expect(tries.results).toEqual([{ status: "failed", failure_cause: "cancelled_by_admin" }]);
+  });
+
+  it("queues a running run again: the run keeps solving and its log says why", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    expect((await beat(job.id)).status).toBe(200);
+    const response = await adminCall(job.id, "requeue");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ job: { status: "queued", attempt: 2, claimedBy: null, queuePosition: 1 } });
+    expect((await readRun(run.id)).status).toBe("solving");
+    expect((await readLog(run.id, 0)).text).toContain("The administrator stopped try 1 and queued the job again");
+    // The old worker no longer holds it; the next claim starts try 2.
+    expect((await beat(job.id)).status).toBe(404);
+    expect((await claim("solve")).id).toBe(job.id);
+    expect((await adminCall(job.id, "requeue")).status).toBe(200);
+    expect(await getJob(env.DB, aliceId, job.id)).toMatchObject({ status: "queued", attempt: 3 });
+    expect((await charges(aliceId)).map((e) => e.reason)).toEqual(["mesh"]);
+  });
+
+  it("does not queue again a run its owner is cancelling", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    await call("POST", `/api/runs/${run.id}/cancel`, { cookie: alice });
+    expect((await adminCall(job.id, "requeue")).status).toBe(409);
+    expect((await adminCall(job.id, "cancel")).status).toBe(200);
+  });
+});
+
 describe("cancelling a run (M8.2)", () => {
   async function cancel(runId: string, cookie = alice): Promise<Response> {
     return call("POST", `/api/runs/${runId}/cancel`, { cookie });

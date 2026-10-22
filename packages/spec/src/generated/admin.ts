@@ -6,7 +6,7 @@ import schema from "../../schemas/admin.schema.json";
 import { validator } from "../validate";
 
 /**
- * Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) and the event log (M13.1). Only the admin reaches them. Each message is a definition under $defs.
+ * Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) the event log (M13.1) and the dashboard's overview and jobs (M13.2). Only the admin reaches them. Each message is a definition under $defs.
  */
 export interface Admin {
   [k: string]: unknown;
@@ -342,6 +342,159 @@ export interface EventsResponse {
   events: AdminEvent[];
 }
 /**
+ * A job of any user as the dashboard's Overview and Jobs and runs tabs show it (M13.2, ADR-113, ADR-127): its state, tries and failure, for support. Ids and an address, never a project's name, model or results.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "AdminJob".
+ */
+export interface AdminJob {
+  id: string;
+  type: "noop" | "import" | "mesh" | "solve" | "report";
+  /**
+   * Solve jobs run in the solve lane, the rest in the light lane (ADR-107).
+   */
+  lane: "solve" | "light";
+  status: "queued" | "claimed" | "running" | "succeeded" | "failed" | "cancelled" | "stopped_at_limit";
+  /**
+   * The stage its worker reported last.
+   */
+  stage: string | null;
+  ownerId: string;
+  /**
+   * The owner's address; null for a local test user without one.
+   */
+  ownerEmail: string | null;
+  /**
+   * The geometry, mesh or run the job works on: a run id for a solve job.
+   */
+  targetId: string | null;
+  attempt: number;
+  machineSize: string | null;
+  /**
+   * The worker id holding it, or that last held it.
+   */
+  claimedBy: string | null;
+  /**
+   * How its owner or its stop limit asked it to end, while it still runs.
+   */
+  stopRequested: "cancelled" | "stopped_at_limit" | null;
+  /**
+   * ISO 8601 UTC.
+   */
+  createdAt: string;
+  claimedAt: string | null;
+  heartbeatAt: string | null;
+  finishedAt: string | null;
+  failureCategory: "user_fault" | "platform_fault" | null;
+  failureCause: string | null;
+  /**
+   * What its owner was told, for support.
+   */
+  failureMessage: string | null;
+  peakMemoryBytes: number | null;
+  billedSeconds: number | null;
+  /**
+   * Its place among the queued jobs of its lane, oldest first; null unless queued.
+   */
+  queuePosition: number | null;
+}
+/**
+ * Answer of GET /api/admin/jobs: jobs newest first, filtered by ?status=, ?type=, ?user= and ?before= (a creation time, to page on), at most ?limit= (up to 500).
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "AdminJobsResponse".
+ */
+export interface AdminJobsResponse {
+  jobs: AdminJob[];
+}
+/**
+ * Answer of POST /api/admin/jobs/{id}/cancel and /requeue: the job as it is now.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "AdminJobResponse".
+ */
+export interface AdminJobResponse {
+  job: AdminJob;
+}
+/**
+ * Answer of GET /api/admin/jobs/{id}/log?after={n}: the job's log written after chunk n, the n to ask with next time, and whether more chunks are already written.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "AdminJobLogResponse".
+ */
+export interface AdminJobLogResponse {
+  text: string;
+  next: number;
+  more: boolean;
+}
+/**
+ * One lane of the solver host (ADR-107): the jobs running in it and the jobs waiting for it, oldest first.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "AdminLane".
+ */
+export interface AdminLane {
+  lane: "solve" | "light";
+  /**
+   * Claimed or running.
+   */
+  running: AdminJob[];
+  queued: AdminJob[];
+}
+/**
+ * Something the admin should act on, shown on the dashboard only (Shubham, 2026-10-22).
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "AdminAlert".
+ */
+export interface AdminAlert {
+  kind: "no_host" | "host_offline" | "queue_paused";
+  level: "warning" | "error";
+  /**
+   * What is wrong and what to do, in plain words.
+   */
+  message: string;
+}
+/**
+ * Answer of GET /api/admin/overview and PUT /api/admin/queue-paused: the solver host and its latest load, the lanes and their queues, whether the queue is paused, and the alerts.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "OverviewResponse".
+ */
+export interface OverviewResponse {
+  machines: "cloud" | "vps" | "local";
+  /**
+   * True while the admin has paused the queue: no job starts, running jobs finish, new jobs still queue.
+   */
+  paused: boolean;
+  /**
+   * When the admin paused it, ISO 8601 UTC; null while it runs.
+   */
+  pausedAt: string | null;
+  /**
+   * The solver host that checked in last; null when none ever has.
+   */
+  host: SolverHost | null;
+  /**
+   * That host's latest load sample in the last 10 minutes, or null.
+   */
+  load: HostLoadSample | null;
+  /**
+   * The solve lane, then the light lane.
+   */
+  lanes: AdminLane[];
+  alerts: AdminAlert[];
+}
+/**
+ * Body of PUT /api/admin/queue-paused.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "SetQueuePausedRequest".
+ */
+export interface SetQueuePausedRequest {
+  paused: boolean;
+}
+/**
  * Body of PUT /api/admin/machine-sizes/{name}.
  *
  * This interface was referenced by `Admin`'s JSON-Schema
@@ -385,6 +538,14 @@ export const validateHostLoadSample = validator<HostLoadSample>(schema, "HostLoa
 export const validateHostLoadResponse = validator<HostLoadResponse>(schema, "HostLoadResponse");
 export const validateAdminEvent = validator<AdminEvent>(schema, "AdminEvent");
 export const validateEventsResponse = validator<EventsResponse>(schema, "EventsResponse");
+export const validateAdminJob = validator<AdminJob>(schema, "AdminJob");
+export const validateAdminJobsResponse = validator<AdminJobsResponse>(schema, "AdminJobsResponse");
+export const validateAdminJobResponse = validator<AdminJobResponse>(schema, "AdminJobResponse");
+export const validateAdminJobLogResponse = validator<AdminJobLogResponse>(schema, "AdminJobLogResponse");
+export const validateAdminLane = validator<AdminLane>(schema, "AdminLane");
+export const validateAdminAlert = validator<AdminAlert>(schema, "AdminAlert");
+export const validateOverviewResponse = validator<OverviewResponse>(schema, "OverviewResponse");
+export const validateSetQueuePausedRequest = validator<SetQueuePausedRequest>(schema, "SetQueuePausedRequest");
 export const validateSwitchCloudSizeRequest = validator<SwitchCloudSizeRequest>(schema, "SwitchCloudSizeRequest");
 export const validateSetMachineHoursCapRequest = validator<SetMachineHoursCapRequest>(schema, "SetMachineHoursCapRequest");
 export const validateAddAllowedRequest = validator<AddAllowedRequest>(schema, "AddAllowedRequest");
