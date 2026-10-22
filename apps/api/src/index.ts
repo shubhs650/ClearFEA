@@ -2,6 +2,7 @@
 import type { HealthResponse } from "@clearfea/spec";
 import { Hono } from "hono";
 import { probeDatabase, probeStorage } from "./db/health";
+import { HOST_STATS_DAYS, purgeHostLoad } from "./db/stats";
 import { sweepStorage } from "./db/storage";
 import type { Env } from "./env";
 import { internal } from "./internal";
@@ -84,7 +85,8 @@ const EVERY_MINUTE = "* * * * *";
  * only place that looks for them over all workers (M11.3, ADR-112), and on cloud machines start
  * a machine again for work left waiting (M10.7, ADR-100). Daily, and on any other call such as `make dev`'s hourly one: the
  * storage sweep (M8.6, ADR-086), which removes raw solver output past its retention period and
- * charges storage above the free allowance, after the lost-job sweep.
+ * charges storage above the free allowance, after the lost-job sweep, then removes the solver
+ * host's load samples past 14 days (M12.3, ADR-109).
  */
 async function scheduled(controller: ScheduledController, env: Env): Promise<void> {
   const lost = await sweepLostJobs(env);
@@ -97,6 +99,8 @@ async function scheduled(controller: ScheduledController, env: Env): Promise<voi
   console.log(
     `Storage sweep for ${summary.day}: removed the raw output of ${summary.removed} runs, charged ${summary.charged} users.`,
   );
+  const purged = await purgeHostLoad(env.DB);
+  if (purged > 0) console.log(`Removed ${purged} solver host load samples older than ${HOST_STATS_DAYS} days.`);
 }
 
 export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Env>;

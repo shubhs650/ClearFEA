@@ -111,7 +111,92 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9._-]{1,64}$"
         },
-        "managerVersion": { "type": "string", "minLength": 1, "maxLength": 100 }
+        "managerVersion": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "load": { "$ref": "#/$defs/HostLoad" }
+      }
+    },
+    "HostLoad": {
+      "description": "The solver host's load when it checked in (M12.3, ADR-109, ADR-123), kept as host_stats for 14 days. CPU and steal are shares of all the host's CPU time since the previous check-in, from 0 to 1, absent at the manager's first check-in; memory and disk in bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "load1",
+        "load5",
+        "load15",
+        "memoryTotalBytes",
+        "memoryAvailableBytes",
+        "diskTotalBytes",
+        "diskFreeBytes",
+        "containers"
+      ],
+      "properties": {
+        "cpu": { "type": "number", "minimum": 0, "maximum": 1 },
+        "steal": {
+          "description": "CPU time the hypervisor gave to other machines while this one wanted it.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "load1": { "type": "number", "minimum": 0 },
+        "load5": { "type": "number", "minimum": 0 },
+        "load15": { "type": "number", "minimum": 0 },
+        "memoryTotalBytes": { "type": "integer", "minimum": 0 },
+        "memoryAvailableBytes": { "type": "integer", "minimum": 0 },
+        "diskTotalBytes": {
+          "description": "Of the file system holding Docker's data, where the jobs' scratch volumes are.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "diskFreeBytes": { "type": "integer", "minimum": 0 },
+        "containers": {
+          "description": "Containers running on the host, job containers and others.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ContainerStats": {
+      "description": "Body of POST /internal/jobs/{id}/stats (M12.3, ADR-109, ADR-123): what the compute manager measured of one try of a job from its container, sent once the container has ended. Memory, CPU and disk come from Docker's container statistics sampled every 5 s, so a peak shorter than that can be missed. The API answers 204, or 404 when the worker has no try of that job still without these statistics.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workerId", "host", "lane", "image", "exitCode", "outOfMemory", "runMs", "samples"],
+      "properties": {
+        "workerId": { "$ref": "#/$defs/WorkerId" },
+        "host": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$" },
+        "lane": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "image": {
+          "description": "The id of the worker image the container ran (sha256:...).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "exitCode": {
+          "description": "The container's exit code; above 128 it was ended by signal exitCode - 128. Null when it never started.",
+          "type": ["integer", "null"]
+        },
+        "outOfMemory": { "description": "Docker stopped the container at its memory limit.", "type": "boolean" },
+        "runMs": { "description": "From the container's start to its end.", "type": "integer", "minimum": 0 },
+        "samples": {
+          "description": "Statistics samples taken; with none, memory, CPU and disk are left out.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "peakMemoryBytes": { "type": "integer", "minimum": 0 },
+        "cpuSeconds": {
+          "description": "CPU time the container used over all its CPUs, at the last sample.",
+          "type": "number",
+          "minimum": 0
+        },
+        "cpuPeak": {
+          "description": "The most CPUs busy between two samples (6 is six CPUs busy).",
+          "type": "number",
+          "minimum": 0
+        },
+        "diskWrittenBytes": {
+          "description": "Bytes the container wrote to block devices, its scratch volume among them, at the last sample.",
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "HostCheckInResponse": {

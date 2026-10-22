@@ -11,6 +11,7 @@ import {
   type HostCheckInResponse,
   validateClaimRequest,
   validateCompleteRequest,
+  validateContainerStats,
   validateHeartbeatRequest,
   validateHostCheckIn,
   validateImportResult,
@@ -34,6 +35,7 @@ import {
 import { HOST_CHECK_IN_SECONDS, recordCheckIn } from "./db/hosts";
 import { machineSizeExists } from "./db/machines";
 import { getRun } from "./db/runs";
+import { endTry, modelSize, recordContainerStats, recordHostLoad, recordStage, startTry } from "./db/stats";
 import { recordContact } from "./db/workerStarts";
 import type { Env } from "./env";
 import { jobFiles, transfers } from "./jobs/files";
@@ -100,6 +102,7 @@ internal.post("/jobs/claim", async (c) => {
   }
   const job = await claimJob(c.env.DB, workerId, body.value.jobTypes, body.value.software ?? null, machineSize ?? null);
   if (job === null) return c.body(null, 204);
+  await startTry(c.env.DB, job);
   const origin = new URL(c.req.url).origin;
   return c.json({
     job: { ...payload(job), params: job.params, transfers: await transfers(job, workerId, origin, c.env) },
@@ -115,6 +118,8 @@ internal.post("/hosts/check-in", async (c) => {
   const body = await readBody(c.req.raw, validateHostCheckIn, "HostCheckIn", SCHEMA);
   if ("error" in body) return c.json({ error: body.error }, 400);
   await recordCheckIn(c.env.DB, body.value.host, body.value.managerVersion ?? null);
+  // Its load, kept 14 days for support (M12.3, ADR-109).
+  if (body.value.load !== undefined) await recordHostLoad(c.env.DB, body.value.host, body.value.load);
   return c.json({ intervalSeconds: HOST_CHECK_IN_SECONDS } satisfies HostCheckInResponse);
 });
 
@@ -261,7 +266,7 @@ internal.post("/jobs/:id/heartbeat", async (c) => {
     recordContact(c.env.DB, workerId),
   ]);
   if (!outcome.found) return c.json({ error: "This worker holds no job with that id." }, 404);
-  await appendJobLog(c.env.DB, jobId, log);
+  await Promise.all([appendJobLog(c.env.DB, jobId, log), recordStage(c.env.DB, workerId, jobId, stage)]);
   return c.json({ action: outcome.action } satisfies HeartbeatResponse);
 });
 
@@ -282,6 +287,20 @@ internal.post("/jobs/:id/complete", async (c) => {
     held.ratePerHour === null ? null : chargeFor(billableMs, held.ratePerHour, completion);
   const job = await completeJob(c.env.DB, request.workerId, held.id, completion, billableMs, charge);
   if (job === null) return c.json({ error: gone }, 409);
+  await endTry(c.env.DB, request.workerId, job, completion, await modelSize(c.env.DB, job, completion));
   await recordOutcome(c.env, job, completion, charge);
   return c.json({ job: { ...payload(job), status: job.status } } satisfies CompleteResponse);
+});
+
+/**
+ * What the compute manager measured of a job's container, once it has ended (M12.3, ADR-109):
+ * added to the worker's latest try of the job still without it. The job need not be held any
+ * more: it has usually completed, and may already be queued again.
+ */
+internal.post("/jobs/:id/stats", async (c) => {
+  const body = await readBody(c.req.raw, validateContainerStats, "ContainerStats", SCHEMA);
+  if ("error" in body) return c.json({ error: body.error }, 400);
+  const recorded = await recordContainerStats(c.env.DB, c.req.param("id"), body.value);
+  if (!recorded) return c.json({ error: "This worker has no try of that job waiting for its statistics." }, 404);
+  return c.body(null, 204);
 });

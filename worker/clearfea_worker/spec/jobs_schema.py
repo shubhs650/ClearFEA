@@ -144,22 +144,81 @@ class HeartbeatResponse(BaseModel):
     action: HeartbeatAction
 
 
-class HostCheckIn(BaseModel):
+class HostLoad(BaseModel):
     """
-    Body of POST /internal/hosts/check-in (M12.4, ADR-120): the solver host's compute manager says it is up, at start and every intervalSeconds whatever its lanes are doing. With MACHINES=vps the API refuses new jobs while no host has checked in for 120 s.
+    The solver host's load when it checked in (M12.3, ADR-109, ADR-123), kept as host_stats for 14 days. CPU and steal are shares of all the host's CPU time since the previous check-in, from 0 to 1, absent at the manager's first check-in; memory and disk in bytes.
     """
 
     model_config = ConfigDict(
         extra="forbid",
         populate_by_name=True,
     )
+    cpu: Annotated[float | None, Field(ge=0.0, le=1.0)] = None
+    steal: Annotated[float | None, Field(ge=0.0, le=1.0)] = None
+    """
+    CPU time the hypervisor gave to other machines while this one wanted it.
+    """
+    load1: Annotated[float, Field(ge=0.0)]
+    load5: Annotated[float, Field(ge=0.0)]
+    load15: Annotated[float, Field(ge=0.0)]
+    memory_total_bytes: Annotated[int, Field(alias="memoryTotalBytes", ge=0)]
+    memory_available_bytes: Annotated[int, Field(alias="memoryAvailableBytes", ge=0)]
+    disk_total_bytes: Annotated[int, Field(alias="diskTotalBytes", ge=0)]
+    """
+    Of the file system holding Docker's data, where the jobs' scratch volumes are.
+    """
+    disk_free_bytes: Annotated[int, Field(alias="diskFreeBytes", ge=0)]
+    containers: Annotated[int, Field(ge=0)]
+    """
+    Containers running on the host, job containers and others.
+    """
+
+
+class ContainerStats(BaseModel):
+    """
+    Body of POST /internal/jobs/{id}/stats (M12.3, ADR-109, ADR-123): what the compute manager measured of one try of a job from its container, sent once the container has ended. Memory, CPU and disk come from Docker's container statistics sampled every 5 s, so a peak shorter than that can be missed. The API answers 204, or 404 when the worker has no try of that job still without these statistics.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    worker_id: Annotated[WorkerId, Field(alias="workerId")]
     host: Annotated[str, Field(pattern="^[A-Za-z0-9._-]{1,64}$")]
+    lane: Annotated[str, Field(max_length=32, min_length=1)]
+    image: Annotated[str, Field(max_length=100, min_length=1)]
     """
-    The host's name, as the admin page shows it.
+    The id of the worker image the container ran (sha256:...).
     """
-    manager_version: Annotated[
-        str | None, Field(alias="managerVersion", max_length=100, min_length=1)
-    ] = None
+    exit_code: Annotated[int | None, Field(alias="exitCode")]
+    """
+    The container's exit code; above 128 it was ended by signal exitCode - 128. Null when it never started.
+    """
+    out_of_memory: Annotated[bool, Field(alias="outOfMemory")]
+    """
+    Docker stopped the container at its memory limit.
+    """
+    run_ms: Annotated[int, Field(alias="runMs", ge=0)]
+    """
+    From the container's start to its end.
+    """
+    samples: Annotated[int, Field(ge=0)]
+    """
+    Statistics samples taken; with none, memory, CPU and disk are left out.
+    """
+    peak_memory_bytes: Annotated[int | None, Field(alias="peakMemoryBytes", ge=0)] = None
+    cpu_seconds: Annotated[float | None, Field(alias="cpuSeconds", ge=0.0)] = None
+    """
+    CPU time the container used over all its CPUs, at the last sample.
+    """
+    cpu_peak: Annotated[float | None, Field(alias="cpuPeak", ge=0.0)] = None
+    """
+    The most CPUs busy between two samples (6 is six CPUs busy).
+    """
+    disk_written_bytes: Annotated[int | None, Field(alias="diskWrittenBytes", ge=0)] = None
+    """
+    Bytes the container wrote to block devices, its scratch volume among them, at the last sample.
+    """
 
 
 class HostCheckInResponse(BaseModel):
@@ -333,6 +392,25 @@ class ErrorResponse(BaseModel):
         populate_by_name=True,
     )
     error: str
+
+
+class HostCheckIn(BaseModel):
+    """
+    Body of POST /internal/hosts/check-in (M12.4, ADR-120): the solver host's compute manager says it is up, at start and every intervalSeconds whatever its lanes are doing. With MACHINES=vps the API refuses new jobs while no host has checked in for 120 s.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    host: Annotated[str, Field(pattern="^[A-Za-z0-9._-]{1,64}$")]
+    """
+    The host's name, as the admin page shows it.
+    """
+    manager_version: Annotated[
+        str | None, Field(alias="managerVersion", max_length=100, min_length=1)
+    ] = None
+    load: HostLoad | None = None
 
 
 class JobResponse(BaseModel):

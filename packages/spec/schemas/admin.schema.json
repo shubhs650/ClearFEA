@@ -140,6 +140,80 @@
         }
       }
     },
+    "JobTry": {
+      "description": "One try of a job (M12.3, ADR-109, ADR-123), for support: queue wait, stage times, model size, solver and what its container used. Admin only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobId", "jobType", "ownerId", "targetId", "attempt", "workerId", "host", "lane", "image", "queuedAt", "claimedAt", "endedAt", "queueWaitMs", "stageMs", "lastStage", "status", "failureCategory", "failureCause", "nodes", "elements", "dofs", "solver", "analysis", "exitCode", "signal", "outOfMemory", "runMs", "peakMemoryBytes", "cpuSeconds", "cpuAverage", "cpuPeak", "diskWrittenBytes"],
+      "properties": {
+        "jobId": { "type": "string" },
+        "jobType": { "enum": ["noop", "import", "mesh", "solve", "report"] },
+        "ownerId": { "type": "string", "description": "The user the job is for; nothing else of their records is shown." },
+        "targetId": { "type": ["string", "null"], "description": "The geometry, mesh or run the job works on: a run id for a solve job." },
+        "attempt": { "type": "integer", "minimum": 1, "description": "1 for the first try; a job re-queued after a platform fault (M12.2) is tried again under the same id." },
+        "workerId": { "type": "string" },
+        "host": { "type": ["string", "null"], "description": "The solver host, from the compute manager's statistics; null from any other worker." },
+        "lane": { "type": ["string", "null"] },
+        "image": { "type": ["string", "null"], "description": "The worker image id the container ran." },
+        "queuedAt": { "type": "string", "description": "ISO 8601 UTC: when this try began to wait: the job's creation, or the end of its previous try." },
+        "claimedAt": { "type": "string" },
+        "endedAt": { "type": ["string", "null"], "description": "Null while the try runs." },
+        "queueWaitMs": { "type": "integer", "minimum": 0 },
+        "stageMs": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 }, "description": "Milliseconds in each stage the worker reported, as seen by its heartbeats every 5 s; \"starting\" is from the claim to the first heartbeat." },
+        "lastStage": { "type": ["string", "null"], "description": "The stage the try was in when it ended, or is in now." },
+        "status": { "type": ["string", "null"], "enum": ["succeeded", "failed", "cancelled", "stopped_at_limit", null], "description": "How the try ended; null while it runs." },
+        "failureCategory": { "type": ["string", "null"], "enum": ["user_fault", "platform_fault", null] },
+        "failureCause": { "type": ["string", "null"] },
+        "nodes": { "type": ["integer", "null"], "description": "Of the mesh made (mesh job) or solved on (solve job)." },
+        "elements": { "type": ["integer", "null"] },
+        "dofs": { "type": ["integer", "null"], "description": "Unknowns of the solve: three per node for a structural run, one for a thermal one." },
+        "solver": { "type": ["string", "null"] },
+        "analysis": { "type": ["string", "null"] },
+        "exitCode": { "type": ["integer", "null"] },
+        "signal": { "type": ["integer", "null"], "description": "exitCode - 128 when the container was ended by a signal (9: killed)." },
+        "outOfMemory": { "type": ["boolean", "null"] },
+        "runMs": { "type": ["integer", "null"], "description": "The container's run time." },
+        "peakMemoryBytes": { "type": ["integer", "null"] },
+        "cpuSeconds": { "type": ["number", "null"] },
+        "cpuAverage": { "type": ["number", "null"], "description": "cpuSeconds over runMs, in CPUs." },
+        "cpuPeak": { "type": ["number", "null"] },
+        "diskWrittenBytes": { "type": ["integer", "null"] }
+      }
+    },
+    "JobTriesResponse": {
+      "description": "Answer of GET /api/admin/stats/jobs: tries newest first, of one job (?job=), of the jobs of one record such as a run (?target=), or of all jobs (?before= pages on).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tries"],
+      "properties": { "tries": { "type": "array", "items": { "$ref": "#/$defs/JobTry" } } }
+    },
+    "HostLoadSample": {
+      "description": "The solver host's load at one check-in (M12.3, ADR-109): shares from 0 to 1, bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "at", "cpu", "steal", "load1", "load5", "load15", "memoryTotalBytes", "memoryAvailableBytes", "diskTotalBytes", "diskFreeBytes", "containers"],
+      "properties": {
+        "host": { "type": "string" },
+        "at": { "type": "string", "description": "ISO 8601 UTC." },
+        "cpu": { "type": ["number", "null"] },
+        "steal": { "type": ["number", "null"] },
+        "load1": { "type": "number" },
+        "load5": { "type": "number" },
+        "load15": { "type": "number" },
+        "memoryTotalBytes": { "type": "integer" },
+        "memoryAvailableBytes": { "type": "integer" },
+        "diskTotalBytes": { "type": "integer" },
+        "diskFreeBytes": { "type": "integer" },
+        "containers": { "type": "integer" }
+      }
+    },
+    "HostLoadResponse": {
+      "description": "Answer of GET /api/admin/stats/host: the host's load samples since ?since= (default the last hour), oldest first, kept 14 days.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["samples"],
+      "properties": { "samples": { "type": "array", "items": { "$ref": "#/$defs/HostLoadSample" } } }
+    },
     "SwitchCloudSizeRequest": {
       "description": "Body of PUT /api/admin/machine-sizes/{name}.",
       "type": "object",

@@ -15,6 +15,7 @@ import { recordImportOutcome } from "../db/geometries";
 import { type Completion, failLostJob, type Job, lostJobs, type StopReason } from "../db/jobs";
 import { recordMeshOutcome } from "../db/meshes";
 import { recordRunOutcome } from "../db/runs";
+import { endTry, modelSize } from "../db/stats";
 import { heartbeatTimeoutSeconds } from "../db/settings";
 import type { Env } from "../env";
 import { jobFiles } from "./files";
@@ -188,6 +189,7 @@ export async function sweepLostJobs(env: Env, claimingWorker: string | null = nu
     const charge = lost.ratePerHour === null ? null : chargeFor(billableMs, lost.ratePerHour, completion);
     const job = await failLostJob(env.DB, lost, completion, billableMs, charge);
     if (job === null) continue; // it checked in or completed meanwhile
+    if (lost.claimedBy !== null) await endTry(env.DB, lost.claimedBy, job, completion, await modelSize(env.DB, job, completion));
     await recordOutcome(env, job, completion, charge);
     failed += 1;
   }
