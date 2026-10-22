@@ -131,3 +131,41 @@ describe("polling back-off (M11.2, ADR-112)", () => {
     expect(waitChanged(null, null)).toBe(false);
   });
 });
+
+describe("a 20-minute solve from one tab (M11 exit)", () => {
+  /** The run's stage at `t` seconds: queued, the worker's stages, 20 minutes solving, the results. */
+  const STAGES: [number, string][] = [
+    [0, "queued"],
+    [5, "downloading"],
+    [8, "writing input"],
+    [10, "solving"],
+    [1210, "uploading"],
+    [1215, "reading results"],
+    [1225, "writing result files"],
+    [1230, "uploading results"],
+    [1235, "finished"],
+  ];
+  const stageAt = (t: number) => STAGES.filter(([from]) => from <= t).at(-1)?.[1] ?? "queued";
+
+  it("asks for the run's status about 60 times, and for its log once per status check", async () => {
+    vi.setSystemTime(0);
+    const { doc } = page();
+    let seen = "queued";
+    let stop = () => {};
+    const { times, check } = recorder(() => {
+      const stage = stageAt(Date.now() / 1000);
+      const changed = stage !== seen;
+      seen = stage;
+      if (stage === "finished") stop();
+      return { changed, retryAfter: stage === "queued" ? 5 : 2 };
+    });
+    stop = startPolling(check, doc);
+    await vi.advanceTimersByTimeAsync(1300_000);
+    stop();
+    // 54 checks: 2 s steps through each change of stage, 30 s apart while it solves, the last
+    // 2 s after it finished. Each is one GET of the run and, with the log's `more`, one of its log.
+    expect(times).toHaveLength(54);
+    expect(times.filter((t) => t > 41_000 && t < 1211_000).every((t) => (t - 41_000) % 30_000 === 0)).toBe(true);
+    expect(times.at(-1)).toBe(1237_000);
+  });
+});

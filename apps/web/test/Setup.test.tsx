@@ -1168,8 +1168,8 @@ function finishedRun(beforeM32 = false, spec: SimulationSpec = supported): Recor
         ],
       },
     },
-    "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
-    "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
+    "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1, more: false } },
+    "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1, more: false } },
     "GET /api/runs/r1/surface": { status: 200, bytes: display },
     "GET /api/runs/r1/fields": { status: 200, bytes: twoFacesFields({ safety: !beforeM32 }) },
     "GET /api/runs/r1/share": { status: 200, json: { share: null } },
@@ -1210,8 +1210,8 @@ describe("run", () => {
       routes([simulation(supported)], {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
         "POST /api/simulations/s1/runs": { status: 201, json: { run: run() } },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "CalculiX Version 2.21\n", next: 1 } },
-        "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "CalculiX Version 2.21\n", next: 1, more: false } },
+        "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1, more: false } },
       }),
     );
     render(<App />);
@@ -1255,7 +1255,7 @@ describe("run", () => {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
         "GET /api/simulations/s1/estimate?solver=pastix&analysis=linear_static": { status: 200, json: { estimate: slow } },
         "POST /api/simulations/s1/runs": { status: 201, json: { run: run() } },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -1301,7 +1301,7 @@ describe("run", () => {
             ],
           },
         },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -1325,7 +1325,7 @@ describe("run", () => {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
         "GET /api/simulations/s1/estimate?solver=pastix&analysis=linear_static": { status: 200, json: { estimate: tight } },
         "POST /api/simulations/s1/runs": { status: 201, json: { run: run() } },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -1362,7 +1362,7 @@ describe("run", () => {
       routes([simulation(supported)], {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
         "GET /api/simulations/s1/runs": { status: 200, json: { runs: [running] } },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
         "POST /api/runs/r1/cancel": { status: 200, json: { run: cancelling } },
       }),
     );
@@ -1386,7 +1386,7 @@ describe("run", () => {
       routes([simulation(supported)], {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
         "GET /api/simulations/s1/runs": { status: 200, json: { runs: [run()] } },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
         "POST /api/runs/r1/cancel": {
           status: 200,
           json: {
@@ -1469,7 +1469,7 @@ describe("run", () => {
           status: 200,
           json: { runs: [run({ spec: supported, status: "failed", stage: null, problem: "x", finishedAt: "2026-10-15T12:01:00.000Z" })] },
         },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -1593,7 +1593,7 @@ describe("run", () => {
             ],
           },
         },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -1640,7 +1640,7 @@ describe("run", () => {
             ],
           },
         },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -1674,7 +1674,7 @@ describe("run", () => {
             ],
           },
         },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -1702,7 +1702,7 @@ describe("run", () => {
             runs: [run({ status: "cancelled", stage: null, problem: "You cancelled the run.", finishedAt: "2026-10-15T12:01:00.000Z" })],
           },
         },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -1929,7 +1929,7 @@ describe("share link (M8.7)", () => {
       routes([simulation(supported)], {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
         "GET /api/simulations/s1/runs": { status: 200, json: { runs: [run()] } },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -1992,7 +1992,7 @@ describe("raw solver output (M8.6)", () => {
         ...finishedRun(),
         "GET /api/simulations/s1/runs": { status: 200, json: { runs: [removed] } },
         "POST /api/runs/r1/rerun": { status: 201, json: { run: again } },
-        "GET /api/runs/r2/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r2/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -2011,7 +2011,7 @@ describe("raw solver output (M8.6)", () => {
       routes([simulation(supported)], {
         "GET /api/simulations/s1/mesh": { status: 200, json: { mesh: mesh() } },
         "GET /api/simulations/s1/runs": { status: 200, json: { runs: [run()] } },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
       }),
     );
     render(<App />);
@@ -2093,8 +2093,8 @@ describe("steady-state thermal analysis (M5.1)", () => {
           ],
         },
       },
-      "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
-      "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
+      "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1, more: false } },
+      "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1, more: false } },
       "GET /api/runs/r1/surface": { status: 200, bytes: display },
       "GET /api/runs/r1/fields": { status: 200, bytes: fields },
     };
@@ -2581,8 +2581,8 @@ describe("modal analysis (M6.1)", () => {
             ],
           },
         },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1 } },
-        "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: " Job finished\n", next: 1, more: false } },
+        "GET /api/runs/r1/log?after=1": { status: 200, json: { text: "", next: 1, more: false } },
       }),
     );
     render(<App />);
@@ -2714,7 +2714,7 @@ describe("report options (M7.1)", () => {
           status: 200,
           json: { runs: [run({ status: "succeeded", stage: null, finishedAt: "2026-10-17T01:00:00.000Z" })] },
         },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
         "GET /api/simulations/s1/report-options": { status: 200, json: { options: defaults, saved: true, updatedAt: null } },
         "GET /api/report-branding": { status: 200, json: { branding: { companyName: "", logo: null } } },
         "GET /api/simulations/s1/views": { status: 200, json: { views } },
@@ -2755,7 +2755,7 @@ describe("report options (M7.1)", () => {
           status: 200,
           json: { runs: [run({ status: "succeeded", stage: null, finishedAt: "2026-10-17T01:00:00.000Z" })] },
         },
-        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0 } },
+        "GET /api/runs/r1/log?after=0": { status: 200, json: { text: "", next: 0, more: false } },
         // Sections without figures, so the report is asked for without drawing any.
         "GET /api/simulations/s1/report-options": {
           status: 200,

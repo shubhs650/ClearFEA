@@ -450,24 +450,29 @@ export async function appendJobLog(db: D1Database, jobId: string, text: string):
 /** Most log chunks one read returns; a client reads on from the `next` it gets back. */
 export const LOG_CHUNKS_PER_READ = 100;
 
-/** The user's job's log text after chunk `after`, and the chunk number to read on from. */
+/**
+ * The user's job's log text after chunk `after`, the chunk number to read on from, and whether more
+ * chunks were already written than one read returns (so a client asks again only then).
+ */
 export async function readJobLog(
   db: D1Database,
   userId: string,
   jobId: string,
   after: number,
-): Promise<{ text: string; next: number }> {
+): Promise<{ text: string; next: number; more: boolean }> {
   const { results } = await db
     .prepare(
       `SELECT job_logs.seq, job_logs.text FROM job_logs JOIN jobs ON jobs.id = job_logs.job_id
         WHERE job_logs.job_id = ? AND jobs.owner_id = ? AND job_logs.seq > ?
         ORDER BY job_logs.seq LIMIT ?`,
     )
-    .bind(jobId, userId, after, LOG_CHUNKS_PER_READ)
+    .bind(jobId, userId, after, LOG_CHUNKS_PER_READ + 1)
     .all<{ seq: number; text: string }>();
+  const read = results.slice(0, LOG_CHUNKS_PER_READ);
   return {
-    text: results.map((r) => r.text).join(""),
-    next: results.length === 0 ? after : (results[results.length - 1]?.seq ?? after),
+    text: read.map((r) => r.text).join(""),
+    next: read.length === 0 ? after : (read[read.length - 1]?.seq ?? after),
+    more: results.length > LOG_CHUNKS_PER_READ,
   };
 }
 

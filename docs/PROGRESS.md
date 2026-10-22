@@ -5,9 +5,9 @@ Current state of the project. Update this file at the end of every working sessi
 ## Now
 
 - **Phase:** 0 (localhost prototype)
-- **Current milestone:** none open. M9 Gate closed 2026-10-21 on the maintainer's sign-off and a green phase-end run; Phase 0's gate is met. The site is live at https://clearfea.triyalabs.com
-- **Next task:** the closed beta redesign (M11 to M17 in PLAN.md, ADR-106 to ADR-119), approved by Shubham on 2026-10-22 with an autodrive; M11.1 and M11.2 first
-- **Blocked on:** nothing for M11.2. M11.1 needs the Access service token and its two GitHub secrets from the maintainer. The live site solves nothing until M12.7: AWS is off and is being deleted (his decision, 2026-10-22), and the deploy health check has failed since 2026-10-21 on Cloudflare Access
+- **Current milestone:** M12 Solver on the VPS. M11 Fix the live beta closed 2026-10-22 (closed beta redesign, M11 to M17, ADR-106 to ADR-119, under Shubham's autodrive). The site is live at https://clearfea.triyalabs.com behind Cloudflare Access
+- **Next task:** M12.1 and M12.4 in parallel (PLAN.md order)
+- **Blocked on:** nothing. The live site solves nothing until M12.7: AWS is off and is being deleted (his decision, 2026-10-22); deploys pass their health check through Access again since run 32
 
 ## Milestones
 
@@ -23,6 +23,7 @@ Current state of the project. Update this file at the end of every working sessi
 | M7 | Report | Done (phase-end run on main green, [run 39004363940](https://github.com/shubhs650/ClearFEA/actions/runs/39004363940)) | 2026-10-17 |
 | M8 | Platform | Done (phase-end run on main green, [run 39023659289](https://github.com/shubhs650/ClearFEA/actions/runs/39023659289); verify 307 of 307 with the ledger reconciling over 26 cases, E-01 to E-07) | 2026-10-17 |
 | M9 | Gate | Done (Shubham signed off the gate walk, "I sign off M9", 2026-10-21 08:21 UTC; phase-end run on main green, [run 39568682383](https://github.com/shubhs650/ClearFEA/actions/runs/39568682383), full tier 314 of 314 in 27 cases, E-01 to E-09) | 2026-10-21 |
+| M11 | Fix the live beta | Done (phase-end run on main green, [run PHASE_END_RUN](https://github.com/shubhs650/ClearFEA/actions/runs/PHASE_END_RUN); deploys green behind Access; a 20-minute solve is 54 status checks; the Live checks behind Access move to M12's exit, since nothing solves on the live site until M12.7) | 2026-10-22 |
 | M10 | Live closed beta | Done (phase-end run on main green, [run 39475421085](https://github.com/shubhs650/ClearFEA/actions/runs/39475421085), full tier 307 of 307, E-01 to E-08; live quick tier 307 of 307 and cases A and B 34 of 34 in M10.9; the colleagues' first sign-in and tutorial move to M9.8) | 2026-10-20 |
 
 Status values: Not started, In progress, Verifying, Done.
@@ -34,6 +35,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 ### M11 Fix the live beta
 
 - [x] M11.1 Cloudflare Access service token (ADR-111): worker, deploy health check, Live checks and harness send it; AWS image job removed from the deploy. Works on the live site once the maintainer adds the service token, its Service Auth policy and the secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (DEPLOYMENT.md 1.8)
+- [x] M11.2 Polling discipline (ADR-112): one polling hook (2 s doubling to 30 s, paused in hidden tabs, one request in flight, stopped at a final state) replaces the geometry, mesh, run and report timers; the job status answer carries the queue position and a `retryAfter` hint; the machine-wait poll folds into it
 - [x] M11.3 Server protections (ADR-112): launcher only after routes that queue a job, lost-job sweep only in the per-minute cron (`make dev` now calls it each minute), queue limits as settings (2 waiting and 1 running per user per lane, 30 runs per user per day, 20 waiting in all), 120 requests per user per minute with Workers rate limiting, a 12-hour stop-limit ceiling
 
 ### M9 Gate
@@ -183,7 +185,7 @@ Things only the maintainer can do.
 - [x] Review ADR-091 to ADR-104: all accepted (2026-10-21)
 - [x] Decide V-23 (NAFEMS LE10): build it, with the edge supports it needs (2026-10-21)
 - [x] M9.9: sign off the gate walk (2026-10-21)
-- [ ] M11.1: create the Access service token `clearfea-machines`, add a Service Auth policy for it to the site's Access application, and add the GitHub secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (`docs/DEPLOYMENT.md` section 1.8). Until then every deploy fails its last step, the health check, with "Cloudflare Access refused the health check"
+- [x] M11.1 (done 2026-10-22; deploy run 32 passed its health check through Access): create the Access service token `clearfea-machines`, add a Service Auth policy for it to the site's Access application, and add the GitHub secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (`docs/DEPLOYMENT.md` section 1.8). Until then every deploy fails its last step, the health check, with "Cloudflare Access refused the health check"
 - [ ] At the next AWS stack change, update the `clearfea` stack with **Replace existing template** and the current `infra/aws/clearfea.yaml` (DEPLOYMENT.md 4.3), so the stack holds PR #134's deploy role fixes; do it while no job is running
 
 ## Verification status
@@ -200,6 +202,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> Close M11 (2026-10-22): every M11 task is merged (PR #142, #143, #144) and ticked in PLAN.md. The exit, checked: deploys pass through Access (Deploy runs 32 and 33 green, 34 for M11.3 running at the close); a 20-minute solve from one tab is 54 checks of the run's status, now a test in `apps/web/test/usePolling.test.ts` (2 s steps through each stage change, 30 s apart while it solves). The close found that each check also read the log twice whenever the solver had written lines (three requests per check, about 160 for the solve), so `RunLogResponse` gained `more` and the browser reads on only when it is true: two requests per check, about 108 in all (ADR-112, "As checked at the M11 close"). Not met: the Live checks behind Access. Every case imports, meshes and solves, and nothing on the live site takes a job until M12.7's VPS, so they run at M12's exit, which already asks for the quick tier and cases A and B on the VPS. Do not run them before then: the deploy still passes the AWS launcher keys if the secrets exist, so a queued job could try to start a Fargate task if the stack were not yet deleted. Nothing else listed for M11 was left unbuilt (ADR-111, ADR-112 and the PLAN tasks checked line by line); ADR-111's "the manager sends the token" is M12's.
 
 > M11.3 (2026-10-22): the queue limits are `queueRefusal` in `apps/api/src/jobs/limits.ts`; every route that queues a job calls it and is wrapped in `launchesMachines`, the only way a request runs the launcher now. A new route that queues a job must do both. Refusals answer 429 with the reason. "1 running per user per lane" lives in `claimJob`, so M12's manager gets it for free, but the M11.2 queue position does not know about it (a job passed over still counts as ahead). The verification account is exempt from the daily run count, and `infra/stack.sh` raises it to 1000 for `make verify`/`make e2e`, which run everything as alice. Rate limiting is bound only in the production configuration (`scripts/productionConfig.mjs`): with it in `wrangler.jsonc`, E-01's quick page reloads went over 120 a minute in `make e2e`, since the development web build asks twice for much of what it loads. `test/limits.test.ts` checks the 429 with a stub binding. A claim no longer fails other workers' silent jobs; only the per-minute cron does, so locally that needs `make dev`'s new per-minute call (or `/__scheduled?cron=*+*+*+*+*`).
 
@@ -483,6 +487,8 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-22
+
+- Close M11: phase-end run on main green (PHASE_END_RUN); deploys green behind Access; the exit's request count is now a test (54 status checks for a 20-minute solve); the run log answer says `more`, so a solving run's check reads the log once instead of twice. The Live checks behind Access move to M12's exit. Learned: count every request a poll makes, not only the one the hook schedules; the log read hid a second request per check.
 
 - M11.3 server protections (ADR-112): the launcher runs only after routes that queue a job, and only the per-minute cron looks for silent workers; queue limits as `settings` rows (migration 0027) refuse a job with 429 and the reason; a claim passes over a user's job while one of theirs runs in its lane; Workers rate limiting (120 per user per minute) in `requireUser`; no stop limit above 12 hours.
 - M11.2 polling discipline (ADR-112): one polling hook (`usePolling`, 2 s doubling to 30 s, paused in hidden tabs, one request in flight) replaces the geometry, mesh, run, report and worker-check timers; the polled answers carry the job's `wait` (queue position, machine starting, `retryAfter`), which replaces `GET /api/jobs/machine-wait` and its 5 s poll. A long solve's log now updates at worst every 30 s.
