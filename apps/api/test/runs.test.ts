@@ -926,7 +926,9 @@ describe("a finished solve job", () => {
 describe("a worker that stops checking in (M8.4)", () => {
   /** Moves the solve job's last heartbeat back by this many seconds, and its claim 30 s before that. */
   async function silentFor(jobId: string, seconds: number): Promise<void> {
-    const at = (s: number) => new Date(Date.now() - s * 1000).toISOString();
+    // One clock reading, so claim and heartbeat lie exactly 30 s apart (billing rounds up).
+    const now = Date.now();
+    const at = (s: number) => new Date(now - s * 1000).toISOString();
     await env.DB.prepare("UPDATE jobs SET claimed_at = ?, heartbeat_at = ? WHERE id = ?")
       .bind(at(seconds + 30), at(seconds), jobId)
       .run();
