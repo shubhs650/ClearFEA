@@ -32,6 +32,7 @@ import {
   type Job,
   recordHeartbeat,
 } from "./db/jobs";
+import { recordJobFailed } from "./db/events";
 import { HOST_CHECK_IN_SECONDS, recordCheckIn } from "./db/hosts";
 import { machineSizeExists } from "./db/machines";
 import { getRun } from "./db/runs";
@@ -117,7 +118,8 @@ internal.post("/jobs/claim", async (c) => {
 internal.post("/hosts/check-in", async (c) => {
   const body = await readBody(c.req.raw, validateHostCheckIn, "HostCheckIn", SCHEMA);
   if ("error" in body) return c.json({ error: body.error }, 400);
-  await recordCheckIn(c.env.DB, body.value.host, body.value.managerVersion ?? null);
+  // Coming online and a restart of the manager are events (M13.1, ADR-125).
+  await recordCheckIn(c.env.DB, body.value.host, body.value.managerVersion ?? null, body.value.startedAt ?? null);
   // Its load, kept 14 days for support (M12.3, ADR-109).
   if (body.value.load !== undefined) await recordHostLoad(c.env.DB, body.value.host, body.value.load);
   return c.json({ intervalSeconds: HOST_CHECK_IN_SECONDS } satisfies HostCheckInResponse);
@@ -301,6 +303,7 @@ internal.post("/jobs/:id/complete", async (c) => {
   const job = await completeJob(c.env.DB, request.workerId, held.id, completion, billableMs, charge, peakMemoryBytes);
   if (job === null) return c.json({ error: gone }, 409);
   await endTry(c.env.DB, request.workerId, job, completion, await modelSize(c.env.DB, job, completion));
+  await recordJobFailed(c.env.DB, held, completion);
   await recordOutcome(c.env, job, completion, charge);
   return c.json({ job: { ...payload(job), status: job.status } } satisfies CompleteResponse);
 });

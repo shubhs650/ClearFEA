@@ -476,6 +476,9 @@ def test_the_host_checks_in_at_start_and_when_the_api_says(  # M12.4, ADR-120
     check_ins = [body for path, body in api.calls if path.endswith("/hosts/check-in")]
     assert len(check_ins) == 2
     assert check_ins[0]["host"] == "vps1" and check_ins[0]["managerVersion"]
+    # The same start time in each, so the API can tell a restart from a check-in (M13.1).
+    assert check_ins[0]["startedAt"].endswith("Z")
+    assert check_ins[1]["startedAt"] == check_ins[0]["startedAt"]
 
 
 def test_an_idle_lane_asks_less_often_up_to_its_limit() -> None:

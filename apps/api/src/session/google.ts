@@ -4,10 +4,12 @@
 // unless the account's verified address is the admin's (ADMIN_EMAIL) or on the allowlist,
 // checked when the user is created and again whenever a session is created. A user's first
 // sign-in creates their ClearFEA user row, with their address as login, and the play-money grant.
+// Each sign-in and each refusal is an event (M13.1, ADR-125).
 
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { isAllowed } from "../db/allowlist";
+import { recordEvent } from "../db/events";
 import { grantStatement } from "../billing/ledger";
 import type { Env } from "../env";
 
@@ -45,6 +47,19 @@ export function googleSettings(
 
 function refuse(): never {
   throw new APIError("FORBIDDEN", { code: NOT_INVITED, message: NOT_INVITED_MESSAGE });
+}
+
+/** Records a refused Google sign-in, then refuses it. */
+async function refuseAndRecord(db: D1Database, email: string | null, verified: boolean, userId: string | null): Promise<never> {
+  const why = verified ? "it is not invited" : "Google has not verified the address";
+  await recordEvent(db, {
+    kind: "sign_in_refused",
+    level: "warning",
+    userId,
+    message: `A Google sign-in as ${email ?? "an account without an address"} was refused: ${why}.`,
+    detail: { method: "google", email, reason: verified ? "not_invited" : "unverified" },
+  });
+  refuse();
 }
 
 /** Better Auth for one request. Call only when `googleSettings(env)` is ok. */
@@ -112,7 +127,9 @@ export function googleAuth(env: Env) {
       user: {
         create: {
           before: async (user) => {
-            if (!user.emailVerified || !(await isAllowed(db, user.email, env.ADMIN_EMAIL))) refuse();
+            if (!user.emailVerified || !(await isAllowed(db, user.email, env.ADMIN_EMAIL))) {
+              await refuseAndRecord(db, user.email, user.emailVerified, null);
+            }
             return { data: { ...user, login: user.email.trim().toLowerCase() } };
           },
           after: async (user) => {
@@ -128,8 +145,18 @@ export function googleAuth(env: Env) {
               .bind(session.userId)
               .first<{ email: string | null; email_verified: number }>();
             if (row?.email == null || row.email_verified !== 1 || !(await isAllowed(db, row.email, env.ADMIN_EMAIL))) {
-              refuse();
+              await refuseAndRecord(db, row?.email ?? null, row?.email_verified === 1, row === null ? null : session.userId);
             }
+          },
+          after: async (session) => {
+            const row = await db.prepare("SELECT email FROM users WHERE id = ?").bind(session.userId).first<{ email: string | null }>();
+            await recordEvent(db, {
+              kind: "sign_in",
+              level: "info",
+              userId: session.userId,
+              message: `${row?.email ?? "A user"} signed in with Google.`,
+              detail: { method: "google", email: row?.email ?? null },
+            });
           },
         },
       },

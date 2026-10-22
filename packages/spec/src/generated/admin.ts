@@ -6,7 +6,7 @@ import schema from "../../schemas/admin.schema.json";
 import { validator } from "../validate";
 
 /**
- * Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) and the solver machines started on AWS (M10.7). Only the admin reaches them. Each message is a definition under $defs.
+ * Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) and the event log (M13.1). Only the admin reaches them. Each message is a definition under $defs.
  */
 export interface Admin {
   [k: string]: unknown;
@@ -293,6 +293,55 @@ export interface HostLoadResponse {
   samples: HostLoadSample[];
 }
 /**
+ * One entry of the event log (M13.1, ADR-113, ADR-125): what happened, to whom and how serious it is. For support: ids and plain words, never a project's name, model or results.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "AdminEvent".
+ */
+export interface AdminEvent {
+  id: number;
+  /**
+   * ISO 8601 UTC.
+   */
+  at: string;
+  /**
+   * sign_in and sign_in_refused: a sign-in, or one refused (Google, a local password or the verification token); job_failed: a job ended failed, through the user's setup (info) or a fault in ClearFEA (error); job_retried: a machine fault ended a try and the job was queued again; host_online and host_offline: the solver host checked in after a silence (or for the first time), or has been silent for 120 s; manager_started: its compute manager restarted while the host stayed online; admin_action: the admin changed something.
+   */
+  kind:
+    | "sign_in"
+    | "sign_in_refused"
+    | "job_failed"
+    | "job_retried"
+    | "host_online"
+    | "host_offline"
+    | "manager_started"
+    | "admin_action";
+  level: "info" | "warning" | "error";
+  /**
+   * The user it is about: who signed in, whose job it was, the admin who acted.
+   */
+  userId: string | null;
+  jobId: string | null;
+  host: string | null;
+  /**
+   * One line in plain words.
+   */
+  message: string;
+  /**
+   * The particulars as named values, such as the failure cause, the try, or the address refused.
+   */
+  detail: {} | null;
+}
+/**
+ * Answer of GET /api/admin/events: events newest first, filtered by ?kind=, ?level=, ?user=, ?since= and ?before= (times), at most ?limit= (up to 500).
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "EventsResponse".
+ */
+export interface EventsResponse {
+  events: AdminEvent[];
+}
+/**
  * Body of PUT /api/admin/machine-sizes/{name}.
  *
  * This interface was referenced by `Admin`'s JSON-Schema
@@ -334,6 +383,8 @@ export const validateJobTry = validator<JobTry>(schema, "JobTry");
 export const validateJobTriesResponse = validator<JobTriesResponse>(schema, "JobTriesResponse");
 export const validateHostLoadSample = validator<HostLoadSample>(schema, "HostLoadSample");
 export const validateHostLoadResponse = validator<HostLoadResponse>(schema, "HostLoadResponse");
+export const validateAdminEvent = validator<AdminEvent>(schema, "AdminEvent");
+export const validateEventsResponse = validator<EventsResponse>(schema, "EventsResponse");
 export const validateSwitchCloudSizeRequest = validator<SwitchCloudSizeRequest>(schema, "SwitchCloudSizeRequest");
 export const validateSetMachineHoursCapRequest = validator<SetMachineHoursCapRequest>(schema, "SetMachineHoursCapRequest");
 export const validateAddAllowedRequest = validator<AddAllowedRequest>(schema, "AddAllowedRequest");

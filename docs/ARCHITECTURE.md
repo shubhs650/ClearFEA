@@ -261,6 +261,8 @@ Settings (environment): the worker's `CLEARFEA_API_URL`, `CLEARFEA_WORKER_TOKEN`
 
 Statistics (M12.3, ADR-109, ADR-123): the API keeps one `job_stats` row per try of a job, started by the claim, moved from stage to stage by the heartbeats and ended with the completion, before a re-queue. The manager samples each job container's Docker statistics every 5 s (`manager/stats.py`) and posts memory, CPU, disk, exit code and the out-of-memory flag to `POST /internal/jobs/{id}/stats` when the container ends; each check-in carries the host's load, kept in `host_stats` for 14 days. The admin reads both at `GET /api/admin/stats/jobs` and `GET /api/admin/stats/host`.
 
+Event log (M13.1, ADR-113, ADR-125): the `events` table holds one row per sign-in or refused sign-in, failed job, job queued again after a machine fault, solver host check-in after a silence (or its first), host silent for 120 s (recorded once by the per-minute cron), compute manager restart (a new `startedAt` in the check-in while the host stays online) and admin action, each with a kind, a level (info, warning, error), the user, job and host it concerns, one plain line and a JSON detail. It is written by `apps/api/src/db/events.ts` from the routes and sweeps where these happen and read by the admin at `GET /api/admin/events` (kind, level, user, since, before, limit). It holds ids, addresses and failure messages for support, never a project's name, model or results.
+
 ## 8. API
 
 Hono on Cloudflare Workers, TypeScript.

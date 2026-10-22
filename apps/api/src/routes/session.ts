@@ -7,6 +7,7 @@ import { type SessionResponse, type SessionUser, type SignInOptions, validateLog
 import { Hono } from "hono";
 import { readBody } from "../body";
 import { isAdminEmail } from "../db/allowlist";
+import { recordEvent } from "../db/events";
 import { findCredentials, getUser, type UserWithEmail } from "../db/users";
 import {
   authMode,
@@ -59,9 +60,24 @@ session.post("/", async (c) => {
   const found = await findCredentials(c.env.DB, login);
   const matches = await verifyPassword(password, found?.passwordHash ?? DUMMY_HASH);
   if (found === null || found.passwordHash === null || !matches) {
+    // The login typed is not recorded when it names nobody: it may be a password typed in the wrong box.
+    await recordEvent(c.env.DB, {
+      kind: "sign_in_refused",
+      level: "warning",
+      userId: found?.user.id ?? null,
+      message: found === null ? "A password sign-in with an unknown login was refused." : `A password sign-in as ${found.user.login} was refused: wrong password.`,
+      detail: { method: "password", reason: found === null ? "unknown_login" : "wrong_password" },
+    });
     return c.json({ error: "The login or password is wrong. Check both and try again." }, 401);
   }
   await startSession(c, c.env.SESSION_SECRET ?? "", found.user.id);
+  await recordEvent(c.env.DB, {
+    kind: "sign_in",
+    level: "info",
+    userId: found.user.id,
+    message: `${found.user.login} signed in with a password.`,
+    detail: { method: "password" },
+  });
   return c.json({ user: sessionUser(found.user, c.env.ADMIN_EMAIL) } satisfies SessionResponse);
 });
 
@@ -76,12 +92,25 @@ session.post("/verification", async (c) => {
   const given = /^Bearer (.+)$/.exec(c.req.header("Authorization") ?? "")?.[1]?.trim() ?? "";
   if (!(await tokenMatches(given, wanted))) {
     await recordFailure(c.env.DB);
+    await recordEvent(c.env.DB, {
+      kind: "sign_in_refused",
+      level: "warning",
+      message: "A sign-in with a wrong verification token was refused.",
+      detail: { method: "verification_token", reason: "wrong_token" },
+    });
     return c.json({ error: "The verification token is wrong." }, 401);
   }
   await ensureVerificationUser(c.env.DB);
   await startVerificationSession(c, wanted);
   const user = await getUser(c.env.DB, VERIFICATION_USER_ID);
   if (user === null) return c.json({ error: "The verification account could not be created." }, 500);
+  await recordEvent(c.env.DB, {
+    kind: "sign_in",
+    level: "info",
+    userId: user.id,
+    message: "The verification account signed in with its token (live checks).",
+    detail: { method: "verification_token" },
+  });
   return c.json({ user: sessionUser(user, c.env.ADMIN_EMAIL) } satisfies SessionResponse);
 });
 

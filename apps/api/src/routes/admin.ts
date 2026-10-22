@@ -2,11 +2,14 @@
 // The admin page's routes (M10.3, ADR-097): the allowlist of Google addresses that may sign in,
 // the users, the cloud machine sizes switched on (M10.6, ADR-099), and the solver machines and
 // their monthly hours cap (M10.7, ADR-100), and the statistics of each try of a job and of the solver
-// host's load (M12.3, ADR-109). Only the admin (ADMIN_EMAIL) reaches them; to anyone else they answer as if
+// host's load (M12.3, ADR-109), and the event log, where each change made here is recorded (M13.1,
+// ADR-113, ADR-125). Only the admin (ADMIN_EMAIL) reaches them; to anyone else they answer as if
 // they did not exist. Shapes: packages/spec/schemas/admin.schema.json.
 
 import {
+  type AdminEvent,
   type AdminResponse,
+  type EventsResponse,
   type HostLoadResponse,
   type JobTriesResponse,
   validateAddAllowedRequest,
@@ -16,6 +19,7 @@ import {
 import { Hono, type MiddlewareHandler } from "hono";
 import { readBody } from "../body";
 import { addAllowed, isAdminEmail, listAllowed, listUsers, normalEmail, removeAllowed } from "../db/allowlist";
+import { listEvents, recordAdminAction } from "../db/events";
 import { latestHost } from "../db/hosts";
 import { listCloudSizes, machineMode, switchCloudSize } from "../db/machines";
 import { setMachineHoursCap } from "../db/settings";
@@ -73,12 +77,19 @@ admin.post("/allowed", async (c) => {
     return c.json({ error: "That is the admin's own address, which can always sign in. Nothing was added." }, 400);
   }
   await addAllowed(c.env.DB, body.value.email);
+  const email = normalEmail(body.value.email);
+  await recordAdminAction(c.env.DB, c.var.userId, `Invited ${email}.`, { action: "allowlist_add", email });
   return c.json(await view(c.env.DB, c.env));
 });
 
 admin.delete("/allowed/:email", async (c) => {
   const removed = await removeAllowed(c.env.DB, c.req.param("email"));
   if (!removed) return c.json({ error: "That address is not on the list. Reload the admin page." }, 404);
+  const email = normalEmail(c.req.param("email"));
+  await recordAdminAction(c.env.DB, c.var.userId, `Removed ${email} from the invited addresses and ended their sessions.`, {
+    action: "allowlist_remove",
+    email,
+  });
   return c.json(await view(c.env.DB, c.env));
 });
 
@@ -95,6 +106,13 @@ admin.put("/machine-sizes/:name", async (c) => {
       400,
     );
   }
+  const size = c.req.param("name");
+  const { enabled } = body.value;
+  await recordAdminAction(c.env.DB, c.var.userId, `Switched the ${size} machine size ${enabled ? "on" : "off"}.`, {
+    action: "machine_size",
+    size,
+    enabled,
+  });
   return c.json(await view(c.env.DB, c.env));
 });
 
@@ -109,6 +127,11 @@ admin.put("/machine-hours-cap", async (c) => {
     return c.json({ error: "Type a whole number of hours from 0 to 744, such as 60, and try again." }, 400);
   }
   await setMachineHoursCap(c.env.DB, body.value.hours);
+  const { hours } = body.value;
+  await recordAdminAction(c.env.DB, c.var.userId, `Set the monthly machine-hours cap to ${hours} h.`, {
+    action: "machine_hours_cap",
+    hours,
+  });
   return c.json(await view(c.env.DB, c.env));
 });
 
@@ -154,4 +177,51 @@ admin.get("/stats/host", async (c) => {
   const since = sinceText === undefined ? new Date(Date.now() - 3600_000).toISOString() : isoTime(sinceText);
   if (since === null) return c.json({ error: "Give ?since= as an ISO 8601 time, such as 2026-10-22T12:00:00Z." }, 400);
   return c.json({ samples: await listHostLoad(c.env.DB, since) } satisfies HostLoadResponse);
+});
+
+const EVENT_KINDS: AdminEvent["kind"][] = [
+  "sign_in",
+  "sign_in_refused",
+  "job_failed",
+  "job_retried",
+  "host_online",
+  "host_offline",
+  "manager_started",
+  "admin_action",
+];
+const EVENT_LEVELS: AdminEvent["level"][] = ["info", "warning", "error"];
+
+/** Most events one read returns, and how many by default. */
+const MAX_EVENTS = 500;
+const DEFAULT_EVENTS = 100;
+
+/**
+ * The event log, newest first (M13.1, ADR-113, ADR-125): of one kind (?kind=), level (?level=) or
+ * user (?user=), from ?since= and before ?before= (times, which also page on), at most ?limit=.
+ */
+admin.get("/events", async (c) => {
+  const limitText = c.req.query("limit");
+  const limit = limitText === undefined ? DEFAULT_EVENTS : Number(limitText);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EVENTS) {
+    return c.json({ error: `Ask for 1 to ${MAX_EVENTS} events with ?limit=.` }, 400);
+  }
+  const kind = c.req.query("kind");
+  if (kind !== undefined && !EVENT_KINDS.includes(kind as AdminEvent["kind"])) {
+    return c.json({ error: `Give ?kind= as one of ${EVENT_KINDS.join(", ")}.` }, 400);
+  }
+  const level = c.req.query("level");
+  if (level !== undefined && !EVENT_LEVELS.includes(level as AdminEvent["level"])) {
+    return c.json({ error: `Give ?level= as one of ${EVENT_LEVELS.join(", ")}.` }, 400);
+  }
+  const times: Record<"since" | "before", string | undefined> = { since: undefined, before: undefined };
+  for (const name of ["since", "before"] as const) {
+    const text = c.req.query(name);
+    const time = isoTime(text);
+    if (text !== undefined && time === null) {
+      return c.json({ error: `Give ?${name}= as an ISO 8601 time, such as 2026-10-22T12:00:00Z.` }, 400);
+    }
+    times[name] = time ?? undefined;
+  }
+  const events = await listEvents(c.env.DB, { kind, level, userId: c.req.query("user"), ...times, limit });
+  return c.json({ events } satisfies EventsResponse);
 });
