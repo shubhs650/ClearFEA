@@ -383,6 +383,8 @@ const ROUTES: Record<string, Route> = {
   "DELETE /api/admin/allowed/:email": { area: "admin" },
   "PUT /api/admin/machine-sizes/:name": { area: "admin" },
   "PUT /api/admin/machine-hours-cap": { area: "admin" },
+  "GET /api/admin/stats/jobs": { area: "admin" },
+  "GET /api/admin/stats/host": { area: "admin" },
 
   "POST /api/jobs": { area: "account" },
   "GET /api/jobs": { area: "account" },
@@ -500,6 +502,7 @@ const ROUTES: Record<string, Route> = {
   "POST /internal/jobs/:id/heartbeat": { area: "worker" },
   "POST /internal/jobs/:id/complete": { area: "worker" },
   "POST /internal/hosts/check-in": { area: "worker" },
+  "POST /internal/jobs/:id/stats": { area: "worker" },
 };
 
 /** Bob's calls on his own account, with a body where the route needs one. */
@@ -544,6 +547,8 @@ const ADMIN_CALLS: Record<string, Request> = {
   "DELETE /api/admin/allowed/:email": { path: "/api/admin/allowed/invited%40example.com" },
   "PUT /api/admin/machine-sizes/:name": { path: "/api/admin/machine-sizes/large", json: { enabled: false } },
   "PUT /api/admin/machine-hours-cap": { path: "/api/admin/machine-hours-cap", json: { hours: 0 } },
+  "GET /api/admin/stats/jobs": { path: "/api/admin/stats/jobs" },
+  "GET /api/admin/stats/host": { path: "/api/admin/stats/host" },
 };
 
 /** The allowlist, the cloud size list and the settings as they stand, to show a refused call changed nothing. */

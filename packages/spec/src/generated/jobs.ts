@@ -149,6 +149,78 @@ export interface HostCheckIn {
    */
   host: string;
   managerVersion?: string;
+  load?: HostLoad;
+}
+/**
+ * The solver host's load when it checked in (M12.3, ADR-109, ADR-123), kept as host_stats for 14 days. CPU and steal are shares of all the host's CPU time since the previous check-in, from 0 to 1, absent at the manager's first check-in; memory and disk in bytes.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "HostLoad".
+ */
+export interface HostLoad {
+  cpu?: number;
+  /**
+   * CPU time the hypervisor gave to other machines while this one wanted it.
+   */
+  steal?: number;
+  load1: number;
+  load5: number;
+  load15: number;
+  memoryTotalBytes: number;
+  memoryAvailableBytes: number;
+  /**
+   * Of the file system holding Docker's data, where the jobs' scratch volumes are.
+   */
+  diskTotalBytes: number;
+  diskFreeBytes: number;
+  /**
+   * Containers running on the host, job containers and others.
+   */
+  containers: number;
+}
+/**
+ * Body of POST /internal/jobs/{id}/stats (M12.3, ADR-109, ADR-123): what the compute manager measured of one try of a job from its container, sent once the container has ended. Memory, CPU and disk come from Docker's container statistics sampled every 5 s, so a peak shorter than that can be missed. The API answers 204, or 404 when the worker has no try of that job still without these statistics.
+ *
+ * This interface was referenced by `Jobs`'s JSON-Schema
+ * via the `definition` "ContainerStats".
+ */
+export interface ContainerStats {
+  workerId: WorkerId;
+  host: string;
+  lane: string;
+  /**
+   * The id of the worker image the container ran (sha256:...).
+   */
+  image: string;
+  /**
+   * The container's exit code; above 128 it was ended by signal exitCode - 128. Null when it never started.
+   */
+  exitCode: number | null;
+  /**
+   * Docker stopped the container at its memory limit.
+   */
+  outOfMemory: boolean;
+  /**
+   * From the container's start to its end.
+   */
+  runMs: number;
+  /**
+   * Statistics samples taken; with none, memory, CPU and disk are left out.
+   */
+  samples: number;
+  peakMemoryBytes?: number;
+  /**
+   * CPU time the container used over all its CPUs, at the last sample.
+   */
+  cpuSeconds?: number;
+  /**
+   * The most CPUs busy between two samples (6 is six CPUs busy).
+   */
+  cpuPeak?: number;
+  /**
+   * Bytes the container wrote to block devices, its scratch volume among them, at the last sample.
+   */
+  diskWrittenBytes?: number;
 }
 /**
  * This interface was referenced by `Jobs`'s JSON-Schema
@@ -324,6 +396,8 @@ export const validateClaimResponse = validator<ClaimResponse>(schema, "ClaimResp
 export const validateHeartbeatRequest = validator<HeartbeatRequest>(schema, "HeartbeatRequest");
 export const validateHeartbeatResponse = validator<HeartbeatResponse>(schema, "HeartbeatResponse");
 export const validateHostCheckIn = validator<HostCheckIn>(schema, "HostCheckIn");
+export const validateHostLoad = validator<HostLoad>(schema, "HostLoad");
+export const validateContainerStats = validator<ContainerStats>(schema, "ContainerStats");
 export const validateHostCheckInResponse = validator<HostCheckInResponse>(schema, "HostCheckInResponse");
 export const validateMetering = validator<Metering>(schema, "Metering");
 export const validateCompleteSucceeded = validator<CompleteSucceeded>(schema, "CompleteSucceeded");

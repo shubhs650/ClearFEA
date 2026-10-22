@@ -165,6 +165,134 @@ export interface AdminResponse {
   solverHost: SolverHost | null;
 }
 /**
+ * One try of a job (M12.3, ADR-109, ADR-123), for support: queue wait, stage times, model size, solver and what its container used. Admin only.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "JobTry".
+ */
+export interface JobTry {
+  jobId: string;
+  jobType: "noop" | "import" | "mesh" | "solve" | "report";
+  /**
+   * The user the job is for; nothing else of their records is shown.
+   */
+  ownerId: string;
+  /**
+   * The geometry, mesh or run the job works on: a run id for a solve job.
+   */
+  targetId: string | null;
+  /**
+   * 1 for the first try; a job re-queued after a platform fault (M12.2) is tried again under the same id.
+   */
+  attempt: number;
+  workerId: string;
+  /**
+   * The solver host, from the compute manager's statistics; null from any other worker.
+   */
+  host: string | null;
+  lane: string | null;
+  /**
+   * The worker image id the container ran.
+   */
+  image: string | null;
+  /**
+   * ISO 8601 UTC: when this try began to wait: the job's creation, or the end of its previous try.
+   */
+  queuedAt: string;
+  claimedAt: string;
+  /**
+   * Null while the try runs.
+   */
+  endedAt: string | null;
+  queueWaitMs: number;
+  /**
+   * Milliseconds in each stage the worker reported, as seen by its heartbeats every 5 s; "starting" is from the claim to the first heartbeat.
+   */
+  stageMs: {
+    [k: string]: number;
+  };
+  /**
+   * The stage the try was in when it ended, or is in now.
+   */
+  lastStage: string | null;
+  /**
+   * How the try ended; null while it runs.
+   */
+  status: "succeeded" | "failed" | "cancelled" | "stopped_at_limit" | null;
+  failureCategory: "user_fault" | "platform_fault" | null;
+  failureCause: string | null;
+  /**
+   * Of the mesh made (mesh job) or solved on (solve job).
+   */
+  nodes: number | null;
+  elements: number | null;
+  /**
+   * Unknowns of the solve: three per node for a structural run, one for a thermal one.
+   */
+  dofs: number | null;
+  solver: string | null;
+  analysis: string | null;
+  exitCode: number | null;
+  /**
+   * exitCode - 128 when the container was ended by a signal (9: killed).
+   */
+  signal: number | null;
+  outOfMemory: boolean | null;
+  /**
+   * The container's run time.
+   */
+  runMs: number | null;
+  peakMemoryBytes: number | null;
+  cpuSeconds: number | null;
+  /**
+   * cpuSeconds over runMs, in CPUs.
+   */
+  cpuAverage: number | null;
+  cpuPeak: number | null;
+  diskWrittenBytes: number | null;
+}
+/**
+ * Answer of GET /api/admin/stats/jobs: tries newest first, of one job (?job=), of the jobs of one record such as a run (?target=), or of all jobs (?before= pages on).
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "JobTriesResponse".
+ */
+export interface JobTriesResponse {
+  tries: JobTry[];
+}
+/**
+ * The solver host's load at one check-in (M12.3, ADR-109): shares from 0 to 1, bytes.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "HostLoadSample".
+ */
+export interface HostLoadSample {
+  host: string;
+  /**
+   * ISO 8601 UTC.
+   */
+  at: string;
+  cpu: number | null;
+  steal: number | null;
+  load1: number;
+  load5: number;
+  load15: number;
+  memoryTotalBytes: number;
+  memoryAvailableBytes: number;
+  diskTotalBytes: number;
+  diskFreeBytes: number;
+  containers: number;
+}
+/**
+ * Answer of GET /api/admin/stats/host: the host's load samples since ?since= (default the last hour), oldest first, kept 14 days.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "HostLoadResponse".
+ */
+export interface HostLoadResponse {
+  samples: HostLoadSample[];
+}
+/**
  * Body of PUT /api/admin/machine-sizes/{name}.
  *
  * This interface was referenced by `Admin`'s JSON-Schema
@@ -202,6 +330,10 @@ export const validateMachineStart = validator<MachineStart>(schema, "MachineStar
 export const validateSolverHost = validator<SolverHost>(schema, "SolverHost");
 export const validateSolverMachines = validator<SolverMachines>(schema, "SolverMachines");
 export const validateAdminResponse = validator<AdminResponse>(schema, "AdminResponse");
+export const validateJobTry = validator<JobTry>(schema, "JobTry");
+export const validateJobTriesResponse = validator<JobTriesResponse>(schema, "JobTriesResponse");
+export const validateHostLoadSample = validator<HostLoadSample>(schema, "HostLoadSample");
+export const validateHostLoadResponse = validator<HostLoadResponse>(schema, "HostLoadResponse");
 export const validateSwitchCloudSizeRequest = validator<SwitchCloudSizeRequest>(schema, "SwitchCloudSizeRequest");
 export const validateSetMachineHoursCapRequest = validator<SetMachineHoursCapRequest>(schema, "SetMachineHoursCapRequest");
 export const validateAddAllowedRequest = validator<AddAllowedRequest>(schema, "AddAllowedRequest");

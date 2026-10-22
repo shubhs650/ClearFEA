@@ -57,7 +57,16 @@ class FakeDocker:
         self._next = 0
 
     def info(self) -> dict[str, Any]:
-        return {"NCPU": 8, "MemTotal": 24 * 1024**3, "ServerVersion": "29.0.0"}
+        running = sum(
+            1 for r in self.containers_by_id.values() if r["State"]["Status"] == "running"
+        )
+        return {
+            "NCPU": 8,
+            "MemTotal": 24 * 1024**3,
+            "ServerVersion": "29.0.0",
+            "ContainersRunning": running,
+            "DockerRootDir": "/nonexistent/docker",
+        }
 
     def image_id(self, name: str) -> str | None:
         return self.images.get(name)
@@ -100,6 +109,12 @@ class FakeDocker:
         if record["Spec"]["Cmd"] == ["software"]:
             self.exit(container, 0)
         return record["State"]["ExitCode"]
+
+    def stats(self, container: str) -> dict[str, Any] | None:
+        record = self.containers_by_id.get(container)
+        if record is None or record["State"]["Status"] != "running":
+            return None if record is None else {"read": "0001-01-01T00:00:00Z"}
+        return record.get("Stats")
 
     def kill(self, container: str) -> None:
         self.killed.append(container)

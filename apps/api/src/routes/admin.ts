@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The admin page's routes (M10.3, ADR-097): the allowlist of Google addresses that may sign in,
 // the users, the cloud machine sizes switched on (M10.6, ADR-099), and the solver machines and
-// their monthly hours cap (M10.7, ADR-100). Only the admin (ADMIN_EMAIL) reaches them; to anyone else they answer as if
+// their monthly hours cap (M10.7, ADR-100), and the statistics of each try of a job and of the solver
+// host's load (M12.3, ADR-109). Only the admin (ADMIN_EMAIL) reaches them; to anyone else they answer as if
 // they did not exist. Shapes: packages/spec/schemas/admin.schema.json.
 
 import {
   type AdminResponse,
+  type HostLoadResponse,
+  type JobTriesResponse,
   validateAddAllowedRequest,
   validateSetMachineHoursCapRequest,
   validateSwitchCloudSizeRequest,
@@ -16,6 +19,7 @@ import { addAllowed, isAdminEmail, listAllowed, listUsers, normalEmail, removeAl
 import { latestHost } from "../db/hosts";
 import { listCloudSizes, machineMode, switchCloudSize } from "../db/machines";
 import { setMachineHoursCap } from "../db/settings";
+import { listHostLoad, listTries } from "../db/stats";
 import { getUser } from "../db/users";
 import type { Env } from "../env";
 import { solverMachines } from "../launcher";
@@ -106,4 +110,48 @@ admin.put("/machine-hours-cap", async (c) => {
   }
   await setMachineHoursCap(c.env.DB, body.value.hours);
   return c.json(await view(c.env.DB, c.env));
+});
+
+/** Most tries one read of the statistics returns, and how many by default. */
+const MAX_TRIES = 500;
+const DEFAULT_TRIES = 100;
+
+/** An ISO 8601 UTC time as the database stores them, or null for anything else. */
+function isoTime(text: string | undefined): string | null {
+  if (text === undefined) return null;
+  const time = Date.parse(text);
+  return Number.isNaN(time) ? null : new Date(time).toISOString();
+}
+
+/**
+ * The statistics of jobs' tries, newest first (M12.3, ADR-109): of one job (?job=), of the jobs of
+ * one record such as a run (?target=), or of every job, paged with ?before= (a claim time) and
+ * ?limit= (up to 500).
+ */
+admin.get("/stats/jobs", async (c) => {
+  const limitText = c.req.query("limit");
+  const limit = limitText === undefined ? DEFAULT_TRIES : Number(limitText);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_TRIES) {
+    return c.json({ error: `Ask for 1 to ${MAX_TRIES} tries with ?limit=.` }, 400);
+  }
+  const beforeText = c.req.query("before");
+  const before = isoTime(beforeText);
+  if (beforeText !== undefined && before === null) {
+    return c.json({ error: "Give ?before= as an ISO 8601 time, such as 2026-10-22T12:00:00Z." }, 400);
+  }
+  const tries = await listTries(c.env.DB, {
+    jobId: c.req.query("job"),
+    targetId: c.req.query("target"),
+    before: before ?? undefined,
+    limit,
+  });
+  return c.json({ tries } satisfies JobTriesResponse);
+});
+
+/** The solver host's load samples since ?since= (default the last hour), oldest first, at most a day's. */
+admin.get("/stats/host", async (c) => {
+  const sinceText = c.req.query("since");
+  const since = sinceText === undefined ? new Date(Date.now() - 3600_000).toISOString() : isoTime(sinceText);
+  if (since === null) return c.json({ error: "Give ?since= as an ISO 8601 time, such as 2026-10-22T12:00:00Z." }, 400);
+  return c.json({ samples: await listHostLoad(c.env.DB, since) } satisfies HostLoadResponse);
 });

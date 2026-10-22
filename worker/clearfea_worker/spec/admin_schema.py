@@ -184,6 +184,148 @@ class AdminResponse(BaseModel):
     """
 
 
+class JobTry(BaseModel):
+    """
+    One try of a job (M12.3, ADR-109, ADR-123), for support: queue wait, stage times, model size, solver and what its container used. Admin only.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    job_id: Annotated[str, Field(alias="jobId")]
+    job_type: Annotated[
+        Literal["noop", "import", "mesh", "solve", "report"], Field(alias="jobType")
+    ]
+    owner_id: Annotated[str, Field(alias="ownerId")]
+    """
+    The user the job is for; nothing else of their records is shown.
+    """
+    target_id: Annotated[str | None, Field(alias="targetId")]
+    """
+    The geometry, mesh or run the job works on: a run id for a solve job.
+    """
+    attempt: Annotated[int, Field(ge=1)]
+    """
+    1 for the first try; a job re-queued after a platform fault (M12.2) is tried again under the same id.
+    """
+    worker_id: Annotated[str, Field(alias="workerId")]
+    host: str | None
+    """
+    The solver host, from the compute manager's statistics; null from any other worker.
+    """
+    lane: str | None
+    image: str | None
+    """
+    The worker image id the container ran.
+    """
+    queued_at: Annotated[str, Field(alias="queuedAt")]
+    """
+    ISO 8601 UTC: when this try began to wait: the job's creation, or the end of its previous try.
+    """
+    claimed_at: Annotated[str, Field(alias="claimedAt")]
+    ended_at: Annotated[str | None, Field(alias="endedAt")]
+    """
+    Null while the try runs.
+    """
+    queue_wait_ms: Annotated[int, Field(alias="queueWaitMs", ge=0)]
+    stage_ms: Annotated[dict[str, int], Field(alias="stageMs")]
+    """
+    Milliseconds in each stage the worker reported, as seen by its heartbeats every 5 s; "starting" is from the claim to the first heartbeat.
+    """
+    last_stage: Annotated[str | None, Field(alias="lastStage")]
+    """
+    The stage the try was in when it ended, or is in now.
+    """
+    status: Literal["succeeded", "failed", "cancelled", "stopped_at_limit"] | None
+    """
+    How the try ended; null while it runs.
+    """
+    failure_category: Annotated[
+        Literal["user_fault", "platform_fault"] | None, Field(alias="failureCategory")
+    ]
+    failure_cause: Annotated[str | None, Field(alias="failureCause")]
+    nodes: int | None
+    """
+    Of the mesh made (mesh job) or solved on (solve job).
+    """
+    elements: int | None
+    dofs: int | None
+    """
+    Unknowns of the solve: three per node for a structural run, one for a thermal one.
+    """
+    solver: str | None
+    analysis: str | None
+    exit_code: Annotated[int | None, Field(alias="exitCode")]
+    signal: int | None
+    """
+    exitCode - 128 when the container was ended by a signal (9: killed).
+    """
+    out_of_memory: Annotated[bool | None, Field(alias="outOfMemory")]
+    run_ms: Annotated[int | None, Field(alias="runMs")]
+    """
+    The container's run time.
+    """
+    peak_memory_bytes: Annotated[int | None, Field(alias="peakMemoryBytes")]
+    cpu_seconds: Annotated[float | None, Field(alias="cpuSeconds")]
+    cpu_average: Annotated[float | None, Field(alias="cpuAverage")]
+    """
+    cpuSeconds over runMs, in CPUs.
+    """
+    cpu_peak: Annotated[float | None, Field(alias="cpuPeak")]
+    disk_written_bytes: Annotated[int | None, Field(alias="diskWrittenBytes")]
+
+
+class JobTriesResponse(BaseModel):
+    """
+    Answer of GET /api/admin/stats/jobs: tries newest first, of one job (?job=), of the jobs of one record such as a run (?target=), or of all jobs (?before= pages on).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    tries: list[JobTry]
+
+
+class HostLoadSample(BaseModel):
+    """
+    The solver host's load at one check-in (M12.3, ADR-109): shares from 0 to 1, bytes.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    host: str
+    at: str
+    """
+    ISO 8601 UTC.
+    """
+    cpu: float | None
+    steal: float | None
+    load1: float
+    load5: float
+    load15: float
+    memory_total_bytes: Annotated[int, Field(alias="memoryTotalBytes")]
+    memory_available_bytes: Annotated[int, Field(alias="memoryAvailableBytes")]
+    disk_total_bytes: Annotated[int, Field(alias="diskTotalBytes")]
+    disk_free_bytes: Annotated[int, Field(alias="diskFreeBytes")]
+    containers: int
+
+
+class HostLoadResponse(BaseModel):
+    """
+    Answer of GET /api/admin/stats/host: the host's load samples since ?since= (default the last hour), oldest first, kept 14 days.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    samples: list[HostLoadSample]
+
+
 class SwitchCloudSizeRequest(BaseModel):
     """
     Body of PUT /api/admin/machine-sizes/{name}.

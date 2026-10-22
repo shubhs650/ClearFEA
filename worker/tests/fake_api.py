@@ -13,6 +13,7 @@ from clearfea_worker.spec.jobs_schema import (
     ClaimResponse,
     CompleteRequest,
     CompleteResponse,
+    ContainerStats,
     HeartbeatRequest,
     HeartbeatResponse,
     HostCheckIn,
@@ -37,6 +38,8 @@ class FakeApi:
         self.jobs: dict[str, dict[str, Any]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.heartbeat_action = "continue"
+        #: What the compute manager sent of each job's container (M12.3), by job id.
+        self.container_stats: list[tuple[str, dict[str, Any]]] = []
         #: When set, heartbeats answer 404: the job was queued again and this worker no longer
         #: holds it (M12.2).
         self.heartbeat_gone = False
@@ -108,6 +111,10 @@ class FakeApi:
             return 200, _checked(HostCheckInResponse, {"intervalSeconds": 30})
         parts = path.split("/")  # ['', 'internal', 'jobs', id, action]
         job = self.jobs[parts[3]]
+        if parts[4] == "stats":
+            ContainerStats.model_validate(body)
+            self.container_stats.append((parts[3], body))
+            return 204, None
         if parts[4] == "heartbeat":
             HeartbeatRequest.model_validate(body)
             if self.heartbeat_gone:

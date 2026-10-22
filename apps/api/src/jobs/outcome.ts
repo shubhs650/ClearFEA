@@ -15,6 +15,7 @@ import { recordImportOutcome } from "../db/geometries";
 import { type Completion, failLostJob, type Job, lostJobs, requeueJob, type StopReason } from "../db/jobs";
 import { recordMeshOutcome } from "../db/meshes";
 import { recordRunOutcome } from "../db/runs";
+import { endTry, modelSize } from "../db/stats";
 import { heartbeatTimeoutSeconds } from "../db/settings";
 import type { Env } from "../env";
 import { jobFiles } from "./files";
@@ -109,7 +110,12 @@ export function requeueNote(job: Job, cause: string): string {
  */
 export async function retryJob(env: Env, job: Job, completion: Completion): Promise<Job | null> {
   if (!retries(job, completion) || completion.status !== "failed") return null;
-  return requeueJob(env.DB, job, requeueNote(job, completion.failureCause));
+  const requeued = await requeueJob(env.DB, job, requeueNote(job, completion.failureCause));
+  // The try that ended keeps its statistics; the next claim starts a new row (M12.3, ADR-109).
+  if (requeued !== null && job.claimedBy !== null) {
+    await endTry(env.DB, job.claimedBy, job, completion, await modelSize(env.DB, job, completion));
+  }
+  return requeued;
 }
 
 /**
@@ -271,6 +277,7 @@ export async function sweepLostJobs(env: Env, claimingWorker: string | null = nu
     const charge = lost.ratePerHour === null ? null : chargeFor(billableMs, lost.ratePerHour, completion);
     const job = await failLostJob(env.DB, lost, completion, billableMs, charge);
     if (job === null) continue; // it checked in or completed meanwhile
+    if (lost.claimedBy !== null) await endTry(env.DB, lost.claimedBy, job, completion, await modelSize(env.DB, job, completion));
     await recordOutcome(env, job, completion, charge);
     failed += 1;
   }
