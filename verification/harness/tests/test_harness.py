@@ -1051,3 +1051,14 @@ def test_a_poll_rides_out_a_dropped_connection(monkeypatch: pytest.MonkeyPatch) 
     api = client_module.Client("https://example.test")
     assert api.wait("/api/runs/1", "run", {"solving"}, 60)["status"] == "succeeded"
     assert answers == []
+
+
+def test_sends_the_access_service_token_only_when_both_parts_are_set() -> None:
+    from harness.client import ApiError, access_headers
+
+    assert access_headers({}) == {}
+    assert access_headers(
+        {"CLEARFEA_ACCESS_CLIENT_ID": "id.access", "CLEARFEA_ACCESS_CLIENT_SECRET": "secret"}
+    ) == {"CF-Access-Client-Id": "id.access", "CF-Access-Client-Secret": "secret"}
+    with pytest.raises(ApiError, match="CLEARFEA_ACCESS_CLIENT_SECRET"):
+        access_headers({"CLEARFEA_ACCESS_CLIENT_ID": "id.access"})

@@ -27,6 +27,10 @@ class Settings:
     #: Claims no new job once it has been up this long, so it exits after the job it holds.
     #: None has no limit.
     max_lifetime_seconds: float | None = None
+    #: The Cloudflare Access service token (ADR-111), sent as CF-Access-Client-Id and
+    #: CF-Access-Client-Secret to the API when the site is behind Access. None sends neither.
+    access_client_id: str | None = None
+    access_client_secret: str | None = None
 
 
 #: A machine size name as the API writes them, such as medium or large.
@@ -64,6 +68,17 @@ def _machine_size(env: Mapping[str, str]) -> str | None:
     return raw
 
 
+def _access_token(env: Mapping[str, str]) -> tuple[str | None, str | None]:
+    client_id = env.get("CLEARFEA_ACCESS_CLIENT_ID", "").strip()
+    secret = env.get("CLEARFEA_ACCESS_CLIENT_SECRET", "").strip()
+    if bool(client_id) != bool(secret):
+        raise ConfigError(
+            "Set both CLEARFEA_ACCESS_CLIENT_ID and CLEARFEA_ACCESS_CLIENT_SECRET (the Cloudflare "
+            "Access service token, docs/DEPLOYMENT.md), or neither."
+        )
+    return client_id or None, secret or None
+
+
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     env = os.environ if env is None else env
     token = env.get("CLEARFEA_WORKER_TOKEN", "")
@@ -72,6 +87,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             "CLEARFEA_WORKER_TOKEN is not set. Set it to the WORKER_TOKEN value in "
             "apps/api/.dev.vars."
         )
+    access_client_id, access_client_secret = _access_token(env)
     return Settings(
         api_url=env.get("CLEARFEA_API_URL", "http://127.0.0.1:8787").rstrip("/"),
         worker_token=token,
@@ -81,4 +97,6 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         machine_size=_machine_size(env),
         idle_exit_seconds=_optional_seconds(env, "CLEARFEA_IDLE_EXIT_SECONDS"),
         max_lifetime_seconds=_optional_seconds(env, "CLEARFEA_MAX_LIFETIME_SECONDS"),
+        access_client_id=access_client_id,
+        access_client_secret=access_client_secret,
     )
