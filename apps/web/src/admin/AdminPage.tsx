@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The admin dashboard (M13.2, M13.3, ADR-113, ADR-127, ADR-128), drawn over the workbench like the
+// The admin dashboard (M13.2 to M13.4, ADR-113, ADR-127 to ADR-129), drawn over the workbench like the
 // wallet page: the Overview of the solver host, its lanes and queues, with pause and resume; every
 // user's Jobs and runs with their statistics, logs, cancel and re-queue; the Users and who may sign
 // in; the Events log (M13.1); every Setting with the machine sizes and solver machines or host; and
-// each month's Costs. Only the admin (ADMIN_EMAIL) sees it.
+// each month's Costs; and the Export of every table as CSV or Excel (M13.4). Only the admin
+// (ADMIN_EMAIL) sees it.
 
 import { useState } from "react";
 import { CostsTab } from "./CostsTab";
 import { EventsTab } from "./EventsTab";
+import { ExportTab } from "./ExportTab";
 import { JobsTab } from "./JobsTab";
 import { OverviewTab } from "./OverviewTab";
 import { SettingsTab } from "./SettingsTab";
 import { UsersTab } from "./UsersTab";
 
-type Tab = "overview" | "jobs" | "users" | "events" | "settings" | "costs";
+type Tab = "overview" | "jobs" | "users" | "events" | "settings" | "costs" | "export";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -22,6 +24,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "events", label: "Events" },
   { id: "settings", label: "Settings" },
   { id: "costs", label: "Costs" },
+  { id: "export", label: "Export" },
 ];
 
 export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSignedOut: (notice?: string) => void }) {
@@ -57,6 +60,7 @@ export function AdminPage({ onClose, onSignedOut }: { onClose: () => void; onSig
         {tab === "events" && <EventsTab onSignedOut={onSignedOut} />}
         {tab === "settings" && <SettingsTab onSignedOut={onSignedOut} />}
         {tab === "costs" && <CostsTab onSignedOut={onSignedOut} />}
+        {tab === "export" && <ExportTab onSignedOut={onSignedOut} />}
       </div>
     </section>
   );

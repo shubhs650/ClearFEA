@@ -6,9 +6,11 @@
 // and on Settings (M13.3) switches the large machine size on and off (M10.6) and sets the monthly
 // hours limit; on the dashboard (M13.2) she pauses the queue, sees a job wait in the light lane,
 // cancels it from Jobs and runs, resumes the queue and reads both and the setting she changed in
-// the event log, then reads the month on Costs (M13.3); bob sees no Admin and the admin routes
+// the event log, then reads the month on Costs (M13.3) and downloads the jobs as CSV and every
+// table as one Excel workbook on Export (M13.4); bob sees no Admin and the admin routes
 // answer him as unknown addresses. Real Google sign-in is checked on the live site, with the
 // maintainer's OAuth client.
+import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
 
 const OUT = process.env.CLEARFEA_E2E_OUT ?? "e2e-results";
@@ -153,6 +155,41 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await expect(admin.getByRole("table", { name: "Costs by job type" }).getByText("No-op")).toBeVisible();
     await page.screenshot({ path: `${OUT}/e08-dashboard-costs.png` });
 
+    // Export (M13.4): the jobs of this month so far as CSV hold the cancelled job, and every table
+    // comes as one Excel workbook.
+    await admin.getByRole("tab", { name: "Export" }).click();
+    const today = new Date().toISOString().slice(0, 10);
+    await expect(admin.getByLabel("To (UTC)")).toHaveValue(today);
+    const [csv] = await Promise.all([
+      page.waitForEvent("download"),
+      admin.getByRole("button", { name: "CSV of Jobs" }).click(),
+    ]);
+    expect(csv.suggestedFilename()).toBe(`clearfea-jobs-${today.slice(0, 7)}-01-to-${today}.csv`);
+    await csv.saveAs(`${OUT}/e08-${csv.suggestedFilename()}`);
+    const jobsCsv = await readFile(`${OUT}/e08-${csv.suggestedFilename()}`, "utf8");
+    const cancelled = jobsCsv.split("\r\n").find((line) => line.startsWith(`${jobId},`));
+    expect(cancelled).toContain(",noop,light,failed,");
+    expect(cancelled).toContain("cancelled_by_admin");
+    await expect(admin.getByRole("status")).toContainText(`Saved ${csv.suggestedFilename()}.`);
+    const [workbook] = await Promise.all([
+      page.waitForEvent("download"),
+      admin.getByRole("button", { name: "Every table in one Excel workbook" }).click(),
+    ]);
+    expect(workbook.suggestedFilename()).toBe(`clearfea-all-${today.slice(0, 7)}-01-to-${today}.xlsx`);
+    await workbook.saveAs(`${OUT}/e08-${workbook.suggestedFilename()}`);
+    const xlsx = await readFile(`${OUT}/e08-${workbook.suggestedFilename()}`);
+    expect(xlsx.subarray(0, 2).toString("latin1")).toBe("PK");
+    expect(xlsx.includes("xl/worksheets/sheet9.xml")).toBe(true);
+    // A range that ends before it starts is refused with what to do.
+    await admin.getByLabel("From (UTC)").fill("2026-12-31");
+    await admin.getByLabel("To (UTC)").fill("2026-01-01");
+    await admin.getByRole("button", { name: "Excel of Events" }).click();
+    await expect(admin.getByRole("alert")).toHaveText("The range ends before it starts. Choose a later end day.");
+    await admin.getByLabel("From (UTC)").fill(`${today.slice(0, 7)}-01`);
+    await admin.getByLabel("To (UTC)").fill(today);
+    await expect(admin.getByRole("alert")).toHaveCount(0);
+    await page.screenshot({ path: `${OUT}/e08-dashboard-export.png` });
+
     await admin.getByRole("button", { name: "Close" }).click();
     await expect(admin).toHaveCount(0);
   });
@@ -177,6 +214,8 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     expect((await bob.request.get("/api/admin/settings")).status()).toBe(404);
     expect((await bob.request.put("/api/admin/settings/machine_hours_cap", { data: { value: 0 } })).status()).toBe(404);
     expect((await bob.request.get("/api/admin/costs")).status()).toBe(404);
+    expect((await bob.request.get("/api/admin/export/jobs.csv")).status()).toBe(404);
+    expect((await bob.request.get("/api/admin/export/all.xlsx")).status()).toBe(404);
     await context.close();
   });
 });

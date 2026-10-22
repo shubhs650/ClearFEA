@@ -5,7 +5,7 @@
 // host's load (M12.3, ADR-109), and the event log, where each change made here is recorded (M13.1,
 // ADR-113, ADR-125), and the dashboard's Overview with pause and resume, and every user's jobs with
 // their logs, cancel and re-queue (M13.2, ADR-127), and every setting and each month's costs
-// (M13.3, ADR-128). Only the admin (ADMIN_EMAIL) reaches them; to
+// (M13.3, ADR-128), and every table as CSV or Excel by date range (M13.4, ADR-129). Only the admin (ADMIN_EMAIL) reaches them; to
 // anyone else they answer as if they did not exist. Shapes: packages/spec/schemas/admin.schema.json.
 
 import {
@@ -49,6 +49,8 @@ import {
 import { latestHostLoad, listHostLoad, listTries } from "../db/stats";
 import { getUser } from "../db/users";
 import type { Env } from "../env";
+import { toCsv, toXlsx } from "../export/sheet";
+import { EXPORT_TABLES, type ExportTable, exportTable, isSnapshot, MAX_EXPORT_ROWS, type Range } from "../export/tables";
 import { cancelAsAdmin, requeueAsAdmin } from "../jobs/outcome";
 import { solverMachines } from "../launcher";
 import { requireUser, type SessionEnv } from "../session";
@@ -479,4 +481,65 @@ admin.get("/costs", async (c) => {
     return c.json({ error: "Give ?month= as a year and month, such as 2026-10." }, 400);
   }
   return c.json((await monthCosts(c.env.DB, month)) satisfies CostsResponse);
+});
+
+const DAY = /^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/;
+
+/** A `YYYY-MM-DD` day as the ISO time it starts (UTC), or null when it is no such day. */
+function dayStart(day: string): string | null {
+  if (!DAY.test(day)) return null;
+  const time = new Date(`${day}T00:00:00.000Z`);
+  return time.toISOString().slice(0, 10) === day ? time.toISOString() : null;
+}
+
+/**
+ * The admin's export (M13.4, ADR-129): `/export/<table>.csv`, `/export/<table>.xlsx` or
+ * `/export/all.xlsx` (every table, a sheet each), of the days ?from= to ?to= (YYYY-MM-DD, UTC,
+ * both included; this month so far by default). The invited addresses and the settings are as of
+ * now. A table of more than 50,000 rows asks for a shorter range.
+ */
+admin.get("/export/:file", async (c) => {
+  const match = /^([a-z-]+)\.(csv|xlsx)$/.exec(c.req.param("file"));
+  const name = match?.[1];
+  const format = match?.[2];
+  if (name === undefined || (name !== "all" && !EXPORT_TABLES.includes(name as ExportTable))) {
+    return c.json({ error: `Export one of ${EXPORT_TABLES.join(", ")} as .csv or .xlsx, or all.xlsx.` }, 404);
+  }
+  if (name === "all" && format !== "xlsx") {
+    return c.json({ error: "Every table together exports as Excel only (all.xlsx); CSV holds one table a file." }, 400);
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const fromDay = c.req.query("from") ?? `${today.slice(0, 7)}-01`;
+  const toDay = c.req.query("to") ?? today;
+  const from = dayStart(fromDay);
+  const toStart = dayStart(toDay);
+  if (from === null || toStart === null) {
+    return c.json({ error: "Give ?from= and ?to= as days, such as 2026-10-01 and 2026-10-22." }, 400);
+  }
+  if (toStart < from) return c.json({ error: "The range ends before it starts. Choose a later end day." }, 400);
+  const range: Range = { from, to: new Date(Date.parse(toStart) + 86_400_000).toISOString() };
+  const names = name === "all" ? [...EXPORT_TABLES] : [name as ExportTable];
+  const tables = [];
+  for (const table of names) {
+    const result = await exportTable(c.env.DB, table, range);
+    if (result === "too_many") {
+      return c.json(
+        {
+          error: `The ${table} table has more than ${MAX_EXPORT_ROWS.toLocaleString("en-US")} rows from ${fromDay} to ${toDay}. Choose a shorter range and export it in parts.`,
+        },
+        400,
+      );
+    }
+    tables.push(result);
+  }
+  const days = names.every(isSnapshot) ? today : `${fromDay}-to-${toDay}`;
+  const filename = `clearfea-${name}-${days}.${format}`;
+  const headers = { "Content-Disposition": `attachment; filename="${filename}"`, "Cache-Control": "no-store" };
+  if (format === "csv") {
+    return c.body(toCsv(tables[0] as (typeof tables)[number]), 200, { ...headers, "Content-Type": "text/csv; charset=utf-8" });
+  }
+  return c.body(toXlsx(tables), 200, {
+    ...headers,
+    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
 });

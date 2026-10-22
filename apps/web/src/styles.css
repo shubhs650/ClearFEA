@@ -2090,7 +2090,8 @@ details > summary {
 .admin-jobs,
 .admin-events,
 .admin-settings,
-.admin-costs {
+.admin-costs,
+.admin-export {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -2210,6 +2211,12 @@ details > summary {
 
 .admin-jobs-table tr[aria-selected="true"] td {
   background: var(--accent-soft);
+}
+
+.admin-export-buttons {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
 }
 
 .admin-older {
