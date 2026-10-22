@@ -24,7 +24,7 @@ import { env, exports } from "cloudflare:workers";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { listLedger } from "../src/billing/ledger";
 import { app } from "../src/index";
-import { getJob } from "../src/db/jobs";
+import { getJob, LOG_CHUNKS_PER_READ } from "../src/db/jobs";
 import { sweepLostJobs } from "../src/jobs/outcome";
 
 const TOKEN = "test-worker-token";
@@ -240,7 +240,7 @@ async function heartbeat(jobId: string, log?: string): Promise<void> {
   expect(response.status).toBe(200);
 }
 
-async function readLog(runId: string, after: number, cookie = alice): Promise<{ text: string; next: number }> {
+async function readLog(runId: string, after: number, cookie = alice): Promise<{ text: string; next: number; more: boolean }> {
   const response = await call("GET", `/api/runs/${runId}/log?after=${after}`, { cookie });
   expect(response.status).toBe(200);
   const body = validateRunLogResponse(await response.json());
@@ -408,9 +408,23 @@ describe("a solving run", () => {
     await heartbeat(job.id);
     await heartbeat(job.id, " STEP 1\n");
     const all = await readLog(run.id, 0);
-    expect(all).toEqual({ text: "CalculiX Version 2.21\n STEP 1\n", next: 2 });
-    expect(await readLog(run.id, 1)).toEqual({ text: " STEP 1\n", next: 2 });
-    expect(await readLog(run.id, 2)).toEqual({ text: "", next: 2 });
+    expect(all).toEqual({ text: "CalculiX Version 2.21\n STEP 1\n", next: 2, more: false });
+    expect(await readLog(run.id, 1)).toEqual({ text: " STEP 1\n", next: 2, more: false });
+    expect(await readLog(run.id, 2)).toEqual({ text: "", next: 2, more: false });
+  });
+
+  it("says when a log is longer than one read returns, so the browser reads on only then", async () => {
+    const id = await meshed();
+    const run = await runOf(await startRun(id));
+    const job = await claim("solve");
+    for (let i = 1; i <= LOG_CHUNKS_PER_READ + 1; i++) await heartbeat(job.id, `line ${i}\n`);
+    const first = await readLog(run.id, 0);
+    expect(first).toMatchObject({ next: LOG_CHUNKS_PER_READ, more: true });
+    expect(await readLog(run.id, first.next)).toEqual({
+      text: `line ${LOG_CHUNKS_PER_READ + 1}\n`,
+      next: LOG_CHUNKS_PER_READ + 1,
+      more: false,
+    });
   });
 
   it("keeps the log to its owner", async () => {

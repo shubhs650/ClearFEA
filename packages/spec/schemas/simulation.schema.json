@@ -1203,13 +1203,14 @@
       }
     },
     "RunLogResponse": {
-      "description": "Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.",
+      "description": "Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, the n to ask with next time, and whether more chunks are already written.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["text", "next"],
+      "required": ["text", "next", "more"],
       "properties": {
         "text": { "type": "string" },
-        "next": { "type": "integer", "minimum": 0 }
+        "next": { "type": "integer", "minimum": 0 },
+        "more": { "description": "True when one read could not return every chunk written so far; ask again at once with next.", "type": "boolean" }
       }
     }
   }

@@ -87,6 +87,8 @@ export function useRun(simulationId: string | null, onSignedOut: (problem: strin
         next = result.value.next;
         const text = result.value.text;
         setLog((old) => ({ runId: id, text: old.runId === id ? old.text + text : text, next }));
+        // Read on only when the API says one read could not return all of it (M11 close).
+        if (!result.value.more) return;
       }
     }
     void readLog(runId);

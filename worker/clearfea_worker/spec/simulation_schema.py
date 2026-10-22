@@ -1299,7 +1299,7 @@ class CreatedShareLinkResponse(BaseModel):
 
 class RunLogResponse(BaseModel):
     """
-    Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, and the n to ask with next time.
+    Answer to GET /api/runs/{id}/log?after={n}: the solver log written after chunk n, the n to ask with next time, and whether more chunks are already written.
     """
 
     model_config = ConfigDict(
@@ -1308,6 +1308,10 @@ class RunLogResponse(BaseModel):
     )
     text: str
     next: Annotated[int, Field(ge=0)]
+    more: bool
+    """
+    True when one read could not return every chunk written so far; ask again at once with next.
+    """
 
 
 class IsotropicMaterial(BaseModel):
