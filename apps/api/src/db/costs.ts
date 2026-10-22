@@ -43,8 +43,16 @@ interface TypeRow {
  * with nothing in the month are left out; the largest machine time comes first.
  */
 export async function monthCosts(db: D1Database, month: string): Promise<CostsResponse> {
-  const { from, to } = monthRange(month);
-  const [users, types, fixed] = await Promise.all([
+  const [usage, fixed] = await Promise.all([usageBetween(db, monthRange(month)), fixedCosts(db)]);
+  return { month, solverHostCents: fixed.solverHostCents, platformCents: fixed.platformCents, ...usage };
+}
+
+/** The usage of jobs that finished and charges written in [from, to), as `monthCosts` counts a month (M13.4). */
+export async function usageBetween(
+  db: D1Database,
+  { from, to }: { from: string; to: string },
+): Promise<Pick<CostsResponse, "totals" | "byUser" | "byType">> {
+  const [users, types] = await Promise.all([
     db
       .prepare(
         `WITH j AS (
@@ -76,7 +84,6 @@ export async function monthCosts(db: D1Database, month: string): Promise<CostsRe
       )
       .bind(from, to)
       .all<TypeRow>(),
-    fixedCosts(db),
   ]);
   const byUser = users.results.map((row) => ({
     userId: row.id,
@@ -91,9 +98,6 @@ export async function monthCosts(db: D1Database, month: string): Promise<CostsRe
   const sum = (key: "jobs" | "solveRuns" | "machineSeconds" | "jobMicroCredits" | "storageMicroCredits") =>
     byUser.reduce((total, user) => total + user[key], 0);
   return {
-    month,
-    solverHostCents: fixed.solverHostCents,
-    platformCents: fixed.platformCents,
     totals: {
       jobs: sum("jobs"),
       solveRuns: sum("solveRuns"),

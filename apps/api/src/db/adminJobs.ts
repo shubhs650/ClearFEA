@@ -12,6 +12,8 @@ export interface AdminJobFilter {
   statuses?: readonly JobStatus[];
   type?: JobType;
   userId?: string;
+  /** Only jobs created at or after this ISO 8601 time (M13.4's export). */
+  since?: string;
   /** Only jobs created before this ISO 8601 time, to page on. */
   before?: string;
   /** Oldest first rather than newest first, for the queues. */
@@ -62,6 +64,10 @@ export async function listAdminJobs(db: D1Database, filter: AdminJobFilter): Pro
   if (filter.userId !== undefined) {
     where.push("jobs.owner_id = ?");
     values.push(filter.userId);
+  }
+  if (filter.since !== undefined) {
+    where.push("jobs.created_at >= ?");
+    values.push(filter.since);
   }
   if (filter.before !== undefined) {
     where.push("jobs.created_at < ?");

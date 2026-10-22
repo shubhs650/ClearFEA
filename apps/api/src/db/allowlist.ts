@@ -69,15 +69,18 @@ export interface UserSummary {
 
 /**
  * Every user, newest first, with when they last signed in with Google and their machine time,
- * jobs and failed jobs this month.
+ * jobs and failed jobs this month, or of the jobs that finished in [from, to) when given (M13.4's
+ * export; the fields keep their "this month" names).
  */
-export async function listUsers(db: D1Database): Promise<UserSummary[]> {
+export async function listUsers(db: D1Database, range?: { from: string; to: string }): Promise<UserSummary[]> {
   const { results } = await db
     .prepare(
       `WITH month AS (
          SELECT owner_id, COALESCE(SUM(billed_seconds), 0) AS seconds, COUNT(*) AS jobs,
                 SUM(status = 'failed') AS failed
-           FROM jobs WHERE finished_at >= strftime('%Y-%m-01T00:00:00.000Z', 'now') GROUP BY owner_id
+           FROM jobs WHERE finished_at >= COALESCE(?1, strftime('%Y-%m-01T00:00:00.000Z', 'now'))
+                       AND (?2 IS NULL OR finished_at < ?2)
+          GROUP BY owner_id
        )
        SELECT u.id, u.name, u.email, u.created_at AS createdAt,
               (SELECT MAX(s.created_at) FROM auth_sessions s WHERE s.user_id = u.id) AS lastSignIn,
@@ -85,6 +88,7 @@ export async function listUsers(db: D1Database): Promise<UserSummary[]> {
               COALESCE(m.failed, 0) AS failedJobsThisMonth
          FROM users u LEFT JOIN month m ON m.owner_id = u.id ORDER BY u.created_at DESC, u.id`,
     )
+    .bind(range?.from ?? null, range?.to ?? null)
     .all<UserSummary>();
   return results;
 }

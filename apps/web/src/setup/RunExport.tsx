@@ -10,20 +10,13 @@ import { fetchRunMesh, fetchRunNodes } from "../api/runs";
 import { type ExportUnits, heatFlowsCsv, nodeCsvChunks, reactionsCsv, vtuParts } from "../viewer/resultExport";
 import { parseResultFields } from "../viewer/resultFields";
 import { parseVolumeMesh } from "../viewer/section";
+import { saveBlob } from "../saveBlob";
 
 type Kind = "nodes" | "reactions" | "heatFlows" | "vtk";
 
 /** Saves Blob parts as a file through a temporary link. */
 function save(parts: BlobPart[], type: string, name: string): void {
-  const url = URL.createObjectURL(new Blob(parts, { type }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  // Let the browser start the download before the data goes.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  saveBlob(new Blob(parts, { type }), name);
 }
 
 /** The run's mesh and its values at every node, or the problem in plain words. */
