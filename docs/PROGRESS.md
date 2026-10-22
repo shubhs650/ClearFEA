@@ -32,6 +32,10 @@ Status values: Not started, In progress, Verifying, Done.
 
 Copy the task list for the current milestone from `PLAN.md` here when the milestone starts, and tick tasks as they merge.
 
+### M12 Solver on the VPS
+
+- [x] M12.4 API VPS mode (ADR-120): `MACHINES=vps`; the compute manager checks in through `POST /internal/hosts/check-in` every 30 s; while no host has checked in for 2 minutes every route that queues a job answers 503; the queue position counts the job's lane; the wallet shows usage only and no balance refuses work; the admin page shows the solver host
+
 ### M11 Fix the live beta
 
 - [x] M11.1 Cloudflare Access service token (ADR-111): worker, deploy health check, Live checks and harness send it; AWS image job removed from the deploy. Works on the live site once the maintainer adds the service token, its Service Auth policy and the secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (DEPLOYMENT.md 1.8)
@@ -202,6 +206,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M12.4 (2026-10-22): `MACHINES=vps` is built but not switched on: production still sets `MACHINES=cloud` until M12.7 changes `scripts/productionConfig.mjs` (and its test). The manager (M12.1) calls `POST /internal/hosts/check-in` with `{ host, managerVersion }` (`HostCheckIn`, Pydantic model in `worker/clearfea_worker/spec/jobs_schema.py`) at start and every `intervalSeconds` (30). The 120 s silence check is `hostRefusal` inside `queueRefusal` (`apps/api/src/jobs/limits.ts`), so every job route already covers it; `queueRefusal` now returns `{ error, status }` (503 offline, 429 limits). With `MACHINES=vps` queued jobs are never failed for a silent host; they wait. The lane queue position is `queuePlace(..., byLane)` in `apps/api/src/db/jobs.ts`, oldest first; if M12.1's fairness order makes it noticeably wrong, align that one clause. The usage-only wallet is `usageOnly` in `WalletResponse`; the dashboard alert for an offline host is M13.5's, the admin page's Solver host card is the stopgap.
 
 > Close M11 (2026-10-22): the phase-end run on main c01ca69 ([run 39802374738](https://github.com/shubhs650/ClearFEA/actions/runs/39802374738)) is green, full tier 314 of 314 and E-01 to E-09; the close's own log change passed a branch phase-end run (39803083847). Every M11 task is merged (PR #142, #143, #144) and ticked in PLAN.md. The exit, checked: deploys pass through Access (Deploy runs 32, 33 and 34 green, the last for M11.3); a 20-minute solve from one tab is 54 checks of the run's status, now a test in `apps/web/test/usePolling.test.ts` (2 s steps through each stage change, 30 s apart while it solves). The close found that each check also read the log twice whenever the solver had written lines (three requests per check, about 160 for the solve), so `RunLogResponse` gained `more` and the browser reads on only when it is true: two requests per check, about 108 in all (ADR-112, "As checked at the M11 close"). Not met: the Live checks behind Access. Every case imports, meshes and solves, and nothing on the live site takes a job until M12.7's VPS, so they run at M12's exit, which already asks for the quick tier and cases A and B on the VPS. Do not run them before then: the deploy still passes the AWS launcher keys if the secrets exist, so a queued job could try to start a Fargate task if the stack were not yet deleted. Nothing else listed for M11 was left unbuilt (ADR-111, ADR-112 and the PLAN tasks checked line by line); ADR-111's "the manager sends the token" is M12's.
 
@@ -488,6 +494,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-22
 
+- M12.4 API VPS mode (ADR-120): host check-ins, a 503 while the host is silent for 2 minutes, the queue position per lane, a usage-only wallet and a Solver host card on the admin page. Learned: the claim cannot double as the host's check-in, since a manager with both lanes busy claims nothing for hours.
 - Close M11: phase-end run on main green ([run 39802374738](https://github.com/shubhs650/ClearFEA/actions/runs/39802374738), full tier 314 of 314, E-01 to E-09); deploys green behind Access; the exit's request count is now a test (54 status checks for a 20-minute solve); the run log answer says `more`, so a solving run's check reads the log once instead of twice. The Live checks behind Access move to M12's exit. Learned: count every request a poll makes, not only the one the hook schedules; the log read hid a second request per check.
 
 - M11.3 server protections (ADR-112): the launcher runs only after routes that queue a job, and only the per-minute cron looks for silent workers; queue limits as `settings` rows (migration 0027) refuse a job with 429 and the reason; a claim passes over a user's job while one of theirs runs in its lane; Workers rate limiting (120 per user per minute) in `requireUser`; no stop limit above 12 hours.
