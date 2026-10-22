@@ -229,6 +229,7 @@ describe("admin page (M10.3)", () => {
           },
         ],
       },
+      solverHost: null,
     },
   });
 
@@ -321,6 +322,52 @@ describe("admin page (M10.3)", () => {
       expect.objectContaining({ method: "PUT", body: JSON.stringify({ hours: 0 }) }),
     );
   });
+});
+
+describe("admin page on the solver host (M12.4)", () => {
+  const admin = { status: 200, body: { user: { ...alice, admin: true } } };
+  const view = (online: boolean | null) => ({
+    status: 200,
+    body: {
+      adminEmail: "alice@clearfea.test",
+      allowed: [],
+      users: [],
+      machines: "vps",
+      cloudSizes: [{ name: "medium", cores: 4, memoryBytes: 17179869184, enabled: true, default: true }],
+      solverMachines: { launcher: "local", problem: null, hoursThisMonth: 0, hoursCap: 60, starts: [] },
+      solverHost:
+        online === null
+          ? null
+          : {
+              host: "vps-1",
+              online,
+              lastSeenAt: "2026-10-22T16:00:30.000Z",
+              firstSeenAt: "2026-10-22T08:00:00.000Z",
+              managerVersion: "0.1.0",
+            },
+    },
+  });
+
+  for (const [online, text] of [
+    [true, "vps-1 is online: last check-in 2026-10-22 16:00 UTC, up since 2026-10-22 08:00 UTC, manager 0.1.0."],
+    [false, "vps-1 is offline: no check-in since 2026-10-22 16:00 UTC"],
+    [null, "No solver host has checked in yet"],
+  ] as const) {
+    it(`shows the host ${online === null ? "never seen" : online ? "online" : "offline"} instead of the AWS machines`, async () => {
+      serve({
+        "GET /api/health": healthy,
+        "GET /api/session": admin,
+        "GET /api/jobs": { status: 200, body: { jobs: [] } },
+        "GET /api/geometries": noGeometries,
+        "GET /api/admin": view(online),
+      });
+      render(<App />);
+      fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+      const card = await screen.findByRole("region", { name: "Solver host" });
+      expect(card.textContent).toContain(text);
+      expect(screen.queryByRole("region", { name: "Solver machines" })).toBeNull();
+    });
+  }
 });
 
 describe("layout shell", () => {
@@ -502,6 +549,7 @@ describe("wallet page (M8.1)", () => {
             ],
           },
           selfHosted: false,
+          usageOnly: false,
         },
       },
     });
@@ -543,7 +591,7 @@ describe("wallet page (M8.1)", () => {
       "GET /api/storage": { status: 200, body: storageBody },
       "GET /api/wallet": {
         status: 200,
-        body: { wallet: { balance: -5000, granted: 0, charged: -5000, entries: [] }, selfHosted: true },
+        body: { wallet: { balance: -5000, granted: 0, charged: -5000, entries: [] }, selfHosted: true, usageOnly: false },
       },
     });
     render(<App />);
@@ -551,5 +599,63 @@ describe("wallet page (M8.1)", () => {
     expect((await screen.findByTestId("wallet-balance")).textContent).toBe("-0.005 credits");
     expect(screen.getByTestId("wallet-self-hosted").textContent).toContain("Nothing is refused when the balance runs out");
     expect(screen.queryByText(/A run is refused/)).toBeNull();
+  });
+
+  it("shows usage only, without a balance or grants, on the solver host (M12.4, ADR-106 item 6)", async () => {
+    serve({
+      "GET /api/health": healthy,
+      "GET /api/session": signedIn,
+      "GET /api/jobs": { status: 200, body: { jobs: [] } },
+      "GET /api/geometries": noGeometries,
+      "GET /api/storage": { status: 200, body: storageBody },
+      "GET /api/wallet": {
+        status: 200,
+        body: {
+          wallet: {
+            balance: 99_999_167,
+            granted: 100_000_000,
+            charged: -833,
+            entries: [
+              {
+                seq: 2,
+                createdAt: "2026-10-17T05:59:00.000Z",
+                reason: "mesh",
+                amount: -833,
+                balance: 99_999_167,
+                job: { id: "j1", machineSize: "medium", ratePerHour: 1_000_000, billedSeconds: 3 },
+                run: null,
+                mesh: { id: "m1", geometryName: "bracket.step", elements: 4000, nodes: 7108 },
+                storage: null,
+              },
+              {
+                seq: 1,
+                createdAt: "2026-10-17T05:00:00.000Z",
+                reason: "grant",
+                amount: 100_000_000,
+                balance: 100_000_000,
+                job: null,
+                run: null,
+                mesh: null,
+                storage: null,
+              },
+            ],
+          },
+          selfHosted: false,
+          usageOnly: true,
+        },
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Wallet" }));
+    expect((await screen.findByTestId("wallet-used")).textContent).toBe("0.000833 credits");
+    expect(screen.queryByTestId("wallet-balance")).toBeNull();
+    expect(screen.getByTestId("wallet-usage-only").textContent).toContain("nothing is refused for it");
+    expect(screen.queryByText(/Credit grant/)).toBeNull();
+    const usage = within(screen.getByRole("table", { name: "Usage" }));
+    const rows = usage.getAllByRole("row").slice(1).map((row) => row.textContent);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toContain("Mesh of bracket.step (4,000 elements)");
+    expect(rows[0]).toContain("3 s");
+    expect(screen.queryByRole("table", { name: "Ledger" })).toBeNull();
   });
 });

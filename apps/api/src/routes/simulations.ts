@@ -55,7 +55,7 @@ import { Hono } from "hono";
 import { estimateRun, runSize, simulatedMachine } from "../billing/estimate";
 import { balanceOf } from "../billing/ledger";
 import { meshFundsProblem, runFundsProblem } from "../billing/wallet";
-import { selfHosted } from "../selfHosting";
+import { balanceRefuses } from "../selfHosting";
 import { readBody } from "../body";
 import { type Geometry, geometryKey, getGeometry } from "../db/geometries";
 import {
@@ -68,7 +68,7 @@ import {
   simulationMesh,
 } from "../db/meshes";
 import { machineRefusal } from "../launcher";
-import { cloudMachines, listMachineSizes, machineSizeExists } from "../db/machines";
+import { listMachineSizes, machineSizeExists, switchedSizesOnly } from "../db/machines";
 import { createRun, listRuns } from "../db/runs";
 import {
   createSimulation,
@@ -260,8 +260,9 @@ simulations.post("/:id/mesh", launchesMachines, async (c) => {
     return c.json({ mesh: meshView(existing), reused: true } satisfies MeshResponse, 200);
   }
   // A new mesh is metered; a reused one is free, so only a new one needs funds (ADR-080). A
-  // self-hosted wallet is informational and refuses nothing (ADR-084).
-  const noFunds = selfHosted(c.env) ? null : meshFundsProblem(await balanceOf(c.env.DB, c.var.userId));
+  // self-hosted wallet is informational and refuses nothing (ADR-084), nor does the closed
+  // beta's on the solver host (ADR-106 item 6).
+  const noFunds = balanceRefuses(c.env) ? meshFundsProblem(await balanceOf(c.env.DB, c.var.userId)) : null;
   if (noFunds !== null) return c.json({ error: noFunds }, 409);
   // On the live site, no machine may be startable or the month's machine hours used up (M10.7).
   const noMachine = await machineRefusal(c.env);
@@ -311,7 +312,7 @@ async function runnableMesh(
  */
 async function meshEstimate(env: Env, mesh: Mesh, solver: Solver, kind: RunKind): Promise<RunEstimate> {
   if (mesh.nodeCount === null) throw new Error("A ready mesh has no node count.");
-  return estimateRun(mesh.nodeCount, mesh.order, await listMachineSizes(env.DB, cloudMachines(env)), solver, kind);
+  return estimateRun(mesh.nodeCount, mesh.order, await listMachineSizes(env.DB, switchedSizesOnly(env)), solver, kind);
 }
 
 /**
@@ -408,9 +409,9 @@ simulations.post("/:id/runs", launchesMachines, async (c) => {
   if (latest?.status === "solving") {
     return c.json({ error: "The simulation is already being solved. Wait for that run to finish." }, 409);
   }
-  const noFunds = selfHosted(c.env)
-    ? null
-    : runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size);
+  const noFunds = balanceRefuses(c.env)
+    ? runFundsProblem(await balanceOf(c.env.DB, c.var.userId), size.cost, size.size)
+    : null;
   if (noFunds !== null) return c.json({ error: noFunds }, 409);
   // On the live site, no machine may be startable or the month's machine hours used up (M10.7).
   const noMachine = await machineRefusal(c.env);

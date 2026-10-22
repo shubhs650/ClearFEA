@@ -2,7 +2,8 @@
 // The wallet page (M8.1, ADR-080): the balance, what was granted and charged, and every ledger
 // entry with the run or mesh it paid for. Drawn over the workbench, which stays as it was. In
 // self-hosting mode (M8.10, ADR-084) it says that the wallet is information only. Since M8.6
-// (ADR-086) it shows storage too, with the daily storage charges in the ledger.
+// (ADR-086) it shows storage too, with the daily storage charges in the ledger. During the closed
+// beta on the solver host (M12.4, ADR-106 item 6) it shows usage only: no balance, no grants.
 
 import type { WalletEntry, WalletResponse, WalletView } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
@@ -52,7 +53,12 @@ export function WalletPage({ onClose, onSignedOut }: { onClose: () => void; onSi
           {state.problem}
         </p>
       )}
-      {state.kind === "loaded" && <WalletContent wallet={state.wallet.wallet} selfHosted={state.wallet.selfHosted} />}
+      {state.kind === "loaded" &&
+        (state.wallet.usageOnly ? (
+          <UsageContent wallet={state.wallet.wallet} />
+        ) : (
+          <WalletContent wallet={state.wallet.wallet} selfHosted={state.wallet.selfHosted} />
+        ))}
       <StorageSection refresh={refreshed} onSignedOut={onSignedOut} />
     </section>
   );
@@ -117,6 +123,62 @@ function WalletContent({ wallet, selfHosted }: { wallet: WalletView; selfHosted:
                 </td>
                 <td className="wallet-number">{credits(entry.amount)}</td>
                 <td className="wallet-number">{credits(entry.balance)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  );
+}
+
+/** What the user's work used, without a balance (ADR-106 item 6). */
+function UsageContent({ wallet }: { wallet: WalletView }) {
+  const used = wallet.entries.filter((entry) => entry.amount < 0);
+  const seconds = used.reduce((sum, entry) => sum + (entry.job?.billedSeconds ?? 0), 0);
+  return (
+    <>
+      <dl className="wallet-totals">
+        <div>
+          <dt>Used</dt>
+          <dd className="wallet-balance" data-testid="wallet-used">
+            {credits(-wallet.charged)}
+          </dd>
+        </div>
+        <div>
+          <dt>Machine time</dt>
+          <dd>{seconds.toLocaleString("en-US")} s</dd>
+        </div>
+      </dl>
+      <p className="wallet-note" data-testid="wallet-usage-only">
+        Closed beta: this page shows what your work used, and nothing is refused for it. Meshing and solving are
+        counted per started second on the solver, at the rate of the machine size the job was queued on, and
+        storage over the free allowance per day. Importing is free, reusing a mesh is free, and a job that stops
+        because of a fault in ClearFEA is not counted.
+      </p>
+      {used.length === 0 ? (
+        <p className="pane-empty">Nothing used yet.</p>
+      ) : (
+        <table className="wallet-table" aria-label="Usage">
+          <thead>
+            <tr>
+              <th>When (UTC)</th>
+              <th>What</th>
+              <th>Machine size</th>
+              <th className="wallet-number">Billed time</th>
+              <th className="wallet-number">Used</th>
+            </tr>
+          </thead>
+          <tbody>
+            {used.map((entry) => (
+              <tr key={entry.seq}>
+                <td>{utc(entry.createdAt)}</td>
+                <td>{what(entry)}</td>
+                <td>{entry.job === null ? "" : `${entry.job.machineSize}, ${credits(entry.job.ratePerHour)} per hour`}</td>
+                <td className="wallet-number">
+                  {entry.job === null ? "" : `${entry.job.billedSeconds.toLocaleString("en-US")} s`}
+                </td>
+                <td className="wallet-number">{credits(-entry.amount)}</td>
               </tr>
             ))}
           </tbody>

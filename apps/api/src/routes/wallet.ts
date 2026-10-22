@@ -5,6 +5,7 @@
 import type { WalletResponse } from "@clearfea/spec";
 import { Hono } from "hono";
 import { walletOf } from "../billing/ledger";
+import { vpsMachines } from "../db/machines";
 import { selfHosted } from "../selfHosting";
 import { requireUser, type SessionEnv } from "../session";
 
@@ -14,5 +15,5 @@ wallet.use("*", requireUser);
 
 wallet.get("/", async (c) => {
   const view = await walletOf(c.env.DB, c.var.userId);
-  return c.json({ wallet: view, selfHosted: selfHosted(c.env) } satisfies WalletResponse);
+  return c.json({ wallet: view, selfHosted: selfHosted(c.env), usageOnly: vpsMachines(c.env) } satisfies WalletResponse);
 });

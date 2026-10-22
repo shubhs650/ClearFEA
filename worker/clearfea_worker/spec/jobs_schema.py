@@ -144,6 +144,35 @@ class HeartbeatResponse(BaseModel):
     action: HeartbeatAction
 
 
+class HostCheckIn(BaseModel):
+    """
+    Body of POST /internal/hosts/check-in (M12.4, ADR-120): the solver host's compute manager says it is up, at start and every intervalSeconds whatever its lanes are doing. With MACHINES=vps the API refuses new jobs while no host has checked in for 120 s.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    host: Annotated[str, Field(pattern="^[A-Za-z0-9._-]{1,64}$")]
+    """
+    The host's name, as the admin page shows it.
+    """
+    manager_version: Annotated[
+        str | None, Field(alias="managerVersion", max_length=100, min_length=1)
+    ] = None
+
+
+class HostCheckInResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    interval_seconds: Annotated[int, Field(alias="intervalSeconds", ge=1)]
+    """
+    Seconds until the next check-in is due.
+    """
+
+
 class Metering(BaseModel):
     """
     What the worker measured of a job (ADR-033): billableMs is the wall-clock time from the start to the end of the job's handler on the machine, in whole milliseconds. Queue time and the worker's start-up are outside it. Sent for every job; the API charges only metered job types.

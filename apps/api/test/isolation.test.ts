@@ -469,6 +469,7 @@ const ROUTES: Record<string, Route> = {
   "PUT /internal/jobs/:id/files/:name": { area: "worker" },
   "POST /internal/jobs/:id/heartbeat": { area: "worker" },
   "POST /internal/jobs/:id/complete": { area: "worker" },
+  "POST /internal/hosts/check-in": { area: "worker" },
 };
 
 /** Bob's calls on his own account, with a body where the route needs one. */

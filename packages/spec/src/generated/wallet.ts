@@ -121,6 +121,10 @@ export interface WalletResponse {
    * True in self-hosting mode (M8.10, ADR-084): jobs are still metered and charged to the ledger, but the wallet is informational and a balance refuses no run or mesh.
    */
   selfHosted: boolean;
+  /**
+   * True during the closed beta on the solver host (MACHINES=vps, ADR-106 item 6): the wallet shows usage instead of a balance, and, as in self-hosting mode, a balance refuses no run or mesh. Jobs are still metered and charged to the ledger.
+   */
+  usageOnly: boolean;
 }
 
 export const LedgerReasonValues = ["grant", "mesh", "solve", "storage"] as const satisfies readonly LedgerReason[];

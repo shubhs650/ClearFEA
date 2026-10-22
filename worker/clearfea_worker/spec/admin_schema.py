@@ -104,6 +104,31 @@ class MachineStart(BaseModel):
     """
 
 
+class SolverHost(BaseModel):
+    """
+    The always-on solver host (M12.4, ADR-120), from its compute manager's check-ins.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    host: str
+    online: bool
+    """
+    True when it checked in within the last 120 s; while no host is online, new jobs are refused.
+    """
+    last_seen_at: Annotated[str, Field(alias="lastSeenAt")]
+    """
+    ISO 8601 UTC.
+    """
+    first_seen_at: Annotated[str, Field(alias="firstSeenAt")]
+    """
+    ISO 8601 UTC: when this run of check-ins began, after a silence of more than 120 s or the first ever.
+    """
+    manager_version: Annotated[str | None, Field(alias="managerVersion")]
+
+
 class SolverMachines(BaseModel):
     """
     The live site's solver machines and their monthly cap (M10.7, ADR-100).
@@ -147,12 +172,16 @@ class AdminResponse(BaseModel):
     """
     allowed: list[AllowedEmail]
     users: list[AdminUser]
-    machines: Literal["cloud", "local"]
+    machines: Literal["cloud", "vps", "local"]
     """
-    Where jobs run: cloud machines (the live site, MACHINES=cloud) or the local worker, which simulates every size and ignores the cloud size list.
+    Where jobs run: cloud machines started on AWS (MACHINES=cloud), the always-on solver host (MACHINES=vps, M12.4, ADR-120) or the local worker, which simulates every size and ignores the cloud size list.
     """
     cloud_sizes: Annotated[list[CloudMachineSize], Field(alias="cloudSizes")]
     solver_machines: Annotated[SolverMachines, Field(alias="solverMachines")]
+    solver_host: Annotated[SolverHost | None, Field(alias="solverHost")]
+    """
+    The solver host that checked in last; null when none ever has.
+    """
 
 
 class SwitchCloudSizeRequest(BaseModel):

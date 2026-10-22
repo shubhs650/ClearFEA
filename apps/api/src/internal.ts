@@ -8,9 +8,11 @@ import {
   type CompleteRequest,
   type CompleteResponse,
   type HeartbeatResponse,
+  type HostCheckInResponse,
   validateClaimRequest,
   validateCompleteRequest,
   validateHeartbeatRequest,
+  validateHostCheckIn,
   validateImportResult,
   validateMeshResult,
   validateReportJobResult,
@@ -29,6 +31,7 @@ import {
   type Job,
   recordHeartbeat,
 } from "./db/jobs";
+import { HOST_CHECK_IN_SECONDS, recordCheckIn } from "./db/hosts";
 import { machineSizeExists } from "./db/machines";
 import { getRun } from "./db/runs";
 import { recordContact } from "./db/workerStarts";
@@ -101,6 +104,18 @@ internal.post("/jobs/claim", async (c) => {
   return c.json({
     job: { ...payload(job), params: job.params, transfers: await transfers(job, workerId, origin, c.env) },
   } satisfies ClaimResponse);
+});
+
+/**
+ * The solver host's compute manager says it is up (M12.4, ADR-120), at start and every
+ * HOST_CHECK_IN_SECONDS. With MACHINES=vps, new jobs are refused while no host has checked in for
+ * 2 minutes. Accepted in every mode, so a manager can be pointed at any API.
+ */
+internal.post("/hosts/check-in", async (c) => {
+  const body = await readBody(c.req.raw, validateHostCheckIn, "HostCheckIn", SCHEMA);
+  if ("error" in body) return c.json({ error: body.error }, 400);
+  await recordCheckIn(c.env.DB, body.value.host, body.value.managerVersion ?? null);
+  return c.json({ intervalSeconds: HOST_CHECK_IN_SECONDS } satisfies HostCheckInResponse);
 });
 
 /** The job's file with this name and direction, if the worker in ?worker= holds the job. */
