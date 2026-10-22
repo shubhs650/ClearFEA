@@ -161,10 +161,7 @@ describe("a try's statistics (M12.3)", () => {
       failureCause: "container_exited",
       metering: { billableMs: 1000 },
     });
-    // As a re-queue after a platform fault does it (M12.2): the same job waits again.
-    await env.DB.prepare("UPDATE jobs SET status = 'queued', claimed_by = NULL, claimed_at = NULL, heartbeat_at = NULL WHERE id = ?")
-      .bind(jobId)
-      .run();
+    // The API queued it again after the machine fault (M12.2), ending the first try.
     await env.DB.prepare(
       "UPDATE job_stats SET ended_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-4 seconds') WHERE job_id = ?",
     )

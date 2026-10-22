@@ -12,7 +12,7 @@ import {
 } from "@clearfea/spec";
 import { chargeFor, type JobCharge } from "../billing/cost";
 import { recordImportOutcome } from "../db/geometries";
-import { type Completion, failLostJob, type Job, lostJobs, type StopReason } from "../db/jobs";
+import { type Completion, failLostJob, type Job, lostJobs, requeueJob, type StopReason } from "../db/jobs";
 import { recordMeshOutcome } from "../db/meshes";
 import { recordRunOutcome } from "../db/runs";
 import { endTry, modelSize } from "../db/stats";
@@ -63,8 +63,90 @@ export const NO_MACHINE = "no_machine";
 /** The API's cause code for a queued job left when the monthly machine-hours cap was reached (M10.7). */
 export const MACHINE_HOURS_CAP = "machine_hours_cap";
 
+/** The compute manager's cause codes for a job container that ended without reporting (M12.1, ADR-121). */
+export const CONTAINER_EXITED = "container_exited";
+export const CONTAINER_START_FAILED = "container_start_failed";
+
+/**
+ * Faults of the machine rather than of the job, which a new try may not meet (M12.2, ADR-108): the
+ * worker went silent or restarted (a manager restart, a VPS reboot), the job's container was
+ * killed from outside, or it did not start. Out of memory, the 13-hour container limit and
+ * whatever the worker itself reports are not retried.
+ */
+const RETRIED_CAUSES = [WORKER_LOST, CONTAINER_EXITED, CONTAINER_START_FAILED];
+
+/** Tries a job gets: the first and at most two more (ADR-108). */
+export const MAX_ATTEMPTS = 3;
+
+/** What stopped a try, as its owner reads it. */
+const MACHINE_FAULT: Record<string, string> = {
+  [WORKER_LOST]: "the machine working on it stopped responding",
+  [CONTAINER_EXITED]: "the machine working on it stopped unexpectedly",
+  [CONTAINER_START_FAILED]: "the machine could not start it",
+};
+
+/** Whether a job that ended with this completion is queued again rather than ended (ADR-108). */
+export function retries(job: Job, completion: Completion): boolean {
+  return (
+    completion.status === "failed" &&
+    completion.failureCategory === "platform_fault" &&
+    RETRIED_CAUSES.includes(completion.failureCause) &&
+    job.attempt < MAX_ATTEMPTS &&
+    job.stopRequested === null
+  );
+}
+
+/** The line a job queued again gets in its log, which a run shows as its solver log. */
+export function requeueNote(job: Job, cause: string): string {
+  return (
+    `\n[ClearFEA] Try ${job.attempt} of ${MAX_ATTEMPTS} stopped because ${MACHINE_FAULT[cause] ?? cause} (${cause}), ` +
+    `a fault in ClearFEA, not in your setup. Nothing is charged for it, and the job is queued again.\n`
+  );
+}
+
+/**
+ * Queues a job a machine fault ended again (ADR-108), or returns null when it is not retried: the
+ * cause is not a machine fault, its tries are used up, it was asked to stop, or it changed meanwhile.
+ */
+export async function retryJob(env: Env, job: Job, completion: Completion): Promise<Job | null> {
+  if (!retries(job, completion) || completion.status !== "failed") return null;
+  const requeued = await requeueJob(env.DB, job, requeueNote(job, completion.failureCause));
+  // The try that ended keeps its statistics; the next claim starts a new row (M12.3, ADR-109).
+  if (requeued !== null && job.claimedBy !== null) {
+    await endTry(env.DB, job.claimedBy, job, completion, await modelSize(env.DB, job, completion));
+  }
+  return requeued;
+}
+
+/**
+ * A machine fault that ends a job, with what its owner is told: what stopped it, how many tries
+ * it had and that nothing is charged. Other completions pass unchanged.
+ */
+export function finalMachineFault(job: Job, completion: Completion): Completion {
+  if (
+    completion.status !== "failed" ||
+    completion.failureCategory !== "platform_fault" ||
+    !RETRIED_CAUSES.includes(completion.failureCause) ||
+    completion.failureCause === WORKER_LOST // lostCompletion words its own
+  ) {
+    return completion;
+  }
+  const what = MACHINE_FAULT[completion.failureCause];
+  return {
+    ...completion,
+    failureMessage:
+      `${WORK[job.type]} stopped because ${what} (${completion.failureCause}). ` +
+      `This is a fault in ClearFEA, not in your setup, so nothing is charged.${tries(job)}${AGAIN[job.type]}`,
+  };
+}
+
+/** How many tries a job had, when it had more than one. */
+function tries(job: Job): string {
+  return job.attempt > 1 ? ` It stopped this way on all ${job.attempt} tries.` : "";
+}
+
 /** Causes the API itself explains, whoever pays: its message replaces the generic fault text. */
-const EXPLAINED_BY_API = [OUT_OF_MEMORY, WORKER_LOST, NO_MACHINE, MACHINE_HOURS_CAP];
+const EXPLAINED_BY_API = [OUT_OF_MEMORY, NO_MACHINE, MACHINE_HOURS_CAP, ...RETRIED_CAUSES];
 
 /**
  * What the owner is told about a failed job: the worker's message when it is their fault, and
@@ -164,6 +246,7 @@ export function lostCompletion(job: Job, timeoutSeconds: number): Extract<Comple
     failureMessage:
       `${WORK[job.type]} stopped because the machine working on it stopped responding ` +
       `(no check-in for ${timeoutSeconds} s). This is a fault in ClearFEA, not in your setup, so nothing is charged.` +
+      tries(job) +
       AGAIN[job.type],
   };
 }
@@ -175,16 +258,21 @@ export function lostBillableMs(job: Job): number {
 }
 
 /**
- * Fails every job whose worker is lost (M8.4): silent for the heartbeat timeout (the cron), or,
- * when `claimingWorker` is given, only the jobs held by that worker now asking for a job, which
- * had restarted (a claim). Each is a fault in
- * ClearFEA, not charged, and its record says so. Returns how many it failed.
+ * Queues again or fails every job whose worker is lost (M8.4, M12.2): silent for the heartbeat
+ * timeout (the cron), or, when `claimingWorker` is given, only the jobs held by that worker now
+ * asking for a job, which had restarted (a claim). Each is a fault in ClearFEA, not charged. A job
+ * with tries left is queued again (ADR-108); the rest fail, and their records say so. Returns how
+ * many it queued again or failed.
  */
 export async function sweepLostJobs(env: Env, claimingWorker: string | null = null): Promise<number> {
   const timeout = await heartbeatTimeoutSeconds(env.DB);
   let failed = 0;
   for (const lost of await lostJobs(env.DB, timeout, claimingWorker)) {
     const completion = lostCompletion(lost, timeout);
+    if (retries(lost, completion)) {
+      if ((await retryJob(env, lost, completion)) !== null) failed += 1;
+      continue; // else it checked in or completed meanwhile
+    }
     const billableMs = lostBillableMs(lost);
     const charge = lost.ratePerHour === null ? null : chargeFor(billableMs, lost.ratePerHour, completion);
     const job = await failLostJob(env.DB, lost, completion, billableMs, charge);

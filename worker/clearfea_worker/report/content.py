@@ -530,10 +530,14 @@ class _Builder:
 
     def solver(self) -> list[Block]:
         spec, run = self.spec, self.run
-        solver = spec.solver or "spooles"
+        # The solver that solved it, which the result names since M12.2 (ADR-108).
+        solver = self.result.solver or spec.solver or "spooles"
+        label = SOLVER_LABELS[solver]
+        if spec.solver is not None and solver != spec.solver:
+            label += f" (after {SOLVER_LABELS[spec.solver]} crashed)"
         rows = [
             ["Analysis type", ANALYSIS_KINDS[spec.analysis]],
-            ["Equation solver", SOLVER_LABELS[solver]],
+            ["Equation solver", label],
         ]
         if spec.analysis == "modal":
             rows.append(["Modes asked for", str(spec.modes) if spec.modes else NOT_ENTERED])

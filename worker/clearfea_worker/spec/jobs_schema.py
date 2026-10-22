@@ -242,6 +242,10 @@ class Metering(BaseModel):
         populate_by_name=True,
     )
     billable_ms: Annotated[int, Field(alias="billableMs", ge=0, le=2592000000)]
+    peak_memory_bytes: Annotated[int | None, Field(alias="peakMemoryBytes", ge=0)] = None
+    """
+    The largest resident memory of the job's solver the worker measured, or the job container's memory limit when the kernel stopped it there (M12.2, ADR-108). Absent where it was not measured.
+    """
 
 
 class CompleteSucceeded(BaseModel):

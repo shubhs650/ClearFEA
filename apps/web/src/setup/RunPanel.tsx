@@ -247,8 +247,8 @@ function SolverChoice({
 }
 
 /** The solver a run used: its frozen spec's, or SPOOLES for runs made before ADR-063. */
-function runSolver(run: Pick<RunView, "spec">): Solver {
-  return frozenRunSolver(run.spec);
+function runSolver(run: Pick<RunView, "spec" | "result">): Solver {
+  return frozenRunSolver(run.spec, run.result);
 }
 
 /** One machine size as an option: its cores and memory, and whether it is the recommended one. */
@@ -828,6 +828,13 @@ function RunRecord({ run, currentSpec }: { run: RunView; currentSpec: Simulation
         <dd>
           {SOLVER_LABELS[runSolver(run)]}
           {isIterative(runSolver(run)) && <span className="field-hint"> ({ITERATIVE_ACCURACY_NOTE})</span>}
+          {run.spec.solver !== undefined && runSolver(run) !== run.spec.solver && (
+            <span className="field-hint">
+              {" "}
+              ({SOLVER_LABELS[run.spec.solver]} crashed, so the run was solved again with {SOLVER_LABELS[runSolver(run)]},
+              which gives the same results; the crashed solve was not charged)
+            </span>
+          )}
         </dd>
         <dt>ClearFEA</dt>
         <dd>{version(software.clearfea)}</dd>

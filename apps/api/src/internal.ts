@@ -39,7 +39,7 @@ import { endTry, modelSize, recordContainerStats, recordHostLoad, recordStage, s
 import { recordContact } from "./db/workerStarts";
 import type { Env } from "./env";
 import { jobFiles, transfers } from "./jobs/files";
-import { OUT_OF_MEMORY, recordOutcome, sweepLostJobs } from "./jobs/outcome";
+import { finalMachineFault, OUT_OF_MEMORY, recordOutcome, retryJob, sweepLostJobs } from "./jobs/outcome";
 
 export const internal = new Hono<{ Bindings: Env }>();
 
@@ -236,7 +236,12 @@ function memory(bytes: number): string {
  * (DECISIONS "Failed runs", ADR-082): the user when they chose a size against the estimate, the
  * platform when it picked or would have accepted the size. Other completions pass unchanged.
  */
-async function withMemoryFault(db: D1Database, job: Job, completion: Completion): Promise<Completion> {
+async function withMemoryFault(
+  db: D1Database,
+  job: Job,
+  completion: Completion,
+  peakMemoryBytes: number | null,
+): Promise<Completion> {
   if (job.type !== "solve" || completion.status !== "failed" || completion.failureCause !== OUT_OF_MEMORY) {
     return completion;
   }
@@ -245,14 +250,16 @@ async function withMemoryFault(db: D1Database, job: Job, completion: Completion)
   const category = outOfMemoryFault(estimate, job.machineSize);
   const size = estimate?.sizes.find((s) => s.size === job.machineSize);
   const on = size === undefined ? `the ${job.machineSize} machine size` : `the ${size.size} machine size (${memory(size.memoryBytes)})`;
+  // The peak the worker measured, or the container limit the kernel stopped it at (M12.2, ADR-108).
+  const peak = peakMemoryBytes === null ? "" : ` It used ${memory(peakMemoryBytes)} at its peak.`;
   const failureMessage =
     category === "user_fault"
-      ? `The run ran out of memory on ${on}, which was chosen although the estimate needs more memory than it has, so the time it used is charged. ${
+      ? `The run ran out of memory on ${on}, which was chosen although the estimate needs more memory than it has, so the time it used is charged.${peak} ${
           estimate?.recommended
             ? `Run it again on the recommended size, ${estimate.recommended}, or larger.`
             : "Run it again on the largest size, or make the mesh coarser or use linear elements."
         }`
-      : `The run ran out of memory on ${on}, which by ClearFEA's estimate has enough memory, so the estimate was too low and the time is not charged. Run it again on a larger size; if it fails again, report it.`;
+      : `The run ran out of memory on ${on}, which by ClearFEA's estimate has enough memory, so the estimate was too low and the time is not charged.${peak} Run it again on a larger size; if it fails again, report it.`;
   return { ...completion, failureCategory: category, failureMessage };
 }
 
@@ -280,12 +287,18 @@ internal.post("/jobs/:id/complete", async (c) => {
   if (request.status === "stopped" && held.stopRequested === null) {
     return c.json({ error: "Nobody asked this job to stop. Report how it ended instead." }, 409);
   }
-  const completion = await withMemoryFault(c.env.DB, held, await checkedCompletion(c.env, held, request));
-  const { billableMs } = request.metering;
+  const checked = await checkedCompletion(c.env, held, request);
+  // A machine fault with tries left queues the job again, uncharged (M12.2, ADR-108).
+  const requeued = await retryJob(c.env, held, checked);
+  if (requeued !== null) {
+    return c.json({ job: { ...payload(requeued), status: requeued.status } } satisfies CompleteResponse);
+  }
+  const { billableMs, peakMemoryBytes = null } = request.metering;
+  const completion = await withMemoryFault(c.env.DB, held, finalMachineFault(held, checked), peakMemoryBytes);
   // A metered job costs its measured time at the rate it was queued with (ADR-033).
   const charge: JobCharge | null =
     held.ratePerHour === null ? null : chargeFor(billableMs, held.ratePerHour, completion);
-  const job = await completeJob(c.env.DB, request.workerId, held.id, completion, billableMs, charge);
+  const job = await completeJob(c.env.DB, request.workerId, held.id, completion, billableMs, charge, peakMemoryBytes);
   if (job === null) return c.json({ error: gone }, 409);
   await endTry(c.env.DB, request.workerId, job, completion, await modelSize(c.env.DB, job, completion));
   await recordOutcome(c.env, job, completion, charge);

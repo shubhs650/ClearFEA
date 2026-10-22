@@ -240,6 +240,10 @@ export interface HostCheckInResponse {
  */
 export interface Metering {
   billableMs: number;
+  /**
+   * The largest resident memory of the job's solver the worker measured, or the job container's memory limit when the kernel stopped it there (M12.2, ADR-108). Absent where it was not measured.
+   */
+  peakMemoryBytes?: number;
 }
 /**
  * This interface was referenced by `Jobs`'s JSON-Schema

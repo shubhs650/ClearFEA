@@ -8,6 +8,7 @@
 import {
   DEFAULT_STOP_MULTIPLIER,
   elementLimitProblem,
+  fallbackSolver,
   type RunLogResponse,
   type RunProgress,
   type RunResponse,
@@ -398,6 +399,7 @@ runs.post("/:id/rerun", launchesMachines, async (c) => {
     estimate,
     stopLimit: { multiplier, seconds: stopLimitSeconds(estimate.seconds, multiplier) },
     rerunOf: run.id,
+    fallbackSolver: fallbackSolver(solver, mesh.order, mesh.elementCount, kind),
   });
   if (created === null) {
     return c.json({ error: "The mesh or the machine sizes changed meanwhile. Try running it again." }, 409);

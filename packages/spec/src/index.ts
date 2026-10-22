@@ -52,6 +52,7 @@ export {
   elementLimitProblem,
   estimateMesh,
   estimatorTable,
+  fallbackSolver,
   ITERATIVE_ACCURACY_NOTE,
   isIterative,
   limitMemoryText,

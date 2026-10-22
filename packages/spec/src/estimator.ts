@@ -194,6 +194,22 @@ export function maxElements(
   return order === 1 ? limits.order1 : limits.order2;
 }
 
+/**
+ * The solver a run is solved with again when its own crashes (M12.2, ADR-108): SPOOLES for a
+ * PaStiX run whose mesh is within SPOOLES's element limit, since both give the same answers
+ * (ADR-048); null for any other run.
+ */
+export function fallbackSolver(
+  solver: Solver,
+  order: ElementOrder,
+  elements: number,
+  kind: RunKind = STATIC_RUN,
+  estimator: EstimatorTable = estimatorTable,
+): Solver | null {
+  if (solver !== "pastix" || runSolverProblem("spooles", kind, estimator) !== null) return null;
+  return elements <= maxElements("spooles", order, kind, estimator) ? "spooles" : null;
+}
+
 /** The limits' machine memory as people say it: "16 GB". */
 export function limitMemoryText(estimator: EstimatorTable = estimatorTable): string {
   return `${Math.round(estimator.limitMemoryBytes / 2 ** 30)} GB`;

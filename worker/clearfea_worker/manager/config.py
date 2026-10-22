@@ -49,9 +49,14 @@ class ManagerSettings:
     #: A job container still running after this long is killed: above the 12-hour stop-limit
     #: ceiling, so it only catches a job that stopped answering its heartbeats.
     job_max_seconds: float = 13 * 3600.0
-    #: The file system whose free space the check-ins report (M12.3); None: Docker's data
-    #: directory when the manager can see it, else its own root.
+    #: The file system whose free space the check-ins report (M12.3); None: ``scratch_path``,
+    #: else Docker's data directory when the manager can see it, else its own root.
     disk_path: str | None = None
+    #: A folder on the disk that holds the job containers' scratch volumes (Docker's data root,
+    #: mounted into the manager), and the free space below which no job is claimed (ADR-108).
+    #: None leaves the disk unchecked, as on a development machine.
+    scratch_path: str | None = None
+    scratch_min_free_bytes: int = 20 * 1024**3
 
 
 #: Starting values from ADR-107 for the Contabo Cloud VPS 8 (8 vCPU, 24 GB); M12.6 measures them.
@@ -125,4 +130,8 @@ def load_manager_settings(env: Mapping[str, str] | None = None) -> ManagerSettin
         idle_poll_max_seconds=_positive(env, "CLEARFEA_IDLE_POLL_MAX_SECONDS", 15.0),
         job_max_seconds=_positive(env, "CLEARFEA_JOB_MAX_SECONDS", 13 * 3600.0),
         disk_path=env.get("CLEARFEA_HOST_DISK_PATH", "").strip() or None,
+        scratch_path=env.get("CLEARFEA_SCRATCH_PATH", "").strip() or None,
+        scratch_min_free_bytes=parse_memory("CLEARFEA_SCRATCH_MIN_FREE", min_free)
+        if (min_free := env.get("CLEARFEA_SCRATCH_MIN_FREE", "").strip())
+        else 20 * 1024**3,
     )

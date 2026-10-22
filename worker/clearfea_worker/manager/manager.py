@@ -15,6 +15,7 @@ the container used once it has ended, and sends the host's load with each check-
 import json
 import logging
 import os
+import shutil
 import threading
 import time
 from collections.abc import Callable
@@ -54,6 +55,8 @@ OUT_OF_MEMORY = "out_of_memory"
 CHECK_IN_RETRY_SECONDS = 30.0
 #: Pause before looking for a missing worker image again.
 IMAGE_RETRY_SECONDS = 60.0
+#: Pause before looking at the scratch disk again after it was too full to claim a job.
+DISK_RETRY_SECONDS = 60.0
 #: Longest wait for the short container that reports an image's software versions.
 SOFTWARE_TIMEOUT_SECONDS = 120.0
 
@@ -94,6 +97,8 @@ class Manager:
     clocks: _Clocks = field(default_factory=_Clocks)
     #: Where the host's /proc is read for its load; inside a container it is still the host's.
     proc: Path = Path("/proc")
+    #: Free bytes on the disk at a path; replaced in tests.
+    free_bytes: Callable[[str], int] = lambda path: shutil.disk_usage(path).free
     _lanes: list[_LaneState] = field(default_factory=list, init=False)
     _software: dict[str, WorkerSoftware] = field(default_factory=dict, init=False)
     _host_cpus: int = field(default=1, init=False)
@@ -125,10 +130,15 @@ class Manager:
         left: a running one is followed again (one per lane), any other is cleared up."""
         info = self.docker.info()
         self._host_cpus = int(info.get("NCPU") or 1)
-        # The disk whose free space counts: where Docker keeps the jobs' scratch volumes, when
-        # the manager can see it, else its own root.
+        # The disk whose free space counts: where Docker keeps the jobs' scratch volumes (the
+        # scratch path of ADR-108, or Docker's data root when the manager can see it), else its
+        # own root.
         root = str(info.get("DockerRootDir") or "")
-        self._disk = self.settings.disk_path or (root if root and os.path.isdir(root) else "/")
+        self._disk = (
+            self.settings.disk_path
+            or self.settings.scratch_path
+            or (root if root and os.path.isdir(root) else "/")
+        )
         log.info(
             "Manager on %s: %d CPUs, %.1f GiB, Docker %s; lanes %s",
             self.settings.host,
@@ -250,7 +260,8 @@ class Manager:
         info: dict[str, Any] | None = None,
     ) -> None:
         """Clears up an ended container. One that exited 0 reported its job; any other way of
-        ending is reported here as ClearFEA's fault, with the time it had the machine."""
+        ending is reported here as ClearFEA's fault, with the time it had the machine. The API
+        queues the job again when the fault was the machine's (M12.2, ADR-108)."""
         info = info if info is not None else self.docker.inspect(container)
         container_state = (info or {}).get("State") or {}
         code = container_state.get("ExitCode")
@@ -263,8 +274,13 @@ class Manager:
             run_ms = max(0, round((end - started) * 1000))
         if job_id is not None and not reported:
             billable_ms = run_ms
+            peak_memory_bytes = None
             if container_state.get("OOMKilled"):
                 cause = OUT_OF_MEMORY
+                # The kernel stops a container when it reaches its memory limit, so that was its
+                # peak (ADR-108); the limit it was created with, else its lane's.
+                limit = ((info or {}).get("HostConfig") or {}).get("Memory")
+                peak_memory_bytes = int(limit) if limit else state.lane.memory_bytes
             elif state.timed_out:
                 cause = JOB_TIMEOUT
             elif started is None:
@@ -283,7 +299,13 @@ class Manager:
                 tail.strip() or "(none)",
             )
             try:
-                state.client.fail(job_id, "platform_fault", cause, billable_ms=billable_ms)
+                state.client.fail(
+                    job_id,
+                    "platform_fault",
+                    cause,
+                    billable_ms=billable_ms,
+                    peak_memory_bytes=peak_memory_bytes,
+                )
             except ApiError as error:
                 log.info("The API did not take job %s's failure: %s", job_id, error)
         elif job_id is not None:
@@ -318,6 +340,9 @@ class Manager:
         software = self._image_software(image_id)
         if software is None:
             state.next_claim = now + IMAGE_RETRY_SECONDS
+            return
+        if not self._scratch_has_room():
+            state.next_claim = now + DISK_RETRY_SECONDS
             return
         try:
             job = state.client.claim(list(state.lane.job_types), software=software)
@@ -393,6 +418,30 @@ class Manager:
             state.client.container_stats(job_id, stats)
         except ApiError as error:
             log.info("The API did not take job %s's statistics: %s", job_id, error)
+
+    def _scratch_has_room(self) -> bool:
+        """Whether the disk of the job containers' scratch volumes has the free space a job may
+        need (ADR-108). A full disk would fail every job queued, so none is claimed until the
+        sweep or an admin frees space; a job already running goes on."""
+        path = self.settings.scratch_path
+        if path is None:
+            return True
+        try:
+            free = self.free_bytes(path)
+        except OSError as error:
+            log.error("Cannot read the free space at %s (%s), so no job is claimed.", path, error)
+            return False
+        if free >= self.settings.scratch_min_free_bytes:
+            return True
+        log.error(
+            "The scratch disk at %s has %.1f GiB free, under the %.1f GiB a job may need, so no "
+            "job is claimed. Free space on the solver host; trying again in %.0f s.",
+            path,
+            free / 1024**3,
+            self.settings.scratch_min_free_bytes / 1024**3,
+            DISK_RETRY_SECONDS,
+        )
+        return False
 
     def _image_software(self, image_id: str) -> WorkerSoftware | None:
         """The versions inside the image, which the claim records as what ran the job (ADR-032),
