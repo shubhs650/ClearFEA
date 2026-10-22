@@ -2,6 +2,8 @@
 # Sourced by infra/verify.sh and infra/e2e.sh: a fresh API (wrangler dev with its own empty local
 # state, seeded test users) and a worker container pointed at it, both stopped when the script
 # exits. It does not touch the state of `make dev`, which can keep running beside it.
+# CLEARFEA_RUNNER=manager runs the compute manager instead of the worker, so every job runs in a
+# container of its own as on the solver host (M12.1, ADR-107).
 #
 # The caller defines say() and die(), and sets:
 #   port     the API's port, and port_var the variable that sets it (named when the port is taken)
@@ -47,6 +49,12 @@ stack_start() {
     api_for_worker="http://127.0.0.1:$port"
   fi
   export CLEARFEA_API_URL="$api_for_worker" CLEARFEA_WORKER_TOKEN="$worker_token" CLEARFEA_WORKER_ID="$project-worker"
+  runner=${CLEARFEA_RUNNER:-worker}
+  case "$runner" in
+    worker) ;;
+    manager) compose+=(--profile manager) && export CLEARFEA_HOST_NAME="$project" ;;
+    *) die "CLEARFEA_RUNNER must be worker or manager, not '$runner'." ;;
+  esac
   CLEARFEA_COMMIT=$(git describe --always --dirty 2>/dev/null || true)
   export CLEARFEA_COMMIT
 
@@ -67,17 +75,17 @@ stack_start() {
     --command "UPDATE settings SET value = 1000 WHERE name = 'runs_per_user_per_day'" >>"$out/api.log" 2>&1 ||
     die "Raising the daily run limit failed; see $out/api.log."
 
-  say "Starting the API on :$port and the worker container (logs in $out)."
+  say "Starting the API on :$port and the $runner container (logs in $out)."
   "${wrangler[@]}" dev --port "$port" --persist-to "$state" </dev/null >>"$out/api.log" 2>&1 &
   pids+=("$(jobs -p %%)")
-  "${compose[@]}" up --build worker </dev/null >"$out/worker.log" 2>&1 &
+  "${compose[@]}" up --build "$runner" </dev/null >"$out/worker.log" 2>&1 &
   local worker_pid
   worker_pid=$(jobs -p %%)
   pids+=("$worker_pid")
 
   # The first run builds the worker image, which takes minutes; a failed build ends it at once.
-  say "Waiting for the worker container (the first run builds its image)."
-  until [ -n "$("${compose[@]}" ps --status running -q worker 2>/dev/null)" ]; do
+  say "Waiting for the $runner container (the first run builds its image)."
+  until [ -n "$("${compose[@]}" ps --status running -q "$runner" 2>/dev/null)" ]; do
     kill -0 "$worker_pid" 2>/dev/null ||
       die "The worker did not start; see $out/worker.log. Behind a TLS-intercepting proxy, pass BUILD_CA (ADR-012)."
     sleep 2
@@ -95,6 +103,11 @@ stack_stop() {
   {
     for pid in "${pids[@]}"; do kill -TERM -- "-$pid" || true; done
     "${compose[@]}" down >/dev/null || true
+    # The manager's job containers and their scratch volumes are not the Compose project's.
+    if [ "${runner:-worker}" = manager ]; then
+      docker ps -aq --filter "label=clearfea.manager.host=$project" | xargs -r docker rm -f >/dev/null || true
+      docker volume ls -q --filter "label=clearfea.manager.host=$project" | xargs -r docker volume rm >/dev/null || true
+    fi
     wait || true
   } 2>/dev/null
   rm -rf "$state"

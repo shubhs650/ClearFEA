@@ -10,7 +10,7 @@ name: clearfea
 
 services:
   worker:
-    build:
+    build: &worker-build
       context: ../worker
       # The units table, packages/spec/units.json (see worker/Dockerfile).
       additional_contexts:
@@ -33,6 +33,32 @@ services:
     # memory itself (ADR-082), and a container cap below the smallest size (8 GiB) would kill
     # runs the size has room for (ADR-088). The solver runs on one thread (ADR-048).
     cpus: 2
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+  # The compute manager (M12.1, ADR-107) in place of the worker: one hardened container of the
+  # worker image per job, a solve lane and a light lane. Only with the profile:
+  #   docker compose -f infra/docker-compose.yml --profile manager up --build manager
+  # It needs the Docker socket to start the job containers, so it runs as root; the job
+  # containers run as the image's own user and never see the socket.
+  manager:
+    profiles: [manager]
+    build: *worker-build
+    image: clearfea-worker
+    command: [manager]
+    user: root
+    environment:
+      CLEARFEA_API_URL: ${CLEARFEA_API_URL:-http://host.docker.internal:8787}
+      CLEARFEA_WORKER_TOKEN: ${CLEARFEA_WORKER_TOKEN:-local-dev-worker-token}
+      CLEARFEA_HOST_NAME: ${CLEARFEA_HOST_NAME:-local}
+      CLEARFEA_JOB_IMAGE: clearfea-worker
+      CLEARFEA_JOB_NETWORK: ${CLEARFEA_JOB_NETWORK:-bridge}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     read_only: true
     tmpfs:
       - /tmp

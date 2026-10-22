@@ -80,7 +80,11 @@ COPY clearfea_worker /opt/worker/clearfea_worker
 # Where clearfea_worker.units looks for the table: packages/spec/units.json beside the package's
 # parent folder, as in a source checkout.
 COPY --from=spec units.json /opt/packages/spec/units.json
-RUN useradd --create-home --uid 10001 worker
+# /scratch is where a compute manager mounts each job container's scratch volume (M12.1,
+# ADR-107); Docker copies its owner to a new volume, so the job can write there under a
+# read-only root.
+RUN useradd --create-home --uid 10001 worker \
+ && install -d -o worker -g worker /scratch
 USER worker
 WORKDIR /home/worker
 ENV PATH=/opt/venv/bin:$PATH PYTHONPATH=/opt/worker PYTHONUNBUFFERED=1

@@ -250,6 +250,12 @@ Planned CalculiX mapping. Keyword details must be confirmed against the CalculiX
 
 **Cut planes on large models (settled in M3.4, ADR-053).** Every model is cut in the browser, on the main thread, from the run's `mesh.bin` and the fields drawn, fetched one field at a time. Measured on a 2-million-element mesh: a cut takes about a quarter of a second and the first cut downloads about 150 MB (the mesh and one scalar field); there is no server-side slice.
 
+### Compute manager (M12.1)
+
+On the solver host (ADR-106, ADR-107, ADR-121) a compute manager, `python -m clearfea_worker manager` (`worker/clearfea_worker/manager/`), takes the worker's place. It claims through the same route with one worker id per lane (`<host>-solve` for solve jobs, `<host>-light` for the rest), at most one job per lane, and runs each claimed job in a fresh container of the worker image through the Docker Engine API on its socket (`manager/docker.py`, standard library only). The container gets the job in `CLEARFEA_JOB` and runs `python -m clearfea_worker job`, the worker's own `run_job` for that one job, so transfers, heartbeats, cancels, stop limits and the outcome work as before. The container's configuration is one pure function, `manager/containers.py`: user 10001, no capabilities, read-only root, a per-job scratch volume at `/scratch`, memory without swap, a process limit, the lane's CPUs, no published ports. The manager reports a container that ended without reporting as a platform fault (`container_exited`, `out_of_memory`, `job_timeout`, `container_start_failed`) and removes it with its volume; after its own restart it follows the containers labelled with its host that still run and clears up the rest. The claim lets users take turns in a lane (ADR-121 item 7).
+
+Settings (environment): the worker's `CLEARFEA_API_URL`, `CLEARFEA_WORKER_TOKEN` and Access pair; `CLEARFEA_HOST_NAME` (default the host name), `CLEARFEA_JOB_IMAGE` (default `clearfea-worker`), `CLEARFEA_JOB_NETWORK` (`bridge`; `host` where the API is on the host's loopback), `CLEARFEA_SOLVE_CPUS` and `CLEARFEA_LIGHT_CPUS` (6 and 1), `CLEARFEA_SOLVE_MEMORY` and `CLEARFEA_LIGHT_MEMORY` (17g and 4g), `CLEARFEA_SOLVE_CPUSET` and `CLEARFEA_LIGHT_CPUSET` (unset: not pinned), `CLEARFEA_JOB_PIDS_LIMIT` (1024), `CLEARFEA_IDLE_POLL_MAX_SECONDS` (15), `CLEARFEA_JOB_MAX_SECONDS` (46800), `CLEARFEA_DOCKER_SOCKET`. Locally `CLEARFEA_RUNNER=manager make verify` (or `make e2e`) runs it in place of the worker.
+
 ## 8. API
 
 Hono on Cloudflare Workers, TypeScript.
