@@ -392,6 +392,9 @@ const ROUTES: Record<string, Route> = {
   "GET /api/admin/jobs/:id/log": { area: "admin" },
   "POST /api/admin/jobs/:id/requeue": { area: "admin" },
   "POST /api/admin/jobs/:id/cancel": { area: "admin" },
+  "GET /api/admin/settings": { area: "admin" },
+  "PUT /api/admin/settings/:name": { area: "admin" },
+  "GET /api/admin/costs": { area: "admin" },
 
   "POST /api/jobs": { area: "account" },
   "GET /api/jobs": { area: "account" },
@@ -564,6 +567,9 @@ const ADMIN_CALLS: Record<string, Request> = {
   "GET /api/admin/jobs/:id/log": { path: "/api/admin/jobs/:job/log" },
   "POST /api/admin/jobs/:id/requeue": { path: "/api/admin/jobs/:job/requeue" },
   "POST /api/admin/jobs/:id/cancel": { path: "/api/admin/jobs/:job/cancel" },
+  "GET /api/admin/settings": { path: "/api/admin/settings" },
+  "PUT /api/admin/settings/:name": { path: "/api/admin/settings/trash_retention_days", json: { value: 7 } },
+  "GET /api/admin/costs": { path: "/api/admin/costs" },
 };
 
 /** The allowlist, the cloud size list and the settings as they stand, to show a refused call changed nothing. */

@@ -61,18 +61,29 @@ export interface UserSummary {
   lastSignIn: string | null;
   /** Billed machine seconds of their jobs that finished this calendar month (UTC). */
   machineSecondsThisMonth: number;
+  /** Their jobs that finished this calendar month (UTC), whatever the outcome (M13.3). */
+  jobsThisMonth: number;
+  /** Of those, the ones that failed, whoever's fault (M13.3). */
+  failedJobsThisMonth: number;
 }
 
-/** Every user, newest first, with when they last signed in with Google and their machine time this month. */
+/**
+ * Every user, newest first, with when they last signed in with Google and their machine time,
+ * jobs and failed jobs this month.
+ */
 export async function listUsers(db: D1Database): Promise<UserSummary[]> {
   const { results } = await db
     .prepare(
-      `SELECT u.id, u.name, u.email, u.created_at AS createdAt,
+      `WITH month AS (
+         SELECT owner_id, COALESCE(SUM(billed_seconds), 0) AS seconds, COUNT(*) AS jobs,
+                SUM(status = 'failed') AS failed
+           FROM jobs WHERE finished_at >= strftime('%Y-%m-01T00:00:00.000Z', 'now') GROUP BY owner_id
+       )
+       SELECT u.id, u.name, u.email, u.created_at AS createdAt,
               (SELECT MAX(s.created_at) FROM auth_sessions s WHERE s.user_id = u.id) AS lastSignIn,
-              (SELECT COALESCE(SUM(j.billed_seconds), 0) FROM jobs j
-                WHERE j.owner_id = u.id AND j.finished_at >= strftime('%Y-%m-01T00:00:00.000Z', 'now'))
-                AS machineSecondsThisMonth
-         FROM users u ORDER BY u.created_at DESC, u.id`,
+              COALESCE(m.seconds, 0) AS machineSecondsThisMonth, COALESCE(m.jobs, 0) AS jobsThisMonth,
+              COALESCE(m.failed, 0) AS failedJobsThisMonth
+         FROM users u LEFT JOIN month m ON m.owner_id = u.id ORDER BY u.created_at DESC, u.id`,
     )
     .all<UserSummary>();
   return results;

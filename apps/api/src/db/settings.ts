@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Configuration values (docs/ARCHITECTURE.md section 4): rows of `settings`, set by migrations and
-// changed with `wrangler d1 execute`, not by any route. Not user data, so not owner-scoped.
+// changed by the admin on the dashboard's Settings tab (M13.3, ADR-128) or with `wrangler d1 execute`.
+// Not user data, so not owner-scoped.
 
 /** The storage rules (M8.6, ADR-086). */
 export interface StorageSettings {
@@ -149,4 +150,225 @@ export async function setQueuePaused(db: D1Database, paused: boolean): Promise<b
     .bind(paused ? 1 : 0, paused ? 1 : 0)
     .run();
   return result.meta.changes === 1;
+}
+
+/** The groups the dashboard's Settings tab shows the settings in (M13.3, ADR-128). */
+export type SettingGroup = "accounts" | "queue" | "storage" | "machines" | "costs";
+
+/**
+ * A setting the admin may change on the dashboard: its row name, where and how it is shown, and
+ * the stored values allowed. The stored value is a whole number (bytes, seconds, days,
+ * micro-credits, cents); it is shown divided by `scale` in `unit`.
+ */
+export interface SettingDefinition {
+  name: string;
+  group: SettingGroup;
+  label: string;
+  description: string;
+  unit: string;
+  scale: number;
+  min: number;
+  max: number;
+}
+
+const MICRO = 1_000_000;
+const GIB = 2 ** 30;
+
+/**
+ * Every row of `settings` the dashboard edits, in the order it shows them. `queue_paused` is left
+ * out: the Overview's Pause and Resume set it (ADR-127). A new setting goes here with its
+ * migration; a test checks that every row is listed.
+ */
+export const SETTINGS: readonly SettingDefinition[] = [
+  {
+    name: "signup_grant_micro_credits",
+    group: "accounts",
+    label: "Credits for a new user",
+    description:
+      "Play-money credits each user gets at their first sign-in. During the closed beta the wallet shows usage only and refuses nothing.",
+    unit: "credits",
+    scale: MICRO,
+    min: 0,
+    max: 1_000_000 * MICRO,
+  },
+  {
+    name: "queue_waiting_per_user",
+    group: "queue",
+    label: "Jobs waiting per user and lane",
+    description: "One more is refused until one of them starts.",
+    unit: "jobs",
+    scale: 1,
+    min: 1,
+    max: 100,
+  },
+  {
+    name: "queue_running_per_user",
+    group: "queue",
+    label: "Jobs running per user and lane",
+    description: "The user's next job waits behind other users' jobs.",
+    unit: "jobs",
+    scale: 1,
+    min: 1,
+    max: 10,
+  },
+  {
+    name: "runs_per_user_per_day",
+    group: "queue",
+    label: "Runs per user per day",
+    description: "New runs and runs again alike, per calendar day (UTC).",
+    unit: "runs",
+    scale: 1,
+    min: 1,
+    max: 10_000,
+  },
+  {
+    name: "queue_total_cap",
+    group: "queue",
+    label: "Jobs waiting in all",
+    description: "Over all users and lanes; one more is refused until the queue drains.",
+    unit: "jobs",
+    scale: 1,
+    min: 1,
+    max: 10_000,
+  },
+  {
+    name: "heartbeat_timeout_seconds",
+    group: "queue",
+    label: "Silence before a worker counts as lost",
+    description:
+      "A held job whose worker sends no heartbeat for this long is ended as a fault in ClearFEA, or queued again (ADR-122). Workers send one every 5 s.",
+    unit: "s",
+    scale: 1,
+    min: 30,
+    max: 3600,
+  },
+  {
+    name: "storage_free_bytes",
+    group: "storage",
+    label: "Free storage per user",
+    description: "Stored files above this are charged once a day.",
+    unit: "GiB",
+    scale: GIB,
+    min: 0,
+    max: 1024 * GIB,
+  },
+  {
+    name: "storage_rate_per_gib_day",
+    group: "storage",
+    label: "Storage rate above the free amount",
+    description: "Charged by the daily storage sweep.",
+    unit: "credits per GiB per day",
+    scale: MICRO,
+    min: 0,
+    max: 100 * MICRO,
+  },
+  {
+    name: "raw_output_retention_days",
+    group: "storage",
+    label: "Days raw solver output is kept",
+    description:
+      "After a run ends, unless its owner pins it. Lowering it removes older output at the next daily sweep, and it cannot be brought back.",
+    unit: "days",
+    scale: 1,
+    min: 1,
+    max: 3650,
+  },
+  {
+    name: "trash_retention_days",
+    group: "storage",
+    label: "Days in the trash",
+    description:
+      "Projects and folders in the trash longer than this are deleted for good, with their files, at the next daily sweep.",
+    unit: "days",
+    scale: 1,
+    min: 1,
+    max: 3650,
+  },
+  {
+    name: "machine_hours_cap",
+    group: "machines",
+    label: "Monthly limit of machine hours",
+    description:
+      "Cloud machines only (MACHINES=cloud): once reached, no machine is started and new runs and meshes are refused until the 1st. 0 pauses the solver.",
+    unit: "h",
+    scale: 1,
+    min: 0,
+    max: 744,
+  },
+  {
+    name: "machine_start_wait_seconds",
+    group: "machines",
+    label: "Time a machine may take to start",
+    description: "Cloud machines only: a start that produces no worker in this time counts as failed.",
+    unit: "s",
+    scale: 1,
+    min: 60,
+    max: 3600,
+  },
+  {
+    name: "machine_max_running",
+    group: "machines",
+    label: "Machines at once",
+    description: "Cloud machines only: running or starting, over all sizes.",
+    unit: "machines",
+    scale: 1,
+    min: 1,
+    max: 20,
+  },
+  {
+    name: "solver_host_monthly_cents",
+    group: "costs",
+    label: "Solver host per month",
+    description: "What the VPS costs each month, used or not. Shown on the Costs tab only.",
+    unit: "USD",
+    scale: 100,
+    min: 0,
+    max: 10_000_000,
+  },
+  {
+    name: "platform_monthly_cents",
+    group: "costs",
+    label: "Cloudflare per month",
+    description: "Workers Paid, with D1 and R2 inside the included amounts. Shown on the Costs tab only.",
+    unit: "USD",
+    scale: 100,
+    min: 0,
+    max: 10_000_000,
+  },
+];
+
+/** The dashboard's settings with their stored values, in the order of SETTINGS. */
+export async function listSettings(db: D1Database): Promise<(SettingDefinition & { value: number })[]> {
+  const { results } = await db.prepare("SELECT name, value FROM settings").all<{ name: string; value: number }>();
+  const values = new Map(results.map((row) => [row.name, row.value]));
+  return SETTINGS.map((definition) => {
+    const value = values.get(definition.name);
+    if (value === undefined) throw new Error(`The setting ${definition.name} is missing; apply the migrations.`);
+    return { ...definition, value };
+  });
+}
+
+/**
+ * Sets one of the dashboard's settings, from the Settings tab. Returns the value it had, or null
+ * when it already had this one (so an unchanged value is not recorded as a change).
+ */
+export async function setSetting(db: D1Database, name: string, value: number): Promise<number | null> {
+  const row = await db.prepare("SELECT value FROM settings WHERE name = ?").bind(name).first<{ value: number }>();
+  if (row === null) throw new Error(`The setting ${name} is missing; apply the migrations.`);
+  if (row.value === value) return null;
+  await db.prepare("UPDATE settings SET value = ? WHERE name = ?").bind(value, name).run();
+  return row.value;
+}
+
+/** The solver host's and Cloudflare's monthly costs in US cents, for the Costs tab (M13.3). */
+export async function fixedCosts(db: D1Database): Promise<{ solverHostCents: number; platformCents: number }> {
+  const { results } = await db
+    .prepare("SELECT name, value FROM settings WHERE name IN ('solver_host_monthly_cents', 'platform_monthly_cents')")
+    .all<{ name: string; value: number }>();
+  const value = (name: string) => {
+    const row = results.find((r) => r.name === name);
+    if (row === undefined) throw new Error(`The setting ${name} is missing; apply the migrations.`);
+    return row.value;
+  };
+  return { solverHostCents: value("solver_host_monthly_cents"), platformCents: value("platform_monthly_cents") };
 }

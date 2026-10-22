@@ -6,7 +6,7 @@ import schema from "../../schemas/admin.schema.json";
 import { validator } from "../validate";
 
 /**
- * Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) the event log (M13.1) and the dashboard's overview and jobs (M13.2). Only the admin reaches them. Each message is a definition under $defs.
+ * Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) the event log (M13.1) the dashboard's overview and jobs (M13.2), and its settings and costs (M13.3). Only the admin reaches them. Each message is a definition under $defs.
  */
 export interface Admin {
   [k: string]: unknown;
@@ -45,6 +45,14 @@ export interface AdminUser {
    * Billed machine seconds of their jobs that finished this calendar month (UTC).
    */
   machineSecondsThisMonth: number;
+  /**
+   * Their jobs that finished this calendar month (UTC), whatever the outcome.
+   */
+  jobsThisMonth: number;
+  /**
+   * Of those, the ones that failed, whoever's fault.
+   */
+  failedJobsThisMonth: number;
   /**
    * True when their address may sign in now: the admin's, or on the allowlist.
    */
@@ -524,6 +532,168 @@ export interface SetMachineHoursCapRequest {
 export interface AddAllowedRequest {
   email: string;
 }
+/**
+ * One setting the admin may change on the Settings tab (M13.3, ADR-128). The stored value is a whole number; the dashboard shows it divided by scale, in unit.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "AdminSetting".
+ */
+export interface AdminSetting {
+  /**
+   * The row of the settings table.
+   */
+  name: string;
+  group: "accounts" | "queue" | "storage" | "machines" | "costs";
+  label: string;
+  /**
+   * What it does, in plain words.
+   */
+  description: string;
+  /**
+   * The unit it is shown in, such as GiB, days or USD.
+   */
+  unit: string;
+  /**
+   * Stored units per shown unit, such as 1073741824 bytes per GiB.
+   */
+  scale: number;
+  /**
+   * The smallest stored value allowed.
+   */
+  min: number;
+  /**
+   * The largest stored value allowed.
+   */
+  max: number;
+  /**
+   * The stored value now.
+   */
+  value: number;
+}
+/**
+ * Answer of GET /api/admin/settings and PUT /api/admin/settings/{name}.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "SettingsResponse".
+ */
+export interface SettingsResponse {
+  settings: AdminSetting[];
+}
+/**
+ * Body of PUT /api/admin/settings/{name}: the new stored value, which must be a whole number from the setting's min to its max.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "SetSettingRequest".
+ */
+export interface SetSettingRequest {
+  value: number;
+}
+/**
+ * One user's usage in the month.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "CostsUser".
+ */
+export interface CostsUser {
+  userId: string;
+  name: string;
+  email: string | null;
+  /**
+   * Jobs that finished in the month.
+   */
+  jobs: number;
+  /**
+   * Solve jobs that finished in the month.
+   */
+  solveRuns: number;
+  /**
+   * Their billed machine seconds.
+   */
+  machineSeconds: number;
+  /**
+   * Micro-credits charged for jobs in the month.
+   */
+  jobMicroCredits: number;
+  /**
+   * Micro-credits charged for storage in the month.
+   */
+  storageMicroCredits: number;
+}
+/**
+ * One job type's usage in the month.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "CostsJobType".
+ */
+export interface CostsJobType {
+  type: "noop" | "import" | "mesh" | "solve" | "report";
+  /**
+   * Jobs that finished in the month.
+   */
+  jobs: number;
+  /**
+   * Their billed machine seconds.
+   */
+  machineSeconds: number;
+  /**
+   * Micro-credits charged for jobs in the month.
+   */
+  jobMicroCredits: number;
+}
+/**
+ * The month's usage over all users.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "CostsTotals".
+ */
+export interface CostsTotals {
+  /**
+   * Jobs that finished in the month.
+   */
+  jobs: number;
+  /**
+   * Solve jobs that finished in the month.
+   */
+  solveRuns: number;
+  /**
+   * Their billed machine seconds.
+   */
+  machineSeconds: number;
+  /**
+   * Micro-credits charged for jobs in the month.
+   */
+  jobMicroCredits: number;
+  /**
+   * Micro-credits charged for storage in the month.
+   */
+  storageMicroCredits: number;
+}
+/**
+ * Answer of GET /api/admin/costs?month=YYYY-MM (M13.3, ADR-128): one calendar month's (UTC) usage by user and by job type, and the beta's monthly costs from the settings.
+ *
+ * This interface was referenced by `Admin`'s JSON-Schema
+ * via the `definition` "CostsResponse".
+ */
+export interface CostsResponse {
+  month: string;
+  /**
+   * What the solver host costs a month, in US cents (setting solver_host_monthly_cents).
+   */
+  solverHostCents: number;
+  /**
+   * What Cloudflare costs a month, in US cents (setting platform_monthly_cents).
+   */
+  platformCents: number;
+  totals: CostsTotals;
+  /**
+   * Users with any job or charge in the month, the most machine time first.
+   */
+  byUser: CostsUser[];
+  /**
+   * Job types with any job in the month, the most machine time first.
+   */
+  byType: CostsJobType[];
+}
 
 export const validateAllowedEmail = validator<AllowedEmail>(schema, "AllowedEmail");
 export const validateAdminUser = validator<AdminUser>(schema, "AdminUser");
@@ -549,3 +719,10 @@ export const validateSetQueuePausedRequest = validator<SetQueuePausedRequest>(sc
 export const validateSwitchCloudSizeRequest = validator<SwitchCloudSizeRequest>(schema, "SwitchCloudSizeRequest");
 export const validateSetMachineHoursCapRequest = validator<SetMachineHoursCapRequest>(schema, "SetMachineHoursCapRequest");
 export const validateAddAllowedRequest = validator<AddAllowedRequest>(schema, "AddAllowedRequest");
+export const validateAdminSetting = validator<AdminSetting>(schema, "AdminSetting");
+export const validateSettingsResponse = validator<SettingsResponse>(schema, "SettingsResponse");
+export const validateSetSettingRequest = validator<SetSettingRequest>(schema, "SetSettingRequest");
+export const validateCostsUser = validator<CostsUser>(schema, "CostsUser");
+export const validateCostsJobType = validator<CostsJobType>(schema, "CostsJobType");
+export const validateCostsTotals = validator<CostsTotals>(schema, "CostsTotals");
+export const validateCostsResponse = validator<CostsResponse>(schema, "CostsResponse");
