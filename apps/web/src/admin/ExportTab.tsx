@@ -39,6 +39,12 @@ export function ExportTab({ onSignedOut }: { onSignedOut: (notice?: string) => v
   const [problem, setProblem] = useState<string | undefined>();
   const [saved, setSaved] = useState<string | undefined>();
 
+  /** A new range; a refusal of the old one no longer applies. */
+  function choose(next: { from: string; to: string }) {
+    setRange(next);
+    setProblem(undefined);
+  }
+
   async function download(table: string, format: ExportFormat) {
     const key = `${table}.${format}`;
     setBusy(key);
@@ -74,7 +80,7 @@ export function ExportTab({ onSignedOut }: { onSignedOut: (notice?: string) => v
             type="date"
             value={range.from}
             max={range.to}
-            onChange={(event) => setRange({ ...range, from: event.target.value })}
+            onChange={(event) => choose({ ...range, from: event.target.value })}
           />
         </label>
         <label className="field">
@@ -83,7 +89,7 @@ export function ExportTab({ onSignedOut }: { onSignedOut: (notice?: string) => v
             type="date"
             value={range.to}
             min={range.from}
-            onChange={(event) => setRange({ ...range, to: event.target.value })}
+            onChange={(event) => choose({ ...range, to: event.target.value })}
           />
         </label>
         <button type="button" disabled={busy !== null} onClick={() => void download("all", "xlsx")}>
@@ -118,9 +124,11 @@ export function ExportTab({ onSignedOut }: { onSignedOut: (notice?: string) => v
               <tr key={table.id}>
                 <td>{table.label}</td>
                 <td>{table.holds}</td>
-                <td className="admin-export-buttons">
-                  {button(table.id, "csv", table.label)}
-                  {button(table.id, "xlsx", table.label)}
+                <td>
+                  <div className="admin-export-buttons">
+                    {button(table.id, "csv", table.label)}
+                    {button(table.id, "xlsx", table.label)}
+                  </div>
                 </td>
               </tr>
             ))}

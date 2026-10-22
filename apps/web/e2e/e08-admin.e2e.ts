@@ -187,6 +187,7 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await expect(admin.getByRole("alert")).toHaveText("The range ends before it starts. Choose a later end day.");
     await admin.getByLabel("From (UTC)").fill(`${today.slice(0, 7)}-01`);
     await admin.getByLabel("To (UTC)").fill(today);
+    await expect(admin.getByRole("alert")).toHaveCount(0);
     await page.screenshot({ path: `${OUT}/e08-dashboard-export.png` });
 
     await admin.getByRole("button", { name: "Close" }).click();
