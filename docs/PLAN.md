@@ -211,7 +211,7 @@ Two threads at a time: thread A takes M11.1, M12, M13 and M16; thread B takes M1
 
 - [ ] M11.1 Cloudflare Access service token (ADR-111): the worker sends `CF-Access-Client-Id` and `CF-Access-Client-Secret` and treats a non-JSON answer as "blocked by Access" with back-off instead of crashing; the deploy health check, the Live checks workflow and the verification harness send them too; the web app says when the Access sign-in has expired; `deploy.yml` stops building and registering the AWS solver image, since AWS is being deleted. Needs: the service token, a Service Auth policy and two GitHub secrets.
 - [x] M11.2 Polling discipline (ADR-112): one shared polling hook (2 s doubling to 30 s, paused in hidden tabs, one request in flight, stops at a final state) replaces the geometry, mesh, run and report timers; the job status answer carries the queue position and a `retryAfter` hint; the machine-wait poll folds into it.
-- [ ] M11.3 Server protections (ADR-112): the launcher runs only after routes that queue a job; the lost-job sweep only in the per-minute cron; per-user and total queue limits; Workers rate limiting on `/api`; the limits as settings.
+- [x] M11.3 Server protections (ADR-112): the launcher runs only after routes that queue a job; the lost-job sweep only in the per-minute cron; per-user and total queue limits; Workers rate limiting on `/api`; the limits as settings.
 
 Order: M11.1 and M11.2 in parallel, M11.3 after M11.2. Fixing the AWS launcher (stopping a machine that never checks in, counting it as running, pausing starts after a failure streak) is parked until AWS returns for production, with the maintainer's review.
 

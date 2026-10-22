@@ -38,6 +38,13 @@ describe("productionConfig", () => {
     });
   });
 
+  it("limits each user's requests on the live site only (M11.3)", () => {
+    expect(config.ratelimits).toEqual([
+      { name: "API_RATE_LIMIT", namespace_id: "1001", simple: { limit: 120, period: 60 } },
+    ]);
+    expect(BASE).not.toHaveProperty("ratelimits");
+  });
+
   it("keeps the code, compatibility date, bindings and cron triggers the tests run against", () => {
     expect(config.main).toBe(BASE.main);
     expect(config.compatibility_date).toBe(BASE.compatibility_date);

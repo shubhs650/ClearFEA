@@ -14,6 +14,8 @@ import { Hono } from "hono";
 import { readBody } from "../body";
 import {
   confirmUnit,
+  UNIT_SETTABLE,
+  unitNeedsImport,
   createGeometry,
   type Geometry,
   type GeometryFile,
@@ -21,6 +23,7 @@ import {
   getGeometry,
   listGeometries,
 } from "../db/geometries";
+import { launchesMachines, queueRefusal, refused } from "../jobs/limits";
 import { jobWait } from "../jobs/wait";
 import { requireUser, type SessionEnv } from "../session";
 
@@ -113,7 +116,7 @@ function looksLikeStep(head: Uint8Array): boolean {
   return text.startsWith("ISO-10303-21");
 }
 
-geometries.post("/", async (c) => {
+geometries.post("/", launchesMachines, async (c) => {
   // A cross-site HTML form cannot send this type without the browser asking first, which
   // the API never allows (the same reason JSON bodies must say application/json).
   if ((c.req.header("Content-Type") ?? "").split(";")[0]?.trim() !== "application/octet-stream") {
@@ -133,6 +136,9 @@ geometries.post("/", async (c) => {
   if (declared > MAX_STEP_BYTES) {
     return c.json({ error: `The file is larger than ${MAX_STEP_BYTES / 1e6} MB, the most ClearFEA accepts.` }, 413);
   }
+  // Refused before the file is stored, so a full queue costs no upload (M11.3, ADR-112).
+  const full = await queueRefusal(c.env, c.var.userId, "import");
+  if (full !== null) return refused(c, full);
   // Streamed to storage, not read into memory: a Worker has 128 MB (ADR-095 item 4). Only the
   // first bytes are read here, to check that this is a STEP file before anything is stored.
   const reader = (c.req.raw.body ?? new ReadableStream<Uint8Array>()).getReader();
@@ -212,7 +218,7 @@ geometries.get("/:id/display", (c) =>
   output(c, c.req.param("id"), "display.bin", "application/octet-stream"),
 );
 
-geometries.post("/:id/unit", async (c) => {
+geometries.post("/:id/unit", launchesMachines, async (c) => {
   const body = await readBody(
     c.req.raw,
     validateConfirmUnitRequest,
@@ -230,6 +236,10 @@ geometries.post("/:id/unit", async (c) => {
   }
   const geometry = await getGeometry(c.env.DB, c.var.userId, c.req.param("id"));
   if (geometry === null) return c.json({ error: NOT_FOUND }, 404);
+  if (UNIT_SETTABLE.includes(geometry.status) && !geometry.unitLocked && unitNeedsImport(geometry, unit)) {
+    const full = await queueRefusal(c.env, c.var.userId, "import");
+    if (full !== null) return refused(c, full);
+  }
   const change = await confirmUnit(c.env.DB, c.var.userId, geometry, unit);
   if (change.kind === "notAllowed") {
     const why =

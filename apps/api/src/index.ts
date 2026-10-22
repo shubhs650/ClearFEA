@@ -9,7 +9,6 @@ import { authMode, configurationProblem } from "./session";
 import { googleAuth } from "./session/google";
 import { sweepLostJobs } from "./jobs/outcome";
 import { ensureMachines } from "./launcher";
-import { cloudMachines } from "./db/machines";
 import { admin } from "./routes/admin";
 import { geometries } from "./routes/geometries";
 import { jobs } from "./routes/jobs";
@@ -42,22 +41,6 @@ app.get("/api/health", async (c) => {
       commit: c.env.CLEARFEA_COMMIT || "development",
     } satisfies HealthResponse,
     ok ? 200 : 503,
-  );
-});
-
-// A request that changed something may have queued a job: on cloud machines the launcher then
-// starts a machine for it, after the answer has gone (M10.7, ADR-100).
-app.use("/api/*", async (c, next) => {
-  await next();
-  if (c.req.method === "GET" || c.res.status >= 400 || !cloudMachines(c.env)) return;
-  let context: typeof c.executionCtx;
-  try {
-    context = c.executionCtx;
-  } catch {
-    return; // no execution context: app.request in tests, where nothing may reach AWS
-  }
-  context.waitUntil(
-    ensureMachines(c.env).catch((error) => console.error("The launcher failed after a request:", error)),
   );
 });
 
@@ -97,9 +80,9 @@ app.route("/internal", internal);
 const EVERY_MINUTE = "* * * * *";
 
 /**
- * The cron triggers in wrangler.jsonc. Each minute: fail jobs whose worker is lost (M8.4), which
- * every worker's claim does as well, and on cloud machines start a machine again for work left
- * waiting (M10.7, ADR-100). Daily, and on any other call such as `make dev`'s hourly one: the
+ * The cron triggers in wrangler.jsonc. Each minute: fail jobs whose worker is lost (M8.4), the
+ * only place that looks for them over all workers (M11.3, ADR-112), and on cloud machines start
+ * a machine again for work left waiting (M10.7, ADR-100). Daily, and on any other call such as `make dev`'s hourly one: the
  * storage sweep (M8.6, ADR-086), which removes raw solver output past its retention period and
  * charges storage above the free allowance, after the lost-job sweep.
  */

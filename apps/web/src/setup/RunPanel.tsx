@@ -28,6 +28,7 @@
 // Numbers only: no verdict is ever drawn from them (CLAUDE.md).
 
 import {
+  atStopCeiling,
   DEFAULT_STOP_MULTIPLIER,
   type ElementOrder,
   frozenRunSolver,
@@ -759,7 +760,10 @@ function RunningJob({
               <dt>Stop limit</dt>
               <dd data-testid="run-stop-limit">
                 {limitTime(run.stopLimit.seconds)}
-                <span className="field-hint"> ({run.stopLimit.multiplier} × the estimate)</span>
+                <span className="field-hint">
+                  {" "}
+                  ({atStopCeiling(run.stopLimit.seconds) ? "the 12-hour ceiling" : `${run.stopLimit.multiplier} × the estimate`})
+                </span>
               </dd>
             </>
           )}
@@ -852,7 +856,14 @@ function RunRecord({ run, currentSpec }: { run: RunView; currentSpec: Simulation
             <dt>Stop limit</dt>
             <dd>
               {limitTime(run.stopLimit.seconds)}
-              <span className="field-hint"> ({run.stopLimit.multiplier} × the estimated time)</span>
+              <span className="field-hint">
+                {" "}
+                (
+                {atStopCeiling(run.stopLimit.seconds)
+                  ? "the 12-hour ceiling"
+                  : `${run.stopLimit.multiplier} × the estimated time`}
+                )
+              </span>
             </dd>
           </>
         )}

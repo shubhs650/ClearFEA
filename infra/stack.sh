@@ -61,6 +61,11 @@ stack_start() {
     die "Applying the migrations failed; see $out/api.log."
   "${wrangler[@]}" d1 execute DB --local --persist-to "$state" --file seed/test-users.sql >>"$out/api.log" 2>&1 ||
     die "Seeding the test users failed; see $out/api.log."
+  # Every case and browser test runs as alice in one day, more runs than one user may start
+  # (M11.3, ADR-112); the other queue limits stay as on the live site.
+  "${wrangler[@]}" d1 execute DB --local --persist-to "$state" \
+    --command "UPDATE settings SET value = 1000 WHERE name = 'runs_per_user_per_day'" >>"$out/api.log" 2>&1 ||
+    die "Raising the daily run limit failed; see $out/api.log."
 
   say "Starting the API on :$port and the worker container (logs in $out)."
   "${wrangler[@]}" dev --port "$port" --persist-to "$state" </dev/null >>"$out/api.log" 2>&1 &

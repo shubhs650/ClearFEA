@@ -88,8 +88,10 @@ export { type Validation, validator } from "./validate";
 export { checkMaterialLibrary, materialLibrary } from "./library";
 export { credits, MICRO_CREDITS } from "./credits";
 export {
+  atStopCeiling,
   DEFAULT_STOP_MULTIPLIER,
   MAX_STOP_MULTIPLIER,
+  MAX_STOP_SECONDS,
   MIN_STOP_MULTIPLIER,
   MIN_STOP_SECONDS,
   stopLimitSeconds,

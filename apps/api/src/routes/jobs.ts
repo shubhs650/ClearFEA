@@ -12,6 +12,7 @@ import {
 import { Hono } from "hono";
 import { readBody } from "../body";
 import { createJob, getJob, type Job, listJobs } from "../db/jobs";
+import { launchesMachines, queueRefusal, refused } from "../jobs/limits";
 import { jobWait } from "../jobs/wait";
 import { requireUser, type SessionEnv } from "../session";
 
@@ -35,7 +36,7 @@ function view(job: Job): JobView {
   };
 }
 
-jobs.post("/", async (c) => {
+jobs.post("/", launchesMachines, async (c) => {
   const body = await readBody(
     c.req.raw,
     validateCreateJobRequest,
@@ -43,6 +44,8 @@ jobs.post("/", async (c) => {
     "jobs.schema.json",
   );
   if ("error" in body) return c.json({ error: body.error }, 400);
+  const full = await queueRefusal(c.env, c.var.userId, body.value.type);
+  if (full !== null) return refused(c, full);
   const job = await createJob(c.env.DB, c.var.userId, body.value.type);
   return c.json({ job: view(job) } satisfies JobResponse, 201);
 });

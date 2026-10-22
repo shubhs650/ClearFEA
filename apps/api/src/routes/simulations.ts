@@ -82,6 +82,7 @@ import { getReportOptions, saveReportOptions } from "../db/report";
 import { deleteView, listViews, saveView } from "../db/views";
 import type { Env } from "../env";
 import { jobWait } from "../jobs/wait";
+import { launchesMachines, queueRefusal, refused } from "../jobs/limits";
 import { requireUser, type SessionEnv } from "../session";
 import { meshView } from "./meshes";
 import { projectUnitSystem } from "./projects";
@@ -215,7 +216,7 @@ simulations.get("/:id/mesh", async (c) => {
  * still-meshing mesh of the same geometry, scaling and settings, that mesh becomes the
  * simulation's mesh instead (M2.10, ADR-047).
  */
-simulations.post("/:id/mesh", async (c) => {
+simulations.post("/:id/mesh", launchesMachines, async (c) => {
   const simulation = await getSimulation(c.env.DB, c.var.userId, c.req.param("id"));
   if (simulation === null) return c.json({ error: NOT_FOUND }, 404);
   const size = simulation.spec.mesh.size;
@@ -265,6 +266,8 @@ simulations.post("/:id/mesh", async (c) => {
   // On the live site, no machine may be startable or the month's machine hours used up (M10.7).
   const noMachine = await machineRefusal(c.env);
   if (noMachine !== null) return c.json({ error: noMachine }, 409);
+  const full = await queueRefusal(c.env, c.var.userId, "mesh");
+  if (full !== null) return refused(c, full);
   const { mesh } = await createMesh(c.env.DB, c.var.userId, { ...request, simulationId: simulation.id, hash });
   return c.json({ mesh: meshView(mesh), reused: false } satisfies MeshResponse, 201);
 });
@@ -361,7 +364,7 @@ simulations.get("/:id/estimate", async (c) => {
  * than the wallet holds (M8.1, ADR-080). The run is stopped if it is still solving at its stop
  * limit, a multiple of the estimated time that the body may set (M8.3, ADR-087).
  */
-simulations.post("/:id/runs", async (c) => {
+simulations.post("/:id/runs", launchesMachines, async (c) => {
   let request: CreateRunRequest = {};
   // An empty body asks for the recommended size.
   if ((await c.req.raw.clone().text()) !== "") {
@@ -412,6 +415,8 @@ simulations.post("/:id/runs", async (c) => {
   // On the live site, no machine may be startable or the month's machine hours used up (M10.7).
   const noMachine = await machineRefusal(c.env);
   if (noMachine !== null) return c.json({ error: noMachine }, 409);
+  const full = await queueRefusal(c.env, c.var.userId, "solve");
+  if (full !== null) return refused(c, full);
   const multiplier = request.stopMultiplier ?? DEFAULT_STOP_MULTIPLIER;
   const created = await createRun(c.env.DB, c.var.userId, {
     simulationId: simulation.id,

@@ -4,6 +4,7 @@
 // worker's completion route and by the sweep that fails jobs whose worker is lost (M8.4).
 
 import {
+  atStopCeiling,
   type RunFileName,
   validateImportResult,
   validateMeshResult,
@@ -94,7 +95,7 @@ function stoppedProblem(reason: StopReason, charge: JobCharge | null, job: Job |
   const limit =
     job?.stopAfterSeconds == null || job.stopMultiplier === null
       ? ""
-      : ` of ${usedTime(job.stopAfterSeconds)} (${job.stopMultiplier} × the estimated time)`;
+      : ` of ${usedTime(job.stopAfterSeconds)} (${atStopCeiling(job.stopAfterSeconds) ? "the 12-hour ceiling" : `${job.stopMultiplier} × the estimated time`})`;
   return (
     `The run reached its stop limit${limit} and was stopped${time}.${charged} ` +
     "If it needs longer, raise the stop limit and run it again; a coarser mesh or a faster solver also shortens it."
@@ -173,8 +174,9 @@ export function lostBillableMs(job: Job): number {
 }
 
 /**
- * Fails every job whose worker is lost (M8.4): silent for the heartbeat timeout, or held by the
- * worker now asking for a job (`claimingWorker`), which had restarted. Each is a fault in
+ * Fails every job whose worker is lost (M8.4): silent for the heartbeat timeout (the cron), or,
+ * when `claimingWorker` is given, only the jobs held by that worker now asking for a job, which
+ * had restarted (a claim). Each is a fault in
  * ClearFEA, not charged, and its record says so. Returns how many it failed.
  */
 export async function sweepLostJobs(env: Env, claimingWorker: string | null = null): Promise<number> {

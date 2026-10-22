@@ -86,9 +86,15 @@ export async function sessionUserId(c: Context<SessionEnv>): Promise<string | nu
   return token === undefined ? null : readToken(c.env.SESSION_SECRET ?? "", token, now());
 }
 
+/** Requests one user may make per minute on the live site (M11.3, ADR-112); its API_RATE_LIMIT binding holds it. */
+export const REQUESTS_PER_MINUTE = 120;
+
+export const RATE_LIMITED_MESSAGE = `Your account sent more than ${REQUESTS_PER_MINUTE} requests in the last minute, the most the API answers. Wait a minute, then try again; if a page keeps doing this, reload it.`;
+
 /**
  * Refuses the request unless the session names a user who still exists (a wiped local
- * database leaves old cookies behind), then sets `c.var.userId`.
+ * database leaves old cookies behind), then sets `c.var.userId`. Each user's requests are
+ * counted by Workers rate limiting, and one over the limit is refused (M11.3, ADR-112).
  */
 export const requireUser: MiddlewareHandler<SessionEnv> = async (c, next) => {
   const problem = configurationProblem(c.env);
@@ -96,6 +102,9 @@ export const requireUser: MiddlewareHandler<SessionEnv> = async (c, next) => {
   const userId = await sessionUserId(c);
   if (userId === null || (await getUser(c.env.DB, userId)) === null) {
     return c.json({ error: SIGNED_OUT_MESSAGE }, 401);
+  }
+  if (c.env.API_RATE_LIMIT !== undefined && !(await c.env.API_RATE_LIMIT.limit({ key: userId })).success) {
+    return c.json({ error: RATE_LIMITED_MESSAGE }, 429, { "Retry-After": "60" });
   }
   c.set("userId", userId);
   await next();

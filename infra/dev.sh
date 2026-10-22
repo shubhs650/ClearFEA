@@ -101,10 +101,18 @@ run worker "${compose[@]}" up --build worker
     if curl -fsS -o /dev/null http://127.0.0.1:8787/api/health 2>/dev/null &&
       curl -fsS -o /dev/null http://127.0.0.1:5173/ 2>/dev/null; then
       say "Ready: open http://localhost:5173 (API on http://localhost:8787)."
+      # Cron triggers never fire under wrangler dev: the storage sweep now and hourly (ADR-086),
+      # and the per-minute tick, the only one that fails jobs of a silent worker (M11.3, ADR-112).
+      minute=0
       while true; do
-        curl -fsS -o /dev/null http://127.0.0.1:8787/__scheduled 2>/dev/null ||
-          say "The storage sweep did not run; check the [api] lines above."
-        sleep 3600
+        if [ $((minute % 60)) -eq 0 ]; then
+          curl -fsS -o /dev/null http://127.0.0.1:8787/__scheduled 2>/dev/null ||
+            say "The storage sweep did not run; check the [api] lines above."
+        fi
+        curl -fsS -o /dev/null 'http://127.0.0.1:8787/__scheduled?cron=*+*+*+*+*' 2>/dev/null ||
+          say "The per-minute tick did not run; check the [api] lines above."
+        minute=$((minute + 1))
+        sleep 60
       done
     fi
     sleep 1
