@@ -112,6 +112,12 @@
           "pattern": "^[A-Za-z0-9._-]{1,64}$"
         },
         "managerVersion": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "startedAt": {
+          "description": "ISO 8601 UTC: when the compute manager started (M13.1, ADR-125). A new value while the host stays online is recorded as a restart of the manager.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
         "load": { "$ref": "#/$defs/HostLoad" }
       }
     },

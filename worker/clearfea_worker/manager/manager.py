@@ -20,6 +20,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +60,11 @@ IMAGE_RETRY_SECONDS = 60.0
 DISK_RETRY_SECONDS = 60.0
 #: Longest wait for the short container that reports an image's software versions.
 SOFTWARE_TIMEOUT_SECONDS = 120.0
+
+
+def _utc_now() -> str:
+    """Now as ISO 8601 UTC, as the API stores times."""
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 @dataclass
@@ -103,6 +109,8 @@ class Manager:
     _software: dict[str, WorkerSoftware] = field(default_factory=dict, init=False)
     _host_cpus: int = field(default=1, init=False)
     _next_check_in: float = field(default=0.0, init=False)
+    #: When this manager started, in every check-in: a new value is a restart (M13.1, ADR-125).
+    _started_at: str = field(default_factory=_utc_now, init=False)
     _cpu_times: CpuTimes | None = field(default=None, init=False)
     _disk: str = field(default="/", init=False)
     _load_failed: bool = field(default=False, init=False)
@@ -200,7 +208,9 @@ class Manager:
         now = self.clocks.monotonic()
         load = self._host_load()
         try:
-            interval = self._lanes[0].client.check_in(self.settings.host, clearfea_version(), load)
+            interval = self._lanes[0].client.check_in(
+                self.settings.host, clearfea_version(), load, self._started_at
+            )
         except ApiError as error:
             log.warning("Check-in failed: %s", error)
             self._next_check_in = now + CHECK_IN_RETRY_SECONDS

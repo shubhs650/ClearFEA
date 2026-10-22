@@ -2,7 +2,12 @@
 // Google sign-in (M10.3, ADR-097) through the API's own routes, with Google's token endpoint
 // answered here: the sign-in start, Google's callback, the allowlist checked at user and session
 // creation, the admin page's routes, sign-out, and the password login refused in "google" mode.
-import { validateAdminResponse, validateSessionResponse, validateSignInOptions } from "@clearfea/spec";
+import {
+  validateAdminResponse,
+  validateEventsResponse,
+  validateSessionResponse,
+  validateSignInOptions,
+} from "@clearfea/spec";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../src/index";
@@ -92,6 +97,7 @@ afterEach(() => {
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM allowed_emails"),
+    env.DB.prepare("DELETE FROM events"),
     env.DB.prepare("DELETE FROM auth_sessions"),
     env.DB.prepare("DELETE FROM auth_accounts"),
     env.DB.prepare("DELETE FROM auth_verifications"),
@@ -255,6 +261,67 @@ describe("Google sign-in", () => {
     await call("PUT", "/api/admin/machine-hours-cap", { jar: admin, json: { hours: 60 } });
     const row = await env.DB.prepare("SELECT value FROM settings WHERE name = 'machine_hours_cap'").first<{ value: number }>();
     expect(row?.value).toBe(60);
+  });
+
+  it("records sign-ins, refusals and the admin's changes in the event log (M13.1)", async () => {
+    const { jar: admin } = await signInWithGoogle({ sub: "g-admin", email: ADMIN });
+    await signInWithGoogle({ sub: "g-stranger", email: "stranger@gmail.com" });
+    await signInWithGoogle({ sub: "g-unverified", email: "unverified@gmail.com", verified: false });
+    expect((await call("POST", "/api/admin/allowed", { jar: admin, json: { email: "Colleague@Gmail.com" } })).status).toBe(200);
+    await signInWithGoogle({ sub: "g-colleague", email: "colleague@gmail.com" });
+    expect((await call("DELETE", "/api/admin/allowed/colleague%40gmail.com", { jar: admin })).status).toBe(200);
+    // Refused at session creation now, as a known user.
+    await signInWithGoogle({ sub: "g-colleague", email: "colleague@gmail.com" });
+    expect((await call("PUT", "/api/admin/machine-sizes/large", { jar: admin, json: { enabled: true } })).status).toBe(200);
+    expect((await call("PUT", "/api/admin/machine-hours-cap", { jar: admin, json: { hours: 60 } })).status).toBe(200);
+    // Refused changes are not actions.
+    expect((await call("PUT", "/api/admin/machine-sizes/medium", { jar: admin, json: { enabled: false } })).status).toBe(400);
+
+    const response = await call("GET", "/api/admin/events?limit=50", { jar: admin });
+    expect(response.status).toBe(200);
+    const answer = validateEventsResponse(await response.json());
+    if (!answer.ok) throw new Error(answer.errors.join(" "));
+    const ids = await env.DB.prepare("SELECT id, email FROM users").all<{ id: string; email: string }>();
+    const idOf = (email: string) => ids.results.find((u) => u.email === email)?.id ?? null;
+    const adminId = idOf("admin.person@gmail.com");
+    const colleagueId = idOf("colleague@gmail.com");
+    expect(
+      answer.value.events.reverse().map((e) => [e.kind, e.level, e.userId, e.message, e.detail]),
+    ).toEqual([
+      ["sign_in", "info", adminId, "admin.person@gmail.com signed in with Google.", { method: "google", email: "admin.person@gmail.com" }],
+      [
+        "sign_in_refused",
+        "warning",
+        null,
+        "A Google sign-in as stranger@gmail.com was refused: it is not invited.",
+        { method: "google", email: "stranger@gmail.com", reason: "not_invited" },
+      ],
+      [
+        "sign_in_refused",
+        "warning",
+        null,
+        "A Google sign-in as unverified@gmail.com was refused: Google has not verified the address.",
+        { method: "google", email: "unverified@gmail.com", reason: "unverified" },
+      ],
+      ["admin_action", "info", adminId, "Invited colleague@gmail.com.", { action: "allowlist_add", email: "colleague@gmail.com" }],
+      ["sign_in", "info", colleagueId, "colleague@gmail.com signed in with Google.", { method: "google", email: "colleague@gmail.com" }],
+      [
+        "admin_action",
+        "info",
+        adminId,
+        "Removed colleague@gmail.com from the invited addresses and ended their sessions.",
+        { action: "allowlist_remove", email: "colleague@gmail.com" },
+      ],
+      [
+        "sign_in_refused",
+        "warning",
+        colleagueId,
+        "A Google sign-in as colleague@gmail.com was refused: it is not invited.",
+        { method: "google", email: "colleague@gmail.com", reason: "not_invited" },
+      ],
+      ["admin_action", "info", adminId, "Switched the large machine size on.", { action: "machine_size", size: "large", enabled: true }],
+      ["admin_action", "info", adminId, "Set the monthly machine-hours cap to 60 h.", { action: "machine_hours_cap", hours: 60 }],
+    ]);
   });
 
   it("gives a returning user their same account and no second grant", async () => {

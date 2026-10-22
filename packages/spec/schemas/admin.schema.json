@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Admin",
-  "description": "Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) and the solver machines started on AWS (M10.7). Only the admin reaches them. Each message is a definition under $defs.",
+  "description": "Wire shapes of the admin routes (M10.3, ADR-097): the allowlist of addresses that may sign in with Google, the users, the cloud machine sizes (M10.6) the solver machines started on AWS (M10.7), the statistics (M12.3) and the event log (M13.1). Only the admin reaches them. Each message is a definition under $defs.",
   "$defs": {
     "AllowedEmail": {
       "type": "object",
@@ -213,6 +213,48 @@
       "additionalProperties": false,
       "required": ["samples"],
       "properties": { "samples": { "type": "array", "items": { "$ref": "#/$defs/HostLoadSample" } } }
+    },
+    "AdminEvent": {
+      "description": "One entry of the event log (M13.1, ADR-113, ADR-125): what happened, to whom and how serious it is. For support: ids and plain words, never a project's name, model or results.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "at", "kind", "level", "userId", "jobId", "host", "message", "detail"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "at": { "type": "string", "description": "ISO 8601 UTC." },
+        "kind": {
+          "description": "sign_in and sign_in_refused: a sign-in, or one refused (Google, a local password or the verification token); job_failed: a job ended failed, through the user's setup (info) or a fault in ClearFEA (error); job_retried: a machine fault ended a try and the job was queued again; host_online and host_offline: the solver host checked in after a silence (or for the first time), or has been silent for 120 s; manager_started: its compute manager restarted while the host stayed online; admin_action: the admin changed something.",
+          "enum": [
+            "sign_in",
+            "sign_in_refused",
+            "job_failed",
+            "job_retried",
+            "host_online",
+            "host_offline",
+            "manager_started",
+            "admin_action"
+          ]
+        },
+        "level": { "enum": ["info", "warning", "error"] },
+        "userId": {
+          "type": ["string", "null"],
+          "description": "The user it is about: who signed in, whose job it was, the admin who acted."
+        },
+        "jobId": { "type": ["string", "null"] },
+        "host": { "type": ["string", "null"] },
+        "message": { "type": "string", "description": "One line in plain words." },
+        "detail": {
+          "type": ["object", "null"],
+          "description": "The particulars as named values, such as the failure cause, the try, or the address refused."
+        }
+      }
+    },
+    "EventsResponse": {
+      "description": "Answer of GET /api/admin/events: events newest first, filtered by ?kind=, ?level=, ?user=, ?since= and ?before= (times), at most ?limit= (up to 500).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["events"],
+      "properties": { "events": { "type": "array", "items": { "$ref": "#/$defs/AdminEvent" } } }
     },
     "SwitchCloudSizeRequest": {
       "description": "Body of PUT /api/admin/machine-sizes/{name}.",
