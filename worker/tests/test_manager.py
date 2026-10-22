@@ -162,6 +162,10 @@ def started(api: FakeApi, docker: FakeDocker, **changes: Any) -> tuple[Manager, 
     return manager, clock
 
 
+def claims(api: FakeApi) -> list[dict[str, Any]]:
+    return [body for path, body in api.calls if path.endswith("/claim")]
+
+
 def outcomes(api: FakeApi) -> list[tuple[str, dict[str, Any]]]:
     return [(path.split("/")[3], body) for path, body in api.calls if path.endswith("/complete")]
 
@@ -405,7 +409,7 @@ def test_a_missing_image_claims_nothing() -> None:
         manager, clock = started(api, docker)
         manager.tick()
         assert all(s.next_claim == clock.now + IMAGE_RETRY_SECONDS for s in manager.lanes)
-    assert api.calls == []
+    assert claims(api) == []
 
 
 def test_an_image_that_cannot_report_its_software_claims_nothing() -> None:
@@ -415,7 +419,7 @@ def test_an_image_that_cannot_report_its_software_claims_nothing() -> None:
         api.enqueue("s1", "solve")
         manager, _ = started(api, docker)
         manager.tick()
-    assert api.calls == []
+    assert claims(api) == []
     assert docker.containers_by_id == {}
 
 
@@ -431,6 +435,20 @@ def test_a_container_that_cannot_be_created_fails_its_job_uncharged() -> None:
     assert body["failureCause"] == "container_start_failed"
     assert body["metering"] == {"billableMs": 0}
     assert docker.volumes == set()
+
+
+def test_the_host_checks_in_at_start_and_when_the_api_says(  # M12.4, ADR-120
+) -> None:
+    docker = FakeDocker()
+    with FakeApi() as api:
+        manager, clock = started(api, docker)
+        manager.tick()
+        manager.tick()
+        clock.now += 30
+        manager.tick()
+    check_ins = [body for path, body in api.calls if path.endswith("/hosts/check-in")]
+    assert len(check_ins) == 2
+    assert check_ins[0]["host"] == "vps1" and check_ins[0]["managerVersion"]
 
 
 def test_an_idle_lane_asks_less_often_up_to_its_limit() -> None:

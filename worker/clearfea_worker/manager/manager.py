@@ -20,6 +20,7 @@ from typing import Any
 from ..api import AccessBlocked, ApiClient, ApiError, ClaimedJob
 from ..runner import ACCESS_BACKOFF_MAX_SECONDS
 from ..spec.jobs_schema import WorkerSoftware
+from ..versions import clearfea_version
 from .config import Lane, ManagerSettings
 from .containers import (
     HOST_LABEL,
@@ -43,6 +44,8 @@ CONTAINER_START_FAILED = "container_start_failed"
 JOB_TIMEOUT = "job_timeout"
 OUT_OF_MEMORY = "out_of_memory"
 
+#: Pause before checking in again after a check-in failed.
+CHECK_IN_RETRY_SECONDS = 30.0
 #: Pause before looking for a missing worker image again.
 IMAGE_RETRY_SECONDS = 60.0
 #: Longest wait for the short container that reports an image's software versions.
@@ -83,6 +86,7 @@ class Manager:
     _lanes: list[_LaneState] = field(default_factory=list, init=False)
     _software: dict[str, WorkerSoftware] = field(default_factory=dict, init=False)
     _host_cpus: int = field(default=1, init=False)
+    _next_check_in: float = field(default=0.0, init=False)
 
     def __post_init__(self) -> None:
         factory = self.client_factory or _default_client
@@ -154,11 +158,25 @@ class Manager:
         log.info("Manager stopping; job containers keep running and are followed after a restart")
 
     def tick(self) -> None:
+        if self.clocks.monotonic() >= self._next_check_in:
+            self._check_in()
         for state in self._lanes:
             if state.container is not None:
                 self._watch(state)
             elif self.clocks.monotonic() >= state.next_claim:
                 self._claim(state)
+
+    def _check_in(self) -> None:
+        """Tells the API the host is up, whatever the lanes are doing (M12.4, ADR-120): with
+        MACHINES=vps it refuses new jobs while no host has checked in for 2 minutes."""
+        now = self.clocks.monotonic()
+        try:
+            interval = self._lanes[0].client.check_in(self.settings.host, clearfea_version())
+        except ApiError as error:
+            log.warning("Check-in failed: %s", error)
+            self._next_check_in = now + CHECK_IN_RETRY_SECONDS
+            return
+        self._next_check_in = now + interval
 
     # A busy lane -----------------------------------------------------------------------------
 

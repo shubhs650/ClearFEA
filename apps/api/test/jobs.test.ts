@@ -137,11 +137,13 @@ describe("internal job routes", () => {
 
   it("lets users take turns in a lane rather than serving one user's queue first (M12.1)", async () => {
     const [a1, a2, b1] = await queued("alice", "alice", "bob");
-    expect(await claimedId("lane")).toBe(a1);
-    await finish("lane", a1);
+    const first = await claimedId("lane");
+    expect(first).toBe(a1);
+    await finish("lane", first);
     // alice was served last, so bob's job, queued after her second, goes first.
-    expect(await claimedId("lane")).toBe(b1);
-    await finish("lane", b1);
+    const second = await claimedId("lane");
+    expect(second).toBe(b1);
+    await finish("lane", second);
     expect(await claimedId("lane")).toBe(a2);
   });
 
@@ -149,8 +151,9 @@ describe("internal job routes", () => {
     await createJob(env.DB, "alice", "solve");
     expect((await claim("solve-lane", ["solve"])).status).toBe(200);
     const [a1, b1] = await queued("alice", "bob");
-    expect(await claimedId("light-lane")).toBe(b1);
-    await finish("light-lane", b1);
+    const first = await claimedId("light-lane");
+    expect(first).toBe(b1);
+    await finish("light-lane", first);
     expect(await claimedId("light-lane")).toBe(a1);
   });
 

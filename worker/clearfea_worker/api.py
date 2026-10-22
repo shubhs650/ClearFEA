@@ -27,6 +27,8 @@ from .spec.jobs_schema import (
     HeartbeatAction,
     HeartbeatRequest,
     HeartbeatResponse,
+    HostCheckIn,
+    HostCheckInResponse,
     JobType,
     Metering,
     WorkerSoftware,
@@ -232,6 +234,13 @@ class ApiClient:
         if status == 204 or body is None:
             return None
         return self._parse(ClaimResponse, "/jobs/claim", body).job
+
+    def check_in(self, host: str, manager_version: str | None = None) -> int:
+        """Says the solver host is up (M12.4, ADR-120). Returns the seconds until the next
+        check-in is due."""
+        extra = {} if manager_version is None else {"manager_version": manager_version}
+        _, body = self._post("/hosts/check-in", HostCheckIn(host=host, **extra))
+        return self._parse(HostCheckInResponse, "/hosts/check-in", body).interval_seconds
 
     def heartbeat(self, job_id: str, stage: str | None, log: str = "") -> HeartbeatAction:
         """Reports the job alive at ``stage``, with any log text written since the last one."""

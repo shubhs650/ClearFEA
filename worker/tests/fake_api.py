@@ -15,6 +15,8 @@ from clearfea_worker.spec.jobs_schema import (
     CompleteResponse,
     HeartbeatRequest,
     HeartbeatResponse,
+    HostCheckIn,
+    HostCheckInResponse,
 )
 
 # Every request and answer is checked against the shared schemas, so a test that passes
@@ -98,6 +100,9 @@ class FakeApi:
                     answer = {"job": {k: job[k] for k in keys}}
                     return 200, _checked(ClaimResponse, answer)
             return 204, None
+        if path == "/internal/hosts/check-in":
+            HostCheckIn.model_validate(body)
+            return 200, _checked(HostCheckInResponse, {"intervalSeconds": 30})
         parts = path.split("/")  # ['', 'internal', 'jobs', id, action]
         job = self.jobs[parts[3]]
         if parts[4] == "heartbeat":
