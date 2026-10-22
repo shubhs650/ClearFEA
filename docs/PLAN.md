@@ -19,6 +19,13 @@ Task status is tracked in `PROGRESS.md`. Scope questions are answered by `DECISI
 | M8 | Platform | Wallet, estimates, stop limit, storage rules, share links, isolation tests |
 | M9 | Gate | Size targets, acceptance cases, outside trial |
 | M10 | Live closed beta | ClearFEA live at clearfea.triyalabs.com for invited engineers; merges deploy themselves (ADR-095) |
+| M11 | Fix the live beta | Machines, deploys and checks get through Cloudflare Access; polling backs off; queue limits |
+| M12 | Solver on the VPS | Every job runs on one always-on VPS in a limited container, with retries and per-run statistics |
+| M13 | Admin dashboard | Overview, jobs and runs, users, events, settings and costs, with CSV and Excel export |
+| M14 | Projects home | Projects, folders, recent items and trash per user |
+| M15 | Workbench tree and flow | SimScale-style tree, many meshes and runs per simulation, job status, profile page |
+| M16 | Coordinate systems and browser geometry | Local coordinate systems; STEP preview in the browser |
+| M17 | Results ribbon, polish and relaunch | Animation and a full results ribbon; design pass; colleagues back |
 
 ## M0: Bootstrap
 
@@ -191,6 +198,98 @@ Order: M10.1, then M10.2; M10.3 to M10.6 after it (M10.3 and M10.4 both change t
 **Verification added:** none. Physics, solver numerics, tolerances and the verification cases are unchanged; M10.9 runs the existing cases through the live site.
 
 **Exit:** an invited colleague signs in with Google at `clearfea.triyalabs.com` and completes the tutorial to a report with nothing installed; an address not on the allowlist is refused; the solver machine stops after its idle time and AWS shows no running task; a merge to main reaches the live site and, for a worker change, the next solver machine without a manual step; the quick verification tier is green against the live site.
+
+## Closed beta redesign (M11 to M17)
+
+**Approved by Shubham on 2026-10-22, with an autodrive for these milestones.** Shubham asked for a redesign of the closed beta after the colleagues' first feedback and the AWS bill (thread "Closed beta redesign plan"): the solver moves from AWS Fargate to one always-on Contabo VPS (8 vCPU, 24 GB) run by a compute manager, Cloudflare Access hides the site until the public beta, the admin page becomes a dashboard, and the workbench gets a projects home and a SimScale-style tree. ADR-106 to ADR-119 are accepted. His answers: AWS off until production and its resources deleted; a Contabo Cloud VPS 8 on a monthly plan that nothing creates or replaces automatically; the repository stays private; Access stays for the closed beta; alerts on the dashboard only; the PaStiX to SPOOLES retry; statistics only for support; any change makes a new run; usage shown, nothing charged against a balance; the starting limits as proposed.
+
+Two threads at a time: thread A takes M11.1, M12, M13 and M16; thread B takes M11.2, M11.3, M14, M15 and M17. Colleagues come back once M12 and M14 are done.
+
+### M11: Fix the live beta
+
+**Goal:** the live site's machines, deploys and checks get through Cloudflare Access, and the browser and API stop asking the server more than they need to.
+
+- [ ] M11.1 Cloudflare Access service token (ADR-111): the worker sends `CF-Access-Client-Id` and `CF-Access-Client-Secret` and treats a non-JSON answer as "blocked by Access" with back-off instead of crashing; the deploy health check, the Live checks workflow and the verification harness send them too; the web app says when the Access sign-in has expired; `deploy.yml` stops building and registering the AWS solver image, since AWS is being deleted. Needs: the service token, a Service Auth policy and two GitHub secrets.
+- [ ] M11.2 Polling discipline (ADR-112): one shared polling hook (2 s doubling to 30 s, paused in hidden tabs, one request in flight, stops at a final state) replaces the geometry, mesh, run and report timers; the job status answer carries the queue position and a `retryAfter` hint; the machine-wait poll folds into it.
+- [ ] M11.3 Server protections (ADR-112): the launcher runs only after routes that queue a job; the lost-job sweep only in the per-minute cron; per-user and total queue limits; Workers rate limiting on `/api`; the limits as settings.
+
+Order: M11.1 and M11.2 in parallel, M11.3 after M11.2. Fixing the AWS launcher (stopping a machine that never checks in, counting it as running, pausing starts after a failure streak) is parked until AWS returns for production, with the maintainer's review.
+
+**Exit:** deploy and Live checks green behind Access; a 20-minute solve costs about 60 status requests from one tab.
+
+### M12: Solver on the VPS
+
+**Goal:** every job runs on one always-on VPS in its own container with limits, crashes are handled and recorded, and each run keeps its statistics (ADR-106 to ADR-110).
+
+- [ ] M12.1 Compute manager: claims jobs through the existing API, one hardened container per job through the Docker API (non-root, no capabilities, read-only root, process and memory limits), a light lane (import, mesh, report; 1 vCPU, 4 GB) and a solve lane (6 vCPU, 17 GB), one job per lane, a fairness rule between users, reattach or stop its containers after its own restart.
+- [ ] M12.2 Crash handling and retries (ADR-108): attempts per job; platform faults re-queued at most twice and not charged; out of memory recorded with peak memory; a PaStiX crash retried once with SPOOLES under SPOOLES's limit, the run record naming the solver used.
+- [ ] M12.3 Statistics (ADR-109): `job_stats` (queue wait, stage times, nodes, elements, degrees of freedom, solver, peak memory, CPU, disk, exit, attempt, host, image) and `host_stats` (every 30 s, kept 14 days); internal routes; sampling in the manager.
+- [ ] M12.4 API VPS mode: `MACHINES=vps`, solver online or offline from host check-ins, a plain refusal when the host has not checked in for 2 minutes, queue position in job status; the wallet shows usage only and refuses nothing for its balance (ADR-106 item 6).
+- [ ] M12.5 VPS setup as code (ADR-110): `infra/vps/` (bootstrap script, systemd unit, environment template, image updater); `deploy.yml` stores the worker image as an archive in R2 (ADR-110); the redeploy guide in `DEPLOYMENT.md`, with a manual restart when the VPS stops (nothing creates a new VPS). Needs: the VPS ordered with the maintainer's SSH key.
+- [ ] M12.6 Benchmark on the VPS: job-step benchmark, estimator refit, element limits per solver for the solve lane, Gmsh memory for the light lane, the hourly rate for metering.
+- [ ] M12.7 Go live on the VPS: production on `MACHINES=vps`; Live checks quick tier, acceptance cases A and B and the limit models against it; AWS stays off.
+
+Order: M12.1 and M12.4 in parallel; M12.2 and M12.3 after M12.1; M12.5 after them; then M12.6 and M12.7.
+
+**Exit:** a colleague's import, mesh and solve run on the VPS with no machine start; a run killed from outside is re-queued and finishes; the admin can read each run's statistics; the quick tier and cases A and B are green on the VPS.
+
+### M13: Admin dashboard
+
+**Goal:** the admin sees and controls the beta from one dashboard and exports any table (ADR-113).
+
+- [ ] M13.1 Events table: sign-ins and refusals, job failures and retries, manager and host events, admin actions as an audit trail.
+- [ ] M13.2 Dashboard shell with the Overview (host, lanes, queue, alerts, pause and resume) and Jobs and runs tabs (statistics, cancel, re-queue, log).
+- [ ] M13.3 Users, Settings and Costs tabs; every setting editable and logged as an event.
+- [ ] M13.4 CSV and Excel (.xlsx) export of every table, by date range.
+- [ ] M13.5 Alerts on the dashboard: solver host offline (restart it by hand), disk low, out of memory, repeated platform failures.
+
+After M12.3.
+
+### M14: Projects home
+
+**Goal:** each user has a home with projects, folders, recent items and trash (ADR-114).
+
+- [ ] M14.1 Data model: `folders`; projects gain a folder, `deleted_at`, `last_opened_at` and a thumbnail; geometries and simulations always belong to a project; each user's existing work moves into "My first project"; owner-scoped access and isolation tests.
+- [ ] M14.2 API: create, rename, move and duplicate folders and projects; trash and restore; purge after the retention period in the storage sweep, with R2 deletes.
+- [ ] M14.3 Home page: Recent, My projects with the folder tree, Trash; grid and list, sort, search, info panel, thumbnails from the viewer; `/app` opens the home, `/app/p/<id>` the workbench.
+- [ ] M14.4 Browser test E-10 for the home page and trash.
+
+Independent of M12.
+
+### M15: Workbench tree and flow
+
+**Goal:** the SimScale-style flow: geometry, simulation, coordinate systems, materials, boundary conditions, many meshes, many runs, results per run, with live job status (ADR-115).
+
+- [ ] M15.1 Tree restructure (geometries, simulations and their items) and a job status strip for the project.
+- [ ] M15.2 Many named meshes per simulation; a run picks one; reuse by settings hash stays.
+- [ ] M15.3 Many runs per simulation, each with its mesh and simulation control; any change followed by Run makes a new run; the run list shows what changed from the previous run and its maximum values.
+- [ ] M15.4 Profile page: name and picture, default units and title block, wallet history, storage, sessions, data download.
+- [ ] M15.5 Browser tests E-01 to E-10 moved to the new tree.
+
+After M14.
+
+### M16: Coordinate systems and browser geometry
+
+**Goal:** local coordinate systems for loads, supports and results, and an instant STEP preview in the browser (ADR-116, ADR-117).
+
+- [ ] M16.1 Cartesian local coordinate systems for load and support directions: spec version bump, UI, deck generator, verification cases and coverage rows. Physics-critical.
+- [ ] M16.2 Result components in a local Cartesian or cylindrical system, with a thick-cylinder verification case. Physics-critical.
+- [ ] M16.3 STEP preview in the browser (occt-import-js, pinned, in a web worker) with checks before upload; the server import stays the face authority and meshing stays on the server.
+- [ ] M16.4 Spike, report only: does the browser's face numbering match Gmsh's on every test model?
+
+M16.1 then M16.2; M16.3 and M16.4 beside them.
+
+### M17: Results ribbon, polish and relaunch
+
+**Goal:** a full results ribbon with animation, a consistent visual design, and the colleagues invited back (ADR-118, ADR-119).
+
+- [ ] M17.1 Ribbon layout, legend control (fixed range, bands, colour map), statistics panel.
+- [ ] M17.2 Animation of the deformed shape and of modes; screenshot and video capture.
+- [ ] M17.3 Iso-surface and threshold filter.
+- [ ] M17.4 Design pass: tokens, icons, empty states, loading skeletons, toasts; screenshots for review.
+- [ ] M17.5 Relaunch: user and admin guides updated, colleagues invited back.
+
+**Verification added across M11 to M17:** M16 adds cases for local coordinate systems; the rest changes no physics. Every milestone closes on a green phase-end run on main.
 
 ## After Phase 0
 
