@@ -23,6 +23,7 @@ import { latestReportJob, queueReport, type ReportFormat, reportKey, reportView 
 import type { Run } from "../db/runs";
 import { getRun } from "../db/runs";
 import { getSimulation } from "../db/simulations";
+import { jobWait } from "../jobs/wait";
 import { requireUser, type SessionEnv } from "../session";
 import { projectUnitSystem } from "./projects";
 import { runView } from "./runs";
@@ -84,7 +85,8 @@ reports.get("/:id/report", async (c) => {
   const run = await getRun(c.env.DB, c.var.userId, c.req.param("id"));
   if (run === null) return c.json({ error: NOT_FOUND }, 404);
   const job = await latestReportJob(c.env.DB, c.var.userId, run.id);
-  return c.json({ report: job === null ? null : reportView(job) } satisfies RunReportResponse);
+  const wait = await jobWait(c.env, c.var.userId, job?.id ?? null);
+  return c.json({ report: job === null ? null : reportView(job), ...(wait && { wait }) } satisfies RunReportResponse);
 });
 
 /** Queues a report of a solved run, unless one is already being made. */

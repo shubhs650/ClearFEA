@@ -7,13 +7,12 @@ import {
   type JobListResponse,
   type JobResponse,
   type JobView,
-  type MachineWaitResponse,
   validateCreateJobRequest,
 } from "@clearfea/spec";
 import { Hono } from "hono";
 import { readBody } from "../body";
 import { createJob, getJob, type Job, listJobs } from "../db/jobs";
-import { machineStarting } from "../launcher";
+import { jobWait } from "../jobs/wait";
 import { requireUser, type SessionEnv } from "../session";
 
 export const jobs = new Hono<SessionEnv>();
@@ -53,14 +52,10 @@ jobs.get("/", async (c) => {
   return c.json({ jobs: list.map(view) } satisfies JobListResponse);
 });
 
-// Whether a queued job of the user waits for a solver machine to start (M10.10, ADR-103).
-jobs.get("/machine-wait", async (c) => {
-  return c.json({ machineStarting: await machineStarting(c.env, c.var.userId) } satisfies MachineWaitResponse);
-});
-
 jobs.get("/:id", async (c) => {
   const job = await getJob(c.env.DB, c.var.userId, c.req.param("id"));
   // Another user's job answers exactly like a missing one, so ids reveal nothing.
   if (job === null) return c.json({ error: "There is no job with that id in your account." }, 404);
-  return c.json({ job: view(job) } satisfies JobResponse);
+  const wait = await jobWait(c.env, c.var.userId, job.id);
+  return c.json({ job: view(job), ...(wait && { wait }) } satisfies JobResponse);
 });

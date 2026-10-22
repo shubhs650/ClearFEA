@@ -2,15 +2,14 @@
 // The open simulation's latest run (M1.8): loads it, starts a new one, and while it solves
 // follows its stage, time and cost and reads on in its solver log every couple of seconds; it
 // can be cancelled (M8.2). Since M8.6 a run's pin can change, and a finished run can be solved
-// again with its own frozen setup.
+// again with its own frozen setup. Since M11.2 (ADR-112) a solving run is checked through the
+// shared polling hook, which backs off while nothing changes.
 
-import type { RunView } from "@clearfea/spec";
-import { useCallback, useEffect, useState } from "react";
+import type { JobWait, RunView } from "@clearfea/spec";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiResult } from "../api/request";
-import { cancelRun, getRun, getRunLog, listRuns, rerunRun, startRun } from "../api/runs";
-
-/** How often a solving run and its log are checked. */
-export const RUN_POLL_MS = 2000;
+import { cancelRun, followRun, getRunLog, listRuns, rerunRun, startRun } from "../api/runs";
+import { usePolling, waitChanged } from "../jobs/usePolling";
 
 export type RunState =
   | { kind: "none" }
@@ -23,6 +22,9 @@ export function useRun(simulationId: string | null, onSignedOut: (problem: strin
   const [log, setLog] = useState({ runId: "", text: "", next: 0 });
   const [requesting, setRequesting] = useState(false);
   const [requestProblem, setRequestProblem] = useState<string>();
+  const [wait, setWait] = useState<JobWait | null>(null);
+  /** Reads the run's log on from where it stopped; set while a run is shown. */
+  const readLogRef = useRef<((id: string) => Promise<void>) | null>(null);
 
   const failed = useCallback(
     (result: ApiResult<unknown>): string | null => {
@@ -56,8 +58,8 @@ export function useRun(simulationId: string | null, onSignedOut: (problem: strin
   const runId = run?.id ?? null;
   const solving = run?.status === "solving";
 
-  // Reads the run's log from the start when the run changes, then on from where it stopped.
-  // While the run solves, its status and log are read again every RUN_POLL_MS.
+  // Reads the run's log from the start when the run changes, then on from where it stopped
+  // whenever the polling below checks the solving run.
   useEffect(() => {
     if (runId === null) return;
     let current = true;
@@ -88,26 +90,31 @@ export function useRun(simulationId: string | null, onSignedOut: (problem: strin
       }
     }
     void readLog(runId);
-    if (!solving) {
-      return () => {
-        current = false;
-      };
-    }
-    const timer = setInterval(() => {
-      void getRun(runId).then(async (result) => {
-        if (!current || result.kind !== "ok") {
-          if (current) failed(result);
-          return;
-        }
-        await readLog(runId);
-        if (current) setState({ kind: "loaded", run: result.value });
-      });
-    }, RUN_POLL_MS);
+    readLogRef.current = readLog;
     return () => {
       current = false;
-      clearInterval(timer);
+      if (readLogRef.current === readLog) readLogRef.current = null;
     };
-  }, [runId, solving, failed]);
+  }, [runId, failed]);
+
+  // While the run solves, its status, cost and log are checked until it has finished. New log
+  // lines alone do not count as a change, so a long solve is checked less and less often.
+  usePolling(solving && runId !== null ? runId : null, async (current) => {
+    if (runId === null) return { changed: false };
+    const result = await followRun(runId);
+    if (!current()) return { changed: false };
+    if (result.kind !== "ok") {
+      failed(result);
+      return { changed: false };
+    }
+    const { value: next, wait: nextWait } = result.value;
+    await readLogRef.current?.(runId);
+    if (!current()) return { changed: false };
+    const changed = next.status !== run?.status || next.stage !== run?.stage || waitChanged(wait, nextWait);
+    setWait(nextWait);
+    setState({ kind: "loaded", run: next });
+    return { changed, retryAfter: nextWait?.retryAfter };
+  });
 
   const start = useCallback(
     async (machineSize?: string, stopMultiplier?: number) => {
@@ -166,6 +173,7 @@ export function useRun(simulationId: string | null, onSignedOut: (problem: strin
     state,
     run,
     log: log.runId === runId ? log.text : "",
+    wait: solving ? wait : null,
     start,
     cancel,
     rerun,

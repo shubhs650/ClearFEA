@@ -2,6 +2,7 @@
 // Client for a simulation's mesh and /api/meshes (M1.6). Shapes: simulation.schema.json.
 
 import { type MeshView, validateMeshResponse, validateSimulationMeshResponse } from "@clearfea/spec";
+import { type Followed, readWait } from "./jobs";
 import { type ApiResult, apiBinary, apiRequest } from "./request";
 
 /** The simulation's latest mesh, or null before one was requested. */
@@ -9,6 +10,13 @@ export async function getSimulationMesh(simulationId: string): Promise<ApiResult
   const path = `/api/simulations/${encodeURIComponent(simulationId)}/mesh`;
   const result = await apiRequest("GET", path, validateSimulationMeshResponse);
   return result.kind === "ok" ? { kind: "ok", value: result.value.mesh } : result;
+}
+
+/** The simulation's latest mesh and, while it is being made, how its mesh job is getting on (M11.2). */
+export async function followSimulationMesh(simulationId: string): Promise<ApiResult<Followed<MeshView | null>>> {
+  const path = `/api/simulations/${encodeURIComponent(simulationId)}/mesh`;
+  const result = await apiRequest("GET", path, validateSimulationMeshResponse);
+  return result.kind === "ok" ? { kind: "ok", value: { value: result.value.mesh, wait: readWait(result.value.wait) } } : result;
 }
 
 /**

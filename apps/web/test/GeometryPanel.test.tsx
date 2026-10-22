@@ -70,21 +70,37 @@ describe("geometry panel", () => {
     expect(init?.headers).toEqual({ "Content-Type": "application/octet-stream" });
   });
 
-  it("says a solver machine is starting while the import waits for one on the live site", async () => {
-    let starting = true;
-    serve({
-      "GET /api/geometries": { status: 200, body: { geometries: [geometry({ status: "importing" })] } },
-      "GET /api/jobs/machine-wait": () => ({ status: 200, body: { machineStarting: starting } }),
+  it("says a solver machine is starting while the import waits for one, from the import's own poll", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const importing = geometry({ status: "importing" });
+    const wait = { status: "queued", queuePosition: 1, machineStarting: true, retryAfter: 15 };
+    let answer: unknown = { geometry: importing, wait };
+    const fetchMock = serve({
+      "GET /api/geometries": { status: 200, body: { geometries: [importing] } },
+      "GET /api/geometries/g1": () => ({ status: 200, body: answer }),
     });
-    render(<GeometryPanel onSignedOut={() => {}} />);
-    const note = await screen.findByRole("status", { name: "Solver machine" });
-    expect(note.textContent).toContain("Starting a solver machine. After a break this takes 1 to 3 minutes");
-    starting = false;
-    cleanup();
-    render(<GeometryPanel onSignedOut={() => {}} />);
-    expect(await screen.findByText("Importing")).toBeTruthy();
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(screen.queryByRole("status", { name: "Solver machine" })).toBeNull();
+    try {
+      render(<GeometryPanel onSignedOut={() => {}} />);
+      expect(await screen.findByText("Importing")).toBeTruthy();
+      expect(screen.queryByRole("status", { name: "Solver machine" })).toBeNull();
+      await vi.advanceTimersByTimeAsync(2000);
+      const note = await screen.findByRole("status", { name: "Solver machine" });
+      expect(note.textContent).toContain("Starting a solver machine. After a break this takes 1 to 3 minutes");
+
+      // The API's hint of 15 s holds the next check back, and the import's poll is the only one.
+      await vi.advanceTimersByTimeAsync(14_000);
+      expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual(["/api/geometries", "/api/geometries/g1"]);
+      answer = { geometry: geometry({ status: "unconfirmed" }) };
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(await screen.findByText("Confirm the unit")).toBeTruthy();
+      expect(screen.queryByRole("status", { name: "Solver machine" })).toBeNull();
+
+      // Finished: no more checks.
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows the detected unit with the size it gives, and confirms it", async () => {

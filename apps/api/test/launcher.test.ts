@@ -10,11 +10,11 @@ import {
   type MachineState,
   machineHours,
   machineRefusal,
-  machineStarting,
   planMachines,
   solverMachines,
   waitsForMachine,
 } from "../src/launcher";
+import { jobWait } from "../src/jobs/wait";
 import { LAUNCH_PARAMETER } from "../src/launcher/aws";
 import { signRequest } from "../src/launcher/sigv4";
 
@@ -361,19 +361,27 @@ describe("ensureMachines", () => {
     expect((await getJob(env.DB, "alice", capped.id))?.failureCause).toBe("machine_hours_cap");
   });
 
-  it("tells a user whose queued job waits for a machine, and nobody else, until a machine takes it", async () => {
-    expect(await machineStarting(cloud(), "alice")).toBe(false);
+  it("tells the owner of a queued job that a machine is starting, until a machine takes it", async () => {
     const queued = await createJob(env.DB, "alice", "noop");
-    expect(await machineStarting(env, "alice")).toBe(false);
-    expect(await machineStarting(cloud(), "alice")).toBe(true);
-    expect(await machineStarting(cloud(), "bob")).toBe(false);
+    expect((await jobWait(env, "alice", queued.id))?.machineStarting).toBe(false);
+    expect(await jobWait(cloud(), "alice", queued.id)).toEqual({
+      status: "queued",
+      queuePosition: 1,
+      machineStarting: true,
+      retryAfter: 15,
+    });
+    expect(await jobWait(cloud(), "bob", queued.id)).toBeUndefined();
 
     await ensureMachines(cloud(), fakeAws().fetcher);
-    expect(await machineStarting(cloud(), "alice")).toBe(true);
+    expect((await jobWait(cloud(), "alice", queued.id))?.machineStarting).toBe(true);
     const row = await env.DB.prepare("SELECT id FROM worker_starts").first<{ id: string }>();
     expect((await claim(`aws-${row?.id}`)).status).toBe(200);
-    expect((await getJob(env.DB, "alice", queued.id))?.status).toBe("claimed");
-    expect(await machineStarting(cloud(), "alice")).toBe(false);
+    expect(await jobWait(cloud(), "alice", queued.id)).toEqual({
+      status: "claimed",
+      queuePosition: null,
+      machineStarting: false,
+      retryAfter: 2,
+    });
   });
 
   it("leaves the main module exporting only handlers, which workerd requires to start", async () => {

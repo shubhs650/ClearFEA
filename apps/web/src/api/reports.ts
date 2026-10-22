@@ -4,6 +4,7 @@
 // Shapes: packages/spec/schemas/report.schema.json.
 
 import { type RunReport, validateRunReportResponse } from "@clearfea/spec";
+import { type Followed, readWait } from "./jobs";
 import { type ApiResult, apiRequest } from "./request";
 
 const reportPath = (runId: string) => `/api/runs/${encodeURIComponent(runId)}/report`;
@@ -19,6 +20,12 @@ function report(result: ApiResult<{ report: RunReport | null }>): ApiResult<RunR
 /** The run's latest report, or null when none was asked for. */
 export async function fetchRunReport(runId: string): Promise<ApiResult<RunReport | null>> {
   return report(await apiRequest("GET", reportPath(runId), validateRunReportResponse));
+}
+
+/** The run's latest report and, while it is being made, how its job is getting on (M11.2). */
+export async function followRunReport(runId: string): Promise<ApiResult<Followed<RunReport | null>>> {
+  const result = await apiRequest("GET", reportPath(runId), validateRunReportResponse);
+  return result.kind === "ok" ? { kind: "ok", value: { value: result.value.report, wait: readWait(result.value.wait) } } : result;
 }
 
 /** Asks for a new report of the run, made from its figures as stored now. */

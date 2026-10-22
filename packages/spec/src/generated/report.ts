@@ -301,6 +301,10 @@ export interface RunReport {
  */
 export interface RunReportResponse {
   report: RunReport | null;
+  /**
+   * On GET while the report job has not finished: a JobWait (jobs.schema.json), checked against that schema by the browser (M11.2, ADR-112).
+   */
+  wait?: {};
 }
 
 export const ReportSectionValues = ["project", "geometry", "materials", "mesh", "loadsSupports", "solver", "results", "reactions", "extremes", "warnings"] as const satisfies readonly ReportSection[];

@@ -370,7 +370,6 @@ const ROUTES: Record<string, Route> = {
 
   "POST /api/jobs": { area: "account" },
   "GET /api/jobs": { area: "account" },
-  "GET /api/jobs/machine-wait": { area: "account" },
   "GET /api/jobs/:id": { area: "owned", owned: (i) => ({ path: `/api/jobs/${i.jobId}` }) },
 
   "GET /api/project": { area: "account" },
@@ -476,7 +475,6 @@ const ROUTES: Record<string, Route> = {
 const ACCOUNT_CALLS: Record<string, Request> = {
   "POST /api/jobs": { path: "/api/jobs", json: { type: "noop" } },
   "GET /api/jobs": { path: "/api/jobs" },
-  "GET /api/jobs/machine-wait": { path: "/api/jobs/machine-wait" },
   "GET /api/project": { path: "/api/project" },
   "PATCH /api/project": { path: "/api/project", json: { unitSystem: "si" } },
   "POST /api/geometries": { path: "/api/geometries?name=bob.step", bytes: new TextEncoder().encode("ISO-10303-21;\nbob") },

@@ -155,6 +155,22 @@ describe("uploading a STEP file", () => {
     ]);
   });
 
+  it("tells the owner how the import is getting on while it has not finished (M11.2)", async () => {
+    const created = await uploaded();
+    const answer = async (cookie = alice) =>
+      (await (await call("GET", `/api/geometries/${created.id}`, { cookie })).json()) as Record<string, unknown>;
+    expect((await answer()).wait).toEqual({ status: "queued", queuePosition: 1, machineStarting: false, retryAfter: 5 });
+    await claim();
+    expect((await answer()).wait).toEqual({ status: "claimed", queuePosition: null, machineStarting: false, retryAfter: 2 });
+    expect(validateGeometryResponse(await answer()).ok).toBe(true);
+  });
+
+  it("leaves the wait out once the import has finished", async () => {
+    const created = await uploaded();
+    await runImport();
+    expect("wait" in ((await (await call("GET", `/api/geometries/${created.id}`, { cookie: alice })).json()) as object)).toBe(false);
+  });
+
   it("streams a file sent in pieces to storage whole", async () => {
     const bytes = new TextEncoder().encode(`${STEP}${"/* padding */\n".repeat(5000)}`);
     const pieces = [bytes.subarray(0, 5), bytes.subarray(5, 70), bytes.subarray(70, 40000), bytes.subarray(40000)];

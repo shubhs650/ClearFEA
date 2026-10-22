@@ -18,6 +18,7 @@ import {
   validateRunLogResponse,
   validateRunResponse,
 } from "@clearfea/spec";
+import { type Followed, readWait } from "./jobs";
 import { type ApiResult, apiBinary, apiRequest } from "./request";
 
 /** The simulation's runs, newest first. */
@@ -59,9 +60,10 @@ export async function getEstimate(
   return result.kind === "ok" ? { kind: "ok", value: result.value.estimate } : result;
 }
 
-export async function getRun(runId: string): Promise<ApiResult<RunView>> {
+/** The run and, while it solves, how its solve job is getting on (M11.2). */
+export async function followRun(runId: string): Promise<ApiResult<Followed<RunView>>> {
   const result = await apiRequest("GET", `/api/runs/${encodeURIComponent(runId)}`, validateRunResponse);
-  return result.kind === "ok" ? { kind: "ok", value: result.value.run } : result;
+  return result.kind === "ok" ? { kind: "ok", value: { value: result.value.run, wait: readWait(result.value.wait) } } : result;
 }
 
 /**

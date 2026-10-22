@@ -211,7 +211,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["geometry"],
-      "properties": { "geometry": { "$ref": "#/$defs/GeometryView" } }
+      "properties": {
+        "geometry": { "$ref": "#/$defs/GeometryView" },
+        "wait": { "description": "On GET while the import job has not finished: a JobWait (jobs.schema.json), checked against that schema by the browser (M11.2, ADR-112).", "type": "object" }
+      }
     },
     "GeometryListResponse": {
       "description": "Answer to GET /api/geometries: the signed-in user's geometries, newest first.",

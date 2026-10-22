@@ -928,6 +928,10 @@ export interface MeshResponse {
  */
 export interface SimulationMeshResponse {
   mesh: MeshView | null;
+  /**
+   * On GET while the mesh job has not finished: a JobWait (jobs.schema.json), checked against that schema by the browser (M11.2, ADR-112).
+   */
+  wait?: {};
 }
 /**
  * Parameters of a solve job (ADR-030): the run's frozen spec and the mesh it is solved on. The worker writes the deck from these two alone.
@@ -1428,6 +1432,10 @@ export interface SimulationSpec1 {
  */
 export interface RunResponse {
   run: RunView;
+  /**
+   * On GET while the solve job has not finished: a JobWait (jobs.schema.json), checked against that schema by the browser (M11.2, ADR-112).
+   */
+  wait?: {};
 }
 /**
  * Answer to GET /api/simulations/{id}/runs: the simulation's runs, newest first.

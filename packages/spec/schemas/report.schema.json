@@ -216,7 +216,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["report"],
-      "properties": { "report": { "oneOf": [{ "$ref": "#/$defs/RunReport" }, { "type": "null" }] } }
+      "properties": {
+        "report": { "oneOf": [{ "$ref": "#/$defs/RunReport" }, { "type": "null" }] },
+        "wait": { "description": "On GET while the report job has not finished: a JobWait (jobs.schema.json), checked against that schema by the browser (M11.2, ADR-112).", "type": "object" }
+      }
     }
   }
 }

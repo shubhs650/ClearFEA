@@ -3,9 +3,10 @@
 
 import {
   type JobView,
+  type JobWait,
   validateJobListResponse,
   validateJobResponse,
-  validateMachineWaitResponse,
+  validateJobWait,
 } from "@clearfea/spec";
 import { type ApiResult, apiRequest } from "./request";
 
@@ -19,8 +20,16 @@ export async function queueNoopJob(): Promise<ApiResult<JobView>> {
   return result.kind === "ok" ? { kind: "ok", value: result.value.job } : result;
 }
 
-/** Whether a queued job of the user waits for a solver machine to start (M10.10, ADR-103). */
-export async function getMachineWait(): Promise<ApiResult<boolean>> {
-  const result = await apiRequest("GET", "/api/jobs/machine-wait", validateMachineWaitResponse);
-  return result.kind === "ok" ? { kind: "ok", value: result.value.machineStarting } : result;
+/** A polled answer: what the screen shows, and how its unfinished job is getting on (M11.2). */
+export interface Followed<T> {
+  value: T;
+  /** Null once the job has finished, or when the answer had no valid wait. */
+  wait: JobWait | null;
+}
+
+/** The `wait` of a polled answer, checked against the JobWait schema (ADR-112). */
+export function readWait(value: unknown): JobWait | null {
+  if (value === undefined) return null;
+  const valid = validateJobWait(value);
+  return valid.ok ? valid.value : null;
 }
