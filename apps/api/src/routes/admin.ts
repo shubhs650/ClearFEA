@@ -5,7 +5,8 @@
 // host's load (M12.3, ADR-109), and the event log, where each change made here is recorded (M13.1,
 // ADR-113, ADR-125), and the dashboard's Overview with pause and resume, and every user's jobs with
 // their logs, cancel and re-queue (M13.2, ADR-127), and every setting and each month's costs
-// (M13.3, ADR-128), and every table as CSV or Excel by date range (M13.4, ADR-129). Only the admin (ADMIN_EMAIL) reaches them; to
+// (M13.3, ADR-128), and every table as CSV or Excel by date range (M13.4, ADR-129), and the alerts
+// on the Overview (M13.5, ADR-130). Only the admin (ADMIN_EMAIL) reaches them; to
 // anyone else they answer as if they did not exist. Shapes: packages/spec/schemas/admin.schema.json.
 
 import {
@@ -38,6 +39,8 @@ import { latestHost } from "../db/hosts";
 import { jobForAdmin, readJobLog } from "../db/jobs";
 import { listCloudSizes, machineMode, switchCloudSize } from "../db/machines";
 import {
+  type AlertSettings,
+  alertSettings,
   listSettings,
   queuePaused,
   SETTINGS,
@@ -46,12 +49,12 @@ import {
   setQueuePaused,
   setSetting,
 } from "../db/settings";
-import { latestHostLoad, listHostLoad, listTries } from "../db/stats";
+import { latestHostLoad, listHostLoad, listTries, type RecentFaults, recentFaults } from "../db/stats";
 import { getUser } from "../db/users";
 import type { Env } from "../env";
 import { toCsv, toXlsx } from "../export/sheet";
 import { EXPORT_TABLES, type ExportTable, exportTable, isSnapshot, MAX_EXPORT_ROWS, type Range } from "../export/tables";
-import { cancelAsAdmin, requeueAsAdmin } from "../jobs/outcome";
+import { CANCELLED_BY_ADMIN, cancelAsAdmin, OUT_OF_MEMORY, REQUEUED_BY_ADMIN, requeueAsAdmin } from "../jobs/outcome";
 import { solverMachines } from "../launcher";
 import { requireUser, type SessionEnv } from "../session";
 
@@ -252,11 +255,22 @@ admin.get("/events", async (c) => {
   return c.json({ events } satisfies EventsResponse);
 });
 
+/** Bytes as GiB with one decimal, for the alerts. */
+const gib = (bytes: number) => `${(bytes / 2 ** 30).toFixed(1)} GiB`;
+
+const tries = (n: number) => (n === 1 ? "1 try" : `${n} tries`);
+
 /**
- * What the admin should act on (M13.2, ADR-127), shown on the dashboard only (Shubham,
- * 2026-10-22): no solver host, a silent one, a paused queue. M13.5 adds more.
+ * What the admin should act on (M13.2, ADR-127; M13.5, ADR-130), shown on the dashboard only
+ * (Shubham, 2026-10-22): no solver host, a silent one, a paused queue, a low disk on the host,
+ * tries out of memory and repeated faults of the platform. Nothing here restarts or starts a
+ * machine: the admin restarts the VPS by hand.
  */
-function alerts(overview: Omit<OverviewResponse, "alerts">): AdminAlert[] {
+function alerts(
+  overview: Omit<OverviewResponse, "alerts">,
+  limits: AlertSettings,
+  faults: RecentFaults,
+): AdminAlert[] {
   const list: AdminAlert[] = [];
   if (overview.machines === "vps" && overview.host === null) {
     list.push({
@@ -272,6 +286,30 @@ function alerts(overview: Omit<OverviewResponse, "alerts">): AdminAlert[] {
       message: `The solver host ${overview.host.host} has not checked in since ${overview.host.lastSeenAt}, so new jobs are refused and queued work waits. Restart the VPS by hand (docs/DEPLOYMENT.md); nothing starts a new one.`,
     });
   }
+  if (overview.load !== null && overview.load.diskFreeBytes < limits.diskFreeBytes) {
+    const { host, diskFreeBytes, diskTotalBytes } = overview.load;
+    list.push({
+      kind: "disk_low",
+      level: "warning",
+      message: `The solver host ${host} has ${gib(diskFreeBytes)} free of ${gib(diskTotalBytes)} on its scratch disk, below the ${gib(limits.diskFreeBytes)} alert. Its lanes stop taking jobs at CLEARFEA_SCRATCH_MIN_FREE (20 GiB by default). Remove old images and stopped containers on the VPS (docker system prune), or give it a larger disk.`,
+    });
+  }
+  if (faults.outOfMemory > 0 && faults.lastOutOfMemory !== null) {
+    const { jobId, at } = faults.lastOutOfMemory;
+    list.push({
+      kind: "out_of_memory",
+      level: "warning",
+      message: `${tries(faults.outOfMemory)} ran out of memory in the last ${limits.windowHours} h, the latest of job ${jobId} at ${at}. Look at its peak memory in Jobs and runs: a lane's memory or a solver's element limit may be set too high for the host.`,
+    });
+  }
+  if (faults.platformFaults >= limits.platformFailures && faults.lastPlatformFault !== null) {
+    const { jobId, at, cause } = faults.lastPlatformFault;
+    list.push({
+      kind: "platform_failures",
+      level: "error",
+      message: `${tries(faults.platformFaults)} ended by a fault in ClearFEA in the last ${limits.windowHours} h, the latest of job ${jobId} at ${at}${cause === null ? "" : ` (${cause})`}. Look at the job_failed and job_retried events and the jobs' logs; if the host is the cause, pause the queue and restart the VPS by hand.`,
+    });
+  }
   if (overview.paused) {
     const waiting = overview.lanes.reduce((sum, lane) => sum + lane.queued.length, 0);
     list.push({
@@ -284,13 +322,19 @@ function alerts(overview: Omit<OverviewResponse, "alerts">): AdminAlert[] {
 }
 
 async function overview(env: Env): Promise<OverviewResponse> {
-  const [paused, host, lanes] = await Promise.all([queuePaused(env.DB), latestHost(env.DB), laneJobs(env.DB)]);
-  const [pausedAt, load] = await Promise.all([
+  const [paused, host, lanes, limits] = await Promise.all([
+    queuePaused(env.DB),
+    latestHost(env.DB),
+    laneJobs(env.DB),
+    alertSettings(env.DB),
+  ]);
+  const [pausedAt, load, faults] = await Promise.all([
     paused ? lastPausedAt(env.DB) : null,
     host === null ? null : latestHostLoad(env.DB, host.host),
+    recentFaults(env.DB, limits.windowHours, OUT_OF_MEMORY, [CANCELLED_BY_ADMIN, REQUEUED_BY_ADMIN]),
   ]);
   const view = { machines: machineMode(env), paused, pausedAt, host, load, lanes };
-  return { ...view, alerts: alerts(view) };
+  return { ...view, alerts: alerts(view, limits, faults) };
 }
 
 /** The solver host, its lanes and their queues, pause, and the alerts (M13.2). */

@@ -456,7 +456,7 @@ export interface AdminLane {
  * via the `definition` "AdminAlert".
  */
 export interface AdminAlert {
-  kind: "no_host" | "host_offline" | "queue_paused";
+  kind: "no_host" | "host_offline" | "queue_paused" | "disk_low" | "out_of_memory" | "platform_failures";
   level: "warning" | "error";
   /**
    * What is wrong and what to do, in plain words.
@@ -543,7 +543,7 @@ export interface AdminSetting {
    * The row of the settings table.
    */
   name: string;
-  group: "accounts" | "queue" | "storage" | "machines" | "costs";
+  group: "accounts" | "queue" | "storage" | "machines" | "costs" | "alerts";
   label: string;
   /**
    * What it does, in plain words.

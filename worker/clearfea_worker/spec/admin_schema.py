@@ -520,7 +520,9 @@ class AdminAlert(BaseModel):
         extra="forbid",
         populate_by_name=True,
     )
-    kind: Literal["no_host", "host_offline", "queue_paused"]
+    kind: Literal[
+        "no_host", "host_offline", "queue_paused", "disk_low", "out_of_memory", "platform_failures"
+    ]
     level: Literal["warning", "error"]
     message: str
     """
@@ -632,7 +634,7 @@ class AdminSetting(BaseModel):
     """
     The row of the settings table.
     """
-    group: Literal["accounts", "queue", "storage", "machines", "costs"]
+    group: Literal["accounts", "queue", "storage", "machines", "costs", "alerts"]
     label: str
     description: str
     """

@@ -398,3 +398,59 @@ export async function purgeHostLoad(db: D1Database): Promise<number> {
     .run();
   return result.meta.changes;
 }
+
+/** Tries that ran out of memory, and tries ended by a fault of the platform, over a window. */
+export interface RecentFaults {
+  outOfMemory: number;
+  /** The latest try out of memory: its job and when it ended, or null. */
+  lastOutOfMemory: { jobId: string; at: string } | null;
+  platformFaults: number;
+  lastPlatformFault: { jobId: string; at: string; cause: string | null } | null;
+}
+
+/**
+ * For the dashboard's alerts (M13.5, ADR-130): the tries of the last `hours` that ran out of
+ * memory (its container killed by the kernel, or its solver stopped past its size: cause
+ * `outOfMemoryCause`) and that ended by a fault of the platform, other than the `excluded` causes
+ * (the admin's own cancels and re-queues). A try counts by when it ended, or, when only the
+ * manager's report of its container says so, by that report.
+ */
+export async function recentFaults(
+  db: D1Database,
+  hours: number,
+  outOfMemoryCause: string,
+  excluded: readonly string[],
+): Promise<RecentFaults> {
+  const since = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' hours')`;
+  const notExcluded = excluded.length === 0 ? "" : `AND failure_cause NOT IN (${excluded.map(() => "?").join(", ")})`;
+  const [memory, platform] = await db.batch<{ n: number; job_id: string | null; at: string | null; cause: string | null }>([
+    db
+      .prepare(
+        `SELECT COUNT(*) OVER () AS n, job_id, COALESCE(ended_at, stats_at) AS at, failure_cause AS cause
+           FROM job_stats
+          WHERE (out_of_memory = 1 OR failure_cause = ?) AND COALESCE(ended_at, stats_at) >= ${since}
+          ORDER BY at DESC LIMIT 1`,
+      )
+      .bind(outOfMemoryCause, hours),
+    db
+      .prepare(
+        `SELECT COUNT(*) OVER () AS n, job_id, ended_at AS at, failure_cause AS cause
+           FROM job_stats
+          WHERE failure_category = 'platform_fault' AND ended_at >= ${since} ${notExcluded}
+          ORDER BY ended_at DESC LIMIT 1`,
+      )
+      .bind(hours, ...excluded),
+  ]);
+  const memoryRow = memory?.results[0];
+  const platformRow = platform?.results[0];
+  return {
+    outOfMemory: memoryRow?.n ?? 0,
+    lastOutOfMemory:
+      memoryRow?.job_id && memoryRow.at ? { jobId: memoryRow.job_id, at: memoryRow.at } : null,
+    platformFaults: platformRow?.n ?? 0,
+    lastPlatformFault:
+      platformRow?.job_id && platformRow.at
+        ? { jobId: platformRow.job_id, at: platformRow.at, cause: platformRow.cause }
+        : null,
+  };
+}

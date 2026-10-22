@@ -17,6 +17,7 @@ const GROUPS: { id: AdminSetting["group"]; title: string }[] = [
   { id: "accounts", title: "Accounts" },
   { id: "machines", title: "Cloud machines" },
   { id: "costs", title: "Costs" },
+  { id: "alerts", title: "Alerts" },
 ];
 
 type SettingsState =
