@@ -15,7 +15,7 @@ import { geometries } from "./routes/geometries";
 import { jobs } from "./routes/jobs";
 import { materials } from "./routes/materials";
 import { meshes } from "./routes/meshes";
-import { projects } from "./routes/projects";
+import { folders, home, projects } from "./routes/projects";
 import { reportBranding } from "./routes/reportBranding";
 import { reportFigures } from "./routes/reportFigures";
 import { reports } from "./routes/reports";
@@ -60,6 +60,8 @@ app.route("/api/session", session);
 app.route("/api/admin", admin);
 app.route("/api/jobs", jobs);
 app.route("/api/project", projects);
+app.route("/api/projects", home);
+app.route("/api/folders", folders);
 app.route("/api/geometries", geometries);
 app.route("/api/simulations", simulations);
 app.route("/api/materials", materials);
@@ -84,9 +86,9 @@ const EVERY_MINUTE = "* * * * *";
  * The cron triggers in wrangler.jsonc. Each minute: fail jobs whose worker is lost (M8.4), the
  * only place that looks for them over all workers (M11.3, ADR-112), and on cloud machines start
  * a machine again for work left waiting (M10.7, ADR-100). Daily, and on any other call such as `make dev`'s hourly one: the
- * storage sweep (M8.6, ADR-086), which removes raw solver output past its retention period and
- * charges storage above the free allowance, after the lost-job sweep, then removes the solver
- * host's load samples past 14 days (M12.3, ADR-109).
+ * storage sweep (M8.6, ADR-086), which purges the trash (M14.2, ADR-124), removes raw solver output
+ * past its retention period and charges storage above the free allowance, after the lost-job
+ * sweep, then removes the solver host's load samples past 14 days (M12.3, ADR-109).
  */
 async function scheduled(controller: ScheduledController, env: Env): Promise<void> {
   const lost = await sweepLostJobs(env);
@@ -97,7 +99,7 @@ async function scheduled(controller: ScheduledController, env: Env): Promise<voi
   }
   const summary = await sweepStorage(env.DB, env.FILES, new Date(controller.scheduledTime));
   console.log(
-    `Storage sweep for ${summary.day}: removed the raw output of ${summary.removed} runs, charged ${summary.charged} users.`,
+    `Storage sweep for ${summary.day}: purged ${summary.purgedProjects} projects and ${summary.purgedFolders} folders from the trash, removed the raw output of ${summary.removed} runs, charged ${summary.charged} users.`,
   );
   const purged = await purgeHostLoad(env.DB);
   if (purged > 0) console.log(`Removed ${purged} solver host load samples older than ${HOST_STATS_DAYS} days.`);

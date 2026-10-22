@@ -23,7 +23,7 @@ import {
   getGeometry,
   listGeometries,
 } from "../db/geometries";
-import { userProject } from "../db/projects";
+import { getProject, userProject } from "../db/projects";
 import { launchesMachines, queueRefusal, refused } from "../jobs/limits";
 import { jobWait } from "../jobs/wait";
 import { requireUser, type SessionEnv } from "../session";
@@ -137,6 +137,14 @@ geometries.post("/", launchesMachines, async (c) => {
   if (declared > MAX_STEP_BYTES) {
     return c.json({ error: `The file is larger than ${MAX_STEP_BYTES / 1e6} MB, the most ClearFEA accepts.` }, 413);
   }
+  // Into the project the user names (?projectId=, M14.2), else their oldest project outside the
+  // trash, until the home page always names one (M14.3).
+  const projectId = c.req.query("projectId");
+  const project =
+    projectId === undefined ? await userProject(c.env.DB, c.var.userId) : await getProject(c.env.DB, c.var.userId, projectId);
+  if (project === null || project.deletedAt !== null) {
+    return c.json({ error: "There is no project with that id in your account outside the trash. Open a project and upload there." }, 404);
+  }
   // Refused before the file is stored, so a full queue costs no upload (M11.3, ADR-112).
   const full = await queueRefusal(c.env, c.var.userId, "import");
   if (full !== null) return refused(c, full);
@@ -165,8 +173,6 @@ geometries.post("/", launchesMachines, async (c) => {
       400,
     );
   }
-  // Until the home page opens a chosen project (M14.3), uploads go into the user's first project.
-  const project = await userProject(c.env.DB, c.var.userId);
   const { geometry } = await createGeometry(c.env.DB, c.var.userId, {
     id,
     projectId: project.id,
@@ -177,7 +183,7 @@ geometries.post("/", launchesMachines, async (c) => {
 });
 
 geometries.get("/", async (c) => {
-  const list = await listGeometries(c.env.DB, c.var.userId);
+  const list = await listGeometries(c.env.DB, c.var.userId, { projectId: c.req.query("projectId") });
   return c.json({ geometries: list.map(view) } satisfies GeometryListResponse);
 });
 

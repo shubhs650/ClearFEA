@@ -771,7 +771,7 @@ export interface SimulationResponse {
   simulation: SimulationView;
 }
 /**
- * Answer to GET /api/simulations[?geometryId=]: the signed-in user's simulations, newest first.
+ * Answer to GET /api/simulations[?geometryId=][&projectId=]: the signed-in user's simulations, newest first, those on one geometry or in one project when it is named.
  *
  * This interface was referenced by `Simulation`'s JSON-Schema
  * via the `definition` "SimulationListResponse".

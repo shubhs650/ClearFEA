@@ -86,27 +86,22 @@ export async function getSimulation(
   return row === null ? null : toSimulation(row);
 }
 
-/** The user's most recent simulations, newest first, optionally only those on one geometry. */
+/**
+ * The user's most recent simulations, newest first, optionally only those on one geometry or in
+ * one project.
+ */
 export async function listSimulations(
   db: D1Database,
   userId: string,
-  options: { geometryId?: string; limit?: number } = {},
+  options: { geometryId?: string; projectId?: string; limit?: number } = {},
 ): Promise<Simulation[]> {
-  const limit = options.limit ?? 50;
-  const statement =
-    options.geometryId === undefined
-      ? db
-          .prepare(
-            "SELECT * FROM simulations WHERE owner_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
-          )
-          .bind(userId, limit)
-      : db
-          .prepare(
-            `SELECT * FROM simulations WHERE owner_id = ? AND geometry_id = ?
-              ORDER BY created_at DESC, id DESC LIMIT ?`,
-          )
-          .bind(userId, options.geometryId, limit);
-  const { results } = await statement.all<SimulationRow>();
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM simulations WHERE owner_id = ?1 AND (?2 IS NULL OR geometry_id = ?2) AND (?3 IS NULL OR project_id = ?3)
+        ORDER BY created_at DESC, id DESC LIMIT ?4`,
+    )
+    .bind(userId, options.geometryId ?? null, options.projectId ?? null, options.limit ?? 50)
+    .all<SimulationRow>();
   return results.map(toSimulation);
 }
 

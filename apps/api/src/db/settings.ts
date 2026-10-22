@@ -120,3 +120,12 @@ export async function queueLimits(db: D1Database): Promise<QueueLimits> {
     totalCap: value(QUEUE_NAMES.totalCap),
   };
 }
+
+/** Days a project or folder stays in the trash before the storage sweep purges it (M14.2, ADR-124). */
+export async function trashRetentionDays(db: D1Database): Promise<number> {
+  const row = await db
+    .prepare("SELECT value FROM settings WHERE name = 'trash_retention_days'")
+    .first<{ value: number }>();
+  if (row === null) throw new Error("The setting trash_retention_days is missing; apply the migrations.");
+  return row.value;
+}
