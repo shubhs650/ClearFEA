@@ -145,11 +145,12 @@ systemctl enable clearfea-manager.service
 systemctl enable --now clearfea-image-update.timer
 
 step "The worker image"
-# Loads the image the API names and starts the manager on it.
-"$LIB_DIR/update-image.sh"
+# Loads the image the API names and starts the manager on it. Enabling the timer above already
+# started a run, so this one waits for it rather than giving up.
+CLEARFEA_IMAGE_WAIT=1 "$LIB_DIR/update-image.sh"
 if ! docker image inspect clearfea-worker:current >/dev/null 2>&1; then
   echo
-  echo "No worker image is loaded yet: the site has not stored one (see the message above)."
+  echo "No worker image is loaded yet (see the message above; journalctl -u clearfea-image-update has more)."
   echo "The updater looks again every 5 minutes and starts the manager once it has loaded one."
   exit 0
 fi
