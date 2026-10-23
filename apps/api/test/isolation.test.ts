@@ -517,6 +517,9 @@ const ROUTES: Record<string, Route> = {
   "POST /internal/jobs/:id/complete": { area: "worker" },
   "POST /internal/hosts/check-in": { area: "worker" },
   "POST /internal/jobs/:id/stats": { area: "worker" },
+  // The worker image the solver host loads (M12.5): one image for the whole site, no owner.
+  "GET /internal/worker-image": { area: "worker" },
+  "GET /internal/worker-image/archive": { area: "worker" },
 };
 
 /** Bob's calls on his own account, with a body where the route needs one. */

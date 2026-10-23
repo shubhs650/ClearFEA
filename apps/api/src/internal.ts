@@ -18,6 +18,7 @@ import {
   validateMeshResult,
   validateReportJobResult,
   validateSolveResult,
+  type WorkerImage,
 } from "@clearfea/spec";
 import { Hono } from "hono";
 import { chargeFor, type JobCharge } from "./billing/cost";
@@ -40,6 +41,7 @@ import { endTry, modelSize, recordContainerStats, recordHostLoad, recordStage, s
 import { recordContact } from "./db/workerStarts";
 import type { Env } from "./env";
 import { jobFiles, transfers } from "./jobs/files";
+import { WORKER_IMAGE_TAG, workerImage, workerImageKey } from "./jobs/workerImage";
 import { finalMachineFault, OUT_OF_MEMORY, recordOutcome, retryJob, sweepLostJobs } from "./jobs/outcome";
 
 export const internal = new Hono<{ Bindings: Env }>();
@@ -123,6 +125,29 @@ internal.post("/hosts/check-in", async (c) => {
   // Its load, kept 14 days for support (M12.3, ADR-109).
   if (body.value.load !== undefined) await recordHostLoad(c.env.DB, body.value.host, body.value.load);
   return c.json({ intervalSeconds: HOST_CHECK_IN_SECONDS } satisfies HostCheckInResponse);
+});
+
+/**
+ * The worker image the solver host should run (M12.5, ADR-110, ADR-131): the deployed one, or the
+ * one in ?tag= when the host pins a tag to roll back. Asked by the host's image updater, which
+ * loads it between jobs.
+ */
+internal.get("/worker-image", async (c) => {
+  const answer = await workerImage(c.env, new URL(c.req.url).origin, c.req.query("tag"));
+  if ("error" in answer) return c.json({ error: answer.error }, answer.status);
+  return c.json(answer.image satisfies WorkerImage);
+});
+
+/** The archive itself, when the API cannot presign R2 links (`make dev`). */
+internal.get("/worker-image/archive", async (c) => {
+  const tag = c.req.query("tag") ?? "";
+  if (!WORKER_IMAGE_TAG.test(tag)) return c.json({ error: "Name the image in ?tag=." }, 400);
+  const object = await c.env.FILES.get(workerImageKey(tag));
+  if (object === null) return c.json({ error: `The worker image ${tag} is not in storage.` }, 404);
+  return c.body(object.body, 200, {
+    "Content-Type": "application/gzip",
+    "Content-Length": String(object.size),
+  });
 });
 
 /** The job's file with this name and direction, if the worker in ?worker= holds the job. */

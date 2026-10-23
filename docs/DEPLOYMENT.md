@@ -6,7 +6,7 @@ Self-hosting on your own machine is a different procedure: see `SELF_HOSTING.md`
 
 Once the site is up, running the beta day to day (inviting, removing, settings, costs, the tutorial trial) is in `ADMIN_GUIDE.md`. That guide still describes the AWS machines in places; M17.5 brings it up to date.
 
-> **Status (2026-10-23).** The website, API, database and files run on Cloudflare behind Cloudflare Access, and every merge to `main` deploys them (sections 1 to 3, 5 and 6 are current). The solver moves from AWS to one always-on Contabo VPS (ADR-106): AWS is switched off and was deleted on 2026-10-23 (section 7.6), so **the live site solves nothing until M12.7**. The compute manager that runs on the VPS (M12.1 to M12.3) and the API's VPS mode (M12.4) are on `main`; the VPS setup itself (bootstrap script, systemd unit, environment template, image updater, and the deploy storing the worker image in R2) is task M12.5 and is **not built yet**. Section 4 says what is known now and marks each step that waits on M12.5. Check that a task is ticked in `PROGRESS.md` before doing a step that names it.
+> **Status (2026-10-23).** The website, API, database and files run on Cloudflare behind Cloudflare Access, and every merge to `main` deploys them (sections 1 to 3, 5 and 6 are current). The solver moves from AWS to one always-on Contabo VPS (ADR-106): AWS is switched off and was deleted on 2026-10-23 (section 7.6), so **the live site solves nothing until M12.7**. The compute manager that runs on the VPS (M12.1 to M12.3) and the API's VPS mode (M12.4) are on `main`; the VPS setup (bootstrap script, systemd units, environment template, image updater, and the deploy storing the worker image in R2, M12.5) is on `main` too, and section 4.3 is how you set the VPS up with it. Check that a task is ticked in `PROGRESS.md` before doing a step that names it.
 
 ## What you are setting up
 
@@ -44,7 +44,7 @@ Keep a private note (a password manager is best) of what you created, since some
 | First deploy, invite colleagues | M10.2 onwards, M10.10 | 6 | Done |
 | Delete AWS | ADR-106 | 7.6 | Done (2026-10-23) |
 | Order the VPS with your SSH key | M12.5 | 4.1 | Done (2026-10-23) |
-| Set the VPS up | M12.5 | 4.3 | Waits on M12.5 |
+| Set the VPS up | M12.5 | 4.3 | To do (the scripts are on `main`) |
 | Switch the site to the VPS | M12.7 | 4.5 | Waits on M12.7 |
 
 ## 1. Cloudflare
@@ -180,7 +180,7 @@ The solver runs on one Contabo Cloud VPS 8 that is always on (ADR-106). It opens
    Press Enter to keep the suggested file and choose a passphrase. The **public** key is the file ending in `.pub` (for example `~/.ssh/id_ed25519.pub`); that one goes to Contabo. The other file is the private key: it never leaves your computer.
 2. At <https://contabo.com> order **Cloud VPS 8** on a **monthly** term paid in advance. Pick the region nearest you and your colleagues.
 3. On the order page, add your public key where Contabo asks for the login (SSH key), so the VPS accepts your key from its first start. Contabo's page names change now and then; if you already ordered it with a password only, add the key later in the customer control panel or tell the M12.5 thread.
-4. Operating system: the bootstrap script from M12.5 will name the one it is written for. If the VPS is already running, keep what you chose and tell the M12.5 thread which image it is.
+4. Operating system: **Ubuntu 24.04** (22.04 also works). The bootstrap script (4.3) checks the version and stops on anything else.
 5. When Contabo's email arrives, note the VPS's **IP address** in your private note. Contabo's customer control panel (<https://my.contabo.com>) is where you see, restart and reinstall it.
 
 A thread needs only the IP address and that the key is on it; it never needs your private key or your Contabo password.
@@ -203,17 +203,70 @@ The manager's settings are environment variables (`docs/ARCHITECTURE.md` section
 | `CLEARFEA_SOLVE_CPUSET`, `CLEARFEA_LIGHT_CPUSET` | `0-5` and `6`, so each lane keeps its own cores |
 | `CLEARFEA_SCRATCH_PATH` or `CLEARFEA_HOST_DISK_PATH` | Docker's data directory on the VPS, so the 20 GiB stop and the dashboard's disk alert watch the right disk |
 
-M12.5's environment template holds these, with the rest left at their defaults until M12.6 measures the VPS (M12.6 may change the lane sizes and the element limits).
+The environment template `infra/vps/manager.env.example` holds these (with `CLEARFEA_SCRATCH_PATH=/var/lib/docker`), the rest left at their defaults until M12.6 measures the VPS (M12.6 may change the lane sizes and the element limits).
 
-### 4.3 Set the VPS up and redeploy it (waits on M12.5)
+### 4.3 Set the VPS up and redeploy it
 
-> **Not written yet.** This section is filled in by task M12.5 together with the files it describes. Do not set the VPS up by hand before then: the steps depend on scripts that do not exist yet.
+Everything on the VPS comes from the folder `infra/vps/` (M12.5, ADR-110, ADR-131): a **bootstrap script** you run once, the **compute manager** as a systemd service that starts with the VPS and comes back by itself if it stops, an **image updater** that every 5 minutes loads the worker image the site names, and the **environment file** with the manager's settings. Nothing in it orders, replaces or restarts a VPS.
 
-What M12.5 adds (PLAN.md, ADR-110), and what this section will then explain step by step:
+**How a new worker image reaches the VPS.** When a merge changes `worker/` or `packages/spec/`, the deploy's **Worker image** job builds the image and stores it as a compressed archive in the `clearfea-files` bucket (`worker-images/src-....tar.gz`, about a few GB; the newest three are kept), using the R2 keys of section 1.7, so nothing new goes into GitHub. The deployed site then names that image. Within 5 minutes the VPS's updater downloads and loads it, and every job after that runs it; a job already running finishes on the old one. The manager moves to the new image as soon as no job is running. A merge that changes neither folder builds nothing and the VPS keeps its image.
 
-1. `infra/vps/`: a **bootstrap script** you run once over SSH on a fresh VPS (it installs Docker and the manager and locks the machine down to SSH by key), a **systemd unit** that starts the manager when the VPS boots and restarts it if it stops, an **environment template** with the settings of 4.2, and an **image updater**.
-2. **The worker image from R2.** The repository is private and AWS is gone, so `deploy.yml` will store the worker image as a compressed archive in the `clearfea-files` bucket whenever `worker/` or `packages/spec/` changes; the API tells the manager which image to run and hands it a signed link, and the manager loads a new image between jobs, so an update never interrupts a running job. Pinning a tag in the VPS's environment file rolls back. Until M12.5 lands, nothing builds or publishes the worker image for the live site.
-3. **The redeploy guide**: how to rebuild the same setup on a reinstalled or newly ordered VPS (which you order by hand, as in 4.1), how to rotate `WORKER_TOKEN` or the Access token on the VPS, and how to check the manager's log over SSH.
+#### First setup (about 15 minutes)
+
+You need: the VPS's IP address, your SSH key on it (4.1), and three secrets from your private note: `WORKER_TOKEN` (section 3) and the Access service token's **Client ID** and **Client Secret** (section 1.8). The site must have deployed once since M12.5 merged, so an image is stored (Actions tab, **Deploy**, a green run whose **Worker image** job says "Stored ...").
+
+1. **Get the folder onto your computer.** On GitHub, open the repository, **Code** → **Download ZIP**, and unzip it. (With a clone, `git pull` instead.) The folder you need is `infra/vps` inside it.
+2. **Copy it to the VPS.** In a terminal in the unzipped folder (PowerShell on Windows, Terminal on macOS):
+
+   ```
+   scp -r infra/vps root@<the VPS's IP>:clearfea-vps
+   ```
+
+   The first time, SSH asks whether to trust the VPS's key fingerprint: type `yes`.
+3. **Log in and check the Ubuntu version.**
+
+   ```
+   ssh root@<the VPS's IP>
+   cat /etc/os-release
+   ```
+
+   The `VERSION=` line must say 24.04 or 22.04. If it says anything else, reinstall the VPS with Ubuntu 24.04 in Contabo's control panel (it erases the VPS, which holds nothing you need yet), add your SSH key again, and start from step 2.
+4. **Run the bootstrap script** (still logged in to the VPS):
+
+   ```
+   bash clearfea-vps/bootstrap.sh
+   ```
+
+   It updates the system (a few minutes), turns off password logins (SSH by key only, and only once your key is there), closes every port except SSH, installs Docker, and then asks for the three secrets one by one. Paste each and press Enter; nothing shows while you paste. It saves them in `/etc/clearfea/manager.env`, which only root can read. It then downloads the worker image (a few minutes) and starts the manager, and finally prints the manager's first log lines.
+5. **Check it is up.** Within a minute the dashboard's **Overview** shows the host `contabo-1` online with its load, and the **Events** tab has a `host_online` event. Until M12.7 switches the site to the VPS (4.5) the live site sends it no jobs.
+
+If step 4 stops with a message, it says what to do; fix that and run the same command again. Running it again is always safe.
+
+#### Day to day on the VPS
+
+All of these are typed on the VPS after `ssh root@<the VPS's IP>`:
+
+| To | Type |
+| --- | --- |
+| See the manager's log, live (Ctrl-C to stop watching) | `journalctl -u clearfea-manager -f` |
+| See what the image updater did | `journalctl -u clearfea-image-update -n 50` |
+| Load a new image now instead of within 5 minutes | `systemctl start clearfea-image-update` |
+| Restart the manager (running jobs keep going and are followed again) | `systemctl restart clearfea-manager` |
+| Stop taking jobs until you start it again (running jobs keep going) | `systemctl disable --now clearfea-manager`, later `systemctl enable --now clearfea-manager` |
+| See which image runs | `docker image ls clearfea-worker` (the `current` tag has the same IMAGE ID as the `src-...` it runs) |
+| See running jobs | `docker ps` |
+
+**Roll back the worker image.** Find the tag that worked: the `src-...` printed by the **Worker image** job of an earlier deploy run in the Actions tab (only the newest three are stored). On the VPS, `nano /etc/clearfea/manager.env`, set `CLEARFEA_IMAGE_PIN=src-...`, save (Ctrl-O, Enter, Ctrl-X), then `systemctl start clearfea-image-update`. The VPS keeps that image whatever later deploys store, until you empty the line again. Rolling back the site itself is section 7.2; it also rolls the image back when the older commit's archive is still stored.
+
+**Change a secret** (after rotating `WORKER_TOKEN` in section 3, or making a new Access service token in 1.8): update GitHub first and let the deploy run, then on the VPS `nano /etc/clearfea/manager.env`, replace the value after `CLEARFEA_WORKER_TOKEN=`, `CLEARFEA_ACCESS_CLIENT_ID=` or `CLEARFEA_ACCESS_CLIENT_SECRET=` (no quotes, no spaces), save and `systemctl restart clearfea-manager`.
+
+**Install an updated `infra/vps`** (when a pull request changes the scripts or the lane settings): steps 1, 2 and 4 again. The script keeps your environment file and its secrets; a changed setting in `manager.env.example` is not copied over it, so the pull request says which line to change by hand.
+
+**Security updates** install themselves every day. The VPS never reboots by itself, since a reboot stops a running solve; when the login message says "System restart required", reboot when no job is running (`docker ps` shows only `clearfea-manager`) with `reboot`. The manager starts again with the VPS.
+
+#### Rebuild on a reinstalled or new VPS
+
+If the VPS is reinstalled from Contabo's panel, or you order a replacement by hand (4.1), do the first setup again: nothing on the VPS is of record. Keep the same `CLEARFEA_HOST_NAME` (`contabo-1`) so the dashboard keeps one host; jobs that were running on the old one are queued again by the site within a few minutes (4.4). If a new VPS has a new IP address, nothing on the site needs to change, since the site never calls the VPS.
 
 ### 4.4 When the VPS stops (restart it by hand)
 
@@ -225,7 +278,7 @@ When the solver host has not checked in for 2 minutes:
 To bring it back:
 
 1. Open <https://my.contabo.com>, find the VPS and use its **Restart** action (Contabo may call it reboot or power cycle). If the control panel shows it as running but it still does not check in, restart it anyway.
-2. Within a few minutes of the VPS being up, the Overview shows the host online again and the Events tab has a `host_online` event. Once M12.5's systemd unit is installed, the manager starts with the VPS by itself; before that there is nothing on the VPS to start.
+2. Within a few minutes of the VPS being up, the Overview shows the host online again and the Events tab has a `host_online` event: the manager starts with the VPS by itself (4.3).
 3. If it does not come back, look at the VPS's console in Contabo's control panel, and tell a thread what the dashboard and the console show. A VPS that cannot be recovered is reinstalled or replaced by you, by hand, then set up again with 4.3.
 
 ### 4.5 Switch the site to the VPS (M12.7)
@@ -252,7 +305,7 @@ The repository's **Settings** → **Secrets and variables** → **Actions** shou
 | `WORKER_TOKEN` | Secret | 3 |
 | `VERIFY_TOKEN` | Secret | 3 (optional, for the live checks) |
 
-M12.5 may add a value for the worker image archive; it will say so here.
+The worker image archive (4.3) needs nothing more: the deploy stores it with `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
 
 **Remove the AWS values.** `AWS_REGION` and `AWS_DEPLOY_ROLE_ARN` (variables) and `AWS_LAUNCHER_ACCESS_KEY_ID` and `AWS_LAUNCHER_SECRET_ACCESS_KEY` (secrets) belong to the AWS setup that is being deleted. Delete them on the same page (the bin icon beside each). The deploy still sends the launcher keys to the site whenever they are set, so removing them is what keeps a queued job from trying to start an AWS machine. A Worker keeps a secret it was once given even after GitHub stops sending it, so also open Cloudflare → **Compute (Workers)** → `clearfea` → **Settings** → **Variables and Secrets** and delete `AWS_LAUNCHER_ACCESS_KEY_ID`, `AWS_LAUNCHER_SECRET_ACCESS_KEY` and `AWS_REGION` there. Deleting the stack (7.6) also deletes the launcher user, so its key stops working in any case.
 
@@ -293,7 +346,7 @@ If someone sees "This Google account is not invited", the address they chose on 
 2. **Deploy** runs by itself: tests, then the database changes, the site and the API.
 3. About 5 minutes later the site runs the new version. Your colleagues see it on their next page load.
 
-If the tests fail, nothing is deployed and the site keeps the previous version. Until M12.5 a change to the worker reaches nothing live; from M12.5 the deploy also stores a new worker image in R2 and the VPS takes it between jobs (4.3).
+If the tests fail, nothing is deployed and the site keeps the previous version. When a merge changes the worker, the deploy first stores a new worker image in R2 (its **Worker image** job, up to about 40 minutes when nothing is cached) and the VPS takes it between jobs (4.3).
 
 ### 7.2 Undo a bad deploy
 
@@ -311,7 +364,7 @@ The large machine (8 vCPU, 32 GB) existed only on AWS and is off. On the VPS eve
 
 ### 7.5 Check the solver host
 
-Dashboard → **Overview**: the solver host with its latest CPU, memory and disk, each lane's running and waiting jobs, and the alerts (host offline, disk low, out of memory, repeated platform failures, queue paused). Each alert says what to do. The disk alert asks you to free space on the VPS over SSH; M12.5's guide (4.3) will give the command for that.
+Dashboard → **Overview**: the solver host with its latest CPU, memory and disk, each lane's running and waiting jobs, and the alerts (host offline, disk low, out of memory, repeated platform failures, queue paused). Each alert says what to do. The disk alert asks you to free space on the VPS. Log in (`ssh root@<the VPS's IP>`) and type `docker system df` to see what uses the disk, then `docker container prune -f && docker volume prune -f && docker image prune -f` (it removes only stopped containers, volumes no container uses and images without a tag, so a running job and its files are kept) and `journalctl --vacuum-size=500M`. If the disk is still full, tell a thread what `df -h /` and `docker system df` show.
 
 ### 7.6 Pause, delete AWS, shut down
 
@@ -343,6 +396,8 @@ GitHub → **Actions** → **Live checks** → **Run workflow**, and pick a suit
 | ClearFEA says the address is not invited | Not on the allowlist | Add it on the dashboard (6.3) |
 | Imports, meshes and runs are refused saying the solver is offline | The VPS has not checked in for 2 minutes (only once the site runs `MACHINES=vps`, 4.5) | Restart the VPS by hand (4.4) |
 | The Overview says the host's disk is low | Old images, stopped containers or raw output fill the VPS's disk | Free space on the VPS (7.5); at 20 GiB free the lanes stop taking jobs |
+| The VPS's `journalctl -u clearfea-image-update` says no image to load, or the pinned image cannot be loaded | No deploy has stored an image since M12.5, or the pinned archive was pruned | Run **Deploy** by hand (6.1) and check its **Worker image** job; for a pin, choose one of the three newest tags (4.3) |
+| The manager's log says the Docker image is not loaded, or `systemctl status clearfea-manager` keeps restarting | The image updater has not loaded an image yet | `systemctl start clearfea-image-update`, then read `journalctl -u clearfea-image-update -n 50` |
 | The Overview reports tries out of memory | A model was too large for its lane | Look at the job's peak memory in **Jobs and runs** and tell a thread; the lane sizes and element limits are M12.6's |
 | The Overview reports repeated platform failures | Something on the host or in ClearFEA keeps failing jobs | Read the `job_failed` and `job_retried` events and the jobs' logs on the dashboard; if the host is the cause, pause the queue and restart the VPS by hand (4.4) |
 | A job fails saying the solver machines of this site are not set up | The site still runs the AWS mode (`MACHINES=cloud`) with no AWS key, as intended until M12.7 | Nothing to do: it is not charged. Jobs run again once M12.7 switches the site to the VPS |

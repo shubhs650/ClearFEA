@@ -232,6 +232,34 @@ class HostCheckInResponse(BaseModel):
     """
 
 
+class WorkerImage(BaseModel):
+    """
+    Answer of GET /internal/worker-image (M12.5, ADR-110, ADR-131): the worker image the solver host should run, a compressed `docker save` archive in R2 that the deploy stored for the API's own commit, or the tag asked for in ?tag= to roll back. The host's image updater downloads it from url, checks its size and SHA-256, and loads it between jobs.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+    )
+    tag: Annotated[str, Field(pattern="^src-[0-9a-f]{20}$")]
+    """
+    The image's tag: src- and 20 hex digits, a hash of the worker/ and packages/spec/ source it was built from.
+    """
+    bytes: Annotated[int, Field(ge=1)]
+    """
+    The archive's size.
+    """
+    sha256: Annotated[str, Field(pattern="^[0-9a-f]{64}$")]
+    """
+    The archive's SHA-256, in hex, as the deploy recorded it.
+    """
+    url: Annotated[str, Field(min_length=1)]
+    """
+    Where to download the archive: a presigned R2 URL in production, valid for urlSeconds, else the API's own pass-through route, which needs the worker token.
+    """
+    url_seconds: Annotated[int | None, Field(alias="urlSeconds", ge=1)] = None
+
+
 class Metering(BaseModel):
     """
     What the worker measured of a job (ADR-033): billableMs is the wall-clock time from the start to the end of the job's handler on the machine, in whole milliseconds. Queue time and the worker's start-up are outside it. Sent for every job; the API charges only metered job types.
