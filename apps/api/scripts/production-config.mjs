@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Writes wrangler.production.json, the configuration `wrangler deploy` uses for the live site
 // (M10.1, ADR-095). Run from apps/api after building the web app:
-//   CLOUDFLARE_D1_DATABASE_ID=<id> CLOUDFLARE_ACCOUNT_ID=<id> [CLEARFEA_COMMIT=<sha>] node scripts/production-config.mjs
+//   CLOUDFLARE_D1_DATABASE_ID=<id> CLOUDFLARE_ACCOUNT_ID=<id> [CLEARFEA_COMMIT=<sha>] \
+//     [CLEARFEA_WORKER_IMAGE=<tag>] node scripts/production-config.mjs
 // The commit defaults to the checked-out one. The file is not committed: it holds the account's
 // database id, which lives in the GitHub variable of the same name (docs/DEPLOYMENT.md).
 
@@ -23,9 +24,12 @@ try {
     databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID,
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
     commit,
+    workerImage: process.env.CLEARFEA_WORKER_IMAGE,
   });
   writeFileSync(OUTPUT, `${JSON.stringify(config, null, 2)}\n`);
-  console.log(`Wrote ${OUTPUT} for commit ${commit}.`);
+  console.log(
+    `Wrote ${OUTPUT} for commit ${commit}${process.env.CLEARFEA_WORKER_IMAGE ? `, worker image ${process.env.CLEARFEA_WORKER_IMAGE}` : ""}.`,
+  );
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);

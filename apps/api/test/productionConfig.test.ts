@@ -83,4 +83,14 @@ describe("productionConfig", () => {
   it("refuses to deploy without a commit", () => {
     expect(() => productionConfig(BASE, { databaseId: ID, accountId: ACCOUNT, commit: " " })).toThrow(/CLEARFEA_COMMIT/);
   });
+
+  it("names the worker image the solver host loads when the deploy gives one (M12.5)", () => {
+    const tag = "src-0123456789abcdef0123";
+    const withImage = productionConfig(BASE, { databaseId: ID, accountId: ACCOUNT, commit: "abc1234", workerImage: tag });
+    expect(withImage.vars).toMatchObject({ WORKER_IMAGE_TAG: tag });
+    expect(config.vars).not.toHaveProperty("WORKER_IMAGE_TAG");
+    expect(() =>
+      productionConfig(BASE, { databaseId: ID, accountId: ACCOUNT, commit: "abc1234", workerImage: "latest" }),
+    ).toThrow(/CLEARFEA_WORKER_IMAGE/);
+  });
 });

@@ -19,10 +19,12 @@ const ACCOUNT = /^[0-9a-f]{32}$/;
  * URLs name (M10.5, ADR-098).
  *
  * @param {Record<string, unknown>} base wrangler.jsonc as written
- * @param {{ databaseId: string | undefined, accountId: string | undefined, commit: string | undefined }} production
+ * The worker image's tag (M12.5, ADR-110), when given, names the archive the solver host loads.
+ *
+ * @param {{ databaseId: string | undefined, accountId: string | undefined, commit: string | undefined, workerImage?: string | undefined }} production
  * @returns {Record<string, unknown>}
  */
-export function productionConfig(base, { databaseId, accountId, commit }) {
+export function productionConfig(base, { databaseId, accountId, commit, workerImage }) {
   const id = databaseId?.trim().toLowerCase() ?? "";
   if (!ID.test(id)) {
     throw new Error(
@@ -39,6 +41,12 @@ export function productionConfig(base, { databaseId, accountId, commit }) {
   }
   if (!commit?.trim()) {
     throw new Error("No commit to deploy: set CLEARFEA_COMMIT to the git commit being deployed.");
+  }
+  const image = workerImage?.trim() ?? "";
+  if (image !== "" && !/^src-[0-9a-f]{20}$/.test(image)) {
+    throw new Error(
+      `CLEARFEA_WORKER_IMAGE must be a worker image tag such as src-0123456789abcdef0123 (infra/vps/worker-archive.sh tag), got ${image}.`,
+    );
   }
   const databases = /** @type {Record<string, unknown>[]} */ (base.d1_databases ?? []);
   if (databases.length !== 1) {
@@ -78,6 +86,8 @@ export function productionConfig(base, { databaseId, accountId, commit }) {
       MACHINES: "cloud",
       R2_ACCOUNT_ID: account,
       R2_BUCKET: files.bucket_name,
+      // The solver host loads the image of this tag (M12.5, ADR-110).
+      ...(image === "" ? {} : { WORKER_IMAGE_TAG: image }),
     },
     observability: { enabled: true },
     // Each signed-in user's requests to /api (M11.3, ADR-112): REQUESTS_PER_MINUTE in
