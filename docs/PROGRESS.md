@@ -213,7 +213,9 @@ Things only the maintainer can do.
 - [x] Decide V-23 (NAFEMS LE10): build it, with the edge supports it needs (2026-10-21)
 - [x] M9.9: sign off the gate walk (2026-10-21)
 - [x] M11.1 (done 2026-10-22; deploy run 32 passed its health check through Access): create the Access service token `clearfea-machines`, add a Service Auth policy for it to the site's Access application, and add the GitHub secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (`docs/DEPLOYMENT.md` section 1.8). Until then every deploy fails its last step, the health check, with "Cloudflare Access refused the health check"
-- [ ] At the next AWS stack change, update the `clearfea` stack with **Replace existing template** and the current `infra/aws/clearfea.yaml` (DEPLOYMENT.md 4.3), so the stack holds PR #134's deploy role fixes; do it while no job is running
+- [x] ~~At the next AWS stack change, update the `clearfea` stack with **Replace existing template**~~ (dropped: AWS is deleted, ADR-106)
+- [x] Delete AWS (done 2026-10-23, Shubham, Worker secrets included): empty the image store, delete the `clearfea` stack, remove the AWS variables and secrets from GitHub and the launcher secrets from the Cloudflare Worker (`docs/DEPLOYMENT.md` sections 7.6 and 5)
+- [x] M12.5: order the Contabo Cloud VPS 8 with your SSH key and note its IP address (done 2026-10-23; the IP is in project memory, not the repository) (`docs/DEPLOYMENT.md` section 4.1)
 
 ## Verification status
 
@@ -229,6 +231,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M12.5, guide part (2026-10-23): `docs/DEPLOYMENT.md` is rewritten for the VPS closed beta: AWS taken out of the setup (kept as appendix A, pointing at commit `069785e` for the old steps), the AWS delete steps and the removal of the AWS GitHub values and Worker secrets (5, 7.6), ordering the VPS with an SSH key (4.1), what runs on it as built (4.2, with the settings M12.5's environment template must set, `CLEARFEA_SCRATCH_PATH` or `CLEARFEA_HOST_DISK_PATH` among them), the manual restart when the host goes silent (4.4, which the dashboard's host alert points to), and the dashboard in place of the AWS checks (7, 8). Section 4.3 (bootstrap, systemd unit, environment template, image updater, worker image archive in R2, the redeploy steps) is a marked placeholder: M12.5's code PR fills it in and ticks M12.5; section 4.5 and 7.7 are M12.7's. `ADMIN_GUIDE.md` still describes AWS (M17.5); its links to DEPLOYMENT.md 4.3, 7.3 and 7.5 now land on the VPS sections.
 
 > Close M13 (2026-10-23): every M13 task is on main and matches PLAN.md and ADR-113 (tabs Overview, Jobs and runs, Users, Events, Settings, Costs and Export; the event log as audit trail; every setting editable and logged; CSV and .xlsx of every table by range; the four alerts on the dashboard only). M13 has no exit sentence beyond its goal, so the close is the green phase-end run on main 517b8d0 ([run 39902036869](https://github.com/shubhs650/ClearFEA/actions/runs/39902036869), full tier 314 of 314 in 27 cases, E-01 to E-10). Found and fixed in PR #160: ADR-113's "every table filters by date, user and status" was not met on Jobs and runs (status and type only) or Events (kind and level only); both now filter by user and UTC day (`apps/web/src/admin/filters.tsx`), and `/api/admin/jobs` takes `?since=`. M13.2's PLAN.md box ticked. Not checkable without the VPS (reported, not faked): the host card, the host load, the disk alert and the manager's out-of-memory flag are covered only by E-08's hand check-in of `e2e-vps` and the API tests until M12.5 runs a real manager; M12.5 must set `CLEARFEA_HOST_DISK_PATH` or `CLEARFEA_SCRATCH_PATH` (M13.5 note). The admin guide still describes the AWS-era admin page; PLAN.md puts its update in M17.5. Next: M12.5 once the VPS is ordered.
 
@@ -542,6 +546,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-23
 
+- M12.5 guide part: `DEPLOYMENT.md` describes the Contabo VPS instead of AWS, with what waits on M12.5's scripts marked as such. Learned: a Worker keeps a secret after GitHub stops sending it, so removing the AWS launcher keys means deleting them in Cloudflare too.
 - Close M13: every M13 task checked against main, PLAN.md and ADR-113; the missing user and day filters added (PR #160); phase-end run on main green ([run 39902036869](https://github.com/shubhs650/ClearFEA/actions/runs/39902036869), full tier 314 of 314, E-01 to E-10). Learned: a milestone without an exit sentence is checked against its ADR's wording.
 - M13 close, gap: ADR-113 says every dashboard table filters by date, user and status, but Jobs and runs filtered only by status and type and Events only by kind and level, though both API routes took `?user=`; both tabs now have a User choice and From and To days (UTC), and `/api/admin/jobs` takes `?since=`. M13.2's box in PLAN.md was never ticked; ticked. Learned: check an ADR's "every" against each screen, not only the routes.
 
