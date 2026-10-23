@@ -76,7 +76,10 @@ def save_row(path: Path, row: dict[str, object]) -> None:
     data = (
         json.loads(path.read_text())
         if path.exists()
-        else {"description": "Light-lane mesh benchmark (M12.6). How it is measured: mesh.py.", "runs": []}
+        else {
+            "description": "Light-lane mesh benchmark (M12.6). How it is measured: mesh.py.",
+            "runs": [],
+        }
     )
     data["runs"] = [
         r
