@@ -6,7 +6,7 @@ Current state of the project. Update this file at the end of every working sessi
 
 - **Phase:** 0 (localhost prototype)
 - **Current milestone:** M12 Solver on the VPS. M11 Fix the live beta closed 2026-10-22 (closed beta redesign, M11 to M17, ADR-106 to ADR-119, under Shubham's autodrive). The site is live at https://clearfea.triyalabs.com behind Cloudflare Access
-- **Next task:** M12.5 VPS setup as code, which needs the VPS (M12.1 to M12.4 merged; M13 Admin dashboard closed 2026-10-23 and M14 Projects home 2026-10-22 under the autodrive while the VPS waits)
+- **Next task:** M12.6 Benchmark on the VPS, once Shubham has run `infra/vps/bootstrap.sh` on it (`docs/DEPLOYMENT.md` section 4.3; M12.1 to M12.5 merged; M13 Admin dashboard closed 2026-10-23 and M14 Projects home 2026-10-22 under the autodrive while the VPS waited)
 - **Blocked on:** nothing. The live site solves nothing until M12.7: AWS is off and is being deleted (his decision, 2026-10-22); deploys pass their health check through Access again since run 32
 
 ## Milestones
@@ -40,7 +40,7 @@ Copy the task list for the current milestone from `PLAN.md` here when the milest
 - [x] M12.2 Crash handling and retries (ADR-108, ADR-122): machine faults (`worker_lost`, `container_exited`, `container_start_failed`) queue the job again, uncharged, at most twice, with a line in its log; a PaStiX crash is solved again with SPOOLES in the same job within SPOOLES's element limit, uncharged for the crashed solve, and the run record and report name the solver used; peak memory is stored with each solve and said when a run runs out of memory; a scratch disk under 20 GB stops the manager's claims
 - [x] M12.3 Statistics (ADR-109, ADR-123): `job_stats` has a row per try (queue wait, stage times from the heartbeats, nodes, elements, unknowns, solver, and from the manager peak memory, CPU, disk written, exit code, out of memory, host, lane, image); `host_stats` from each check-in, kept 14 days; admin reads at `/api/admin/stats/jobs` and `/api/admin/stats/host`
 - [x] M12.4 API VPS mode (ADR-120): `MACHINES=vps`; the compute manager checks in through `POST /internal/hosts/check-in` every 30 s; while no host has checked in for 2 minutes every route that queues a job answers 503; the queue position counts the job's lane; the wallet shows usage only and no balance refuses work; the admin page shows the solver host
-- [ ] M12.5 VPS setup as code (ADR-110). Needs: the VPS ordered with the maintainer's SSH key
+- [x] M12.5 VPS setup as code (ADR-110, ADR-131): `infra/vps/` (bootstrap script for Ubuntu 24.04 or 22.04, `clearfea-manager.service`, `manager.env.example`, `update-image.sh` with a 5-minute timer); the deploy's Worker image job stores the image as a `docker save` archive in R2 under its source tag and the site names it (`WORKER_IMAGE_TAG`, `GET /internal/worker-image`); the redeploy guide in `DEPLOYMENT.md` section 4.3. Running the bootstrap on the VPS is the maintainer's to-do
 - [ ] M12.6 Benchmark on the VPS
 - [ ] M12.7 Go live on the VPS
 
@@ -215,7 +215,8 @@ Things only the maintainer can do.
 - [x] M11.1 (done 2026-10-22; deploy run 32 passed its health check through Access): create the Access service token `clearfea-machines`, add a Service Auth policy for it to the site's Access application, and add the GitHub secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (`docs/DEPLOYMENT.md` section 1.8). Until then every deploy fails its last step, the health check, with "Cloudflare Access refused the health check"
 - [x] ~~At the next AWS stack change, update the `clearfea` stack with **Replace existing template**~~ (dropped: AWS is deleted, ADR-106)
 - [x] Delete AWS (done 2026-10-23, Shubham): empty the image store, delete the `clearfea` stack, remove the AWS variables and secrets from GitHub and the launcher secrets from the Cloudflare Worker (`docs/DEPLOYMENT.md` sections 7.6 and 5)
-- [x] M12.5: order the Contabo Cloud VPS 8 with your SSH key and note its IP address (done 2026-10-23; the IP is in project memory, not the repository) (`docs/DEPLOYMENT.md` section 4.1)
+- [x] M12.5: order the Contabo Cloud VPS 8 with your SSH key and note its IP address (done 2026-10-23; Ubuntu 24.04; the IP is in project memory, not the repository) (`docs/DEPLOYMENT.md` section 4.1)
+- [ ] M12.5: once a deploy after the M12.5 merge shows a green **Worker image** job, set the VPS up: copy `infra/vps` to it and run `bash clearfea-vps/bootstrap.sh` as root, pasting `WORKER_TOKEN` and the Access Client ID and Secret when asked (`docs/DEPLOYMENT.md` section 4.3). M12.6 needs it
 
 ## Verification status
 
@@ -231,6 +232,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M12.5 (2026-10-23, ADR-131): the VPS is `infra/vps/`. The image updater is a shell script beside the manager, not manager code: it asks `GET /internal/worker-image` (worker token and Access pair from `/etc/clearfea/manager.env`), downloads the archive, checks size and SHA-256, `docker load`s it and retags `clearfea-worker:current`; the manager already looks the tag's image id up at every claim, so new jobs take the new image with no manager change. The manager container is restarted onto a new image only when no container labelled `clearfea.manager.host` runs, and started when enabled but not running (bootstrap enables it before an image may exist). The deploy's Worker image job (`infra/vps/worker-archive.sh`, AWS CLI against R2's S3 endpoint with the presign token of DEPLOYMENT.md 1.7) builds with buildx `type=docker,dest=` so the image is never loaded on the runner, keeps the newest three archives, and the site job waits for it so `WORKER_IMAGE_TAG` is never a missing archive; without R2 keys it warns and the site names no image. Not tried on the real VPS or in Actions from here (no SSH from the sandbox, and the job only runs on main): the first deploy after merge and Shubham's bootstrap are the first real runs, so check the Worker image job's log and the dashboard's host card then. `shellcheck infra/vps/*.sh` is clean but not in `make test`. Next: Shubham runs the bootstrap, then M12.6.
 
 > M12.5, guide part (2026-10-23): `docs/DEPLOYMENT.md` is rewritten for the VPS closed beta: AWS taken out of the setup (kept as appendix A, pointing at commit `069785e` for the old steps), the AWS delete steps and the removal of the AWS GitHub values and Worker secrets (5, 7.6), ordering the VPS with an SSH key (4.1), what runs on it as built (4.2, with the settings M12.5's environment template must set, `CLEARFEA_SCRATCH_PATH` or `CLEARFEA_HOST_DISK_PATH` among them), the manual restart when the host goes silent (4.4, which the dashboard's host alert points to), and the dashboard in place of the AWS checks (7, 8). Section 4.3 (bootstrap, systemd unit, environment template, image updater, worker image archive in R2, the redeploy steps) is a marked placeholder: M12.5's code PR fills it in and ticks M12.5; section 4.5 and 7.7 are M12.7's. `ADMIN_GUIDE.md` still describes AWS (M17.5); its links to DEPLOYMENT.md 4.3, 7.3 and 7.5 now land on the VPS sections.
 
@@ -546,6 +549,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-23
 
+- M12.5 VPS setup as code (ADR-131): bootstrap script, manager under systemd, an image updater every 5 minutes, and the deploy storing the worker image as an R2 archive the API names. Learned: the manager already re-reads its image tag at each claim, so retagging is the whole of "update between jobs".
 - M12.5 guide part: `DEPLOYMENT.md` describes the Contabo VPS instead of AWS, with what waits on M12.5's scripts marked as such. Learned: a Worker keeps a secret after GitHub stops sending it, so removing the AWS launcher keys means deleting them in Cloudflare too.
 - Close M13: every M13 task checked against main, PLAN.md and ADR-113; the missing user and day filters added (PR #160); phase-end run on main green ([run 39902036869](https://github.com/shubhs650/ClearFEA/actions/runs/39902036869), full tier 314 of 314, E-01 to E-10). Learned: a milestone without an exit sentence is checked against its ADR's wording.
 - M13 close, gap: ADR-113 says every dashboard table filters by date, user and status, but Jobs and runs filtered only by status and type and Events only by kind and level, though both API routes took `?user=`; both tabs now have a User choice and From and To days (UTC), and `/api/admin/jobs` takes `?since=`. M13.2's box in PLAN.md was never ticked; ticked. Learned: check an ADR's "every" against each screen, not only the routes.

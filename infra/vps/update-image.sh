@@ -99,7 +99,7 @@ if [ -z "$(image_id "$IMAGE")" ]; then
   rm -f "$WORK_DIR"/*.tar.gz
   # The archive, then the loaded image, which is about three times its size.
   free=$(df --output=avail -B1 "$WORK_DIR" | tail -n 1)
-  [ "$free" -gt $((BYTES * 4)) ] || die "only $((free / 1024 ** 3)) GiB free in $WORK_DIR, too little to download and load a $((BYTES / 1024 ** 2)) MiB archive. Free space on the VPS (docs/DEPLOYMENT.md section 8)."
+  [ "$free" -gt $((BYTES * 4)) ] || die "only $((free / 1024 ** 3)) GiB free in $WORK_DIR, too little to download and load a $((BYTES / 1024 ** 2)) MiB archive. Free space on the VPS (docs/DEPLOYMENT.md section 7.5)."
   echo "update-image: downloading $IMAGE ($((BYTES / 1024 ** 2)) MiB)"
   # The worker token goes only to the API, never to the presigned R2 link.
   download_headers=(-A "$USER_AGENT")
