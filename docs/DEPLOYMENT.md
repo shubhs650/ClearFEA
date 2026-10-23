@@ -1,26 +1,28 @@
 # Deploying the live closed beta
 
-How the maintainer sets up `clearfea.triyalabs.com` (ADR-095, milestone M10). Written for someone who is not a DevOps engineer: every step says where to click and what to copy where. You do these steps once. After that, every merge to `main` goes live by itself.
+How the maintainer sets up and runs `clearfea.triyalabs.com` for the closed beta (ADR-095, redesigned in M11 to M17, ADR-106 to ADR-119). Written for someone who is not a DevOps engineer: every step says where to click and what to copy where. You do the setup once. After that, every merge to `main` goes live by itself.
 
 Self-hosting on your own machine is a different procedure: see `SELF_HOSTING.md`.
 
-Once the site is up, running the beta day to day (inviting, removing, credits, machine sizes, costs, the tutorial trial) is in `ADMIN_GUIDE.md`.
+Once the site is up, running the beta day to day (inviting, removing, settings, costs, the tutorial trial) is in `ADMIN_GUIDE.md`. That guide still describes the AWS machines in places; M17.5 brings it up to date.
 
-> Status: written at the start of M10, before the code it describes is merged. Each section names the M10 task that needs it. Tasks update this file when they land, so check that the task is ticked in `PROGRESS.md` before doing its section.
+> **Status (2026-10-23).** The website, API, database and files run on Cloudflare behind Cloudflare Access, and every merge to `main` deploys them (sections 1 to 3, 5 and 6 are current). The solver moves from AWS to one always-on Contabo VPS (ADR-106): AWS is switched off and is to be deleted (section 7.6), so **the live site solves nothing until M12.7**. The compute manager that runs on the VPS (M12.1 to M12.3) and the API's VPS mode (M12.4) are on `main`; the VPS setup itself (bootstrap script, systemd unit, environment template, image updater, and the deploy storing the worker image in R2) is task M12.5 and is **not built yet**. Section 4 says what is known now and marks each step that waits on M12.5. Check that a task is ticked in `PROGRESS.md` before doing a step that names it.
 
 ## What you are setting up
 
 | Piece | Service | What it does | Monthly cost (closed beta) |
 | --- | --- | --- | --- |
 | Website, API, sign-in | Cloudflare Workers (Paid plan) | Serves the landing page and the app at `clearfea.triyalabs.com`, runs the API | $5 |
-| Database | Cloudflare D1 | Projects, simulations, runs, ledger, allowlist | Included |
-| Files | Cloudflare R2 | STEP files, meshes, results, reports | Free up to 10 GB |
+| Database | Cloudflare D1 | Projects, simulations, runs, ledger, allowlist, events, statistics | Included |
+| Files | Cloudflare R2 | STEP files, meshes, results, reports (and, from M12.5, the worker image) | Free up to 10 GB |
+| Hiding the site | Cloudflare Zero Trust (Access) | Only people and machines you let in reach the site until the public beta (ADR-111) | Free plan |
 | Google sign-in | Google Cloud (OAuth client) | "Sign in with Google" | Free |
-| Solver machines | AWS ECS Fargate | Starts a 4 vCPU / 16 GB machine when a job is waiting, stops it after 10 idle minutes | About $0.23 per machine hour, roughly $5 to $14 |
-| Solver image store | AWS ECR | Holds the worker image | About $2 |
-| Automatic deploys | GitHub Actions | Tests and deploys every merge to `main` | Free (public repository) |
+| Solver host | Contabo Cloud VPS 8 (8 vCPU, 24 GB, NVMe), monthly plan paid in advance | Always on; its compute manager takes jobs from the API and runs each in its own container (ADR-106, ADR-107) | About $17 |
+| Automatic deploys | GitHub Actions | Tests and deploys every merge to `main` | Within the minutes GitHub includes for private repositories |
 
-All passwords and keys live in **one place: GitHub repository secrets**. The deploy workflow copies them to Cloudflare and AWS. Never paste a secret into a chat, an issue, a pull request or a file in the repository.
+AWS is no longer part of the closed beta (ADR-106). Its launcher code and stack template stay in the repository, unused, for production later (appendix A).
+
+All passwords and keys for the site live in **one place: GitHub repository secrets**. The deploy workflow copies them to Cloudflare. The solver host has its own copy of the few it needs, in a file only root can read on the VPS (section 4). Never paste a secret into a chat, an issue, a pull request or a file in the repository.
 
 Two kinds of values go into GitHub:
 
@@ -31,16 +33,19 @@ Keep a private note (a password manager is best) of what you created, since some
 
 ### Order
 
-| Step | Needed by task | Section |
-| --- | --- | --- |
-| Cloudflare plan, R2, D1, tokens | M10.1, M10.2 | 1 |
-| Google sign-in client | M10.3 | 2 |
-| Two random keys | M10.3, M10.6 | 3 |
-| R2 API token | M10.5 | 1.7 |
-| Access service token | M11.1 | 1.8 |
-| AWS account and stack | M10.7 | 4 |
-| GitHub secrets and variables | as each value is made | 5 |
-| First deploy, invite colleagues | M10.2 onwards, M10.10 | 6 |
+| Step | Needed by task | Section | State |
+| --- | --- | --- | --- |
+| Cloudflare plan, R2, D1, tokens | M10.1, M10.2 | 1 | Done |
+| Google sign-in client | M10.3 | 2 | Done |
+| Random keys | M10.3, M10.6, M10.9 | 3 | Done |
+| R2 API token | M10.5 | 1.7 | Done |
+| Access service token | M11.1 | 1.8 | Done |
+| GitHub secrets and variables | as each value is made | 5 | Remove the AWS ones (5) |
+| First deploy, invite colleagues | M10.2 onwards, M10.10 | 6 | Done |
+| Delete AWS | ADR-106 | 7.6 | To do now |
+| Order the VPS with your SSH key | M12.5 | 4.1 | To do now |
+| Set the VPS up | M12.5 | 4.3 | Waits on M12.5 |
+| Switch the site to the VPS | M12.7 | 4.5 | Waits on M12.7 |
 
 ## 1. Cloudflare
 
@@ -96,14 +101,14 @@ This token lets GitHub deploy the site. It cannot touch anything outside your ac
 
 ### 1.7 Create the R2 API token (for task M10.5)
 
-The API uses this to give a solver machine signed links to its files.
+The API uses this to give the solver signed links to its files.
 
 1. Left menu → **R2 Object Storage** → **Manage API tokens** (on the right of the R2 overview) → **Create API token**.
 2. Name: `clearfea-presign`. Permissions: **Object Read & Write**. Specify bucket: **Apply to specific buckets only** → `clearfea-files`. TTL: Forever.
 3. **Create API Token**. The next page shows an **Access Key ID** and a **Secret Access Key**, once.
 4. In GitHub, add the **secrets** `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`.
 
-The deploy names the account and bucket for these links itself (from `CLOUDFLARE_ACCOUNT_ID` and the bucket in `wrangler.jsonc`). Until both secrets are set, solver machines move files through the API instead, which works only for files under 100 MB (ADR-098).
+The deploy names the account and bucket for these links itself (from `CLOUDFLARE_ACCOUNT_ID` and the bucket in `wrangler.jsonc`). Until both secrets are set, the solver moves files through the API instead, which works only for files under 100 MB (ADR-098).
 
 ### 1.8 Let machines and checks through Cloudflare Access (for task M11.1)
 
@@ -113,7 +118,7 @@ The site is behind Cloudflare Access until the public beta, so a program (the so
 2. The next page shows a **Client ID** (ending in `.access`) and a **Client Secret**, once. Copy both into your private note.
 3. **Access** → **Applications** → the application for `clearfea.triyalabs.com` → **Policies** → **Add a policy**. Name: `Machines`. Action: **Service Auth**. Include: **Service Token** → `clearfea-machines`. **Save**. Keep the existing policy for people beside it.
 4. In GitHub, add the **secrets** `CF_ACCESS_CLIENT_ID` (the Client ID) and `CF_ACCESS_CLIENT_SECRET` (the Client Secret).
-5. The solver host gets the same two values as `CLEARFEA_ACCESS_CLIENT_ID` and `CLEARFEA_ACCESS_CLIENT_SECRET` (M12 sets this up). To run the harness against the live site from your own computer, set those two as well.
+5. The solver host gets the same two values as `CLEARFEA_ACCESS_CLIENT_ID` and `CLEARFEA_ACCESS_CLIENT_SECRET` (section 4.2). To run the harness against the live site from your own computer, set those two as well.
 
 The dashboard's menu names change now and then; if one is not where this says, search the Zero Trust dashboard for "Service Tokens". Check it worked: `curl -A test -H "CF-Access-Client-Id: ..." -H "CF-Access-Client-Secret: ..." https://clearfea.triyalabs.com/api/health` prints JSON with `"status":"ok"`; without the two headers it prints nothing (a redirect to Access). If the deploy's last step says "Cloudflare Access refused the health check", one of steps 3 and 4 is missing or the token was copied wrongly.
 
@@ -142,13 +147,13 @@ The dashboard's menu names change now and then; if one is not where this says, s
 4. **Authorized redirect URIs**: `https://clearfea.triyalabs.com/api/auth/callback/google`
 5. **Create**. Copy the **Client ID** and the **Client secret**.
 6. In GitHub, add the **secrets** `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
-7. In GitHub, add the **variable** `ADMIN_EMAIL` with your admin Gmail address. That account is always allowed in and is the only one that sees the admin page.
+7. In GitHub, add the **variable** `ADMIN_EMAIL` with your admin Gmail address. That account is always allowed in and is the only one that sees the admin dashboard.
 
-Your colleagues' addresses do **not** go into GitHub. You add them on ClearFEA's admin page after the first deploy (section 6.3).
+Your colleagues' addresses do **not** go into GitHub. You add them on ClearFEA's admin dashboard after the first deploy (section 6.3).
 
-## 3. Two random keys (for tasks M10.3 and M10.6)
+## 3. Random keys (for tasks M10.3, M10.6 and M10.9)
 
-Make two long random strings. Either use your password manager's generator (40 or more characters, letters and digits), or run this in a terminal (Git Bash, WSL, macOS or Linux), once for each:
+Make long random strings. Either use your password manager's generator (40 or more characters, letters and digits), or run this in a terminal (Git Bash, WSL, macOS or Linux), once for each:
 
 ```
 openssl rand -base64 32
@@ -157,72 +162,79 @@ openssl rand -base64 32
 | GitHub secret | What it is |
 | --- | --- |
 | `BETTER_AUTH_SECRET` | Signs sign-in sessions. Changing it signs everyone out. |
-| `WORKER_TOKEN` | The key solver machines use to talk to the API. The API hands it to each machine when it starts it, so it is never stored in AWS. |
+| `WORKER_TOKEN` | The key the solver host's compute manager and its job containers use to talk to the API. The same value goes into the VPS's environment file (4.3). Changing it means changing it in both places, or the host stops getting jobs. |
 | `VERIFY_TOKEN` | For the live checks (M10.9): signs the verification account in, so the checks run without a Google account. At least 32 characters; leave it out and that sign-in does not exist. Changing it ends the account's sign-in. |
 
-## 4. AWS (for task M10.7)
+## 4. The solver VPS (tasks M12.5 and M12.7)
 
-> AWS is switched off for the closed beta and its resources are being deleted (ADR-106, 2026-10-22): see 7.6, "Shut AWS down completely". The deploy no longer builds or registers the solver image, and the variables `AWS_REGION` and `AWS_DEPLOY_ROLE_ARN` and the two launcher secrets can be removed from GitHub once the stack is gone. This section stays for production later; the solver moves to a VPS in M12.
+The solver runs on one Contabo Cloud VPS 8 that is always on (ADR-106). It opens no port to the internet except SSH with your key: its compute manager asks the API for work, the same way the local worker does, so nothing on the internet calls into it. **Nothing creates, replaces or restarts a VPS automatically** (your decision, 2026-10-22): you order it once, and when it stops you restart it by hand (4.4).
 
-The solver runs on AWS Fargate: a machine exists only while there is work, and you pay per second only while it exists. Everything ClearFEA needs in AWS is created in one go from a template file in the repository, `infra/aws/clearfea.yaml` (added by M10.7).
+### 4.1 Order the VPS with your SSH key (needed before M12.5 can start)
 
-### 4.1 Create and protect the account
+1. Make an SSH key on your own computer if you have none. In a terminal (PowerShell on Windows, Terminal on macOS or Linux):
 
-1. Go to <https://aws.amazon.com> → **Create an AWS Account**. Use an email you check; it becomes the root user. Choose the **Basic (free)** support plan.
-2. Sign in as the root user → top right, your account name → **Security credentials** → **Assign MFA device** → follow the steps with an authenticator app. Do this before anything else.
-3. Top right → account name → **Billing and Cost Management** → **Billing preferences**: turn on **Receive AWS Free Tier alerts** and **Receive CloudWatch billing alerts**, with your email.
+   ```
+   ssh-keygen -t ed25519 -C clearfea-vps
+   ```
 
-### 4.2 Pick a region
+   Press Enter to keep the suggested file and choose a passphrase. The **public** key is the file ending in `.pub` (for example `~/.ssh/id_ed25519.pub`); that one goes to Contabo. The other file is the private key: it never leaves your computer.
+2. At <https://contabo.com> order **Cloud VPS 8** on a **monthly** term paid in advance. Pick the region nearest you and your colleagues.
+3. On the order page, add your public key where Contabo asks for the login (SSH key), so the VPS accepts your key from its first start. Contabo's page names change now and then; if you already ordered it with a password only, add the key later in the customer control panel or tell the M12.5 thread.
+4. Operating system: the bootstrap script from M12.5 will name the one it is written for. If the VPS is already running, keep what you chose and tell the M12.5 thread which image it is.
+5. When Contabo's email arrives, note the VPS's **IP address** in your private note. Contabo's customer control panel (<https://my.contabo.com>) is where you see, restart and reinstall it.
 
-Top right of the AWS console, next to your account name, is the region. Pick the one nearest you (for example **Asia Pacific (Mumbai) ap-south-1** in India, or **US East (N. Virginia) us-east-1**) and keep using it for every step. Prices differ by a few percent between regions; the site's speed for your colleagues does not depend on it.
+A thread needs only the IP address and that the key is on it; it never needs your private key or your Contabo password.
 
-In GitHub, add the **variable** `AWS_REGION` with the region code, for example `ap-south-1`.
+### 4.2 What runs on the VPS (as built on `main`)
 
-### 4.3 Create the ClearFEA stack
+- **The compute manager** (M12.1, ADR-107, ADR-121): `python -m clearfea_worker manager` from the worker image, in a container of its own with the Docker socket. It claims jobs from the API in two **lanes**, solve (6 vCPU, 17 GB) and light (import, mesh and report; 1 vCPU, 4 GB), one job per lane, and runs each job in a fresh hardened container of the worker image (non-root, no capabilities, read-only root, its own scratch volume, memory without swap, a process limit). After its own restart it follows the job containers still running. The remaining 1 vCPU and about 3 GB stay with the system and Docker.
+- **Check-ins** (M12.4, ADR-120): every 30 s the manager tells the API it is alive, with the host's load (CPU, memory, disk). The dashboard's Overview shows the host from these; if none comes for 2 minutes the host counts as offline.
+- **Retries** (M12.2, ADR-122): a job lost to a machine fault (a container killed, the manager restarted, the VPS rebooted) is queued again, uncharged, at most twice. The manager stops taking jobs while the scratch disk has under 20 GiB free.
+- **Statistics** (M12.3): each try's memory, CPU and disk, read on the dashboard's Jobs and runs tab.
 
-Do this once the M10.7 pull request is merged.
+The manager's settings are environment variables (`docs/ARCHITECTURE.md` section 7, "Compute manager"). On the VPS they will be, at least:
 
-1. Download `infra/aws/clearfea.yaml` from the repository on GitHub (open the file → **Download raw file**).
-2. In the AWS console, search for **CloudFormation** → **Create stack** → **With new resources (standard)**.
-3. **Choose an existing template** → **Upload a template file** → choose `clearfea.yaml` → **Next**.
-4. Stack name: `clearfea`. Parameters:
+| Setting | Value on the VPS |
+| --- | --- |
+| `CLEARFEA_API_URL` | `https://clearfea.triyalabs.com` |
+| `CLEARFEA_WORKER_TOKEN` | The `WORKER_TOKEN` secret (section 3) |
+| `CLEARFEA_ACCESS_CLIENT_ID`, `CLEARFEA_ACCESS_CLIENT_SECRET` | The Access service token (section 1.8), so the manager gets past Cloudflare Access |
+| `CLEARFEA_HOST_NAME` | A short name the dashboard shows for the host, for example `contabo-1` |
+| `CLEARFEA_SOLVE_CPUSET`, `CLEARFEA_LIGHT_CPUSET` | `0-5` and `6`, so each lane keeps its own cores |
+| `CLEARFEA_SCRATCH_PATH` or `CLEARFEA_HOST_DISK_PATH` | Docker's data directory on the VPS, so the 20 GiB stop and the dashboard's disk alert watch the right disk |
 
-   | Parameter | Value |
-   | --- | --- |
-   | `AlertEmail` | Your email, for cost alarms |
-   | `MonthlyBudgetUsd` | The monthly AWS amount that should email you, for example `25` |
-   | `GitHubRepository` | `shubhs650/ClearFEA` |
-   | `GitHubRepositoryIds` | `shubhs650@221185337/ClearFEA@1419578936` (the name GitHub gives this repository in a deploy's identity; empty for a repository GitHub names as owner/name) |
-   | `ApiUrl` | `https://clearfea.triyalabs.com` |
-   | `LargeSizeEnabled` | `false` (switch on later, section 7.3) |
+M12.5's environment template holds these, with the rest left at their defaults until M12.6 measures the VPS (M12.6 may change the lane sizes and the element limits).
 
-5. **Next** → leave the options as they are → **Next** → at the bottom tick **I acknowledge that AWS CloudFormation might create IAM resources with custom names** → **Submit**.
-6. Wait until the stack status reads **CREATE_COMPLETE** (a few minutes; press the refresh button).
-7. Open the **Outputs** tab. In GitHub, add the **variable** `AWS_DEPLOY_ROLE_ARN` with the value of `DeployRoleArn`. You do not copy the other outputs: the stack also writes how to start a machine (cluster, subnets, security group) into a setting named `/clearfea/launch`, which the API reads by itself.
+### 4.3 Set the VPS up and redeploy it (waits on M12.5)
 
-To bring an existing stack up to a newer `clearfea.yaml`: download it as in step 1, then **CloudFormation** → `clearfea` → **Update** → **Replace existing template** → **Upload a template file** → **Next**, check the parameters against the table above (a new one shows its default) → **Next** to the end → tick the acknowledgement → **Submit**. Do it while no job is running: the update can replace machine definitions. An older file would undo what newer ones add, such as the deploy role's permissions, so always upload the current one.
+> **Not written yet.** This section is filled in by task M12.5 together with the files it describes. Do not set the VPS up by hand before then: the steps depend on scripts that do not exist yet.
 
-The budget alarm emails `AlertEmail` directly when the month's spending is forecast to pass 80% of `MonthlyBudgetUsd` and when it has passed it; there is no subscription to confirm.
+What M12.5 adds (PLAN.md, ADR-110), and what this section will then explain step by step:
 
-If the stack fails with "Provider with url https://token.actions.githubusercontent.com already exists", the account already trusts GitHub from earlier work: create the stack again with `CreateGitHubOidcProvider` set to `false`.
+1. `infra/vps/`: a **bootstrap script** you run once over SSH on a fresh VPS (it installs Docker and the manager and locks the machine down to SSH by key), a **systemd unit** that starts the manager when the VPS boots and restarts it if it stops, an **environment template** with the settings of 4.2, and an **image updater**.
+2. **The worker image from R2.** The repository is private and AWS is gone, so `deploy.yml` will store the worker image as a compressed archive in the `clearfea-files` bucket whenever `worker/` or `packages/spec/` changes; the API tells the manager which image to run and hands it a signed link, and the manager loads a new image between jobs, so an update never interrupts a running job. Pinning a tag in the VPS's environment file rolls back. Until M12.5 lands, nothing builds or publishes the worker image for the live site.
+3. **The redeploy guide**: how to rebuild the same setup on a reinstalled or newly ordered VPS (which you order by hand, as in 4.1), how to rotate `WORKER_TOKEN` or the Access token on the VPS, and how to check the manager's log over SSH.
 
-What the stack creates: a small network with public subnets and no NAT gateway (which would cost about $32 a month on its own), the image store (ECR, keeps the last ten images), the ECS cluster, the machine definitions (standard 4 vCPU / 16 GB; large 8 vCPU / 32 GB only with `LargeSizeEnabled`), a log group kept for 14 days, the `/clearfea/launch` setting, the budget alarm, the role GitHub deploys with, and the `clearfea-launcher` user, which can only start those machine definitions and read that setting. Nothing in it costs money while no machine runs, apart from the stored images (about $0.10 per GB a month).
+### 4.4 When the VPS stops (restart it by hand)
 
-The first machine can start only once the deploy workflow has put the worker image in the image store. After adding `AWS_REGION` and `AWS_DEPLOY_ROLE_ARN`, run the deploy by hand once (6.1): its **Solver image** job builds the image (about half an hour the first time) and pushes it. Until then a job waits for about 20 minutes while three starts fail, then fails saying no machine came up; nothing is charged.
+When the solver host has not checked in for 2 minutes:
 
-### 4.4 Create the launcher's access key
+- The dashboard's **Overview** shows the alert "The solver host ... has not checked in ...", and the **Events** tab has a `host_offline` event (M13.1, M13.5). Alerts are on the dashboard only: nothing emails you and nothing restarts or replaces the VPS.
+- New imports, meshes and runs are refused with a plain message (503) until the host is back. Jobs already queued wait in the queue. A job that was running when the host stopped is queued again by the site's per-minute check about 2 minutes after its last heartbeat, uncharged, at most twice (4.2, retries), and waits for the host too.
 
-The API needs a key to start solver machines. The stack created a user that can do nothing else.
+To bring it back:
 
-1. AWS console → search **IAM** → **Users** → `clearfea-launcher` → **Security credentials** tab → **Create access key**.
-2. Use case: **Application running outside AWS** → **Next** → description `Cloudflare Worker` → **Create access key**.
-3. Copy the **Access key** and the **Secret access key** (shown once).
-4. In GitHub, add the **secrets** `AWS_LAUNCHER_ACCESS_KEY_ID` and `AWS_LAUNCHER_SECRET_ACCESS_KEY`.
-5. Run the deploy once more (section 6.1) so the API gets the key. The admin page's **Solver machines** card then says machines start on AWS; before that it says they cannot be started yet and names what is missing.
+1. Open <https://my.contabo.com>, find the VPS and use its **Restart** action (Contabo may call it reboot or power cycle). If the control panel shows it as running but it still does not check in, restart it anyway.
+2. Within a few minutes of the VPS being up, the Overview shows the host online again and the Events tab has a `host_online` event. Once M12.5's systemd unit is installed, the manager starts with the VPS by itself; before that there is nothing on the VPS to start.
+3. If it does not come back, look at the VPS's console in Contabo's control panel, and tell a thread what the dashboard and the console show. A VPS that cannot be recovered is reinstalled or replaced by you, by hand, then set up again with 4.3.
+
+### 4.5 Switch the site to the VPS (M12.7)
+
+The live site still runs with `MACHINES=cloud` (`apps/api/scripts/productionConfig.mjs`), the AWS launcher's mode. With the AWS keys removed (5) and the stack deleted (7.6), a job queued there fails at once saying the solver machines are not set up, and nothing is charged. M12.7 changes production to `MACHINES=vps` once the VPS is set up and benchmarked (M12.6): from then on jobs wait for the VPS and runs show usage only (ADR-106 item 6). M12.7 runs the live checks (7.7) against it and updates this section.
 
 ## 5. GitHub: the full list
 
-When all sections are done, the repository's **Settings** → **Secrets and variables** → **Actions** should show:
+The repository's **Settings** → **Secrets and variables** → **Actions** should show:
 
 | Name | Kind | From |
 | --- | --- | --- |
@@ -239,12 +251,12 @@ When all sections are done, the repository's **Settings** → **Secrets and vari
 | `BETTER_AUTH_SECRET` | Secret | 3 |
 | `WORKER_TOKEN` | Secret | 3 |
 | `VERIFY_TOKEN` | Secret | 3 (optional, for the live checks) |
-| `AWS_REGION` | Variable | 4.2 |
-| `AWS_DEPLOY_ROLE_ARN` | Variable | 4.3 |
-| `AWS_LAUNCHER_ACCESS_KEY_ID` | Secret | 4.4 |
-| `AWS_LAUNCHER_SECRET_ACCESS_KEY` | Secret | 4.4 |
 
-Optional: to approve each deploy yourself instead of letting every merge go live, go to **Settings** → **Environments** → `production` (created by the first deploy) → tick **Required reviewers** and add yourself. Deploys then wait for your click in the Actions tab for **Site and API**. (The **Solver image** job that put the worker image on AWS was removed when AWS was switched off, ADR-106.)
+M12.5 may add a value for the worker image archive; it will say so here.
+
+**Remove the AWS values.** `AWS_REGION` and `AWS_DEPLOY_ROLE_ARN` (variables) and `AWS_LAUNCHER_ACCESS_KEY_ID` and `AWS_LAUNCHER_SECRET_ACCESS_KEY` (secrets) belong to the AWS setup that is being deleted. Delete them on the same page (the bin icon beside each). The deploy still sends the launcher keys to the site whenever they are set, so removing them is what keeps a queued job from trying to start an AWS machine. A Worker keeps a secret it was once given even after GitHub stops sending it, so also open Cloudflare → **Compute (Workers)** → `clearfea` → **Settings** → **Variables and Secrets** and delete `AWS_LAUNCHER_ACCESS_KEY_ID`, `AWS_LAUNCHER_SECRET_ACCESS_KEY` and `AWS_REGION` there. Deleting the stack (7.6) also deletes the launcher user, so its key stops working in any case.
+
+Optional: to approve each deploy yourself instead of letting every merge go live, go to **Settings** → **Environments** → `production` (created by the first deploy) → tick **Required reviewers** and add yourself. Deploys then wait for your click in the Actions tab for **Site and API**.
 
 ## 6. First deploy and inviting colleagues
 
@@ -265,11 +277,11 @@ After this, you never need to run it by hand: every merge to `main` runs it.
 
 `ADMIN_GUIDE.md` section 1 has these steps with a message to send them.
 
-1. Admin page → **Users** → **Allowed addresses** → type the colleague's Gmail address → **Add**.
+1. Admin dashboard → **Users** → **Allowed addresses** → type the colleague's Gmail address → **Add**.
 2. Check the same address is a **Test user** on the Google consent screen (2.2 step 7).
 3. Send them the link `https://clearfea.triyalabs.com` and the user guide's tutorial. They sign in with Google; there is nothing to install.
 
-To remove someone, select **Remove** next to their address on the admin page. They are signed out at once and cannot sign in again; their projects stay in the database. Adding the address again lets them back in to the same account.
+To remove someone, select **Remove** next to their address on the dashboard's **Users** tab. They are signed out at once and cannot sign in again; their projects stay in the database. Adding the address again lets them back in to the same account.
 
 If someone sees "This Google account is not invited", the address they chose on Google's screen is not on the list: check for a second Google account, or add the exact address they used.
 
@@ -278,41 +290,46 @@ If someone sees "This Google account is not invited", the address they chose on 
 ### 7.1 How a change goes live
 
 1. A thread (or you) merges a pull request into `main`.
-2. **Deploy** runs by itself: tests, then the solver image if solver code changed, then the database changes, the site and the API.
-3. About 5 minutes later the site runs the new version (20 to 30 minutes when the solver image is rebuilt). Your colleagues see it on their next page load. Jobs already running finish on the version they started with.
+2. **Deploy** runs by itself: tests, then the database changes, the site and the API.
+3. About 5 minutes later the site runs the new version. Your colleagues see it on their next page load.
 
-If the tests fail, nothing is deployed and the site keeps the previous version.
+If the tests fail, nothing is deployed and the site keeps the previous version. Until M12.5 a change to the worker reaches nothing live; from M12.5 the deploy also stores a new worker image in R2 and the VPS takes it between jobs (4.3).
 
 ### 7.2 Undo a bad deploy
 
 GitHub → **Actions** → **Deploy** → **Run workflow**, and in **Use workflow from** pick the tag or branch of the last good version (a thread can make one for you). Data changes are not undone by this; to get data back, Cloudflare D1 → `clearfea` → **Time Travel** restores the database to any minute in the last 30 days.
 
-### 7.3 Switch on the large machine (8 vCPU / 32 GB)
+### 7.3 Machine sizes
 
-1. AWS → **CloudFormation** → `clearfea` → **Update** → **Replace existing template** → upload the current `clearfea.yaml` (4.3) → set `LargeSizeEnabled` to `true` → **Next** to the end → **Submit**.
-2. ClearFEA admin page → **Settings** → **Machine sizes** → switch **Large** on.
-
-Until the large machine is benchmarked it keeps the 16 GB element limits, so it does not yet allow bigger models (ADR-095 item 5).
+The large machine (8 vCPU, 32 GB) existed only on AWS and is off. On the VPS every run goes into the solve lane; the size a run chooses sets its estimate and rate, and the 16 GB element limits stay until M12.6 benchmarks the VPS. The dashboard's **Settings** tab → **Machine sizes** shows what runs may choose.
 
 ### 7.4 Check what it costs
 
-- AWS → **Billing and Cost Management** → **Bills** (this month so far) or **Cost Explorer** (by service: Fargate is "Elastic Container Service").
+- Contabo: the VPS is a fixed monthly price paid in advance; invoices are in <https://my.contabo.com>.
 - Cloudflare → **Manage account** → **Billing**.
-- ClearFEA admin page → **Settings** → **Solver machines**: machine hours used this month against the monthly limit, and the latest machines started with how each went.
+- ClearFEA dashboard → **Costs**: a month's jobs, machine time and usage by user and job type, beside the solver host's and Cloudflare's monthly cost. Those two amounts are settings (**Settings** → solver host and platform per month): set them to what you actually pay.
 
-### 7.5 Make sure nothing is left running
+### 7.5 Check the solver host
 
-AWS → **Elastic Container Service** → **Clusters** → `clearfea` → **Tasks**. With no one working, the list is empty. A machine stops 10 minutes after its last job.
+Dashboard → **Overview**: the solver host with its latest CPU, memory and disk, each lane's running and waiting jobs, and the alerts (host offline, disk low, out of memory, repeated platform failures, queue paused). Each alert says what to do. The disk alert asks you to free space on the VPS over SSH; M12.5's guide (4.3) will give the command for that.
 
-### 7.6 Pause or shut down
+### 7.6 Pause, delete AWS, shut down
 
-- **Pause the solver**: admin page → **Settings** → **Cloud machines** → set the monthly limit of machine hours to 0. No machine starts and new runs are refused; the site stays up. Set it back (for example to 60) to resume.
-- **Shut AWS down completely**: CloudFormation → `clearfea` → **Delete**. The image store must be emptied first (ECR → `clearfea-worker` → select all images → **Delete**).
+- **Pause the solver**: dashboard → **Overview** → **Pause the queue**. No job starts; new jobs still queue and jobs already running finish; the site stays up. **Resume the queue** to start again.
+- **Delete AWS (to do now, ADR-106).** In the AWS console, in the region the stack is in (`ap-south-1`):
+  1. **Elastic Container Service** → **Clusters** → `clearfea` → **Tasks**: the list should be empty. Stop any task left.
+  2. **ECR** → **Repositories** → `clearfea-worker` → select all images → **Delete**. The stack cannot delete a repository that still holds images.
+  3. **CloudFormation** → `clearfea` → **Delete**. This removes everything the stack made: the network, the image store, the cluster and machine definitions, the log group, the `/clearfea/launch` setting, the budget alarm, the GitHub deploy role and the `clearfea-launcher` user with its key. Wait for **DELETE_COMPLETE**; if it fails, the **Events** tab names the resource that stopped it.
+  4. **IAM** → **Identity providers**: if `token.actions.githubusercontent.com` is still listed and nothing else in the account uses it, delete it (the stack made it only when `CreateGitHubOidcProvider` was true).
+  5. Remove the AWS values from GitHub and from the Worker (section 5).
+  6. A few days later, **Billing and Cost Management** → **Bills** should show nothing new. To close the AWS account altogether: account name (top right) → **Account** → **Close account**.
 - **Take the site down**: Cloudflare → **Compute (Workers)** → `clearfea` → **Settings** → **Domains & Routes** → remove `clearfea.triyalabs.com`.
 
 ### 7.7 Run the live checks
 
-GitHub → **Actions** → **Live checks** → **Run workflow**, and pick a suite: `quick` (the coarse verification tier, a few minutes of solver time), `acceptance` (cases A and B, the Phase 0 gate's item 1) or `limits` (a model at each solver's element limit, about four hours of solver time, gate item 4). The result table is on the run's summary page. They sign in as the verification account (`VERIFY_TOKEN`, section 3), which has its own play-money wallet, is not an admin and counts towards the monthly machine hours like anyone. It shows on the admin page as "Verification account (live checks)". Nothing starts them on their own, since each solve starts a solver machine.
+**Not before M12.7**: nothing on the live site takes a job until the VPS is live, so every case would fail.
+
+GitHub → **Actions** → **Live checks** → **Run workflow**, and pick a suite: `quick` (the coarse verification tier, a few minutes of solver time), `acceptance` (cases A and B, the Phase 0 gate's item 1) or `limits` (a model at each solver's element limit, about four hours of solver time, gate item 4). The result table is on the run's summary page. They sign in as the verification account (`VERIFY_TOKEN`, section 3), get through Cloudflare Access with the service token (1.8), and the account is not an admin. It shows on the dashboard as "Verification account (live checks)". Nothing starts them on their own.
 
 ## 8. When something goes wrong
 
@@ -320,22 +337,25 @@ GitHub → **Actions** → **Live checks** → **Run workflow**, and pick a suit
 | --- | --- | --- |
 | Deploy fails at "Check the deploy settings" | A secret or variable from section 5 is missing | The error names each missing one and its section; add it and run the deploy again (6.1) |
 | Deploy fails at "Authenticate to Cloudflare" | `CLOUDFLARE_API_TOKEN` missing, mistyped or lacking a permission | Make a new token as in 1.6 and replace the secret |
-| Deploy fails at "Configure AWS credentials" | `AWS_DEPLOY_ROLE_ARN` or `AWS_REGION` missing or wrong | Copy them again from 4.2 and 4.3 |
-| "Not authorized to perform sts:AssumeRoleWithWebIdentity" at "Configure AWS credentials" | The deploy role does not trust the identity GitHub gave the run | The next step, "Show the identity AWS was given", prints its `sub`. IAM → Roles → `clearfea-github-deploy` → **Trust relationships** must list that `sub` exactly; if not, update the stack (4.3) with the right `GitHubRepository`, or with `GitHubRepositoryIds` when the `sub` reads `owner@id/name@id` |
-| Deploy fails at "Find the image store" or "Register the machine definitions" | The `clearfea` stack is missing, in another region than `AWS_REGION`, or older than the current `clearfea.yaml` | Create or update the stack (4.3) in that region and run the deploy again (6.1). Nothing of the site was deployed in that run |
+| Deploy's last step says "Cloudflare Access refused the health check" | The Access policy or service token of 1.8 is missing or was copied wrongly | Check 1.8 steps 3 and 4 |
 | Google says "Error 400: redirect_uri_mismatch" | The redirect URI in 2.3 differs from the site's | It must be exactly `https://clearfea.triyalabs.com/api/auth/callback/google` |
 | Google says "Access blocked: ClearFEA has not completed the Google verification process" | The account is not a test user | Add it under Test users (2.2 step 7) |
-| ClearFEA says the address is not invited | Not on the allowlist | Add it on the admin page (6.3) |
-| A job fails saying the solver machines of this site are not set up | The launcher key or `AWS_REGION` is missing | The admin page's **Solver machines** card names what is missing; add it (4.2, 4.4) and deploy again |
-| A job fails saying 3 solver machines were started and none came up | AWS refused the starts, or the machines could not start | The admin page lists each start with AWS's reason. "AccessDenied": the key is not the `clearfea-launcher` one, or the stack is in another region than `AWS_REGION`. "ParameterNotFound": the stack is missing. A start that says nothing and never runs: the worker image is not in the image store yet (M10.8), or see the machine's log in AWS → CloudWatch → Log groups → `/clearfea/worker`. The **Machine logs** workflow (Actions tab, `.github/workflows/machine-logs.yml`) prints why the latest machines stopped and the end of their logs, with the deploy role's read-only policy `clearfea-read-machine-logs` (`ecs:ListTasks`, `ecs:DescribeTasks`, and `logs:DescribeLogStreams`/`GetLogEvents`/`FilterLogEvents` on `/clearfea/worker`), which the stack defines |
-| Runs are refused with "used its ... machine hours for this month" | The monthly limit was reached | Raise it on the admin page, or wait for the 1st |
-| A cost alarm email | AWS spending passed `MonthlyBudgetUsd` | Check 7.5 for machines left running; tell a thread |
+| ClearFEA says the address is not invited | Not on the allowlist | Add it on the dashboard (6.3) |
+| Imports, meshes and runs are refused saying the solver is offline | The VPS has not checked in for 2 minutes (only once the site runs `MACHINES=vps`, 4.5) | Restart the VPS by hand (4.4) |
+| The Overview says the host's disk is low | Old images, stopped containers or raw output fill the VPS's disk | Free space on the VPS (7.5); at 20 GiB free the lanes stop taking jobs |
+| The Overview reports tries out of memory | A model was too large for its lane | Look at the job's peak memory in **Jobs and runs** and tell a thread; the lane sizes and element limits are M12.6's |
+| The Overview reports repeated platform failures | Something on the host or in ClearFEA keeps failing jobs | Read the `job_failed` and `job_retried` events and the jobs' logs on the dashboard; if the host is the cause, pause the queue and restart the VPS by hand (4.4) |
+| A job fails saying the solver machines of this site are not set up | The site still runs the AWS mode (`MACHINES=cloud`) with no AWS key, as intended until M12.7 | Nothing to do: it is not charged. Jobs run again once M12.7 switches the site to the VPS |
 
 ## 9. This Claude project's environment
 
-Claude never holds your Cloudflare, AWS or Google keys: deploys happen in GitHub Actions. One change lets threads check the live site after a deploy:
+Claude never holds your Cloudflare, Contabo or Google keys: deploys happen in GitHub Actions, and the VPS is set up by you over SSH. One change lets threads check the live site after a deploy:
 
 1. In the Claude project, open **Project settings** → **Cloud environment** → the gear beside the selected environment.
 2. Under **Network access**, add `clearfea.triyalabs.com` to **Allowed domains**, keeping **Allow package managers** ticked. Save.
 
-New threads pick it up.
+New threads pick it up. A thread can reach the site only through Access with the service token, given to it as the environment variables `CLEARFEA_ACCESS_CLIENT_ID` and `CLEARFEA_ACCESS_CLIENT_SECRET` (1.8).
+
+## Appendix A. AWS, parked for production
+
+The closed beta ran its solver on AWS Fargate from M10.7 until 2026-10-22 (ADR-099 to ADR-101). ADR-106 parks it: the launcher (`apps/api/src/launcher/`), the stack template (`infra/aws/clearfea.yaml`), the image script (`infra/aws/worker-image.sh`) and the **Machine logs** workflow stay in the repository, unused, for production later. Any code that starts AWS machines is reviewed by the maintainer before it is used again (ADR-106 item 4). The step-by-step AWS setup this guide used to hold (account, stack, launcher key, large machine, troubleshooting) is in this file's history, at commit `069785e` (`git show 069785e:docs/DEPLOYMENT.md`, sections 4 and 7 to 8); bring it back and review it when production is planned, rather than following it as it was.

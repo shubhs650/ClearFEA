@@ -212,7 +212,9 @@ Things only the maintainer can do.
 - [x] Decide V-23 (NAFEMS LE10): build it, with the edge supports it needs (2026-10-21)
 - [x] M9.9: sign off the gate walk (2026-10-21)
 - [x] M11.1 (done 2026-10-22; deploy run 32 passed its health check through Access): create the Access service token `clearfea-machines`, add a Service Auth policy for it to the site's Access application, and add the GitHub secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (`docs/DEPLOYMENT.md` section 1.8). Until then every deploy fails its last step, the health check, with "Cloudflare Access refused the health check"
-- [ ] At the next AWS stack change, update the `clearfea` stack with **Replace existing template** and the current `infra/aws/clearfea.yaml` (DEPLOYMENT.md 4.3), so the stack holds PR #134's deploy role fixes; do it while no job is running
+- [x] ~~At the next AWS stack change, update the `clearfea` stack with **Replace existing template**~~ (dropped: AWS is deleted, ADR-106)
+- [ ] Delete AWS: empty the image store, delete the `clearfea` stack, remove the AWS variables and secrets from GitHub and the launcher secrets from the Cloudflare Worker (`docs/DEPLOYMENT.md` sections 7.6 and 5)
+- [ ] M12.5: order the Contabo Cloud VPS 8 with your SSH key and note its IP address (`docs/DEPLOYMENT.md` section 4.1)
 
 ## Verification status
 
@@ -228,6 +230,8 @@ Things only the maintainer can do.
 ## Handoff notes
 
 Written by the last session for the next one. Replace, do not append.
+
+> M12.5, guide part (2026-10-23): `docs/DEPLOYMENT.md` is rewritten for the VPS closed beta: AWS taken out of the setup (kept as appendix A, pointing at commit `069785e` for the old steps), the AWS delete steps and the removal of the AWS GitHub values and Worker secrets (5, 7.6), ordering the VPS with an SSH key (4.1), what runs on it as built (4.2, with the settings M12.5's environment template must set, `CLEARFEA_SCRATCH_PATH` or `CLEARFEA_HOST_DISK_PATH` among them), the manual restart when the host goes silent (4.4, which the dashboard's host alert points to), and the dashboard in place of the AWS checks (7, 8). Section 4.3 (bootstrap, systemd unit, environment template, image updater, worker image archive in R2, the redeploy steps) is a marked placeholder: M12.5's code PR fills it in and ticks M12.5; section 4.5 and 7.7 are M12.7's. `ADMIN_GUIDE.md` still describes AWS (M17.5); its links to DEPLOYMENT.md 4.3, 7.3 and 7.5 now land on the VPS sections.
 
 > M13.5 (2026-10-22): the alerts are `alerts()` in `apps/api/src/routes/admin.ts`, fed by `alertSettings` (`db/settings.ts`) and `recentFaults` (`db/stats.ts`, over `job_stats`, ADR-130). Out of memory counts a try whose container the kernel killed (`out_of_memory = 1`, from the manager) or whose cause is `out_of_memory` (the worker's size limit); platform failures count tries with `failure_category = 'platform_fault'`, so a lost worker that is queued again counts too, which `job_failed` events would miss; `cancelled_by_admin` and `requeued_by_admin` are left out. Alerts are computed on each Overview read, never stored, so an alert clears by itself once the window passes or the disk is freed; there is no acknowledge. The disk alert reads the latest sample of the last 10 minutes, which is the manager's `CLEARFEA_HOST_DISK_PATH` or else `CLEARFEA_SCRATCH_PATH`, so M12.5 must set one of them or the disk shown is the manager container's own. E-08 checks in a host named `e2e-vps` with the worker token from `apps/api/.dev.vars` and the API on `E2E_API_PORT` (8789). Next: the M13 close.
 
@@ -536,6 +540,10 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 ## Log
 
 Newest first. One entry per session: date, what was done, what was learned.
+
+### 2026-10-23
+
+- M12.5 guide part: `DEPLOYMENT.md` describes the Contabo VPS instead of AWS, with what waits on M12.5's scripts marked as such. Learned: a Worker keeps a secret after GitHub stops sending it, so removing the AWS launcher keys means deleting them in Cloudflare too.
 
 ### 2026-10-22
 
