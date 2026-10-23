@@ -113,6 +113,7 @@ def solve_one(
         "stepSeconds": seconds,
         "jobSeconds": round(sum(seconds.values()), 2),
         "peakMemoryBytes": peak,
+        "containerPeakMemoryBytes": bench.container_peak_memory(),
         "frdBytes": frd_bytes,
         "ccxVersion": calculix_version(),
         "machine": bench.machine(),

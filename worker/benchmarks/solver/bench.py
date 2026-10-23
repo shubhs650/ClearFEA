@@ -113,11 +113,22 @@ def machine() -> dict[str, object]:
     model = re.search(r"model name\s*:\s*(.*)", cpuinfo)
     return {
         "cores": os.cpu_count(),
+        "cpusAllowed": len(os.sched_getaffinity(0)),
         "ramBytes": total_kb * 1024,
         "cpu": model.group(1).strip() if model else platform.processor(),
         "kernel": platform.release(),
         "memoryLimitBytes": cgroup_memory_limit(),
     }
+
+
+def container_peak_memory() -> int | None:
+    """The peak memory of this process's control group (cgroup v2), page cache included, if the
+    kernel keeps it: in a container, what the container's memory limit is held to."""
+    try:
+        text = Path("/sys/fs/cgroup/memory.peak").read_text().strip()
+    except OSError:
+        return None
+    return int(text) if text.isdigit() else None
 
 
 def cgroup_memory_limit() -> int | None:
