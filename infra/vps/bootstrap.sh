@@ -127,6 +127,9 @@ ask() {
   [ -t 0 ] || die "$name is empty in $ENV_FILE. Run this script in an SSH session to be asked for it, or write it into the file."
   read -r -s -p "$what: " value
   echo
+  # A paste can bring a carriage return or spaces along, which would make the API refuse the
+  # value; none of these secrets contains whitespace.
+  value=$(printf '%s' "$value" | tr -d '[:space:]')
   [ -n "$value" ] || die "$name cannot be empty."
   set_setting "$name" "$value"
 }
