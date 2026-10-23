@@ -40,7 +40,7 @@ Keep a private note (a password manager is best) of what you created, since some
 | Random keys | M10.3, M10.6, M10.9 | 3 | Done |
 | R2 API token | M10.5 | 1.7 | Done |
 | Access service token | M11.1 | 1.8 | Done |
-| GitHub secrets and variables | as each value is made | 5 | Done (AWS values removed with AWS) |
+| GitHub secrets and variables | as each value is made | 5 | Check the AWS ones are gone (5) |
 | First deploy, invite colleagues | M10.2 onwards, M10.10 | 6 | Done |
 | Delete AWS | ADR-106 | 7.6 | Done (2026-10-23) |
 | Order the VPS with your SSH key | M12.5 | 4.1 | Done (2026-10-23) |
