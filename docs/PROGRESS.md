@@ -549,6 +549,7 @@ Newest first. One entry per session: date, what was done, what was learned.
 
 ### 2026-10-23
 
+- M12.5 fix: on the real VPS the bootstrap's own image update found the lock held by the timer's first run (enabling the timer starts one at once, which was downloading) and printed "no image" although one was stored; the bootstrap now waits for that run (`CLEARFEA_IMAGE_WAIT=1`). Learned: `systemctl enable --now` on a timer whose `OnBootSec` has passed fires it immediately.
 - M12.5 VPS setup as code (ADR-131): bootstrap script, manager under systemd, an image updater every 5 minutes, and the deploy storing the worker image as an R2 archive the API names. Learned: the manager already re-reads its image tag at each claim, so retagging is the whole of "update between jobs".
 - M12.5 guide part: `DEPLOYMENT.md` describes the Contabo VPS instead of AWS, with what waits on M12.5's scripts marked as such. Learned: a Worker keeps a secret after GitHub stops sending it, so removing the AWS launcher keys means deleting them in Cloudflare too.
 - Close M13: every M13 task checked against main, PLAN.md and ADR-113; the missing user and day filters added (PR #160); phase-end run on main green ([run 39902036869](https://github.com/shubhs650/ClearFEA/actions/runs/39902036869), full tier 314 of 314, E-01 to E-10). Learned: a milestone without an exit sentence is checked against its ADR's wording.

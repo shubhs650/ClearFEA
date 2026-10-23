@@ -54,12 +54,18 @@ PIN=$(setting CLEARFEA_IMAGE_PIN)
 [ -n "$TOKEN" ] || die "CLEARFEA_WORKER_TOKEN is not set in $ENV_FILE. Set it to the WORKER_TOKEN secret (docs/DEPLOYMENT.md section 3)."
 
 # One run at a time: the timer and a run by hand could otherwise load the same archive twice.
+# The timer's runs leave it to a run already going; bootstrap.sh sets CLEARFEA_IMAGE_WAIT=1 and
+# waits for it, since enabling the timer starts a run at once that may be downloading the image.
 mkdir -p "$WORK_DIR"
 exec 9>"$WORK_DIR/.lock"
-flock -n 9 || {
-  echo "update-image: another update is running; leaving it to that one."
-  exit 0
-}
+if ! flock -n 9; then
+  if [ "${CLEARFEA_IMAGE_WAIT:-}" != 1 ]; then
+    echo "update-image: another update is running; leaving it to that one."
+    exit 0
+  fi
+  echo "update-image: waiting for the update already running (it may be downloading the image)"
+  flock 9
+fi
 
 API_HEADERS=(-A "$USER_AGENT" -H "Authorization: Bearer $TOKEN")
 if [ -n "$ACCESS_ID" ] && [ -n "$ACCESS_SECRET" ]; then
