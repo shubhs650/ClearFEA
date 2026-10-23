@@ -6,7 +6,7 @@ Self-hosting on your own machine is a different procedure: see `SELF_HOSTING.md`
 
 Once the site is up, running the beta day to day (inviting, removing, settings, costs, the tutorial trial) is in `ADMIN_GUIDE.md`. That guide still describes the AWS machines in places; M17.5 brings it up to date.
 
-> **Status (2026-10-23).** The website, API, database and files run on Cloudflare behind Cloudflare Access, and every merge to `main` deploys them (sections 1 to 3, 5 and 6 are current). The solver moves from AWS to one always-on Contabo VPS (ADR-106): AWS is switched off and is to be deleted (section 7.6), so **the live site solves nothing until M12.7**. The compute manager that runs on the VPS (M12.1 to M12.3) and the API's VPS mode (M12.4) are on `main`; the VPS setup itself (bootstrap script, systemd unit, environment template, image updater, and the deploy storing the worker image in R2) is task M12.5 and is **not built yet**. Section 4 says what is known now and marks each step that waits on M12.5. Check that a task is ticked in `PROGRESS.md` before doing a step that names it.
+> **Status (2026-10-23).** The website, API, database and files run on Cloudflare behind Cloudflare Access, and every merge to `main` deploys them (sections 1 to 3, 5 and 6 are current). The solver moves from AWS to one always-on Contabo VPS (ADR-106): AWS is switched off and was deleted on 2026-10-23 (section 7.6), so **the live site solves nothing until M12.7**. The compute manager that runs on the VPS (M12.1 to M12.3) and the API's VPS mode (M12.4) are on `main`; the VPS setup itself (bootstrap script, systemd unit, environment template, image updater, and the deploy storing the worker image in R2) is task M12.5 and is **not built yet**. Section 4 says what is known now and marks each step that waits on M12.5. Check that a task is ticked in `PROGRESS.md` before doing a step that names it.
 
 ## What you are setting up
 
@@ -40,10 +40,10 @@ Keep a private note (a password manager is best) of what you created, since some
 | Random keys | M10.3, M10.6, M10.9 | 3 | Done |
 | R2 API token | M10.5 | 1.7 | Done |
 | Access service token | M11.1 | 1.8 | Done |
-| GitHub secrets and variables | as each value is made | 5 | Remove the AWS ones (5) |
+| GitHub secrets and variables | as each value is made | 5 | Done (AWS values removed with AWS) |
 | First deploy, invite colleagues | M10.2 onwards, M10.10 | 6 | Done |
-| Delete AWS | ADR-106 | 7.6 | To do now |
-| Order the VPS with your SSH key | M12.5 | 4.1 | To do now |
+| Delete AWS | ADR-106 | 7.6 | Done (2026-10-23) |
+| Order the VPS with your SSH key | M12.5 | 4.1 | Done (2026-10-23) |
 | Set the VPS up | M12.5 | 4.3 | Waits on M12.5 |
 | Switch the site to the VPS | M12.7 | 4.5 | Waits on M12.7 |
 
@@ -230,7 +230,7 @@ To bring it back:
 
 ### 4.5 Switch the site to the VPS (M12.7)
 
-The live site still runs with `MACHINES=cloud` (`apps/api/scripts/productionConfig.mjs`), the AWS launcher's mode. With the AWS keys removed (5) and the stack deleted (7.6), a job queued there fails at once saying the solver machines are not set up, and nothing is charged. M12.7 changes production to `MACHINES=vps` once the VPS is set up and benchmarked (M12.6): from then on jobs wait for the VPS and runs show usage only (ADR-106 item 6). M12.7 runs the live checks (7.7) against it and updates this section.
+The live site still runs with `MACHINES=cloud` (`apps/api/scripts/productionConfig.mjs`), the AWS launcher's mode. With the AWS keys removed (5) and the stack deleted (7.6, done), a job queued there fails at once saying the solver machines are not set up, and nothing is charged. M12.7 changes production to `MACHINES=vps` once the VPS is set up and benchmarked (M12.6): from then on jobs wait for the VPS and runs show usage only (ADR-106 item 6). M12.7 runs the live checks (7.7) against it and updates this section.
 
 ## 5. GitHub: the full list
 
@@ -316,7 +316,7 @@ Dashboard → **Overview**: the solver host with its latest CPU, memory and disk
 ### 7.6 Pause, delete AWS, shut down
 
 - **Pause the solver**: dashboard → **Overview** → **Pause the queue**. No job starts; new jobs still queue and jobs already running finish; the site stays up. **Resume the queue** to start again.
-- **Delete AWS (to do now, ADR-106).** In the AWS console, in the region the stack is in (`ap-south-1`):
+- **Delete AWS (done 2026-10-23, ADR-106).** For the record, or if anything is left: in the AWS console, in the region the stack is in (`ap-south-1`):
   1. **Elastic Container Service** → **Clusters** → `clearfea` → **Tasks**: the list should be empty. Stop any task left.
   2. **ECR** → **Repositories** → `clearfea-worker` → select all images → **Delete**. The stack cannot delete a repository that still holds images.
   3. **CloudFormation** → `clearfea` → **Delete**. This removes everything the stack made: the network, the image store, the cluster and machine definitions, the log group, the `/clearfea/launch` setting, the budget alarm, the GitHub deploy role and the `clearfea-launcher` user with its key. Wait for **DELETE_COMPLETE**; if it fails, the **Events** tab names the resource that stopped it.

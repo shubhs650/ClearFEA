@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The dashboard's Jobs and runs (M13.2, ADR-127): every user's jobs, newest first, by status and
-// type; a job's details with its tries' statistics (M12.3) and its log; and the admin's cancel
+// The dashboard's Jobs and runs (M13.2, ADR-127): every user's jobs, newest first, by status,
+// type, user and day; a job's details with its tries' statistics (M12.3) and its log; and the admin's cancel
 // (uncharged, at once) and re-queue (for a job whose worker hangs). Read when opened, filtered or
 // refreshed, not polled.
 
@@ -8,6 +8,7 @@ import type { AdminJob, JobTry } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
 import { adminJobAction, fetchAdminJobLog, fetchAdminJobs, fetchJobTries } from "../api/admin";
 import type { ApiResult } from "../api/request";
+import { ANY_USER_OR_DAY, dayBounds, type UserAndDays, UserAndDayFilters } from "./filters";
 import { bytes, duration, hours, utc } from "./format";
 import { JOB_TYPE_NAMES, STATUS_NAMES } from "./names";
 
@@ -32,6 +33,7 @@ type Signed = { onSignedOut: (notice?: string) => void };
 export function JobsTab({ onSignedOut }: Signed) {
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
+  const [userAndDays, setUserAndDays] = useState<UserAndDays>(ANY_USER_OR_DAY);
   const [jobs, setJobs] = useState<AdminJob[] | null>(null);
   const [more, setMore] = useState(false);
   const [problem, setProblem] = useState<string | undefined>();
@@ -52,11 +54,13 @@ export function JobsTab({ onSignedOut }: Signed) {
   );
 
   const load = useCallback(async () => {
-    const answer = answerOf(await fetchAdminJobs({ status, type, limit: PAGE }));
+    const answer = answerOf(
+      await fetchAdminJobs({ status, type, user: userAndDays.user, ...dayBounds(userAndDays), limit: PAGE }),
+    );
     if (answer === undefined) return;
     setJobs(answer.jobs);
     setMore(answer.jobs.length === PAGE);
-  }, [status, type, answerOf]);
+  }, [status, type, userAndDays, answerOf]);
 
   useEffect(() => {
     void load();
@@ -65,7 +69,10 @@ export function JobsTab({ onSignedOut }: Signed) {
   async function older() {
     const last = jobs?.[jobs.length - 1];
     if (last === undefined) return;
-    const answer = answerOf(await fetchAdminJobs({ status, type, before: last.createdAt, limit: PAGE }));
+    const { since } = dayBounds(userAndDays);
+    const answer = answerOf(
+      await fetchAdminJobs({ status, type, user: userAndDays.user, since, before: last.createdAt, limit: PAGE }),
+    );
     if (answer === undefined) return;
     setJobs([...(jobs ?? []), ...answer.jobs]);
     setMore(answer.jobs.length === PAGE);
@@ -100,6 +107,7 @@ export function JobsTab({ onSignedOut }: Signed) {
             ))}
           </select>
         </label>
+        <UserAndDayFilters value={userAndDays} onChange={setUserAndDays} onSignedOut={onSignedOut} />
         <button type="button" onClick={() => void load()}>
           Refresh
         </button>

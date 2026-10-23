@@ -293,8 +293,9 @@ describe("Jobs and runs (M13.2)", () => {
     expect((await jobs("?type=noop")).map((j) => j.id)).toEqual(["j1"]);
     expect((await jobs(`?user=${BOB}`)).map((j) => j.id)).toEqual(["j3", "j1"]);
     expect((await jobs("?limit=1&before=2026-10-22T10:00:00Z")).map((j) => j.id)).toEqual(["j2"]);
+    expect((await jobs("?since=2026-10-22T10:00:00Z")).map((j) => j.id)).toEqual(["j3"]);
     expect((await jobs("?status=queued"))[0]).toMatchObject({ lane: "solve", queuePosition: 1, ownerId: BOB });
-    for (const query of ["limit=0", "limit=501", "status=lost", "type=party", "before=later"]) {
+    for (const query of ["limit=0", "limit=501", "status=lost", "type=party", "since=soon", "before=later"]) {
       expect((await call("GET", `/api/admin/jobs?${query}`, { cookie: alice })).status, query).toBe(400);
     }
   });

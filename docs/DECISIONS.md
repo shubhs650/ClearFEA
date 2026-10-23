@@ -1408,6 +1408,8 @@ As checked at the M11 close (2026-10-22): each check of a solving run read the l
 
 Tabs: Overview, Jobs and runs, Users, Events, Settings, Costs. An `events` table records sign-ins and refusals, job failures and retries, manager and host events, and every admin action. Every table filters by date, user and status and exports to CSV and .xlsx (a small permissively licensed library, pinned). Alerts show on the dashboard only (Shubham, 2026-10-22). The dashboard shows run statistics and failure messages for support, not users' project names, models or results, under the privacy rule in this file (confirmed by Shubham, 2026-10-22).
 
+As built (M13.1 to M13.5, ADR-125, ADR-127 to ADR-130, and the M13 close): Jobs and runs filters by status, type, user and UTC day (`/api/admin/jobs` gained `?since=`), Events by kind, level, user and UTC day; Users and Costs are per month and Export takes any range of days; the Users, Settings and Costs tables are short enough to read whole.
+
 ### ADR-114: Users have projects in folders, and deleted items go to a trash
 2026-10-22 · Accepted by Shubham on 2026-10-22 ("All ADR are accepted", with his answers to the plan's questions). Supersedes ADR-038's "one project per user holds the system".
 
