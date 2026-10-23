@@ -552,7 +552,10 @@
           "enum": [
             "no_host",
             "host_offline",
-            "queue_paused"
+            "queue_paused",
+            "disk_low",
+            "out_of_memory",
+            "platform_failures"
           ]
         },
         "level": {
@@ -710,7 +713,8 @@
             "queue",
             "storage",
             "machines",
-            "costs"
+            "costs",
+            "alerts"
           ]
         },
         "label": {

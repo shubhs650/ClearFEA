@@ -241,7 +241,7 @@ Order: M12.1 and M12.4 in parallel; M12.2 and M12.3 after M12.1; M12.5 after the
 - [ ] M13.2 Dashboard shell with the Overview (host, lanes, queue, alerts, pause and resume), Jobs and runs (statistics, cancel, re-queue, log) and Events tabs.
 - [x] M13.3 Users, Settings and Costs tabs; every setting editable and logged as an event.
 - [x] M13.4 CSV and Excel (.xlsx) export of every table, by date range.
-- [ ] M13.5 Alerts on the dashboard: solver host offline (restart it by hand), disk low, out of memory, repeated platform failures.
+- [x] M13.5 Alerts on the dashboard: solver host offline (restart it by hand), disk low, out of memory, repeated platform failures.
 
 After M12.3.
 

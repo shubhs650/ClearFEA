@@ -173,6 +173,103 @@ describe("the Overview (M13.2)", () => {
   });
 });
 
+describe("the alerts (M13.5)", () => {
+  const load = (diskFreeBytes: number) => ({
+    cpu: 0.5,
+    load1: 1,
+    load5: 1,
+    load15: 1,
+    memoryTotalBytes: 24e9,
+    memoryAvailableBytes: 20e9,
+    diskTotalBytes: 300 * 2 ** 30,
+    diskFreeBytes,
+    containers: 1,
+  });
+
+  /** A try of a new job of Bob's, ended `hoursAgo`. */
+  async function endedTry(
+    id: string,
+    hoursAgo: number,
+    fields: { category?: string; cause?: string; outOfMemory?: boolean },
+  ): Promise<void> {
+    const at = new Date(Date.now() - hoursAgo * 3600_000).toISOString();
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO jobs (id, owner_id, type, status, created_at) VALUES (?, ?, 'solve', 'failed', ?)").bind(
+        id,
+        BOB,
+        at,
+      ),
+      env.DB.prepare(
+        `INSERT INTO job_stats (job_id, attempt, worker_id, queued_at, claimed_at, stage_started_at, ended_at, status,
+                                failure_category, failure_cause, stats_at, out_of_memory)
+         VALUES (?, 1, 'vps-1-solve', ?, ?, ?, ?, 'failed', ?, ?, ?, ?)`,
+      ).bind(
+        id,
+        at,
+        at,
+        at,
+        at,
+        fields.category ?? null,
+        fields.cause ?? null,
+        fields.outOfMemory === undefined ? null : at,
+        fields.outOfMemory === undefined ? null : fields.outOfMemory ? 1 : 0,
+      ),
+    ]);
+  }
+
+  it("alerts when the solver host's disk is below the setting, and the setting moves it", async () => {
+    expect((await worker("/hosts/check-in", { host: "vps-1", load: load(31 * 2 ** 30) })).status).toBe(200);
+    expect((await overview(VPS)).alerts).toEqual([]);
+    expect((await worker("/hosts/check-in", { host: "vps-1", load: load(25 * 2 ** 30) })).status).toBe(200);
+    const low = (await overview(VPS)).alerts;
+    expect(low.map((a) => [a.kind, a.level])).toEqual([["disk_low", "warning"]]);
+    expect(low[0]?.message).toContain("vps-1 has 25.0 GiB free of 300.0 GiB on its scratch disk, below the 30.0 GiB alert");
+    const lowered = await call("PUT", "/api/admin/settings/alert_disk_free_bytes", {
+      cookie: alice,
+      json: { value: 20 * 2 ** 30 },
+    });
+    expect(lowered.status).toBe(200);
+    expect((await overview(VPS)).alerts).toEqual([]);
+    await env.DB.prepare("UPDATE settings SET value = ? WHERE name = 'alert_disk_free_bytes'").bind(30 * 2 ** 30).run();
+    // A sample older than 10 minutes is not the host's load now, so it raises nothing.
+    await env.DB.prepare("UPDATE host_stats SET at = strftime('%Y-%m-%dT%H:%M:%fZ', at, '-11 minutes')").run();
+    expect((await overview(VPS)).alerts).toEqual([]);
+  });
+
+  it("alerts on tries out of memory within the window", async () => {
+    await endedTry("old", 30, { category: "platform_fault", cause: "out_of_memory", outOfMemory: true });
+    expect((await overview()).alerts).toEqual([]);
+    await endedTry("killed", 2, { category: "platform_fault", cause: "out_of_memory", outOfMemory: true });
+    await endedTry("sized", 1, { category: "user_fault", cause: "out_of_memory" });
+    await endedTry("fine", 1, { category: "user_fault", cause: "solver_error", outOfMemory: false });
+    const view = await overview();
+    expect(view.alerts.map((a) => [a.kind, a.level])).toEqual([["out_of_memory", "warning"]]);
+    expect(view.alerts[0]?.message).toMatch(/^2 tries ran out of memory in the last 24 h, the latest of job sized at /);
+    await env.DB.prepare("UPDATE settings SET value = 48 WHERE name = 'alert_window_hours'").run();
+    try {
+      expect((await overview()).alerts[0]?.message).toMatch(/^3 tries ran out of memory in the last 48 h/);
+    } finally {
+      await env.DB.prepare("UPDATE settings SET value = 24 WHERE name = 'alert_window_hours'").run();
+    }
+  });
+
+  it("alerts on repeated platform faults, not counting the admin's cancels and re-queues", async () => {
+    await endedTry("lost1", 3, { category: "platform_fault", cause: "worker_lost" });
+    await endedTry("lost2", 2, { category: "platform_fault", cause: "worker_lost" });
+    await endedTry("cancel", 1, { category: "platform_fault", cause: "cancelled_by_admin" });
+    await endedTry("requeue", 1, { category: "platform_fault", cause: "requeued_by_admin" });
+    await endedTry("user", 1, { category: "user_fault", cause: "solver_error" });
+    expect((await overview()).alerts).toEqual([]);
+    await endedTry("crash", 0.5, { category: "platform_fault", cause: "container_start_failed" });
+    const view = await overview();
+    expect(view.alerts.map((a) => [a.kind, a.level])).toEqual([["platform_failures", "error"]]);
+    expect(view.alerts[0]?.message).toMatch(
+      /^3 tries ended by a fault in ClearFEA in the last 24 h, the latest of job crash at .+ \(container_start_failed\)\./,
+    );
+    expect(view.alerts[0]?.message).toContain("restart the VPS by hand");
+  });
+});
+
 describe("Jobs and runs (M13.2)", () => {
   it("lists every user's jobs newest first with filters, and pages by creation time", async () => {
     await env.DB.batch(

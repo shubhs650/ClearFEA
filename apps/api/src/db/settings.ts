@@ -153,7 +153,7 @@ export async function setQueuePaused(db: D1Database, paused: boolean): Promise<b
 }
 
 /** The groups the dashboard's Settings tab shows the settings in (M13.3, ADR-128). */
-export type SettingGroup = "accounts" | "queue" | "storage" | "machines" | "costs";
+export type SettingGroup = "accounts" | "queue" | "storage" | "machines" | "costs" | "alerts";
 
 /**
  * A setting the admin may change on the dashboard: its row name, where and how it is shown, and
@@ -335,7 +335,72 @@ export const SETTINGS: readonly SettingDefinition[] = [
     min: 0,
     max: 10_000_000,
   },
+  {
+    name: "alert_disk_free_bytes",
+    group: "alerts",
+    label: "Disk low below",
+    description:
+      "Free space on the solver host's scratch disk below which the Overview alerts. The lanes stop taking jobs at the host's CLEARFEA_SCRATCH_MIN_FREE (20 GiB by default).",
+    unit: "GiB",
+    scale: GIB,
+    min: 0,
+    max: 10_240 * GIB,
+  },
+  {
+    name: "alert_window_hours",
+    group: "alerts",
+    label: "Hours the failure alerts look back",
+    description: "Tries that ran out of memory or ended by a fault in ClearFEA count while they are this recent.",
+    unit: "h",
+    scale: 1,
+    min: 1,
+    max: 720,
+  },
+  {
+    name: "alert_platform_failures",
+    group: "alerts",
+    label: "Platform failures that alert",
+    description:
+      "Tries ended by a fault in ClearFEA (a lost worker, a crashed container, an internal error) within the hours above that raise an alert. The admin's cancels and re-queues do not count.",
+    unit: "tries",
+    scale: 1,
+    min: 1,
+    max: 1000,
+  },
 ];
+
+/** The thresholds of the dashboard's alerts (M13.5, ADR-130). */
+export interface AlertSettings {
+  /** Free bytes on the solver host's disk below which the disk counts as low. */
+  diskFreeBytes: number;
+  /** Hours back that tries out of memory and platform faults are counted over. */
+  windowHours: number;
+  /** Platform faults within the window that alert. */
+  platformFailures: number;
+}
+
+const ALERT_NAMES = {
+  diskFreeBytes: "alert_disk_free_bytes",
+  windowHours: "alert_window_hours",
+  platformFailures: "alert_platform_failures",
+} as const satisfies Record<keyof AlertSettings, string>;
+
+export async function alertSettings(db: D1Database): Promise<AlertSettings> {
+  const { results } = await db
+    .prepare("SELECT name, value FROM settings WHERE name IN (?, ?, ?)")
+    .bind(ALERT_NAMES.diskFreeBytes, ALERT_NAMES.windowHours, ALERT_NAMES.platformFailures)
+    .all<{ name: string; value: number }>();
+  const value = (name: string) => {
+    const row = results.find((r) => r.name === name);
+    if (row === undefined) throw new Error(`The setting ${name} is missing; apply the migrations.`);
+    return row.value;
+  };
+  return {
+    diskFreeBytes: value(ALERT_NAMES.diskFreeBytes),
+    windowHours: value(ALERT_NAMES.windowHours),
+    platformFailures: value(ALERT_NAMES.platformFailures),
+  };
+}
 
 /** The dashboard's settings with their stored values, in the order of SETTINGS. */
 export async function listSettings(db: D1Database): Promise<(SettingDefinition & { value: number })[]> {

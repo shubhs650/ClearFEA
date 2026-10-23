@@ -7,9 +7,11 @@
 // hours limit; on the dashboard (M13.2) she pauses the queue, sees a job wait in the light lane,
 // cancels it from Jobs and runs, resumes the queue and reads both and the setting she changed in
 // the event log, then reads the month on Costs (M13.3) and downloads the jobs as CSV and every
-// table as one Excel workbook on Export (M13.4); bob sees no Admin and the admin routes
+// table as one Excel workbook on Export (M13.4), then raises the disk alert of a solver host that
+// checks in from its setting on Settings and clears it again (M13.5); bob sees no Admin and the admin routes
 // answer him as unknown addresses. Real Google sign-in is checked on the live site, with the
 // maintainer's OAuth client.
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { expect, type Page, test } from "@playwright/test";
 
@@ -189,6 +191,53 @@ test("E-08: the live sign-in screen, a refused address, and the admin page", asy
     await admin.getByLabel("To (UTC)").fill(today);
     await expect(admin.getByRole("alert")).toHaveCount(0);
     await page.screenshot({ path: `${OUT}/e08-dashboard-export.png` });
+  });
+
+  await test.step("an alert on the Overview, raised and cleared from its setting (M13.5)", async () => {
+    // A solver host checks in with its disk, as the compute manager does every 30 s, with the
+    // worker token infra/stack.sh gives the worker; the API is the one infra/e2e.sh starts.
+    const devVars = readFileSync(new URL("../../api/.dev.vars", import.meta.url), "utf8");
+    const token = devVars.match(/^WORKER_TOKEN=(.*)$/m)?.[1] ?? "";
+    const checkIn = await page.request.post(`http://127.0.0.1:${process.env.E2E_API_PORT ?? "8789"}/internal/hosts/check-in`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        host: "e2e-vps",
+        load: {
+          load1: 0.5,
+          load5: 0.5,
+          load15: 0.5,
+          memoryTotalBytes: 24 * 2 ** 30,
+          memoryAvailableBytes: 20 * 2 ** 30,
+          diskTotalBytes: 300 * 2 ** 30,
+          diskFreeBytes: 250 * 2 ** 30,
+          containers: 0,
+        },
+      },
+    });
+    expect(checkIn.status()).toBe(200);
+
+    const admin = page.getByRole("region", { name: "Admin" });
+    await admin.getByRole("tab", { name: "Settings" }).click();
+    const alerts = admin.getByRole("region", { name: "Alerts" });
+    const disk = alerts.getByLabel("Disk low below", { exact: true });
+    await expect(disk).toHaveValue("30");
+    await expect(alerts.getByLabel("Platform failures that alert", { exact: true })).toHaveValue("3");
+    await disk.fill("10240");
+    await alerts.getByRole("button", { name: "Save Disk low below" }).click();
+    await expect(alerts.getByRole("alert")).toHaveCount(0);
+    await expect(disk).toHaveValue("10240");
+
+    await admin.getByRole("tab", { name: "Overview" }).click();
+    const low = admin.getByRole("alert").filter({ hasText: "on its scratch disk, below the 10240.0 GiB alert" });
+    await expect(low).toBeVisible();
+    await page.screenshot({ path: `${OUT}/e08-dashboard-alerts.png` });
+
+    await admin.getByRole("tab", { name: "Settings" }).click();
+    await disk.fill("30");
+    await alerts.getByRole("button", { name: "Save Disk low below" }).click();
+    await expect(disk).toHaveValue("30");
+    await admin.getByRole("tab", { name: "Overview" }).click();
+    await expect(admin.getByRole("alert").filter({ hasText: "on its scratch disk" })).toHaveCount(0);
 
     await admin.getByRole("button", { name: "Close" }).click();
     await expect(admin).toHaveCount(0);
