@@ -214,7 +214,7 @@ Things only the maintainer can do.
 - [x] M9.9: sign off the gate walk (2026-10-21)
 - [x] M11.1 (done 2026-10-22; deploy run 32 passed its health check through Access): create the Access service token `clearfea-machines`, add a Service Auth policy for it to the site's Access application, and add the GitHub secrets `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` (`docs/DEPLOYMENT.md` section 1.8). Until then every deploy fails its last step, the health check, with "Cloudflare Access refused the health check"
 - [x] ~~At the next AWS stack change, update the `clearfea` stack with **Replace existing template**~~ (dropped: AWS is deleted, ADR-106)
-- [x] Delete AWS (done 2026-10-23, Shubham): empty the image store, delete the `clearfea` stack, remove the AWS variables and secrets from GitHub and the launcher secrets from the Cloudflare Worker (`docs/DEPLOYMENT.md` sections 7.6 and 5)
+- [x] Delete AWS (done 2026-10-23, Shubham, Worker secrets included): empty the image store, delete the `clearfea` stack, remove the AWS variables and secrets from GitHub and the launcher secrets from the Cloudflare Worker (`docs/DEPLOYMENT.md` sections 7.6 and 5)
 - [x] M12.5: order the Contabo Cloud VPS 8 with your SSH key and note its IP address (done 2026-10-23; Ubuntu 24.04; the IP is in project memory, not the repository) (`docs/DEPLOYMENT.md` section 4.1)
 - [ ] M12.5: once a deploy after the M12.5 merge shows a green **Worker image** job, set the VPS up: copy `infra/vps` to it and run `bash clearfea-vps/bootstrap.sh` as root, pasting `WORKER_TOKEN` and the Access Client ID and Secret when asked (`docs/DEPLOYMENT.md` section 4.3). M12.6 needs it
 
