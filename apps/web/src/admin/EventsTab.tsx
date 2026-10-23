@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// The dashboard's Events (M13.2, M13.1, ADR-125): the event log newest first, by kind and level,
-// with older pages on demand. Read when opened, filtered or refreshed, not polled.
+// The dashboard's Events (M13.2, M13.1, ADR-125): the event log newest first, by kind, level,
+// user and day, with older pages on demand. Read when opened, filtered or refreshed, not polled.
 
 import type { AdminEvent } from "@clearfea/spec";
 import { useCallback, useEffect, useState } from "react";
 import { fetchEvents } from "../api/admin";
+import { ANY_USER_OR_DAY, dayBounds, type UserAndDays, UserAndDayFilters } from "./filters";
 import { utcSeconds } from "./format";
 
 const PAGE = 100;
@@ -25,13 +26,22 @@ const LEVEL_NAMES: Record<AdminEvent["level"], string> = { info: "Info", warning
 export function EventsTab({ onSignedOut }: { onSignedOut: (notice?: string) => void }) {
   const [kind, setKind] = useState("");
   const [level, setLevel] = useState("");
+  const [userAndDays, setUserAndDays] = useState<UserAndDays>(ANY_USER_OR_DAY);
   const [events, setEvents] = useState<AdminEvent[] | null>(null);
   const [more, setMore] = useState(false);
   const [problem, setProblem] = useState<string | undefined>();
 
   const read = useCallback(
-    async (before?: string): Promise<AdminEvent[] | undefined> => {
-      const result = await fetchEvents({ kind, level, before, limit: PAGE });
+    async (older?: string): Promise<AdminEvent[] | undefined> => {
+      const { since, before } = dayBounds(userAndDays);
+      const result = await fetchEvents({
+        kind,
+        level,
+        user: userAndDays.user,
+        since,
+        before: older ?? before,
+        limit: PAGE,
+      });
       if (result.kind === "signedOut") onSignedOut(result.problem);
       else if (result.kind === "error") setProblem(result.problem);
       else {
@@ -41,7 +51,7 @@ export function EventsTab({ onSignedOut }: { onSignedOut: (notice?: string) => v
       }
       return undefined;
     },
-    [kind, level, onSignedOut],
+    [kind, level, userAndDays, onSignedOut],
   );
 
   const load = useCallback(async () => {
@@ -85,6 +95,7 @@ export function EventsTab({ onSignedOut }: { onSignedOut: (notice?: string) => v
             ))}
           </select>
         </label>
+        <UserAndDayFilters value={userAndDays} onChange={setUserAndDays} onSignedOut={onSignedOut} />
         <button type="button" onClick={() => void load()}>
           Refresh
         </button>

@@ -374,8 +374,8 @@ const DEFAULT_JOBS = 100;
 
 /**
  * Every user's jobs, newest first (M13.2): of one status (?status=, or ?status=active for queued,
- * claimed and running), type (?type=) or user (?user=), created before ?before= (to page on), at
- * most ?limit=.
+ * claimed and running), type (?type=) or user (?user=), created from ?since= and before ?before=
+ * (times, which also page on), at most ?limit=.
  */
 admin.get("/jobs", async (c) => {
   const limitText = c.req.query("limit");
@@ -391,10 +391,14 @@ admin.get("/jobs", async (c) => {
   if (type !== undefined && !JOB_TYPES.includes(type as AdminJob["type"])) {
     return c.json({ error: `Give ?type= as one of ${JOB_TYPES.join(", ")}.` }, 400);
   }
-  const beforeText = c.req.query("before");
-  const before = isoTime(beforeText);
-  if (beforeText !== undefined && before === null) {
-    return c.json({ error: "Give ?before= as an ISO 8601 time, such as 2026-10-22T12:00:00Z." }, 400);
+  const times: Record<"since" | "before", string | undefined> = { since: undefined, before: undefined };
+  for (const name of ["since", "before"] as const) {
+    const text = c.req.query(name);
+    const time = isoTime(text);
+    if (text !== undefined && time === null) {
+      return c.json({ error: `Give ?${name}= as an ISO 8601 time, such as 2026-10-22T12:00:00Z.` }, 400);
+    }
+    times[name] = time ?? undefined;
   }
   const jobs = await listAdminJobs(c.env.DB, {
     statuses:
@@ -405,7 +409,7 @@ admin.get("/jobs", async (c) => {
           : [status as AdminJob["status"]],
     type: type as AdminJob["type"] | undefined,
     userId: c.req.query("user"),
-    before: before ?? undefined,
+    ...times,
     limit,
   });
   return c.json({ jobs } satisfies AdminJobsResponse);

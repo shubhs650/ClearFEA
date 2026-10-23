@@ -61,6 +61,8 @@ function query(values: Record<string, string | undefined>): string {
 export function fetchAdminJobs(filter: {
   status?: string;
   type?: string;
+  user?: string;
+  since?: string;
   before?: string;
   limit?: number;
 }): Promise<ApiResult<AdminJobsResponse>> {
@@ -91,6 +93,8 @@ export function adminJobAction(jobId: string, action: "cancel" | "requeue"): Pro
 export function fetchEvents(filter: {
   kind?: string;
   level?: string;
+  user?: string;
+  since?: string;
   before?: string;
   limit?: number;
 }): Promise<ApiResult<EventsResponse>> {

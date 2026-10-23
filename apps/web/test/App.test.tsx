@@ -548,6 +548,30 @@ describe("admin dashboard (M13.2)", () => {
     "GET /api/session": admin,
     "GET /api/jobs": { status: 200, body: { jobs: [] } },
     "GET /api/geometries": noGeometries,
+    "GET /api/admin": {
+      status: 200,
+      body: {
+        adminEmail: "alice@clearfea.test",
+        allowed: [],
+        users: [
+          {
+            id: "b",
+            name: "Bob (test user)",
+            email: "bob@clearfea.test",
+            createdAt: "2026-10-19T05:00:00.000Z",
+            lastSignIn: null,
+            machineSecondsThisMonth: 0,
+            jobsThisMonth: 0,
+            failedJobsThisMonth: 0,
+            allowed: true,
+          },
+        ],
+        machines: "vps",
+        cloudSizes: [],
+        solverMachines: { launcher: "ready", problem: null, hoursThisMonth: 0, hoursCap: 0, starts: [] },
+        solverHost: null,
+      },
+    },
   };
   const adminJob = (status: string) => ({
     id: "11111111-2222-4333-8444-555555555555",
@@ -632,6 +656,35 @@ describe("admin dashboard (M13.2)", () => {
     expect(within(details).queryByRole("button", { name: "Cancel job" })).toBeNull();
   });
 
+  it("filters the jobs by user and by days in UTC", async () => {
+    const fetchMock = serve({
+      ...base,
+      "GET /api/admin/overview": overview(),
+      "GET /api/admin/jobs?limit=50": { status: 200, body: { jobs: [adminJob("running")] } },
+      "GET /api/admin/jobs?user=b&limit=50": { status: 200, body: { jobs: [adminJob("running")] } },
+      "GET /api/admin/jobs?user=b&since=2026-10-21T00%3A00%3A00.000Z&limit=50": { status: 200, body: { jobs: [] } },
+      "GET /api/admin/jobs?user=b&since=2026-10-21T00%3A00%3A00.000Z&before=2026-10-23T00%3A00%3A00.000Z&limit=50": {
+        status: 200,
+        body: { jobs: [adminJob("running")] },
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Jobs and runs" }));
+    await screen.findByRole("table", { name: "Jobs" });
+    const user = screen.getByLabelText("User");
+    await within(user).findByRole("option", { name: "bob@clearfea.test" });
+    fireEvent.change(user, { target: { value: "b" } });
+    fireEvent.change(screen.getByLabelText("From (UTC)"), { target: { value: "2026-10-21" } });
+    expect(await screen.findByText("No jobs match.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("To (UTC)"), { target: { value: "2026-10-22" } });
+    expect(await screen.findByRole("table", { name: "Jobs" })).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/jobs?user=b&since=2026-10-21T00%3A00%3A00.000Z&before=2026-10-23T00%3A00%3A00.000Z&limit=50",
+      expect.anything(),
+    );
+  });
+
   it("reads the event log and filters it by kind", async () => {
     const event = (id: number, kind: string, message: string) => ({
       id,
@@ -655,6 +708,10 @@ describe("admin dashboard (M13.2)", () => {
         status: 200,
         body: { events: [event(1, "admin_action", "Resumed the queue.")] },
       },
+      "GET /api/admin/events?kind=admin_action&before=2026-10-22T00%3A00%3A00.000Z&limit=100": {
+        status: 200,
+        body: { events: [] },
+      },
     });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "Admin" }));
@@ -665,6 +722,9 @@ describe("admin dashboard (M13.2)", () => {
     fireEvent.change(screen.getByLabelText("Kind"), { target: { value: "admin_action" } });
     await waitFor(() => expect(screen.queryByText("The solver host vps-1 has not checked in.")).toBeNull());
     expect(screen.getByText("Resumed the queue.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("To (UTC)"), { target: { value: "2026-10-21" } });
+    await waitFor(() => expect(screen.queryByText("Resumed the queue.")).toBeNull());
+    expect(screen.getByText("No events match.")).toBeTruthy();
   });
 });
 

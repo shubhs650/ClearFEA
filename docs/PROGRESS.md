@@ -537,6 +537,10 @@ Ideas that came up during work and are outside the current milestone. Do not bui
 
 Newest first. One entry per session: date, what was done, what was learned.
 
+### 2026-10-23
+
+- M13 close, gap: ADR-113 says every dashboard table filters by date, user and status, but Jobs and runs filtered only by status and type and Events only by kind and level, though both API routes took `?user=`; both tabs now have a User choice and From and To days (UTC), and `/api/admin/jobs` takes `?since=`. M13.2's box in PLAN.md was never ticked; ticked. Learned: check an ADR's "every" against each screen, not only the routes.
+
 ### 2026-10-22
 
 - M13.5 dashboard alerts (ADR-130): a low disk on the solver host, tries out of memory and repeated platform faults join the host and pause alerts on the Overview, with their thresholds on Settings. Learned: counting faults from `job_stats` rather than `job_failed` events catches machine faults that were retried, and leaves out the admin's cancels by their cause.
