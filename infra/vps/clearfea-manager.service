@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# The compute manager on the solver VPS (M12.5, ADR-107, ADR-121), installed by bootstrap.sh as
+# /etc/systemd/system/clearfea-manager.service. It starts when the VPS boots and again 10 s after
+# it stops for any reason. Stopping or restarting it leaves running job containers alone: the
+# next manager follows them (ADR-121 item 5).
+#
+# It runs as root in its own container because it needs the Docker socket to start the job
+# containers; those run as the image's own user and never see the socket. Docker's data
+# directory is mounted read-only so the manager can watch the scratch disk (ADR-108).
+# Its log: journalctl -u clearfea-manager (docs/DEPLOYMENT.md section 4.3).
+
+[Unit]
+Description=ClearFEA compute manager
+Documentation=https://github.com/shubhs650/ClearFEA/blob/main/docs/DEPLOYMENT.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+TimeoutStopSec=60
+ExecStartPre=-/usr/bin/docker rm --force clearfea-manager
+ExecStart=/usr/bin/docker run --rm --name clearfea-manager \
+  --env-file /etc/clearfea/manager.env \
+  --user root \
+  --read-only --tmpfs /tmp \
+  --cap-drop ALL --security-opt no-new-privileges:true \
+  --memory 1g --pids-limit 256 \
+  --volume /var/run/docker.sock:/var/run/docker.sock \
+  --volume /var/lib/docker:/var/lib/docker:ro \
+  --log-driver journald \
+  clearfea-worker:current manager
+ExecStop=/usr/bin/docker stop --time 30 clearfea-manager
+
+[Install]
+WantedBy=multi-user.target

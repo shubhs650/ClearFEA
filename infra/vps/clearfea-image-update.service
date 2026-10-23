@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# One run of the image updater (M12.5, ADR-110), started by clearfea-image-update.timer.
+# Installed by bootstrap.sh. Its log: journalctl -u clearfea-image-update.
+
+[Unit]
+Description=Load the worker image the ClearFEA API names
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/clearfea/update-image.sh

@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Runs the image updater a minute after boot and every 5 minutes after that (M12.5, ADR-110):
+# one small request to the API each time, and a download only when a deploy changed the image.
+
+[Unit]
+Description=Check every 5 minutes for a new ClearFEA worker image
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+
+[Install]
+WantedBy=timers.target

@@ -2,9 +2,11 @@
 # Deploy: every push to main goes live at clearfea.triyalabs.com (ADR-095 item 9, M10.2).
 # The fast tier first; then the production configuration (ADR-096), D1 migrations, the Worker with the built
 # web app and the secrets copied from GitHub, and a health check that the site reports the commit just
-# deployed, through Cloudflare Access with its service token (ADR-111). The AWS solver image job (M10.8,
-# ADR-101) is gone since AWS was switched off and deleted (ADR-106); infra/aws/worker-image.sh stays for
-# production later.
+# deployed, through Cloudflare Access with its service token (ADR-111). Before the site, the worker image
+# for the solver VPS is stored in R2 as a compressed `docker save` archive when no archive of the current
+# worker/ and packages/spec/ exists (M12.5, ADR-110, ADR-131); the deployed API names it, and the VPS's
+# image updater loads it between jobs. The AWS solver image job (M10.8, ADR-101) is gone since AWS was
+# switched off and deleted (ADR-106); infra/aws/worker-image.sh stays for production later.
 # Run it by hand from the Actions tab for the first deploy, or from an older tag to roll back
 # (docs/DEPLOYMENT.md sections 6.1 and 7.2). Settings come from GitHub repository secrets and
 # variables (DEPLOYMENT.md section 5); none is stored in the repository.
@@ -31,9 +33,97 @@ jobs:
     name: Fast tier
     uses: ./.github/workflows/fast.yml
 
+  # The worker image for the solver VPS (M12.5, ADR-110, ADR-131): built and stored in R2 only when
+  # no archive of this worker/ and packages/spec/ source is there yet. The repository is private and
+  # AWS is gone, so no registry is used; the API hands the VPS a presigned link to the archive.
+  image:
+    name: Worker image
+    needs: test
+    # Runs whenever the site job does, which waits for it, so the API never names an image that is
+    # not stored.
+    if: github.event_name == 'workflow_dispatch' || vars.CLOUDFLARE_ACCOUNT_ID != ''
+    runs-on: ubuntu-24.04
+    # A build without cache compiles CalculiX with PaStiX: about half an hour.
+    timeout-minutes: 90
+    environment:
+      name: production
+    outputs:
+      tag: ${{ steps.store.outputs.stored || steps.image.outputs.stored }}
+    env:
+      R2_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The R2 API token of section 1.7 also stores the archive. Without it the site still deploys,
+      # naming no image, and the VPS keeps the image it has.
+      - name: Check the deploy settings
+        id: settings
+        run: |
+          if [ -n "$R2_ACCOUNT_ID" ] && [ -n "$R2_ACCESS_KEY_ID" ] && [ -n "$R2_SECRET_ACCESS_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            # The bucket the Worker binds as FILES.
+            bucket=$(grep -o '"bucket_name": *"[^"]*"' apps/api/wrangler.jsonc | head -n 1 | cut -d'"' -f4)
+            [ -n "$bucket" ] || { echo "::error::apps/api/wrangler.jsonc names no R2 bucket."; exit 1; }
+            echo "R2_BUCKET=$bucket" >> "$GITHUB_ENV"
+          else
+            echo "::warning::The worker image was not stored, so the solver VPS keeps the image it has. Add the variable CLOUDFLARE_ACCOUNT_ID and the secrets R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY in GitHub (docs/DEPLOYMENT.md sections 1.5 and 1.7)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Look for an archive of this source
+        id: image
+        if: steps.settings.outputs.ready == 'true'
+        run: |
+          tag=$(infra/vps/worker-archive.sh tag)
+          sha=$(infra/vps/worker-archive.sh find "$tag")
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ -n "$sha" ]; then
+            echo "stored=$tag" >> "$GITHUB_OUTPUT"
+            echo "The archive of $tag is already stored (SHA-256 $sha): worker/ and packages/spec/ are unchanged, nothing to build."
+          else
+            echo "No archive for this source yet: building clearfea-worker:$tag."
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.settings.outputs.ready == 'true' && steps.image.outputs.sha == ''
+        uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # v4.4.0
+
+      # As `make worker-image` builds it, from the same Dockerfile; the commit it was built from is
+      # what the worker reports (ADR-032). Written straight to a `docker save` file, so the image
+      # is not loaded on the runner as well. The layer cache lives in GitHub's Actions cache.
+      - name: Build the image
+        if: steps.settings.outputs.ready == 'true' && steps.image.outputs.sha == ''
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: worker
+          build-contexts: spec=packages/spec
+          build-args: CLEARFEA_COMMIT=${{ github.sha }}
+          outputs: type=docker,name=clearfea-worker:${{ steps.image.outputs.tag }},dest=${{ runner.temp }}/worker.tar
+          provenance: false
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,scope=worker,mode=max
+
+      - name: Store the archive in R2
+        id: store
+        if: steps.settings.outputs.ready == 'true' && steps.image.outputs.sha == ''
+        env:
+          TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          gzip -6 "$RUNNER_TEMP/worker.tar"
+          infra/vps/worker-archive.sh store "$TAG" "$RUNNER_TEMP/worker.tar.gz"
+          rm -f "$RUNNER_TEMP/worker.tar.gz"
+          echo "stored=$TAG" >> "$GITHUB_OUTPUT"
+          # This archive and the two before it, for rolling back by a pinned tag (section 4.3).
+          infra/vps/worker-archive.sh prune 3 "$TAG"
+
   site:
     name: Site and API
-    needs: test
+    needs: [test, image]
     # Until the Cloudflare setup is done (DEPLOYMENT.md section 1), merges skip the deploy instead
     # of failing on main; a run started by hand always runs and names what is missing.
     if: github.event_name == 'workflow_dispatch' || vars.CLOUDFLARE_ACCOUNT_ID != ''
@@ -83,11 +173,13 @@ jobs:
       - name: Build the web app
         run: pnpm --filter @clearfea/web build
 
-      # Writes the git-ignored wrangler.production.json from wrangler.jsonc with the database id
-      # and the commit the health check looks for (ADR-096). Needs the built web app.
+      # Writes the git-ignored wrangler.production.json from wrangler.jsonc with the database id,
+      # the commit the health check looks for (ADR-096) and the worker image the VPS loads
+      # (ADR-110). Needs the built web app.
       - name: Write the production configuration
         env:
           CLEARFEA_COMMIT: ${{ github.sha }}
+          CLEARFEA_WORKER_IMAGE: ${{ needs.image.outputs.tag }}
         run: pnpm run deploy:config
 
       # Forward-only; D1 Time Travel restores the database if a migration goes wrong (ADR-095 item 9).
