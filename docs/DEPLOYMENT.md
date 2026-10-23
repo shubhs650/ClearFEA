@@ -264,6 +264,15 @@ All of these are typed on the VPS after `ssh root@<the VPS's IP>`:
 
 **Security updates** install themselves every day. The VPS never reboots by itself, since a reboot stops a running solve; when the login message says "System restart required", reboot when no job is running (`docker ps` shows only `clearfea-manager`) with `reboot`. The manager starts again with the VPS.
 
+#### Benchmark the VPS (M12.6, once per VPS)
+
+The element limits, the run estimate and the lane sizes are measured on the VPS itself by `infra/vps/benchmark.sh`: every case runs in a container like the manager's, on the lane's CPUs and memory, with the image the manager runs. It needs a copy of the whole repository, not only `infra/vps`, and takes about 12 to 15 hours; nothing else should run on the VPS meanwhile, so do it before the site sends jobs to it (M12.7), or pause the queue on the dashboard first. It waits for a running job to end before each case.
+
+1. Get the repository onto your computer as in step 1 of the first setup (for an unmerged branch, pick the branch on GitHub before **Download ZIP**), and copy the whole unzipped folder: `scp -r <the unzipped folder> root@<the VPS's IP>:clearfea-src`
+2. On the VPS: `bash clearfea-src/infra/vps/benchmark.sh start`. You may log out; it runs as the unit `clearfea-benchmark`.
+3. Progress, any time: `bash clearfea-src/infra/vps/benchmark.sh status`. `stop` stops it, and `start` again goes on after the last finished case (also after a reboot).
+4. When `status` says finished, copy the results to your computer: `scp -r root@<the VPS's IP>:/var/lib/clearfea-benchmark/results clearfea-benchmark-results`, and attach the files in that folder to the thread that asked for them. Then `rm -rf clearfea-src` on the VPS.
+
 #### Rebuild on a reinstalled or new VPS
 
 If the VPS is reinstalled from Contabo's panel, or you order a replacement by hand (4.1), do the first setup again: nothing on the VPS is of record. Keep the same `CLEARFEA_HOST_NAME` (`contabo-1`) so the dashboard keeps one host; jobs that were running on the old one are queued again by the site within a few minutes (4.4). If a new VPS has a new IP address, nothing on the site needs to change, since the site never calls the VPS.

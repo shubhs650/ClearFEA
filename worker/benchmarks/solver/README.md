@@ -20,6 +20,14 @@ cd worker && uv run python benchmarks/solver/bench.py --out /tmp/bench [--target
 
 Needs `ccx` and Gmsh's system libraries on the host, like the spikes. The worker's own mesher and deck generator make every mesh and deck; only the `SOLVER=` on the `*STATIC` line differs between solvers.
 
+## On the solver VPS (M12.6)
+
+`infra/vps/benchmark.sh` runs the job-step benchmark, `mesh.py` and PaStiX's thread scaling on the solver VPS, each case in its own container from the image the compute manager runs, pinned to the lane's CPUs and held to its memory as the manager's job containers are (the lane settings in `/etc/clearfea/manager.env`). How to start it is in `docs/DEPLOYMENT.md` section 4.3; it takes about 12 to 15 hours and goes on after a stop where it left off. Its `results` folder holds `steps.json` (rows for this folder's `steps.json`), `mesh.json`, `threads.json` (rows in the format of `results.json`) and `host.txt`; the fit is then run on a development machine.
+
+Since M12.6 a row also has `containerPeakMemoryBytes`, the container's peak (cgroup v2 `memory.peak`, page cache and the benchmark's own Python included), which is what a lane's memory limit holds, and the machine's `cpusAllowed`, the CPUs the container was pinned to.
+
+`mesh.py` measures the light lane: the mesh job's `mesh_geometry` on the block at a target element count and order, in a fresh process, with its wall time and peak memory, up to the finest mesh the mesher makes (the 2,000,000 target, as in `bench.py`). On the VPS it runs on the light lane's CPU with the solve lane's memory as room, so a mesh that needs more than the light lane has shows how much it needs.
+
 ## The model
 
 A steel block, 100 × 100 × 50 mm (E 200 GPa, ν 0.3), held on the x = 0 face and pressed with 10 MPa on the x = 100 mm face; second-order tetrahedra (C3D10). A stocky block is the hard case for a direct solver: its matrix fills in about as much as any part of that size. Slender parts of the same element count need less time and memory from SPOOLES; the iterative solvers care less about shape.
